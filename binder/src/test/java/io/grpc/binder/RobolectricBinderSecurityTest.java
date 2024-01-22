@@ -25,7 +25,6 @@ import android.app.Application;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import androidx.lifecycle.LifecycleService;
@@ -112,6 +111,15 @@ public final class RobolectricBinderSecurityTest {
   }
 
   @Test
+  public void testAsyncServerSecurityPolicy_failedFuture_failsWithCodeInternal() throws Exception {
+    ListenableFuture<Status> status = makeCall();
+    service.setSecurityPolicyFailed(new IllegalStateException("oops"));
+    idleLoopers();
+
+    assertThat(Futures.getDone(status).getCode()).isEqualTo(Status.Code.INTERNAL);
+  }
+
+  @Test
   public void testAsyncServerSecurityPolicy_allowed_returnsOkStatus() throws Exception {
     ListenableFuture<Status> status = makeCall();
     service.setSecurityPolicyStatusWhenReady(Status.OK);
@@ -136,12 +144,7 @@ public final class RobolectricBinderSecurityTest {
         directExecutor());
   }
 
-  private void idleLoopers() {
-    idleLoopers(service);
-  }
-
-  private static void idleLoopers(SomeService service) {
-    service.idleLooper();
+  private static void idleLoopers() {
     shadowOf(Looper.getMainLooper()).idle();
   }
 
@@ -162,17 +165,12 @@ public final class RobolectricBinderSecurityTest {
     private final ArrayBlockingQueue<SettableFuture<Status>> statusesToSet =
         new ArrayBlockingQueue<>(128);
     private Server server;
-    private HandlerThread handlerThread;
-    private Handler handler;
     private final ScheduledExecutorService scheduledExecutorService =
         new HandlerScheduledExecutorService();
 
     @Override
     public void onCreate() {
       super.onCreate();
-      handlerThread = new HandlerThread("test_handler_thread");
-      handlerThread.start();
-      handler = new Handler(handlerThread.getLooper());
 
       MethodDescriptor<Empty, Empty> methodDesc = getMethodDescriptor();
       ServerCallHandler<Empty, Empty> callHandler =
@@ -224,25 +222,29 @@ public final class RobolectricBinderSecurityTest {
 
     /**
      * Returns an {@link ScheduledExecutorService} under which all of the gRPC computations run. The
-     * execution of any pending tasks on this executor can be triggered via {@link #idleLooper()}.
+     * execution of any pending tasks on this executor can be triggered via {@link #idleLoopers()}.
      */
     ScheduledExecutorService getExecutor() {
       return scheduledExecutorService;
     }
 
-    void idleLooper() {
-      shadowOf(handlerThread.getLooper()).idle();
+    void setSecurityPolicyStatusWhenReady(Status status) {
+      getNextEnqueuedStatus().set(status);
     }
 
-    void setSecurityPolicyStatusWhenReady(Status status) {
+    void setSecurityPolicyFailed(Exception e) {
+      getNextEnqueuedStatus().setException(e);
+    }
+
+    private SettableFuture<Status> getNextEnqueuedStatus() {
       @Nullable SettableFuture<Status> future = statusesToSet.poll();
       while (future == null) {
         // It's possible that either the test thread or the gRPC thread has posted tasks to each
         // other's executor. Keep idling until the future is available.
-        idleLoopers(this);
+        idleLoopers();
         future = statusesToSet.poll();
       }
-      future.set(status);
+      return checkNotNull(future);
     }
 
     @Override
@@ -255,7 +257,6 @@ public final class RobolectricBinderSecurityTest {
     public void onDestroy() {
       super.onDestroy();
       server.shutdownNow();
-      handlerThread.quit();
     }
 
     /** A future representing a task submitted to a {@link Handler}. */
@@ -317,12 +318,14 @@ public final class RobolectricBinderSecurityTest {
 
     /**
      * Minimal implementation of a {@link ScheduledExecutorService} that delegates tasks to a {@link
-     * Handler}. Pending tasks can be forced to run via {@link #idleLooper()}.
+     * Handler}. Pending tasks can be forced to run via {@link
+     * org.robolectric.shadows.ShadowLooper#idle()}.
      */
-    private class HandlerScheduledExecutorService extends AbstractExecutorService
+    private static class HandlerScheduledExecutorService extends AbstractExecutorService
         implements ScheduledExecutorService {
+      private final Handler handler = new Handler(Looper.getMainLooper());
 
-      private Runnable asRunnableFor(HandlerFuture<Void> future, Runnable runnable) {
+      private static Runnable asRunnableFor(HandlerFuture<Void> future, Runnable runnable) {
         return () -> {
           try {
             runnable.run();
@@ -333,7 +336,7 @@ public final class RobolectricBinderSecurityTest {
         };
       }
 
-      private <V> Runnable asRunnableFor(HandlerFuture<V> future, Callable<V> callable) {
+      private static <V> Runnable asRunnableFor(HandlerFuture<V> future, Callable<V> callable) {
         return () -> {
           try {
             future.complete(callable.call());
@@ -390,29 +393,26 @@ public final class RobolectricBinderSecurityTest {
       }
 
       @Override
-      public void shutdown() {
-        handlerThread.quitSafely();
-      }
+      public void shutdown() {}
 
       @Override
       public List<Runnable> shutdownNow() {
-        handlerThread.quit();
         return ImmutableList.of();
       }
 
       @Override
       public boolean isShutdown() {
-        return handlerThread.isAlive();
+        return false;
       }
 
       @Override
       public boolean isTerminated() {
-        return handlerThread.isAlive();
+        return false;
       }
 
       @Override
       public boolean awaitTermination(long l, TimeUnit timeUnit) {
-        idleLooper();
+        idleLoopers();
         return true;
       }
 
