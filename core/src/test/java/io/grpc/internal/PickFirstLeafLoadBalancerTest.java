@@ -33,9 +33,7 @@ import static org.junit.Assert.assertNull;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -73,12 +71,12 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
@@ -88,10 +86,18 @@ import org.mockito.junit.MockitoRule;
 
 
 /** Unit test for {@link PickFirstLeafLoadBalancer}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class PickFirstLeafLoadBalancerTest {
   public static final Status CONNECTION_ERROR =
       Status.UNAVAILABLE.withDescription("Simulated connection error");
+
+  @Parameterized.Parameters(name = "{0}")
+  public static List<Boolean> enableHappyEyeballs() {
+    return Arrays.asList(true, false);
+  }
+
+  @Parameterized.Parameter
+  public boolean enableHappyEyeballs;
   private PickFirstLeafLoadBalancer loadBalancer;
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private static final Attributes.Key<String> FOO = Attributes.Key.create("foo");
@@ -130,13 +136,15 @@ public class PickFirstLeafLoadBalancerTest {
   @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
   private PickSubchannelArgs mockArgs;
 
-  @BeforeClass
-  public static void setUpClass() {
-    System.setProperty(PickFirstLeafLoadBalancer.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, "TRUE");
-  }
+  private String originalHappyEyeballsEnabledValue;
 
   @Before
   public void setUp() {
+    originalHappyEyeballsEnabledValue =
+        System.getProperty(PickFirstLeafLoadBalancer.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS);
+    System.setProperty(PickFirstLeafLoadBalancer.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS,
+        enableHappyEyeballs ? "true" : "false");
+
     for (int i = 1; i <= 5; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       servers.add(new EquivalentAddressGroup(addr));
@@ -163,6 +171,13 @@ public class PickFirstLeafLoadBalancerTest {
 
   @After
   public void tearDown() {
+    if (originalHappyEyeballsEnabledValue == null) {
+      System.clearProperty(PickFirstLeafLoadBalancer.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS);
+    } else {
+      System.setProperty(PickFirstLeafLoadBalancer.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS,
+          originalHappyEyeballsEnabledValue);
+    }
+
     loadBalancer.shutdown();
     verifyNoMoreInteractions(mockArgs);
   }
@@ -172,16 +187,19 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     forwardTimeByConnectionDelay(3);
-    verify(mockHelper, times(4)).createSubchannel(createArgsCaptor.capture());
+    int exppectedCreates = enableHappyEyeballs ? 4 : 1;
+    verify(mockHelper, times(exppectedCreates)).createSubchannel(createArgsCaptor.capture());
     List<CreateSubchannelArgs> argsList = createArgsCaptor.getAllValues();
     assertThat(argsList.get(0).getAddresses().get(0)).isEqualTo(servers.get(0));
-    assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(1));
-    assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
-    assertThat(argsList.get(3).getAddresses().get(0)).isEqualTo(servers.get(3));
     assertThat(argsList.get(0).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
+    if (enableHappyEyeballs) {
+      assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(1));
+      assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
+      assertThat(argsList.get(3).getAddresses().get(0)).isEqualTo(servers.get(3));
+      assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
+      assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
+      assertThat(argsList.get(3).getAddresses().size()).isEqualTo(1);
+    }
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel1).requestConnection();
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
@@ -205,20 +223,25 @@ public class PickFirstLeafLoadBalancerTest {
     verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
 
+
     forwardTimeByConnectionDelay(servers.size() - 1);
-    verify(mockHelper, times(servers.size())).createSubchannel(createArgsCaptor.capture());
+    int expectedScs = enableHappyEyeballs ? servers.size() : 1;
+    verify(mockHelper, times(expectedScs)).createSubchannel(createArgsCaptor.capture());
+
     List<CreateSubchannelArgs> argsList = createArgsCaptor.getAllValues();
     // We should still see the same set of addresses.
     // Because we use a fixed seed, the addresses should always be shuffled in this order.
     assertThat(argsList.get(0).getAddresses().get(0)).isEqualTo(servers.get(1));
-    assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(0));
-    assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
     assertThat(argsList.get(0).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
-    assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
+    if (enableHappyEyeballs) {
+      assertThat(argsList.get(1).getAddresses().get(0)).isEqualTo(servers.get(0));
+      assertThat(argsList.get(2).getAddresses().get(0)).isEqualTo(servers.get(2));
+      assertThat(argsList.get(1).getAddresses().size()).isEqualTo(1);
+      assertThat(argsList.get(2).getAddresses().size()).isEqualTo(1);
+      verify(mockSubchannel1).requestConnection();
+    }
 
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    verify(mockSubchannel1).requestConnection();
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verify(mockHelper, atLeast(0)).getSynchronizationContext();
 
@@ -322,20 +345,24 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void pickAfterResolvedAndUnchanged() {
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
-    verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(mockSubchannel1, times(1)).requestConnection();
 
     // Second acceptResolvedAddresses shouldn't do anything
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    verify(mockSubchannel1, times(1)).requestConnection();
-    verify(mockHelper, times(1))
-        .updateBalancingState(isA(ConnectivityState.class), isA(SubchannelPicker.class));
+    if (enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel1, never()).requestConnection();
+    } else {
+      inOrder.verify(mockSubchannel1, times(1)).requestConnection();
+    }
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
   }
 
   @Test
@@ -422,8 +449,8 @@ public class PickFirstLeafLoadBalancerTest {
     //ignore health update on non-ready subchannel
     healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
 
-    verify(mockHelper, atLeastOnce()).getSynchronizationContext();
-    verify(mockHelper, atLeastOnce()).getScheduledExecutorService();
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
 
     // subchannel  |  state    |   health
@@ -451,45 +478,60 @@ public class PickFirstLeafLoadBalancerTest {
     InOrder inOrder =
         inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4);
 
+    SubchannelStateListener[] stateListeners = new SubchannelStateListener[4];
+    Subchannel[] subchannels = new Subchannel[] {
+        mockSubchannel1, mockSubchannel2, mockSubchannel3, mockSubchannel4};
+
     servers.remove(4);
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener4 = stateListenerCaptor.getValue();
+    stateListeners[0] = stateListenerCaptor.getValue();
+
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListeners[1] = stateListenerCaptor.getValue();
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+      stateListeners[2] = stateListenerCaptor.getValue();
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
+      stateListeners[3] = stateListenerCaptor.getValue();
+    }
 
     reset(mockHelper);
 
-    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    stateListeners[0].onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
     // subchannel reports connecting when pick subchannel is called
     assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
-    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    stateListeners[0].onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
 
     Status error = Status.UNAVAILABLE.withDescription("boom!");
-    SubchannelStateListener[] stateListeners = {stateListener, stateListener2, stateListener3,
-        stateListener4};
-    for (SubchannelStateListener listener : stateListeners) {
-      listener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+
+    if (enableHappyEyeballs) {
+      for (SubchannelStateListener listener : stateListeners) {
+        listener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+      }
+    } else {
+      stateListeners[0].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+      for (int i = 1; i < stateListeners.length; i++) {
+        inOrder.verify(subchannels[i]).start(stateListenerCaptor.capture());
+        stateListeners[i] = stateListenerCaptor.getValue();
+        stateListeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+      }
     }
 
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     inOrder.verify(mockHelper).refreshNameResolution();
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
-    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    stateListeners[0].onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     assertEquals(mockSubchannel1, picker.pickSubchannel(mockArgs).getSubchannel());
@@ -666,7 +708,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.requestConnection();
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    inOrder.verify(mockSubchannel2).requestConnection();
+    int exptededRequests = enableHappyEyeballs ? 1 : 2;
+    inOrder.verify(mockSubchannel2, times(exptededRequests)).requestConnection();
 
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
 
@@ -674,7 +717,11 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.requestConnection();
     inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
     inOrder.verify(mockSubchannel1, never()).requestConnection();
-    inOrder.verify(mockSubchannel2, never()).requestConnection();
+    if (enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2, never()).requestConnection();
+    } else {
+      inOrder.verify(mockSubchannel2).requestConnection();
+    }
   }
 
   @Test
@@ -703,6 +750,7 @@ public class PickFirstLeafLoadBalancerTest {
         mockSubchannel3, mockSubchannel4);
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0), servers.get(1));
+    SubchannelStateListener stateListener2 = null;
 
     // Accept Addresses and verify proper connection flow
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
@@ -711,8 +759,10 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    if (enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // First connection attempt is successful
@@ -741,11 +791,15 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper, never()).createSubchannel(any());
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
     verify(mockSubchannel1).shutdown();
-    verify(mockSubchannel2).shutdown();
+    if (enableHappyEyeballs) {
+      verify(mockSubchannel2).shutdown();
+    }
 
     // If obsolete subchannel becomes ready, the state should not be affected
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    if (enableHappyEyeballs) {
+      stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    }
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
 
     // Calling pickSubchannel() creates the subchannel and starts a connection
@@ -771,6 +825,9 @@ public class PickFirstLeafLoadBalancerTest {
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4);
 
+    SubchannelStateListener stateListener2 = null;
+    SubchannelStateListener stateListener4 = null;
+
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0), servers.get(1));
 
@@ -781,9 +838,11 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel1).requestConnection();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Creating second set of endpoints/addresses
@@ -797,18 +856,24 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
     inOrder.verify(mockSubchannel3).requestConnection();
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
-    inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener4 = stateListenerCaptor.getValue();
+    if (enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
+      stateListener4 = stateListenerCaptor.getValue();
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Old subchannels should shut down (in no particular order) and request a connection
     verify(mockSubchannel1).shutdown();
-    verify(mockSubchannel2).shutdown();
+    if (enableHappyEyeballs) {
+      verify(mockSubchannel2).shutdown();
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // If old subchannel becomes ready, the state should not be affected
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    if (enableHappyEyeballs) {
+      stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Fail connection attempt to third address
@@ -816,6 +881,10 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Verify starting connection attempt to fourth address
+    if (!enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
+      stateListener4 = stateListenerCaptor.getValue();
+    }
     inOrder.verify(mockSubchannel4).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
@@ -835,6 +904,8 @@ public class PickFirstLeafLoadBalancerTest {
         mockSubchannel3, mockSubchannel4);
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0), servers.get(1));
+    SubchannelStateListener stateListener2 = null;
+    SubchannelStateListener stateListener4 = null;
 
     // Accept Addresses and verify proper connection flow
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
@@ -849,15 +920,20 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).requestConnection();
 
     // Trigger second subchannel to connect
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+      assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    }
 
     // Mark first subchannel ready, verify state change
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    // Successful connection shuts down other subchannel
-    inOrder.verify(mockSubchannel2).shutdown();
+
+    if (enableHappyEyeballs) {
+      // Successful connection shuts down other subchannel
+      inOrder.verify(mockSubchannel2).shutdown();
+    }
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
@@ -878,15 +954,19 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel3).requestConnection();
 
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener4 = stateListenerCaptor.getValue();
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
+      stateListener4 = stateListenerCaptor.getValue();
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     picker = pickerCaptor.getValue();
 
     // If obsolete subchannel becomes ready, the state should not be affected
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    if (enableHappyEyeballs) {
+      stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Calling pickSubchannel() twice gave the same result
@@ -899,8 +979,12 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Ready subchannel 3
     stateListener3.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    // Successful connection shuts down other subchannel
-    inOrder.verify(mockSubchannel4).shutdown();
+
+    if (enableHappyEyeballs) {
+      // Successful connection shuts down other subchannel
+      inOrder.verify(mockSubchannel4).shutdown();
+    }
+
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     picker = pickerCaptor.getValue();
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
@@ -931,13 +1015,19 @@ public class PickFirstLeafLoadBalancerTest {
 
     // If obsolete subchannel becomes ready, the state should not be affected
     stateListener3.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    stateListener4.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    if (enableHappyEyeballs) {
+      stateListener4.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Connection attempt to address 1 is unsuccessful
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
 
     // Starting connection attempt to address 2
+    if (!enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+    }
     inOrder.verify(mockSubchannel2).requestConnection();
 
     // Connection attempt to address 2 is successful
@@ -958,6 +1048,8 @@ public class PickFirstLeafLoadBalancerTest {
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4);
 
+    SubchannelStateListener stateListener2 = null;
+
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> addrs = Lists.newArrayList(servers.get(0), servers.get(1));
 
@@ -967,9 +1059,11 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+    }
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Failing first connection attempt
@@ -977,6 +1071,10 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Starting second connection attempt
+    if (!enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+    }
     inOrder.verify(mockSubchannel2).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
@@ -1038,8 +1136,13 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    } else {
+      stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    }
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
@@ -1048,11 +1151,13 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
 
     // Successful connection attempt shuts down other subchannels
-    inOrder.verify(mockSubchannel2).shutdown();
-    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
+    if (enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2).shutdown();
+    }
 
     // Verify that picker returns correct subchannel
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
     assertEquals(PickResult.withSubchannel(mockSubchannel1), picker.pickSubchannel(mockArgs));
 
     // Going into IDLE state, nothing should happen unless requested
@@ -1143,9 +1248,11 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel4, never()).requestConnection();
     verify(mockSubchannel5, never()).start(stateListenerCaptor.capture());
 
-    forwardTimeByConnectionDelay(2);
-    inOrder.verify(mockSubchannel1, never()).requestConnection();
-    inOrder.verify(mockSubchannel4).requestConnection();
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay(2);
+      inOrder.verify(mockSubchannel1, never()).requestConnection();
+      inOrder.verify(mockSubchannel4).requestConnection();
+    }
 
     // First connection attempt is successful
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
@@ -1269,6 +1376,8 @@ public class PickFirstLeafLoadBalancerTest {
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4);
 
+    SubchannelStateListener stateListener3 = null;
+
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0), servers.get(1));
 
@@ -1280,9 +1389,11 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel1).requestConnection();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    }
 
     // callback from internal subchannel
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
@@ -1296,18 +1407,20 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // We create new channels and remove old ones, keeping intersecting ones
-    inOrder.verify(mockSubchannel2).shutdown();
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
-
-    // If obsolete subchannel becomes ready, the state should not be affected
-    stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    if (enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2).shutdown();
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+      stateListener3 = stateListenerCaptor.getValue();
+    }
 
     // First connection attempt is unsuccessful
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    if (!enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+      stateListener3 = stateListenerCaptor.getValue();
+    }
 
     // Subchannel 3 attempt starts but fails
     inOrder.verify(mockSubchannel3).requestConnection();
@@ -1388,9 +1501,11 @@ public class PickFirstLeafLoadBalancerTest {
     // Verify that started over and found a noop on connecting for first subchannel
     inOrder.verify(mockHelper, never()).createSubchannel(any());
 
-    forwardTimeByConnectionDelay();
-    inOrder.verify(mockHelper).createSubchannel(any());
-    verify(mockSubchannel2).start(any());
+    if (enableHappyEyeballs) {
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockHelper).createSubchannel(any());
+      verify(mockSubchannel2).start(any());
+    }
 
     // Accept same resolved addresses to update - all were connecting, no updateBalancingStae
     loadBalancer.acceptResolvedAddresses(
@@ -1401,7 +1516,11 @@ public class PickFirstLeafLoadBalancerTest {
     // Verify that no new subchannels were created or started
     inOrder.verify(mockHelper, never()).createSubchannel(any());
     verify(mockSubchannel1, times(1)).start(any());
-    verify(mockSubchannel2, times(1)).start(any());
+    if (enableHappyEyeballs) {
+      verify(mockSubchannel2, times(1)).start(any());
+    } else {
+      verify(mockSubchannel2, times(0)).start(any());
+    }
 
     // First connection attempt is successful
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
@@ -1554,8 +1673,6 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel1).requestConnection();
-    inOrder.verify(mockHelper).getSynchronizationContext();
-    inOrder.verify(mockHelper).getScheduledExecutorService();
 
     // Failing first connection attempt
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
@@ -1566,8 +1683,6 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel2).requestConnection();
-    inOrder.verify(mockHelper).getSynchronizationContext();
-    inOrder.verify(mockHelper).getScheduledExecutorService();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Failing second connection attempt
@@ -1735,6 +1850,7 @@ public class PickFirstLeafLoadBalancerTest {
         mockSubchannel3, mockSubchannel4);
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0), servers.get(1));
+    SubchannelStateListener stateListener2 = null;
 
     // Accept Addresses and verify proper connection flow
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
@@ -1743,17 +1859,23 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
-    forwardTimeByConnectionDelay();
     inOrder.verify(mockSubchannel1).requestConnection();
-    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    forwardTimeByConnectionDelay();
+
+    if (enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+    }
 
     // First connection attempt is unsuccessful
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Second connection attempt is connecting
+    if (!enableHappyEyeballs) {
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListener2 = stateListenerCaptor.getValue();
+    }
     inOrder.verify(mockSubchannel2).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
@@ -1871,15 +1993,18 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(servers).build());
 
     forwardTimeByConnectionDelay(servers.size() - 1);
-    inOrder.verify(mockHelper, times(servers.size())).createSubchannel(any());
+    int expectedSubchannelsCreated = enableHappyEyeballs ? servers.size() : 1;
+    inOrder.verify(mockHelper, times(expectedSubchannelsCreated)).createSubchannel(any());
 
     loadBalancer.shutdown();
 
     inOrder.verify(mockSubchannel1).shutdown();
-    verify(mockSubchannel2).shutdown();
-    verify(mockSubchannel3).shutdown();
-    verify(mockSubchannel4).shutdown();
-    verify(mockSubchannel5).shutdown();
+    if (enableHappyEyeballs) {
+      verify(mockSubchannel2).shutdown();
+      verify(mockSubchannel3).shutdown();
+      verify(mockSubchannel4).shutdown();
+      verify(mockSubchannel5).shutdown();
+    }
     assertEquals(SHUTDOWN, loadBalancer.getConcludedConnectivityState());
 
     loadBalancer.acceptResolvedAddresses(
@@ -1958,6 +2083,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void happy_eyeballs_trigger_connection_delay() {
+    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1,
         mockSubchannel2, mockSubchannel3, mockSubchannel4);
@@ -2002,6 +2128,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void happy_eyeballs_fail_then_trigger_connection_delay() {
+    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
