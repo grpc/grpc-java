@@ -43,6 +43,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.errorprone.annotations.Keep;
 import io.grpc.Attributes;
@@ -122,7 +123,7 @@ public class PickFirstLeafLoadBalancerTest {
   private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   @Captor
   private ArgumentCaptor<SubchannelStateListener> stateListenerCaptor;
-  private Helper mockHelper = mock(Helper.class, delegatesTo(new MockHelperImpl()));
+  private final Helper mockHelper = mock(Helper.class, delegatesTo(new MockHelperImpl()));
   @Mock
   private FakeSubchannel mockSubchannel1;
   @Mock
@@ -187,8 +188,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     forwardTimeByConnectionDelay(3);
-    int exppectedCreates = enableHappyEyeballs ? 4 : 1;
-    verify(mockHelper, times(exppectedCreates)).createSubchannel(createArgsCaptor.capture());
+    int expectedCreates = enableHappyEyeballs ? 4 : 1;
+    verify(mockHelper, times(expectedCreates)).createSubchannel(createArgsCaptor.capture());
     List<CreateSubchannelArgs> argsList = createArgsCaptor.getAllValues();
     assertThat(argsList.get(0).getAddresses().get(0)).isEqualTo(servers.get(0));
     assertThat(argsList.get(0).getAddresses().size()).isEqualTo(1);
@@ -708,8 +709,8 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.requestConnection();
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    int exptededRequests = enableHappyEyeballs ? 1 : 2;
-    inOrder.verify(mockSubchannel2, times(exptededRequests)).requestConnection();
+    int expectedRequests = enableHappyEyeballs ? 1 : 2;
+    inOrder.verify(mockSubchannel2, times(expectedRequests)).requestConnection();
 
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
 
@@ -1507,7 +1508,7 @@ public class PickFirstLeafLoadBalancerTest {
       verify(mockSubchannel2).start(any());
     }
 
-    // Accept same resolved addresses to update - all were connecting, no updateBalancingStae
+    // Accept same resolved addresses to update - all were connecting, no updateBalancingState
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
@@ -2284,7 +2285,7 @@ public class PickFirstLeafLoadBalancerTest {
     index.increment();
     index.increment();
     // We want to make sure both groupIndex and addressIndex are reset
-    index.updateGroups(Arrays.asList(
+    index.updateGroups(ImmutableList.of(
         new EquivalentAddressGroup(Arrays.asList(addr1)),
         new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1);

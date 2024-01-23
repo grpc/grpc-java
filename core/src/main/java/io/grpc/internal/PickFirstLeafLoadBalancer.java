@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -121,8 +122,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     // Make sure we're storing our own list rather than what was passed in
-    final List<EquivalentAddressGroup> newImmutableAddressGroups =
-        Collections.unmodifiableList(new ArrayList<>(servers));
+    final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
+        ImmutableList.<EquivalentAddressGroup>builder().addAll(servers).build();
 
     if (addressIndex == null) {
       addressIndex = new Index(newImmutableAddressGroups);
@@ -583,14 +584,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return addressGroups.get(groupIndex).getAttributes();
     }
 
-    public List<EquivalentAddressGroup> getGroups() {
-      return addressGroups;
-    }
-
     /**
      * Update to new groups, resetting the current index.
      */
-    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
+    public void updateGroups(ImmutableList<EquivalentAddressGroup> newGroups) {
       addressGroups = newGroups != null ? newGroups : Collections.emptyList();
       reset();
     }
