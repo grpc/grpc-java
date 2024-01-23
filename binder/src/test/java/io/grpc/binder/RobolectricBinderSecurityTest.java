@@ -239,8 +239,7 @@ public final class RobolectricBinderSecurityTest {
     private SettableFuture<Status> getNextEnqueuedStatus() {
       @Nullable SettableFuture<Status> future = statusesToSet.poll();
       while (future == null) {
-        // It's possible that either the test thread or the gRPC thread has posted tasks to each
-        // other's executor. Keep idling until the future is available.
+        // Keep idling until the future is available.
         idleLoopers();
         future = statusesToSet.poll();
       }
