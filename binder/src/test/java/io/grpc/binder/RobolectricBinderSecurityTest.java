@@ -193,7 +193,7 @@ public final class RobolectricBinderSecurityTest {
                           SERVICE_NAME,
                           new AsyncSecurityPolicy() {
                             @Override
-                            ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                            public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
                               return Futures.submitAsync(
                                   () -> {
                                     SettableFuture<Status> status = SettableFuture.create();
