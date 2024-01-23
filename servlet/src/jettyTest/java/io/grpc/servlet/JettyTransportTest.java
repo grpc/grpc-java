@@ -199,6 +199,12 @@ public class JettyTransportTest extends AbstractTransportTest {
   public void flowControlPushBack() {
   }
 
+  @Override
+  @Ignore("Servlet flow control not implemented yet")
+  @Test
+  public void flowControlDoesNotDeadlockLargeMessage() {
+  }
+
   // FIXME
   @Override
   @Ignore("Jetty is broken on client RST_STREAM")

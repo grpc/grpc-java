@@ -42,6 +42,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -209,6 +210,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * {@link RealChannel}.
    */
   private final Channel interceptorChannel;
+
+  private final List<ClientTransportFilter> transportFilters;
   @Nullable private final String userAgent;
 
   // Only null after channel is terminated. Must be assigned from the syncContext.
@@ -661,6 +664,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       channel = builder.binlog.wrapChannel(channel);
     }
     this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
+    this.transportFilters = new ArrayList<>(builder.transportFilters);
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
@@ -1566,7 +1570,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           callTracerFactory.create(),
           subchannelTracer,
           subchannelLogId,
-          subchannelLogger);
+          subchannelLogger,
+          transportFilters);
       oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -1990,7 +1995,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           callTracerFactory.create(),
           subchannelTracer,
           subchannelLogId,
-          subchannelLogger);
+          subchannelLogger,
+          transportFilters);
 
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel started")
@@ -2146,6 +2152,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void transportReady() {
       // Don't care
+    }
+
+    @Override
+    public Attributes filterTransport(Attributes attributes) {
+      return attributes;
     }
 
     @Override

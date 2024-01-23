@@ -1098,6 +1098,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     @Override
+    @SuppressWarnings("Finally")
     public void run() {
       String threadName = Thread.currentThread().getName();
       Thread.currentThread().setName("OkHttpClientTransport");
@@ -1130,6 +1131,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           frameReader.close();
         } catch (IOException ex) {
           log.log(Level.INFO, "Exception closing frame reader", ex);
+        } catch (RuntimeException e) {
+          // This same check is done in okhttp proper:
+          // https://github.com/square/okhttp/blob/3cc0f4917cbda03cb31617f8ead1e0aeb19de2fb/okhttp/src/main/kotlin/okhttp3/internal/-UtilJvm.kt#L270
+
+          // Conscrypt in Android 10 and 11 may throw closing an SSLSocket. This is safe to ignore.
+          // https://issuetracker.google.com/issues/177450597
+          if (!"bio == null".equals(e.getMessage())) {
+            throw e;
+          }
         }
         listener.transportTerminated();
         Thread.currentThread().setName(threadName);
@@ -1284,6 +1294,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           outboundWindowSizeIncreased = outboundFlow.initialOutboundWindowSize(initialWindowSize);
         }
         if (firstSettings) {
+          attributes = listener.filterTransport(attributes);
           listener.transportReady();
           firstSettings = false;
         }

@@ -917,6 +917,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     public void onSettingsRead(ChannelHandlerContext ctx, Http2Settings settings) {
       if (firstSettings) {
         firstSettings = false;
+        attributes = lifecycleManager.filterAttributes(attributes);
         lifecycleManager.notifyReady();
       }
     }

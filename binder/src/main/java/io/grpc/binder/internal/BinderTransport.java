@@ -31,6 +31,7 @@ import android.os.TransactionTooLargeException;
 import android.os.UserHandle;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ticker;
+import com.google.common.base.Verify;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -463,14 +464,11 @@ public abstract class BinderTransport
       if (inbound == null) {
         synchronized (this) {
           if (!isShutdown()) {
-            // Create a new inbound. Strictly speaking we could end up doing this twice on
-            // two threads, hence the need to use putIfAbsent, and check its result.
             inbound = createInbound(code);
             if (inbound != null) {
-              Inbound<?> inbound2 = ongoingCalls.putIfAbsent(code, inbound);
-              if (inbound2 != null) {
-                inbound = inbound2;
-              }
+              Inbound<?> existing = ongoingCalls.put(code, inbound);
+              // Can't happen as only one invocation of handleTransaction() is running at a time.
+              Verify.verify(existing == null, "impossible appearance of %s", existing);
             }
           }
         }
@@ -758,6 +756,7 @@ public abstract class BinderTransport
             // triggers), could have shut us down.
             if (!isShutdown()) {
               setState(TransportState.READY);
+              attributes = clientTransportListener.filterTransport(attributes);
               clientTransportListener.transportReady();
             }
           }
