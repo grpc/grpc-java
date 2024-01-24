@@ -125,6 +125,10 @@ public class GoogleCloudToProdNameResolverTest {
   }
 
   private void createResolver() {
+    createResolver(true);
+  }
+
+  private void createResolver(boolean supportIpV6) {
     HttpConnectionProvider httpConnections = new HttpConnectionProvider() {
       @Override
       public HttpURLConnection createConnection(String url) throws IOException {
@@ -135,6 +139,10 @@ public class GoogleCloudToProdNameResolverTest {
               new ByteArrayInputStream(("/" + ZONE).getBytes(StandardCharsets.UTF_8)));
           return con;
         } else if (url.equals(GoogleCloudToProdNameResolver.METADATA_URL_SUPPORT_IPV6)) {
+          if (supportIpV6) {
+            when(con.getInputStream()).thenReturn(
+                new ByteArrayInputStream(("2600:2d00:ffb0:0").getBytes(StandardCharsets.UTF_8)));
+          }
           return con;
         }
         throw new AssertionError("Unknown http query");
@@ -164,6 +172,33 @@ public class GoogleCloudToProdNameResolverTest {
     resolver.start(mockListener);
     assertThat(delegatedResolver.keySet()).containsExactly("dns");
     verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void onGcpAndNoProvidedBootstrap_DelegateToXds_noIpV6() {
+    GoogleCloudToProdNameResolver.isOnGcp = true;
+    GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
+    createResolver(false);
+    resolver.start(mockListener);
+    fakeExecutor.runDueTasks();
+    assertThat(delegatedResolver.keySet()).containsExactly("xds");
+    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
+    Map<String, ?> bootstrap = fakeBootstrapSetter.bootstrapRef.get();
+    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
+    assertThat(node).containsExactly(
+        "id", "C2P-991614323",
+        "locality", ImmutableMap.of("zone", ZONE));
+    Map<String, ?> server = Iterables.getOnlyElement(
+        (List<Map<String, ?>>) bootstrap.get("xds_servers"));
+    assertThat(server).containsExactly(
+        "server_uri", "directpath-pa.googleapis.com",
+        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
+        "server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
+    Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
+    assertThat(authorities).containsExactly(
+        "traffic-director-c2p.xds.googleapis.com",
+        ImmutableMap.of("xds_servers", ImmutableList.of(server)));
   }
 
   @SuppressWarnings("unchecked")

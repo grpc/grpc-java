@@ -34,6 +34,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.HttpURLConnection;
@@ -43,11 +44,15 @@ import java.net.URL;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * CloudToProd version of {@link NameResolver}.
  */
 final class GoogleCloudToProdNameResolver extends NameResolver {
+  private static final Logger logger =
+      Logger.getLogger(GoogleCloudToProdNameResolver.class.getName());
 
   @VisibleForTesting
   static final String METADATA_URL_ZONE =
@@ -142,13 +147,20 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (resolving || shutdown || delegate == null) {
       return;
     }
+
     resolving = true;
+    if (logger.isLoggable(Level.FINE)) {
+      logger.fine("resolve with schemaOverride = " + schemeOverride);
+    }
+
     if (schemeOverride.equals("dns")) {
       delegate.start(listener);
       succeeded = true;
       resolving = false;
       return;
     }
+
+    // must be xds
     if (executor == null) {
       executor = SharedResourceHolder.get(executorResource);
     }
