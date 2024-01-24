@@ -141,7 +141,7 @@ public class GoogleCloudToProdNameResolverTest {
         } else if (url.equals(GoogleCloudToProdNameResolver.METADATA_URL_SUPPORT_IPV6)) {
           if (supportIpV6) {
             when(con.getInputStream()).thenReturn(
-                new ByteArrayInputStream(("2600:2d00:ffb0:0").getBytes(StandardCharsets.UTF_8)));
+                new ByteArrayInputStream("2600:2d00:ffb0:0".getBytes(StandardCharsets.UTF_8)));
           }
           return con;
         }
