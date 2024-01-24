@@ -28,6 +28,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
+import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.ResourceUpdate;
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10847")
 public abstract class XdsResourceType<T extends ResourceUpdate> {
   static final String TYPE_URL_RESOURCE =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
