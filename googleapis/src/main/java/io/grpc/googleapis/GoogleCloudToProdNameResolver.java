@@ -279,7 +279,17 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     HttpURLConnection con = null;
     try {
       con = httpConnectionProvider.createConnection(url);
-      return con.getResponseCode() == 200;
+      if (con.getResponseCode() != 200 ) {
+        return false;
+      }
+      InputStream inputStream = con.getInputStream();
+      if (inputStream == null) {
+        return false;
+      }
+      try (Reader reader = new InputStreamReader(inputStream, Charsets.UTF_8)) {
+        String respBody = CharStreams.toString(reader);
+        return !respBody.isEmpty();
+      }
     } finally {
       if (con != null) {
         con.disconnect();
