@@ -2128,6 +2128,57 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void happy_eyeballs_connection_results_happen_after_get_to_end() {
+    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+
+    List<EquivalentAddressGroup> addrs =
+        Lists.newArrayList(servers.get(0), servers.get(1), servers.get(2));
+
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(addrs).setAttributes(affinity).build());
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    forwardTimeByConnectionDelay(2);
+    inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
+    // Move off the end of the list, but connections requests haven't been completed
+    forwardTimeByConnectionDelay();
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
+    Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
+    // first connection attempt fails
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    // second connection attempt fails
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    // second connection attempt fails again, but still haven't finished third subchannel
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+
+    // last subchannel's connection attempt fails
+    stateListener3.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
+    inOrder.verify(mockHelper).refreshNameResolution();
+
+
+    // Refail the first one, after third time should refreshNameResolution
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).refreshNameResolution();
+  }
+
+  @Test
   public void happy_eyeballs_fail_then_trigger_connection_delay() {
     Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
     // Starting first connection attempt
