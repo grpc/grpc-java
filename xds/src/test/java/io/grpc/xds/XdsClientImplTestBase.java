@@ -92,11 +92,11 @@ import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClient.ResourceWatcher;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
@@ -2242,7 +2242,7 @@ public abstract class XdsClientImplTestBase {
     // The response NACKed with errors indicating indices of the failed resources.
     String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
             + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
-            + "io.grpc.xds.XdsClientImpl$ResourceInvalidException: "
+            + "io.grpc.xds.XdsResourceType$ResourceInvalidException: "
             + "ca_certificate_provider_instance is required in upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -2349,7 +2349,7 @@ public abstract class XdsClientImplTestBase {
 
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "Cluster cluster.googleapis.com: malformed outlier_detection: "
-        + "io.grpc.xds.XdsClientImpl$ResourceInvalidException: outlier_detection "
+        + "io.grpc.xds.XdsResourceType$ResourceInvalidException: outlier_detection "
         + "max_ejection_percent is > 100";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());

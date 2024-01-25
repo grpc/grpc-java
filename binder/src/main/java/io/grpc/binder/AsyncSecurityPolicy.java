@@ -67,5 +67,5 @@ public final Status checkAuthorization(int uid) {
    * @return A {@link ListenableFuture} for a gRPC {@link Status} object, with OK indicating
    *     authorized.
    */
-  abstract ListenableFuture<Status> checkAuthorizationAsync(int uid);
+  public abstract ListenableFuture<Status> checkAuthorizationAsync(int uid);
 }

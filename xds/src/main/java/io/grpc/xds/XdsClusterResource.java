@@ -42,8 +42,8 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -65,7 +65,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
   @Override
   @Nullable
-  String extractResourceName(Message unpackedResource) {
+  protected String extractResourceName(Message unpackedResource) {
     if (!(unpackedResource instanceof Cluster)) {
       return null;
     }
@@ -73,29 +73,28 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  String typeName() {
+  protected String typeName() {
     return "CDS";
   }
 
   @Override
-  String typeUrl() {
+  protected String typeUrl() {
     return ADS_TYPE_URL_CDS;
   }
 
   @Override
-  boolean isFullStateOfTheWorld() {
+  protected boolean isFullStateOfTheWorld() {
     return true;
   }
 
   @Override
   @SuppressWarnings("unchecked")
-  Class<Cluster> unpackedClassName() {
+  protected Class<Cluster> unpackedClassName() {
     return Cluster.class;
   }
 
   @Override
-  CdsUpdate doParse(Args args, Message unpackedMessage)
-      throws ResourceInvalidException {
+  protected CdsUpdate doParse(Args args, Message unpackedMessage) throws ResourceInvalidException {
     if (!(unpackedMessage instanceof Cluster)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
