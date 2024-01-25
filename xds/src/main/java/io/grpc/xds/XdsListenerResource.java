@@ -18,8 +18,8 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsClient.ResourceUpdate;
-import static io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import static io.grpc.xds.XdsClusterResource.validateCommonTlsContext;
+import static io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import static io.grpc.xds.XdsRouteConfigureResource.extractVirtualHosts;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
@@ -66,7 +66,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
 
   @Override
   @Nullable
-  String extractResourceName(Message unpackedResource) {
+  protected String extractResourceName(Message unpackedResource) {
     if (!(unpackedResource instanceof Listener)) {
       return null;
     }
@@ -74,27 +74,27 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
-  String typeName() {
+  protected String typeName() {
     return "LDS";
   }
 
   @Override
-  Class<Listener> unpackedClassName() {
+  protected Class<Listener> unpackedClassName() {
     return Listener.class;
   }
 
   @Override
-  String typeUrl() {
+  protected String typeUrl() {
     return ADS_TYPE_URL_LDS;
   }
 
   @Override
-  boolean isFullStateOfTheWorld() {
+  protected boolean isFullStateOfTheWorld() {
     return true;
   }
 
   @Override
-  LdsUpdate doParse(Args args, Message unpackedMessage)
+  protected LdsUpdate doParse(Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof Listener)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());

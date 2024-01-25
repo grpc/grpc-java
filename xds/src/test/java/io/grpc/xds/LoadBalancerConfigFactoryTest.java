@@ -52,7 +52,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import java.util.List;
 import org.junit.After;
 import org.junit.Test;

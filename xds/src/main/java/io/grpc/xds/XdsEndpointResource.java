@@ -28,8 +28,8 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -54,7 +54,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
 
   @Override
   @Nullable
-  String extractResourceName(Message unpackedResource) {
+  protected String extractResourceName(Message unpackedResource) {
     if (!(unpackedResource instanceof ClusterLoadAssignment)) {
       return null;
     }
@@ -62,28 +62,27 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  String typeName() {
+  protected String typeName() {
     return "EDS";
   }
 
   @Override
-  String typeUrl() {
+  protected String typeUrl() {
     return ADS_TYPE_URL_EDS;
   }
 
   @Override
-  boolean isFullStateOfTheWorld() {
+  protected boolean isFullStateOfTheWorld() {
     return false;
   }
 
   @Override
-  Class<ClusterLoadAssignment> unpackedClassName() {
+  protected Class<ClusterLoadAssignment> unpackedClassName() {
     return ClusterLoadAssignment.class;
   }
 
   @Override
-  EdsUpdate doParse(Args args, Message unpackedMessage)
-      throws ResourceInvalidException {
+  protected EdsUpdate doParse(Args args, Message unpackedMessage) throws ResourceInvalidException {
     if (!(unpackedMessage instanceof ClusterLoadAssignment)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
