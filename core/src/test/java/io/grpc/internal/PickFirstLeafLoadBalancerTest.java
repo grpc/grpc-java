@@ -2132,6 +2132,7 @@ public class PickFirstLeafLoadBalancerTest {
     Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
 
     List<EquivalentAddressGroup> addrs =
         Lists.newArrayList(servers.get(0), servers.get(1), servers.get(2));
@@ -2147,14 +2148,14 @@ public class PickFirstLeafLoadBalancerTest {
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
+    // first connection attempt fails
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
     // Move off the end of the list, but connections requests haven't been completed
     forwardTimeByConnectionDelay();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
-    Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
-    // first connection attempt fails
-    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
-    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     // second connection attempt fails
     stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
@@ -2176,6 +2177,81 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper, never()).refreshNameResolution();
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
     inOrder.verify(mockHelper).refreshNameResolution();
+  }
+
+
+  @Test
+  public void happy_eyeballs_pick_pushes_index_over_end() {
+    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
+
+    List<EquivalentAddressGroup> addrs =
+        Lists.newArrayList(servers.get(0), servers.get(1), servers.get(2));
+    Subchannel[] subchannels = new Subchannel[] {mockSubchannel1, mockSubchannel2, mockSubchannel3};
+    SubchannelStateListener[] listeners = new SubchannelStateListener[subchannels.length];
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(addrs).setAttributes(affinity).build());
+    forwardTimeByConnectionDelay(2);
+    for (int i = 0; i < subchannels.length; i++) {
+      inOrder.verify(subchannels[i]).start(stateListenerCaptor.capture());
+      listeners[i] = stateListenerCaptor.getValue();
+      listeners[i].onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    }
+    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
+
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(addrs).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    SubchannelPicker requestingPicker = pickerCaptor.getValue();
+
+    // First pick moves index to addr 2
+    PickResult pickResult = requestingPicker.pickSubchannel(mockArgs);
+    assertEquals("RequestConnectionPicker", requestingPicker.getClass().getSimpleName());
+    assertEquals(PickResult.withNoResult(), pickResult);
+    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
+
+    // Second pick moves index to addr 3
+    pickResult = requestingPicker.pickSubchannel(mockArgs);
+    assertEquals(PickResult.withNoResult(), pickResult);
+
+    // Sending TF state to one subchannel pushes index past end, but shouldn't do anything
+    listeners[2].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).updateBalancingState(eq(TRANSIENT_FAILURE), any());
+
+    // Put the LB into TF
+    listeners[0].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    listeners[1].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult pickResultTF = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertFalse(pickResultTF.getStatus().isOk());
+
+    // Doing a pick on the old RequestConnectionPicker when past the index end
+    pickResult = requestingPicker.pickSubchannel(mockArgs);
+    assertEquals(PickResult.withNoResult(), pickResult);
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
+
+    // Try pushing after end with just picks
+    listeners[0].onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    for (SubchannelStateListener listener : listeners) {
+      listener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    }
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(addrs).setAttributes(affinity).build());
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    SubchannelPicker requestingPicker2 = pickerCaptor.getValue();
+    for (int i = 0; i <= subchannels.length; i++) {
+      pickResult = requestingPicker2.pickSubchannel(mockArgs);
+      assertEquals(PickResult.withNoResult(), pickResult);
+    }
+    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
+
+    for (SubchannelStateListener listener : listeners) {
+      listener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    }
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
+
   }
 
   @Test
