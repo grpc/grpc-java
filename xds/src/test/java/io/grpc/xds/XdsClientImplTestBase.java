@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.XdsClientImpl.XdsChannelFactory.DEFAULT_XDS_CHANNEL_FACTORY;
+import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -85,13 +85,13 @@ import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
+import io.grpc.xds.GrpcXdsTransportFactory.GrpcXdsTransport;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClient.ResourceWatcher;
-import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
@@ -322,25 +322,25 @@ public abstract class XdsClientImplTestBase {
         .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
-    XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
+    XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
       @Override
-      ManagedChannel create(ServerInfo serverInfo) {
+      public XdsTransport create(ServerInfo serverInfo) {
         if (serverInfo.target().equals(SERVER_URI)) {
-          return channel;
+          return new GrpcXdsTransport(channel);
         }
         if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
           if (channelForCustomAuthority == null) {
             channelForCustomAuthority = cleanupRule.register(
                 InProcessChannelBuilder.forName(serverName).directExecutor().build());
           }
-          return channelForCustomAuthority;
+          return new GrpcXdsTransport(channelForCustomAuthority);
         }
         if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
           if (channelForEmptyAuthority == null) {
             channelForEmptyAuthority = cleanupRule.register(
                 InProcessChannelBuilder.forName(serverName).directExecutor().build());
           }
-          return channelForEmptyAuthority;
+          return new GrpcXdsTransport(channelForEmptyAuthority);
         }
         throw new IllegalArgumentException("Can not create channel for " + serverInfo);
       }
@@ -368,7 +368,7 @@ public abstract class XdsClientImplTestBase {
             .build();
     xdsClient =
         new XdsClientImpl(
-            xdsChannelFactory,
+            xdsTransportFactory,
             bootstrapInfo,
             Context.ROOT,
             fakeClock.getScheduledExecutorService(),
@@ -3743,7 +3743,7 @@ public abstract class XdsClientImplTestBase {
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
-        DEFAULT_XDS_CHANNEL_FACTORY,
+        DEFAULT_XDS_TRANSPORT_FACTORY,
         bootstrapInfo,
         Context.ROOT,
         fakeClock.getScheduledExecutorService(),

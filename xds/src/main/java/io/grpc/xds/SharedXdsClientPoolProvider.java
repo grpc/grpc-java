@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
@@ -26,7 +27,6 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.util.Map;
@@ -124,7 +124,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         if (refCount == 0) {
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           xdsClient = new XdsClientImpl(
-              XdsChannelFactory.DEFAULT_XDS_CHANNEL_FACTORY,
+              DEFAULT_XDS_TRANSPORT_FACTORY,
               bootstrapInfo,
               context,
               scheduler,
