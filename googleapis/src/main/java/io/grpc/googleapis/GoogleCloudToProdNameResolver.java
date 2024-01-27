@@ -160,7 +160,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       return;
     }
 
-    // must be xds
+    // Since not dns, we must be using xds
     if (executor == null) {
       executor = SharedResourceHolder.get(executorResource);
     }
@@ -283,13 +283,9 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         return false;
       }
       InputStream inputStream = con.getInputStream();
-      if (inputStream == null) {
-        return false;
-      }
-      try (Reader reader = new InputStreamReader(inputStream, Charsets.UTF_8)) {
-        String respBody = CharStreams.toString(reader);
-        return !respBody.isEmpty();
-      }
+      int c;
+      return (inputStream != null
+          && (c = inputStream.read()) != -1 && !Character.isWhitespace(c));
     } finally {
       if (con != null) {
         con.disconnect();
