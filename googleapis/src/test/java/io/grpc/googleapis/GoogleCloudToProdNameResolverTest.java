@@ -229,6 +229,7 @@ public class GoogleCloudToProdNameResolverTest {
         ImmutableMap.of("xds_servers", ImmutableList.of(server)));
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void emptyResolverMeetadataValue() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
