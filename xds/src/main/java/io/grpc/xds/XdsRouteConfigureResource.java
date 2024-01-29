@@ -49,7 +49,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
@@ -85,7 +85,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
   @Override
   @Nullable
-  String extractResourceName(Message unpackedResource) {
+  protected String extractResourceName(Message unpackedResource) {
     if (!(unpackedResource instanceof RouteConfiguration)) {
       return null;
     }
@@ -93,27 +93,27 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  String typeName() {
+  protected String typeName() {
     return "RDS";
   }
 
   @Override
-  String typeUrl() {
+  protected String typeUrl() {
     return ADS_TYPE_URL_RDS;
   }
 
   @Override
-  boolean isFullStateOfTheWorld() {
+  protected boolean isFullStateOfTheWorld() {
     return false;
   }
 
   @Override
-  Class<RouteConfiguration> unpackedClassName() {
+  protected Class<RouteConfiguration> unpackedClassName() {
     return RouteConfiguration.class;
   }
 
   @Override
-  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage)
+  protected RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());

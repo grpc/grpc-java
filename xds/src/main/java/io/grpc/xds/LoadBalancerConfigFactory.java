@@ -39,8 +39,8 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.LoadBalancerConfigFactory.LoadBalancingPolicyConverter.MaxRecursionReachedException;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import java.io.IOException;
 import java.util.Map;
 
