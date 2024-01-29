@@ -955,6 +955,8 @@ public abstract class LoadBalancer {
      *
      * <p>It must be called from {@link #getSynchronizationContext the Synchronization Context}
      *
+     * @return Must return a valid Subchannel object, may not return null.
+     *
      * @since 1.22.0
      */
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
@@ -1287,7 +1289,8 @@ public abstract class LoadBalancer {
      */
     public final EquivalentAddressGroup getAddresses() {
       List<EquivalentAddressGroup> groups = getAllAddresses();
-      Preconditions.checkState(groups.size() == 1, "%s does not have exactly one group", groups);
+      Preconditions.checkState(groups != null && groups.size() == 1,
+          "%s does not have exactly one group", groups);
       return groups.get(0);
     }
 
