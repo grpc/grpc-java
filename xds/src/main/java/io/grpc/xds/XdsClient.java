@@ -26,6 +26,7 @@ import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
@@ -115,7 +116,8 @@ public abstract class XdsClient {
   /**
    * Watcher interface for a single requested xDS resource.
    */
-  interface ResourceWatcher<T extends ResourceUpdate> {
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
+  public interface ResourceWatcher<T extends ResourceUpdate> {
 
     /**
      * Called when the resource discovery RPC encounters some transient error.
