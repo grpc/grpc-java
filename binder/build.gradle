@@ -51,6 +51,7 @@ dependencies {
     testImplementation libraries.robolectric
     testImplementation libraries.guava.testlib
     testImplementation libraries.truth
+    testImplementation project(':grpc-protobuf-lite')
     testImplementation project(':grpc-testing')
     testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core'))
