@@ -287,8 +287,6 @@ public abstract class XdsClientImplTestBase {
   private ResourceWatcher<CdsUpdate> cdsResourceWatcher;
   @Mock
   private ResourceWatcher<EdsUpdate> edsResourceWatcher;
-  @Mock
-  private TlsContextManager tlsContextManager;
 
   private ManagedChannel channel;
   private ManagedChannel channelForCustomAuthority;
@@ -374,8 +372,7 @@ public abstract class XdsClientImplTestBase {
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
-            timeProvider,
-            tlsContextManager);
+            timeProvider);
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -3749,8 +3746,7 @@ public abstract class XdsClientImplTestBase {
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,
         fakeClock.getStopwatchSupplier(),
-        timeProvider,
-        tlsContextManager);
+        timeProvider);
   }
 
   private  BootstrapInfo buildBootStrap(String serverUri) {
