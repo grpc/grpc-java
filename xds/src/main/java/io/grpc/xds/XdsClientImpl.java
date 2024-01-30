@@ -47,6 +47,7 @@ import io.grpc.xds.XdsClient.ResourceStore;
 import io.grpc.xds.XdsClient.TimerLaunch;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
@@ -116,8 +117,7 @@ final class XdsClientImpl extends XdsClient
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
-      TimeProvider timeProvider,
-      TlsContextManager tlsContextManager) {
+      TimeProvider timeProvider) {
     this.xdsTransportFactory = xdsTransportFactory;
     this.bootstrapInfo = bootstrapInfo;
     this.context = context;
@@ -125,7 +125,7 @@ final class XdsClientImpl extends XdsClient
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.stopwatchSupplier = stopwatchSupplier;
     this.timeProvider = timeProvider;
-    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
+    this.tlsContextManager = new TlsContextManagerImpl(bootstrapInfo);
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
