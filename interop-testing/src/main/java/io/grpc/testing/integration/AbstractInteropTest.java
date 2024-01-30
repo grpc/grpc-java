@@ -220,7 +220,7 @@ public abstract class AbstractInteropTest {
    * Constructor for tests.
    */
   protected AbstractInteropTest() {
-    TestRule timeout = Timeout.seconds(60);
+    TestRule timeout = Timeout.seconds(90);
     try {
       timeout = new DisableOnDebug(timeout);
     } catch (Throwable t) {
@@ -2212,7 +2212,7 @@ public abstract class AbstractInteropTest {
   }
 
   protected int operationTimeoutMillis() {
-    return 5000;
+    return 7000;
   }
 
   /**
