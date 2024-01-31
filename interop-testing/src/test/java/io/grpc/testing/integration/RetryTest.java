@@ -17,7 +17,6 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
-import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -78,6 +77,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import junit.framework.Assert;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
@@ -261,7 +261,8 @@ public class RetryTest {
     MetricsRecord record = clientStatsRecorder.pollRecord(7, SECONDS);
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
-    assertThat(String.valueOf(statusTag)).isEqualTo(code.toString());
+    Assert.assertNotNull(statusTag);
+    assertThat(statusTag.asString()).isEqualTo(code.toString());
     assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
         .isEqualTo(1);
     assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY))
