@@ -195,7 +195,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             }
           }
           if (retryFuture != null) {
-            retryFuture.cancel(false);
+            boolean cancelled = retryFuture.cancel(false);
+            if (cancelled) {
+              inFlightSubStreams.decrementAndGet();
+            }
           }
           if (hedgingFuture != null) {
             hedgingFuture.cancel(false);
