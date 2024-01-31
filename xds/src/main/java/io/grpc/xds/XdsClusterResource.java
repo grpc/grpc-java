@@ -56,6 +56,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
+  private final LoadBalancerRegistry loadBalancerRegistry
+      = LoadBalancerRegistry.getDefaultRegistry();
 
   private static final XdsClusterResource instance = new XdsClusterResource();
 
@@ -103,7 +105,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       certProviderInstances = args.bootstrapInfo.certProviders().keySet();
     }
     return processCluster((Cluster) unpackedMessage, certProviderInstances,
-        args.serverInfo, args.loadBalancerRegistry);
+        args.serverInfo, loadBalancerRegistry);
   }
 
   @VisibleForTesting

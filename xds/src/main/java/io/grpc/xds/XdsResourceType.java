@@ -17,8 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.Bootstrapper.ServerInfo;
-import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClient.canonifyResourceName;
 import static io.grpc.xds.XdsClient.isResourceNameValid;
 
@@ -29,7 +27,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.ExperimentalApi;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import java.util.ArrayList;
@@ -63,6 +60,8 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
   @VisibleForTesting
   static boolean enablePickFirst = getFlag("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG", true);
 
+  protected final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
+
   static final String TYPE_URL_CLUSTER_CONFIG =
       "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
   static final String TYPE_URL_TYPED_STRUCT_UDPA =
@@ -91,8 +90,6 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
     final String versionInfo;
     final String nonce;
     final Bootstrapper.BootstrapInfo bootstrapInfo;
-    final FilterRegistry filterRegistry;
-    final LoadBalancerRegistry loadBalancerRegistry;
     final TlsContextManager tlsContextManager;
     // Management server is required to always send newly requested resources, even if they
     // may have been sent previously (proactively). Thus, client does not need to cache
@@ -102,16 +99,12 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
 
     public Args(ServerInfo serverInfo, String versionInfo, String nonce,
                 Bootstrapper.BootstrapInfo bootstrapInfo,
-                FilterRegistry filterRegistry,
-                LoadBalancerRegistry loadBalancerRegistry,
                 TlsContextManager tlsContextManager,
                 @Nullable Set<String> subscribedResources) {
       this.serverInfo = serverInfo;
       this.versionInfo = versionInfo;
       this.nonce = nonce;
       this.bootstrapInfo = bootstrapInfo;
-      this.filterRegistry = filterRegistry;
-      this.loadBalancerRegistry = loadBalancerRegistry;
       this.tlsContextManager = tlsContextManager;
       this.subscribedResources = subscribedResources;
     }

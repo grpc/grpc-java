@@ -118,8 +118,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
-    return processRouteConfiguration((RouteConfiguration) unpackedMessage,
-        args.filterRegistry);
+    return processRouteConfiguration((RouteConfiguration) unpackedMessage, filterRegistry);
   }
 
   private static RdsUpdate processRouteConfiguration(

@@ -102,15 +102,13 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     Listener listener = (Listener) unpackedMessage;
 
     if (listener.hasApiListener()) {
-      return processClientSideListener(
-          listener, args);
+      return processClientSideListener(listener);
     } else {
-      return processServerSideListener(
-          listener, args);
+      return processServerSideListener(listener, args);
     }
   }
 
-  private LdsUpdate processClientSideListener(Listener listener, Args args)
+  private LdsUpdate processClientSideListener(Listener listener)
       throws ResourceInvalidException {
     // Unpack HttpConnectionManager from the Listener.
     HttpConnectionManager hcm;
@@ -123,7 +121,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
     return LdsUpdate.forApiListener(parseHttpConnectionManager(
-        hcm, args.filterRegistry, true /* isForClient */));
+        hcm, filterRegistry, true /* isForClient */));
   }
 
   private LdsUpdate processServerSideListener(Listener proto, Args args)
@@ -133,7 +131,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       certProviderInstances = args.bootstrapInfo.certProviders().keySet();
     }
     return LdsUpdate.forTcpListener(parseServerSideListener(proto, args.tlsContextManager,
-        args.filterRegistry, certProviderInstances));
+        filterRegistry, certProviderInstances));
   }
 
   @VisibleForTesting
