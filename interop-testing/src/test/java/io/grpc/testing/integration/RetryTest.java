@@ -77,7 +77,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import junit.framework.Assert;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
@@ -261,7 +260,7 @@ public class RetryTest {
     MetricsRecord record = clientStatsRecorder.pollRecord(7, SECONDS);
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
-    Assert.assertNotNull(statusTag);
+    assertNotNull(statusTag);
     assertThat(statusTag.asString()).isEqualTo(code.toString());
     assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
         .isEqualTo(1);
