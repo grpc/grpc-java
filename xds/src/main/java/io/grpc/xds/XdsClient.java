@@ -117,7 +117,8 @@ public abstract class XdsClient {
   /**
    * Watcher interface for a single requested xDS resource.
    */
-  interface ResourceWatcher<T extends ResourceUpdate> {
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
+  public interface ResourceWatcher<T extends ResourceUpdate> {
 
     /**
      * Called when the resource discovery RPC encounters some transient error.
@@ -125,7 +126,7 @@ public abstract class XdsClient {
      * <p>Note that we expect that the implementer to:
      * - Comply with the guarantee to not generate certain statuses by the library:
      *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
-     *   propagated to the channel, override it with {@link Status.Code#UNAVAILABLE}.
+     *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
      * - Keep {@link Status} description in one form or another, as it contains valuable debugging
      *   information.
      */
@@ -308,23 +309,25 @@ public abstract class XdsClient {
   /**
    * Registers a data watcher for the given Xds resource.
    */
-  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher,
-                                                   Executor executor) {
+  public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher,
+      Executor executor) {
     throw new UnsupportedOperationException();
   }
 
-  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher) {
+  public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher) {
     watchXdsResource(type, resourceName, watcher, MoreExecutors.directExecutor());
   }
 
   /**
    * Unregisters the given resource watcher.
    */
-  <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                         String resourceName,
-                                                         ResourceWatcher<T> watcher) {
+  public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher) {
     throw new UnsupportedOperationException();
   }
 
