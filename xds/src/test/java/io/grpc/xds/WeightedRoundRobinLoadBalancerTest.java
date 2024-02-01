@@ -47,6 +47,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.TestUtils;
@@ -160,6 +161,22 @@ public class WeightedRoundRobinLoadBalancerTest {
         new FakeRandom(0));
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+  }
+
+  @Test
+  public void pickChildLbTF() throws Exception {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers.subList(0, 1)).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+        .forTransientFailure(Status.UNAVAILABLE));
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    final WeightedRoundRobinPicker weightedPicker =
+        (WeightedRoundRobinPicker) pickerCaptor.getValue();
+    weightedPicker.pickSubchannel(mockArgs);
   }
 
   @Test
