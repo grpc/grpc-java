@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import io.grpc.Internal;
+import io.grpc.internal.ObjectPool;
 import java.util.Map;
 
 /**
@@ -29,5 +30,9 @@ public final class InternalSharedXdsClientPoolProvider {
 
   public static void setDefaultProviderBootstrapOverride(Map<String, ?> bootstrap) {
     SharedXdsClientPoolProvider.getDefaultProvider().setBootstrapOverride(bootstrap);
+  }
+
+  public static ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+    return SharedXdsClientPoolProvider.getDefaultProvider().getOrCreate();
   }
 }
