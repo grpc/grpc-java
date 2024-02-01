@@ -77,7 +77,10 @@ public abstract class XdsClient {
     return true;
   }
 
-  static String canonifyResourceName(String resourceName) {
+  /*
+   * Convert the XDSTP resource name to its canonical version.
+   */
+  public static String canonifyResourceName(String resourceName) {
     checkNotNull(resourceName, "resourceName");
     if (!resourceName.startsWith(XDSTP_SCHEME)) {
       return resourceName;
@@ -101,7 +104,10 @@ public abstract class XdsClient {
     return resourceName.replace(rawQuery, canonifiedQuery);
   }
 
-  static String percentEncodePath(String input) {
+  /*
+   * Percent encode the input using the url path segment escaper.
+   */
+  public static String percentEncodePath(String input) {
     Iterable<String> pathSegs = Splitter.on('/').split(input);
     List<String> encodedSegs = new ArrayList<>();
     for (String pathSeg : pathSegs) {
