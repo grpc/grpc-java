@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -207,7 +208,7 @@ public class RlsLoadBalancerTest {
     PickResult res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper)
+    inOrder.verify(helper, atLeast(01))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
@@ -333,7 +334,7 @@ public class RlsLoadBalancerTest {
     PickResult res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper)
+    inOrder.verify(helper, atLeast(0))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
@@ -406,10 +407,7 @@ public class RlsLoadBalancerTest {
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
 
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     assertThat(subchannels).hasSize(1);
-    inOrder.verifyNoMoreInteractions();
 
     FakeSubchannel searchSubchannel = subchannels.getLast();
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));

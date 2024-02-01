@@ -95,6 +95,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
           delegatesTo(
               new FakeLoadBalancerProvider("test_lb2", testLbBalancer2, nextParsedConfigOrError2)));
 
+  private Class<? extends LoadBalancer> PfLbClass =
+      PickFirstLoadBalancerProvider.enableNewPickFirst
+          ? PickFirstLeafLoadBalancer.class
+          : PickFirstLoadBalancer.class;
+
   @Before
   public void setUp() {
     when(testLbBalancer.acceptResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(
@@ -429,7 +434,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .setLoadBalancingPolicyConfig(null)
             .build());
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
-    assertThat(lb.getDelegate()).isInstanceOf(PickFirstLoadBalancer.class);
+    assertThat(lb.getDelegate()).isInstanceOf(PfLbClass);
   }
 
   @Test
@@ -484,7 +489,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     verify(channelLogger).log(
         eq(ChannelLogLevel.INFO),
         eq("Load balancer changed from {0} to {1}"),
-        eq("PickFirstLoadBalancer"),
+        eq(PfLbClass.getSimpleName()),
         eq(testLbBalancer.getClass().getSimpleName()));
 
     verify(channelLogger).log(

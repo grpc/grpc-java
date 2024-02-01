@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import com.google.common.base.Strings;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
@@ -35,8 +34,7 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   private static final String SHUFFLE_ADDRESS_LIST_KEY = "shuffleAddressList";
 
   static boolean enableNewPickFirst =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"))
-          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST"));
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", false);
 
   @Override
   public boolean isAvailable() {
