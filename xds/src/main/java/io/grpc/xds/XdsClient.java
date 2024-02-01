@@ -26,6 +26,7 @@ import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
@@ -47,6 +48,7 @@ import javax.annotation.Nullable;
  * protocols (e.g., LDS, RDS, VHDS, CDS and EDS) over a single channel. Watch-based interfaces
  * are provided for each set of data needed by gRPC.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
 public abstract class XdsClient {
 
   static boolean isResourceNameValid(String resourceName, String typeUrl) {
