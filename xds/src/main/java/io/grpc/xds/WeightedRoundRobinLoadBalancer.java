@@ -365,6 +365,9 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       WeightedChildLbState wChild = (WeightedChildLbState) childLbState;
       PickResult pickResult = childLbState.getCurrentPicker().pickSubchannel(args);
       Subchannel subchannel = pickResult.getSubchannel();
+      if (subchannel == null) {
+        return pickResult;
+      }
       if (!enableOobLoadReport) {
         return PickResult.withSubchannel(subchannel,
             OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
