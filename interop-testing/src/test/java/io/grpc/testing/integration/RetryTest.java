@@ -106,6 +106,7 @@ public class RetryTest {
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private final FakeClock fakeClock = new FakeClock();
   private TestListener realMockCallListener = new TestListener();
+  @SuppressWarnings("unchecked")
   private ClientCall.Listener<Integer> mockCallListener =
       mock(ClientCall.Listener.class, delegatesTo(realMockCallListener));
 
@@ -546,9 +547,10 @@ public class RetryTest {
     assertRetryStatsRecorded(0, 1, 0);
   }
 
-  private class TestListener extends ClientCall.Listener<Integer> {
+  private static class TestListener extends ClientCall.Listener<Integer> {
     Status status = null;
     private CountDownLatch closeLatch = new CountDownLatch(1);
+
     @Override
     public void onClose(Status status, Metadata trailers) {
       this.status = status;
