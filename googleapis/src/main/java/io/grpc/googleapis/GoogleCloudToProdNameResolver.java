@@ -225,7 +225,11 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     ImmutableMap.Builder<String, Object> authoritiesBuilder = ImmutableMap.builder();
     authoritiesBuilder.put(
         C2P_AUTHORITY,
-        ImmutableMap.of("xds_servers", ImmutableList.of(serverBuilder.buildOrThrow())));
+        ImmutableMap.of(
+            "xds_servers",
+            ImmutableList.of(serverBuilder.buildOrThrow()),
+            "client_listener_resource_name_template",
+            "xdstp://traffic-director-c2p.xds.googleapis.com/envoy.config.listener.v3.Listener/%s"));
     return ImmutableMap.of(
         "node", nodeBuilder.buildOrThrow(),
         "xds_servers", ImmutableList.of(serverBuilder.buildOrThrow()),
