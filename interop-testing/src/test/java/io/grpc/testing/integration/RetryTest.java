@@ -133,7 +133,7 @@ public class RetryTest {
             @Override
             public void run() {} // no-op
           },
-          0,
+          1000,
           TimeUnit.NANOSECONDS);
     }
   };
