@@ -77,7 +77,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -105,10 +104,10 @@ public class RetryTest {
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private final FakeClock fakeClock = new FakeClock();
-  private TestListener realMockCallListener = new TestListener();
+  private TestListener testCallListener = new TestListener();
   @SuppressWarnings("unchecked")
   private ClientCall.Listener<Integer> mockCallListener =
-      mock(ClientCall.Listener.class, delegatesTo(realMockCallListener));
+      mock(ClientCall.Listener.class, delegatesTo(testCallListener));
 
   private CountDownLatch backoffLatch = new CountDownLatch(1);
   private final EventLoopGroup group = new DefaultEventLoopGroup() {
@@ -173,11 +172,6 @@ public class RetryTest {
   private ManagedChannel channel;
   private Map<String, Object> retryPolicy = null;
   private long bufferLimit = 1L << 20; // 1M
-
-  @Before
-  public void setUp() throws Exception {
-  }
-
 
   private void startNewServer() throws Exception {
     localServer = cleanupRule.register(NettyServerBuilder.forAddress(localAddress)
@@ -309,12 +303,12 @@ public class RetryTest {
     call.sendMessage(message);
 
     // let attempt fail
-    realMockCallListener.clear();
+    testCallListener.clear();
     serverCall.close(
         Status.UNAVAILABLE.withDescription("2nd attempt failed"),
         new Metadata());
     // no more retry
-    realMockCallListener.verifyDescription("2nd attempt failed", 5000);
+    testCallListener.verifyDescription("2nd attempt failed", 5000);
   }
 
   @Test
