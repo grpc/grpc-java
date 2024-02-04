@@ -21,7 +21,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
-import io.grpc.StatusException;
+import io.grpc.StatusExceptionBuilder;
 import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
@@ -69,8 +69,8 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
       StreamObserver<HealthCheckResponse> responseObserver) {
     ServingStatus status = statusMap.get(request.getService());
     if (status == null) {
-      responseObserver.onError(new StatusException(
-          Status.NOT_FOUND.withDescription("unknown service " + request.getService())));
+      responseObserver.onError(new StatusExceptionBuilder().setStatus(
+          Status.NOT_FOUND.withDescription("unknown service " + request.getService())).build());
     } else {
       HealthCheckResponse response = HealthCheckResponse.newBuilder().setStatus(status).build();
       responseObserver.onNext(response);

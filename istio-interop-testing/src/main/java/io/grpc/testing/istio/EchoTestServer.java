@@ -42,7 +42,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
+import io.grpc.StatusRuntimeExceptionBuilder;
 import io.grpc.TlsServerCredentials;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.MetadataUtils;
@@ -356,8 +356,9 @@ public final class EchoTestServer {
       String rawUrl = request.getUrl();
       List<String> urlParts = Splitter.on(':').limit(2).splitToList(rawUrl);
       if (urlParts.size() < 2) {
-        throw new StatusRuntimeException(
-            Status.INVALID_ARGUMENT.withDescription("No protocol configured for url " + rawUrl));
+        throw new StatusRuntimeExceptionBuilder().setStatus(
+            Status.INVALID_ARGUMENT.withDescription("No protocol configured for url " + rawUrl))
+            .build();
       }
       ChannelCredentials creds;
       String target = null;

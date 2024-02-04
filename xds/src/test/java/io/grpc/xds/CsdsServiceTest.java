@@ -42,6 +42,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
+import io.grpc.StatusRuntimeExceptionBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
@@ -252,7 +253,8 @@ public class CsdsServiceTest {
           csdsAsyncStub.streamClientStatus(responseObserver);
 
       requestObserver.onNext(REQUEST);
-      requestObserver.onError(new StatusRuntimeException(Status.DATA_LOSS));
+      requestObserver.onError(new StatusRuntimeExceptionBuilder().setStatus(Status.DATA_LOSS)
+          .build());
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
       assertThat(responses).hasSize(1);

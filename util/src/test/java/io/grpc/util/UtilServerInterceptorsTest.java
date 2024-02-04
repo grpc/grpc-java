@@ -30,6 +30,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.StatusRuntimeExceptionBuilder;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Arrays;
 import org.junit.Test;
@@ -78,7 +79,8 @@ public class UtilServerInterceptorsTest {
     FakeServerCall<Void, Void> call =
         new FakeServerCall<>(expectedStatus, expectedMetadata);
     final StatusRuntimeException exception =
-        new StatusRuntimeException(expectedStatus, expectedMetadata);
+        new StatusRuntimeExceptionBuilder().setStatus(expectedStatus).setTrailers(expectedMetadata)
+            .build();
     listener = new VoidCallListener() {
       @Override
       public void onMessage(Void message) {
@@ -128,7 +130,8 @@ public class UtilServerInterceptorsTest {
     FakeServerCall<Void, Void> call =
         new FakeServerCall<>(expectedStatus, expectedMetadata);
     final StatusRuntimeException exception =
-        new StatusRuntimeException(expectedStatus, expectedMetadata);
+        new StatusRuntimeExceptionBuilder().setStatus(expectedStatus).setTrailers(expectedMetadata)
+            .build();
 
     listener = new VoidCallListener() {
       @Override

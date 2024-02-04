@@ -23,7 +23,7 @@ import static org.junit.Assert.assertTrue;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
+import io.grpc.StatusRuntimeExceptionBuilder;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -143,7 +143,7 @@ public class MoreInProcessTest {
       public StreamObserver<StreamingInputCallRequest> streamingInputCall(
           StreamObserver<StreamingInputCallResponse> responseObserver) {
         // send error directly
-        responseObserver.onError(new StatusRuntimeException(fakeError));
+        responseObserver.onError(new StatusRuntimeExceptionBuilder().setStatus(fakeError).build());
         responseObserver.onCompleted();
         return new StreamObserver<StreamingInputCallRequest>() {
           @Override

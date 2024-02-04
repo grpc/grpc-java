@@ -25,7 +25,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
+import io.grpc.StatusRuntimeExceptionBuilder;
 import io.grpc.internal.LogExceptionRunnable;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.services.MetricRecorder;
@@ -220,8 +220,10 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
             try {
               lock.acquire();
             } catch (InterruptedException ex) {
-              responseObserver.onError(new StatusRuntimeException(
-                  Status.ABORTED.withDescription("server service interrupted").withCause(ex)));
+              responseObserver.onError(
+                  new StatusRuntimeExceptionBuilder()
+                      .setStatus(Status.ABORTED.withDescription("server service interrupted")
+                          .withCause(ex)).build());
               return;
             }
             oobTestLocked = true;

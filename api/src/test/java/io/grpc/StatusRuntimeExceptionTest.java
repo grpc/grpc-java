@@ -31,7 +31,8 @@ public class StatusRuntimeExceptionTest {
   @Test
   public void internalCtorRemovesStack() {
     StackTraceElement[] trace =
-        new StatusRuntimeException(Status.CANCELLED, null, false) {}.getStackTrace();
+        new StatusRuntimeExceptionBuilder().setStatus(Status.CANCELLED).setTrailers(null)
+            .setFillInStackTrace(false).build().getStackTrace();
 
     assertThat(trace).isEmpty();
   }
@@ -39,14 +40,16 @@ public class StatusRuntimeExceptionTest {
   @Test
   public void normalCtorKeepsStack() {
     StackTraceElement[] trace =
-        new StatusRuntimeException(Status.CANCELLED, null) {}.getStackTrace();
+        new StatusRuntimeExceptionBuilder().setStatus(Status.CANCELLED).setTrailers(null)
+            .build().getStackTrace();
 
     assertThat(trace).isNotEmpty();
   }
 
   @Test
   public void extendPreservesStack() {
-    StackTraceElement[] trace = new StatusRuntimeException(Status.CANCELLED) {}.getStackTrace();
+    StackTraceElement[] trace =
+        new StatusRuntimeExceptionBuilder().setStatus(Status.CANCELLED).build().getStackTrace();
 
     assertThat(trace).isNotEmpty();
   }
@@ -54,13 +57,14 @@ public class StatusRuntimeExceptionTest {
   @Test
   public void extendAndOverridePreservesStack() {
     final StackTraceElement element = new StackTraceElement("a", "b", "c", 4);
-    StatusRuntimeException error = new StatusRuntimeException(Status.CANCELLED, new Metadata()) {
-      @Override
-      public synchronized Throwable fillInStackTrace() {
-        setStackTrace(new StackTraceElement[]{element});
-        return this;
-      }
-    };
+    StatusRuntimeException error =
+        new StatusRuntimeException(Status.CANCELLED, new Metadata(), true) {
+          @Override
+          public synchronized Throwable fillInStackTrace() {
+            setStackTrace(new StackTraceElement[]{element});
+            return this;
+          }
+        };
     assertThat(error.getStackTrace()).asList().containsExactly(element);
   }
 }

@@ -34,7 +34,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
+import io.grpc.StatusRuntimeExceptionBuilder;
 import io.grpc.internal.AbstractServerStream.TransportState;
 import io.grpc.internal.MessageFramerTest.ByteWritableBuffer;
 import java.io.ByteArrayInputStream;
@@ -127,8 +127,8 @@ public class AbstractServerStreamTest {
       @Override
       public void halfClosed() {
         if (streamListenerMessageQueue.isEmpty()) {
-          throw new StatusRuntimeException(Status.INTERNAL.withDescription(
-              "Half close without request"));
+          throw new StatusRuntimeExceptionBuilder().setStatus(Status.INTERNAL.withDescription(
+              "Half close without request")).build();
         }
       }
 

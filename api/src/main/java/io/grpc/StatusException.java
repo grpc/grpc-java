@@ -30,30 +30,16 @@ public class StatusException extends Exception {
   private final boolean fillInStackTrace;
 
   /**
-   * Constructs an exception with both a status.  See also {@link Status#asException()}.
+   * Constructs an exception with status, trailers, and whether to fill in the stack trace.
+   * See also {@link Status#asException()} and {@link Status#asException(Metadata)}.
    *
    * @since 1.0.0
    */
-  public StatusException(Status status) {
-    this(status, null);
-  }
-
-  /**
-   * Constructs an exception with both a status and trailers.  See also
-   * {@link Status#asException(Metadata)}.
-   *
-   * @since 1.0.0
-   */
-  public StatusException(Status status, @Nullable Metadata trailers) {
-    this(status, trailers, /*fillInStackTrace=*/ true);
-  }
-
   StatusException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
     super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
     this.fillInStackTrace = fillInStackTrace;
-    fillInStackTrace();
   }
 
   @Override

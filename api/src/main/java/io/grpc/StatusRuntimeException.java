@@ -32,30 +32,16 @@ public class StatusRuntimeException extends RuntimeException {
   private final boolean fillInStackTrace;
 
   /**
-   * Constructs the exception with both a status. See also {@link Status#asRuntimeException()}.
+   * Constructs an exception with status, trailers, and whether to fill in the stack trace.
+   * See also {@link Status#asRuntimeException()} and {@link Status#asRuntimeException(Metadata)}.
    *
    * @since 1.0.0
    */
-  public StatusRuntimeException(Status status) {
-    this(status, null);
-  }
-
-  /**
-   * Constructs the exception with both a status and trailers. See also {@link
-   * Status#asRuntimeException(Metadata)}.
-   *
-   * @since 1.0.0
-   */
-  public StatusRuntimeException(Status status, @Nullable Metadata trailers) {
-    this(status, trailers, /*fillInStackTrace=*/ true);
-  }
-
   StatusRuntimeException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
     super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
     this.fillInStackTrace = fillInStackTrace;
-    fillInStackTrace();
   }
 
   @Override

@@ -40,7 +40,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
-import io.grpc.StatusException;
+import io.grpc.StatusExceptionBuilder;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
@@ -655,7 +655,7 @@ public class StressTestClient {
         responseObserver.onNext(gauge);
         responseObserver.onCompleted();
       } else {
-        responseObserver.onError(new StatusException(Status.NOT_FOUND));
+        responseObserver.onError(new StatusExceptionBuilder().setStatus(Status.NOT_FOUND).build());
       }
     }
   }
