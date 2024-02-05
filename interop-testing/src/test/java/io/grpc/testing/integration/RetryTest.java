@@ -18,6 +18,7 @@ package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -303,7 +304,7 @@ public class RetryTest {
     call.sendMessage(message);
 
     // let attempt fail
-    testCallListener.clear();
+    testCallListener.reset();
     serverCall.close(
         Status.UNAVAILABLE.withDescription("2nd attempt failed"),
         new Metadata());
@@ -547,11 +548,12 @@ public class RetryTest {
 
     @Override
     public void onClose(Status status, Metadata trailers) {
+      assertNotNull(status);
       this.status = status;
       closeLatch.countDown();
     }
 
-    void clear() {
+    void reset() {
       status = null;
       closeLatch = new CountDownLatch(1);
     }
@@ -559,6 +561,7 @@ public class RetryTest {
     void verifyDescription(String description, long timeoutMs) throws InterruptedException {
       closeLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
       assertNotNull(status);
+      assertEquals("Wait for close timedout", 0, closeLatch.getCount()
       assertThat(status.getDescription()).contains(description);
     }
   }
