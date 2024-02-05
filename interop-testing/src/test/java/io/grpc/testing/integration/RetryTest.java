@@ -250,7 +250,7 @@ public class RetryTest {
   private void assertRpcStatusRecorded(
       Status.Code code, long roundtripLatencyMs, long outboundMessages) throws Exception {
     MetricsRecord record = clientStatsRecorder.pollRecord(7, SECONDS);
-    assertNotNull(record);
+    assertNotNull("No measurement record available", record);
     TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
     assertNotNull(statusTag);
     assertThat(statusTag.asString()).isEqualTo(code.toString());
@@ -549,11 +549,13 @@ public class RetryTest {
     @Override
     public void onClose(Status status, Metadata trailers) {
       assertNotNull(status);
-      this.status = status;
-      closeLatch.countDown();
+      synchronized (this) {
+        this.status = status;
+        closeLatch.countDown();
+      }
     }
 
-    void reset() {
+    synchronized void reset() {
       status = null;
       closeLatch = new CountDownLatch(1);
     }
@@ -561,7 +563,7 @@ public class RetryTest {
     void verifyDescription(String description, long timeoutMs) throws InterruptedException {
       closeLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
       assertNotNull(status);
-      assertEquals("Wait for close timedout", 0, closeLatch.getCount()
+      assertEquals("Wait for close timed out", 0, closeLatch.getCount());
       assertThat(status.getDescription()).contains(description);
     }
   }
