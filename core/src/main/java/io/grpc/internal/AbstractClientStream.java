@@ -455,10 +455,10 @@ public abstract class AbstractClientStream extends AbstractStream
       if (!listenerClosed) {
         listenerClosed = true;
         statsTraceCtx.streamClosed(status);
-        listener().closed(status, rpcProgress, trailers);
         if (getTransportTracer() != null) {
           getTransportTracer().reportStreamClosed(status.isOk());
         }
+        listener().closed(status, rpcProgress, trailers);
       }
     }
   }
