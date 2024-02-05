@@ -543,8 +543,8 @@ public class RetryTest {
   }
 
   private static class TestListener extends ClientCall.Listener<Integer> {
-    Status status = null;
-    private CountDownLatch closeLatch = new CountDownLatch(1);
+    volatile Status status = null;
+    private volatile CountDownLatch closeLatch = new CountDownLatch(1);
 
     @Override
     public void onClose(Status status, Metadata trailers) {
