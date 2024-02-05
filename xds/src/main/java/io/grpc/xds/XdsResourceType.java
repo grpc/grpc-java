@@ -85,12 +85,13 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
   // the resources that need an update.
   protected abstract boolean isFullStateOfTheWorld();
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10847")
   public static class Args {
     final ServerInfo serverInfo;
     final String versionInfo;
     final String nonce;
     final Bootstrapper.BootstrapInfo bootstrapInfo;
-    final TlsContextManager tlsContextManager;
+    final Object securityConfig;
     // Management server is required to always send newly requested resources, even if they
     // may have been sent previously (proactively). Thus, client does not need to cache
     // unrequested resources.
@@ -99,17 +100,18 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
 
     public Args(ServerInfo serverInfo, String versionInfo, String nonce,
                 Bootstrapper.BootstrapInfo bootstrapInfo,
-                TlsContextManager tlsContextManager,
+                Object securityConfig,
                 @Nullable Set<String> subscribedResources) {
       this.serverInfo = serverInfo;
       this.versionInfo = versionInfo;
       this.nonce = nonce;
       this.bootstrapInfo = bootstrapInfo;
-      this.tlsContextManager = tlsContextManager;
+      this.securityConfig = securityConfig;
       this.subscribedResources = subscribedResources;
     }
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10847")
   public static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
