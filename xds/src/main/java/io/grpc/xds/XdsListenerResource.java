@@ -130,7 +130,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     if (args.bootstrapInfo != null && args.bootstrapInfo.certProviders() != null) {
       certProviderInstances = args.bootstrapInfo.certProviders().keySet();
     }
-    return LdsUpdate.forTcpListener(parseServerSideListener(proto, args.tlsContextManager,
+    return LdsUpdate.forTcpListener(parseServerSideListener(proto,
+        (TlsContextManager) args.securityConfig,
         filterRegistry, certProviderInstances));
   }
 
