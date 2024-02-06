@@ -249,6 +249,11 @@ public class RetryTest {
 
   private void assertRpcStatusRecorded(
       Status.Code code, long roundtripLatencyMs, long outboundMessages) throws Exception {
+    assertRpcStatusRecorded(code, roundtripLatencyMs, 0, outboundMessages);
+  }
+
+  private void assertRpcStatusRecorded(
+      Status.Code code, long roundtripLatencyMs, long tolerance, long outboundMessages) throws Exception {
     MetricsRecord record = clientStatsRecorder.pollRecord(7, SECONDS);
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
@@ -256,8 +261,8 @@ public class RetryTest {
     assertThat(statusTag.asString()).isEqualTo(code.toString());
     assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
         .isEqualTo(1);
-    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY))
-        .isEqualTo(roundtripLatencyMs);
+    long roundtripLatency = record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY);
+    assertThat(Math.abs(roundtripLatency - roundtripLatencyMs)).isAtMost(tolerance);
     assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC))
         .isEqualTo(outboundMessages);
   }
