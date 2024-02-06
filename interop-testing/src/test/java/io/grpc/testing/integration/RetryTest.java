@@ -360,6 +360,7 @@ public class RetryTest {
     call.request(1);
     assertInboundMessageRecorded();
     assertInboundWireSizeRecorded(1);
+    activeFuture.get(1, SECONDS);
     assertRpcStatusRecorded(Status.Code.OK, 12000, 2);
     assertRetryStatsRecorded(1, 0, 0);
   }
@@ -467,6 +468,7 @@ public class RetryTest {
     assertRpcStartedRecorded();
     ServerCall<String, Integer> serverCall = serverCalls.poll(5, SECONDS);
     serverCall.close(Status.CANCELLED, new Metadata());
+    activeFuture.get(1, SECONDS);
     assertRpcStatusRecorded(Code.DEADLINE_EXCEEDED, 10_000, 0);
     assertRetryStatsRecorded(0, 0, 0);
   }
@@ -543,6 +545,7 @@ public class RetryTest {
     assertRpcStartedRecorded(); // retry attempt
     ServerCall<String, Integer> serverCall = serverCalls.poll(5, SECONDS);
     serverCall.close(Status.INVALID_ARGUMENT, new Metadata());
+    activeFuture.get(1, SECONDS);
     assertRpcStatusRecorded(Code.INVALID_ARGUMENT, 0, 0);
     assertRetryStatsRecorded(0, 1, 0);
   }
