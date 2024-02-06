@@ -109,6 +109,7 @@ public class RetryTest {
   @SuppressWarnings("unchecked")
   private ClientCall.Listener<Integer> mockCallListener =
       mock(ClientCall.Listener.class, delegatesTo(testCallListener));
+  private java.util.concurrent.ScheduledFuture<?> activeFuture = null;
 
   private CountDownLatch backoffLatch = new CountDownLatch(1);
   private final EventLoopGroup group = new DefaultEventLoopGroup() {
@@ -119,7 +120,7 @@ public class RetryTest {
       if (!command.getClass().getName().contains("RetryBackoffRunnable")) {
         return super.schedule(command, delay, unit);
       }
-      fakeClock.getScheduledExecutorService().schedule(
+      activeFuture = fakeClock.getScheduledExecutorService().schedule(
           new Runnable() {
             @Override
             public void run() {
@@ -308,6 +309,8 @@ public class RetryTest {
     serverCall.close(
         Status.UNAVAILABLE.withDescription("2nd attempt failed"),
         new Metadata());
+    fakeClock.forwardTime(1, SECONDS);
+    activeFuture.get(1, SECONDS); // Make sure the close is done.
     // no more retry
     testCallListener.verifyDescription("2nd attempt failed", 5000);
   }
@@ -421,6 +424,9 @@ public class RetryTest {
     call.cancel("Cancelled before commit", null);
     // Let the netty substream listener be closed.
     streamClosedLatch.countDown();
+    assertNotNull("No activeFuture", activeFuture);
+    fakeClock.forwardTime(1, SECONDS);
+    activeFuture.get(1, SECONDS);
     // The call listener is closed.
     verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
     assertRpcStatusRecorded(Code.CANCELLED, 17_000, 1);
