@@ -253,7 +253,8 @@ public class RetryTest {
   }
 
   private void assertRpcStatusRecorded(
-      Status.Code code, long roundtripLatencyMs, long tolerance, long outboundMessages) throws Exception {
+      Status.Code code, long roundtripLatencyMs, long tolerance, long outboundMessages)
+      throws Exception {
     MetricsRecord record = clientStatsRecorder.pollRecord(7, SECONDS);
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
