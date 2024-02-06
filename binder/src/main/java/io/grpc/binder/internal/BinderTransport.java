@@ -412,7 +412,7 @@ public abstract class BinderTransport
       TransactionUtils.fillInFlags(parcel.get(), flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
       sendTransaction(callId, parcel);
     } catch (StatusException e) {
-      logger.log(Level.WARNING, "Failed sending oob close transaction", e);
+      logger.log(Level.FINER, "Failed sending oob close transaction", e);
     }
   }
 
