@@ -59,9 +59,12 @@ import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 public class StatsTestUtils {
+  private static final Logger logger = Logger.getLogger(StatsTestUtils.class.getName());
+
   private StatsTestUtils() {
   }
 
@@ -100,6 +103,10 @@ public class StatsTestUtils {
      */
     public long getMetricAsLongOrFail(Measure measure) {
       Double doubleValue = getMetric(measure);
+      if (doubleValue == null) {
+        logger.warning(
+            String.format("Measure not found: %s in measure %s", measure.getName(), measure));
+      }
       checkNotNull(doubleValue, "Measure not found: %s", measure.getName());
       long longValue = (long) (Math.abs(doubleValue) + 0.0001);
       if (doubleValue < 0) {
