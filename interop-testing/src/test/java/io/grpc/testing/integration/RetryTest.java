@@ -18,7 +18,10 @@ package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -78,8 +81,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -103,8 +104,12 @@ public class RetryTest {
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private final FakeClock fakeClock = new FakeClock();
-  @Mock
-  private ClientCall.Listener<Integer> mockCallListener;
+  private TestListener testCallListener = new TestListener();
+  @SuppressWarnings("unchecked")
+  private ClientCall.Listener<Integer> mockCallListener =
+      mock(ClientCall.Listener.class, delegatesTo(testCallListener));
+  private java.util.concurrent.ScheduledFuture<?> activeFuture = null;
+
   private CountDownLatch backoffLatch = new CountDownLatch(1);
   private final EventLoopGroup group = new DefaultEventLoopGroup() {
     @SuppressWarnings("FutureReturnValueIgnored")
@@ -114,7 +119,7 @@ public class RetryTest {
       if (!command.getClass().getName().contains("RetryBackoffRunnable")) {
         return super.schedule(command, delay, unit);
       }
-      fakeClock.getScheduledExecutorService().schedule(
+      activeFuture = fakeClock.getScheduledExecutorService().schedule(
           new Runnable() {
             @Override
             public void run() {
@@ -244,13 +249,22 @@ public class RetryTest {
 
   private void assertRpcStatusRecorded(
       Status.Code code, long roundtripLatencyMs, long outboundMessages) throws Exception {
-    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    assertRpcStatusRecorded(code, roundtripLatencyMs, 0, outboundMessages);
+  }
+
+  private void assertRpcStatusRecorded(
+      Status.Code code, long roundtripLatencyMs, long toleranceMs, long outboundMessages)
+      throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(7, SECONDS);
+    assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
+    assertNotNull(statusTag);
     assertThat(statusTag.asString()).isEqualTo(code.toString());
     assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
         .isEqualTo(1);
-    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY))
-        .isEqualTo(roundtripLatencyMs);
+    long roundtripLatency =
+        record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY);
+    assertThat(Math.abs(roundtripLatency - roundtripLatencyMs)).isAtMost(toleranceMs);
     assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC))
         .isEqualTo(outboundMessages);
   }
@@ -295,14 +309,16 @@ public class RetryTest {
     verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
     // send one more message, should exceed buffer limit
     call.sendMessage(message);
+
     // let attempt fail
+    testCallListener.clear();
     serverCall.close(
         Status.UNAVAILABLE.withDescription("2nd attempt failed"),
         new Metadata());
+    fakeClock.forwardTime(1, SECONDS);
+    activeFuture.get(1, SECONDS); // Make sure the close is done.
     // no more retry
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(mockCallListener, timeout(5000)).onClose(statusCaptor.capture(), any(Metadata.class));
-    assertThat(statusCaptor.getValue().getDescription()).contains("2nd attempt failed");
+    testCallListener.verifyDescription("2nd attempt failed", 5000);
   }
 
   @Test
@@ -414,9 +430,12 @@ public class RetryTest {
     call.cancel("Cancelled before commit", null);
     // Let the netty substream listener be closed.
     streamClosedLatch.countDown();
+    assertNotNull("No activeFuture", activeFuture);
+    fakeClock.forwardTime(1, SECONDS);
+    activeFuture.get(1, SECONDS);
     // The call listener is closed.
     verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
-    assertRpcStatusRecorded(Code.CANCELLED, 17_000, 1);
+    assertRpcStatusRecorded(Code.CANCELLED, 18_000, 1);
     assertRetryStatsRecorded(1, 0, 0);
   }
 
@@ -533,5 +552,27 @@ public class RetryTest {
     serverCall.close(Status.INVALID_ARGUMENT, new Metadata());
     assertRpcStatusRecorded(Code.INVALID_ARGUMENT, 0, 0);
     assertRetryStatsRecorded(0, 1, 0);
+  }
+
+  private static class TestListener extends ClientCall.Listener<Integer> {
+    Status status = null;
+    private CountDownLatch closeLatch = new CountDownLatch(1);
+
+    @Override
+    public void onClose(Status status, Metadata trailers) {
+      this.status = status;
+      closeLatch.countDown();
+    }
+
+    void clear() {
+      status = null;
+      closeLatch = new CountDownLatch(1);
+    }
+
+    void verifyDescription(String description, long timeoutMs) throws InterruptedException {
+      closeLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+      assertNotNull(status);
+      assertThat(status.getDescription()).contains(description);
+    }
   }
 }
