@@ -522,7 +522,7 @@ public final class Status {
    * to recover this {@link Status} instance when the returned exception is in the causal chain.
    */
   public StatusRuntimeException asRuntimeException() {
-    return new StatusRuntimeExceptionBuilder().setStatus(this).build();
+    return new StatusRuntimeException.Builder().setStatus(this).build();
   }
 
   /**
@@ -530,7 +530,7 @@ public final class Status {
    * exception.
    */
   public StatusRuntimeException asRuntimeException(@Nullable Metadata trailers) {
-    return new StatusRuntimeExceptionBuilder().setStatus(this).setTrailers(trailers).build();
+    return new StatusRuntimeException.Builder().setStatus(this).setTrailers(trailers).build();
   }
 
   /**
@@ -538,14 +538,14 @@ public final class Status {
    * to recover this {@link Status} instance when the returned exception is in the causal chain.
    */
   public StatusException asException() {
-    return new StatusExceptionBuilder().setStatus(this).build();
+    return new StatusException.Builder().setStatus(this).build();
   }
 
   /**
    * Same as {@link #asException()} but includes the provided trailers in the returned exception.
    */
   public StatusException asException(@Nullable Metadata trailers) {
-    return new StatusExceptionBuilder().setStatus(this).setTrailers(trailers).build();
+    return new StatusException.Builder().setStatus(this).setTrailers(trailers).build();
   }
 
   /** A string representation of the status useful for debugging. */

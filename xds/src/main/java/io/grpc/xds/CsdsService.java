@@ -31,7 +31,6 @@ import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.StatusException;
-import io.grpc.StatusExceptionBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.XdsClient.ResourceMetadata;
@@ -130,7 +129,7 @@ public final class CsdsService extends
   private ClientStatusResponse getConfigDumpForRequest(ClientStatusRequest request)
       throws StatusException, InterruptedException {
     if (request.getNodeMatchersCount() > 0) {
-      throw new StatusExceptionBuilder()
+      throw new StatusException.Builder()
           .setStatus(Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"))
           .build();
     }

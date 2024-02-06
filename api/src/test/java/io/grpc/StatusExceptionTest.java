@@ -31,7 +31,7 @@ public class StatusExceptionTest {
   @Test
   public void internalCtorRemovesStack() {
     StackTraceElement[] trace =
-        new StatusExceptionBuilder().setStatus(Status.CANCELLED).setTrailers(null)
+        new StatusException.Builder().setStatus(Status.CANCELLED).setTrailers(null)
             .setFillInStackTrace(false).build().getStackTrace();
 
     assertThat(trace).isEmpty();
@@ -40,7 +40,7 @@ public class StatusExceptionTest {
   @Test
   public void normalCtorKeepsStack() {
     StackTraceElement[] trace =
-        new StatusExceptionBuilder().setStatus(Status.CANCELLED).setTrailers(null)
+        new StatusException.Builder().setStatus(Status.CANCELLED).setTrailers(null)
             .build().getStackTrace();
 
     assertThat(trace).isNotEmpty();
@@ -49,7 +49,7 @@ public class StatusExceptionTest {
   @Test
   public void extendPreservesStack() {
     StackTraceElement[] trace =
-        new StatusExceptionBuilder().setStatus(Status.CANCELLED).build().getStackTrace();
+        new StatusException.Builder().setStatus(Status.CANCELLED).build().getStackTrace();
 
     assertThat(trace).isNotEmpty();
   }

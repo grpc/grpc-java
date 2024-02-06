@@ -33,7 +33,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
-import io.grpc.StatusRuntimeExceptionBuilder;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -263,11 +262,11 @@ public final class ClientCalls {
       // If we have an embedded status, use it and replace the cause
       if (cause instanceof StatusException) {
         StatusException se = (StatusException) cause;
-        return new StatusRuntimeExceptionBuilder().setStatus(se.getStatus())
+        return new StatusRuntimeException.Builder().setStatus(se.getStatus())
             .setTrailers(se.getTrailers()).build();
       } else if (cause instanceof StatusRuntimeException) {
         StatusRuntimeException se = (StatusRuntimeException) cause;
-        return new StatusRuntimeExceptionBuilder().setStatus(se.getStatus())
+        return new StatusRuntimeException.Builder().setStatus(se.getStatus())
             .setTrailers(se.getTrailers()).build();
       }
       cause = cause.getCause();

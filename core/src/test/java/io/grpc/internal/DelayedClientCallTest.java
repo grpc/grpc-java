@@ -33,7 +33,7 @@ import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.StatusExceptionBuilder;
+import io.grpc.StatusException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
@@ -169,7 +169,7 @@ public class DelayedClientCallTest {
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     delayedClientCall.cancel("cancel",
-        new StatusExceptionBuilder().setStatus(Status.CANCELLED).build());
+        new StatusException.Builder().setStatus(Status.CANCELLED).build());
     Runnable r = delayedClientCall.setCall(mockRealCall);
     assertThat(r).isNull();
     verify(mockRealCall, never()).start(any(Listener.class), any(Metadata.class));
@@ -189,7 +189,7 @@ public class DelayedClientCallTest {
     assertThat(r).isNotNull();
     r.run();
     delayedClientCall.cancel("cancel",
-        new StatusExceptionBuilder().setStatus(Status.CANCELLED).build());
+        new StatusException.Builder().setStatus(Status.CANCELLED).build());
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));

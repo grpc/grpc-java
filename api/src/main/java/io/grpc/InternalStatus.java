@@ -44,7 +44,7 @@ public final class InternalStatus {
   @Internal
   public static final StatusRuntimeException asRuntimeException(Status status,
       @Nullable Metadata trailers, boolean fillInStackTrace) {
-    return new StatusRuntimeExceptionBuilder()
+    return new StatusRuntimeException.Builder()
         .setStatus(status)
         .setTrailers(trailers)
         .setFillInStackTrace(fillInStackTrace)

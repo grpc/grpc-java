@@ -26,7 +26,7 @@ import static org.mockito.Mockito.verify;
 import com.google.protobuf.Message;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.StatusRuntimeExceptionBuilder;
+import io.grpc.StatusRuntimeException;
 import io.grpc.examples.routeguide.RouteGuideClient.TestHelper;
 import io.grpc.examples.routeguide.RouteGuideGrpc.RouteGuideImplBase;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -136,7 +136,7 @@ public class RouteGuideClientTest {
   public void getFeature_error() {
     Point requestPoint =  Point.newBuilder().setLatitude(-1).setLongitude(-1).build();
     final AtomicReference<Point> pointDelivered = new AtomicReference<Point>();
-    final StatusRuntimeException fakeError = new StatusRuntimeExceptionBuilder()
+    final StatusRuntimeException fakeError = new StatusRuntimeException.Builder()
         .setStatus(Status.DATA_LOSS).build();
 
     // implement the fake service
@@ -204,7 +204,7 @@ public class RouteGuideClientTest {
     final Feature responseFeature1 =
         Feature.newBuilder().setName("feature 1").build();
     final AtomicReference<Rectangle> rectangleDelivered = new AtomicReference<Rectangle>();
-    final StatusRuntimeException fakeError = new StatusRuntimeExceptionBuilder()
+    final StatusRuntimeException fakeError = new StatusRuntimeException.Builder()
         .setStatus(Status.INVALID_ARGUMENT).build();
 
     // implement the fake service
@@ -314,7 +314,7 @@ public class RouteGuideClientTest {
     final Feature requestFeature1 =
         Feature.newBuilder().setLocation(point1).build();
     final List<Feature> features = Arrays.asList(requestFeature1);
-    final StatusRuntimeException fakeError = new StatusRuntimeExceptionBuilder()
+    final StatusRuntimeException fakeError = new StatusRuntimeException.Builder()
         .setStatus(Status.INVALID_ARGUMENT).build();
 
     // implement the fake service
@@ -477,7 +477,7 @@ public class RouteGuideClientTest {
   @Test
   public void routeChat_errorResponse() throws Exception {
     final List<RouteNote> notesDelivered = new ArrayList<>();
-    final StatusRuntimeException fakeError = new StatusRuntimeExceptionBuilder()
+    final StatusRuntimeException fakeError = new StatusRuntimeException.Builder()
         .setStatus(Status.PERMISSION_DENIED).build();
 
     // implement the fake service

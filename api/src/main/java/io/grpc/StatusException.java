@@ -35,7 +35,7 @@ public class StatusException extends Exception {
    *
    * @since 1.0.0
    */
-  StatusException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
+  protected StatusException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
     super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
@@ -68,5 +68,58 @@ public class StatusException extends Exception {
    */
   public final Metadata getTrailers() {
     return trailers;
+  }
+
+  /**
+   * Builder for creating a {@link StatusException}.
+   *
+   * @since 1.62.0
+   */
+  public static class Builder {
+    private Status status;
+    private Metadata trailers = null;
+    private boolean fillInStackTrace = true;
+
+    /**
+     * Sets the status.
+     *
+     * @since 1.62.0
+     */
+    public Builder setStatus(final Status status) {
+      this.status = status;
+      return this;
+    }
+
+    /**
+     * Sets the trailers.
+     *
+     * @since 1.62.0
+     */
+    public Builder setTrailers(final Metadata trailers) {
+      this.trailers = trailers;
+      return this;
+    }
+
+    /**
+     * Sets whether to fill in the stack trace.
+     *
+     * @since 1.62.0
+     */
+    public Builder setFillInStackTrace(final boolean fillInStackTrace) {
+      this.fillInStackTrace = fillInStackTrace;
+      return this;
+    }
+
+    /**
+     * Builds the exception.
+     *
+     * @since 1.62.0
+     */
+    public StatusException build() {
+      final StatusException statusException =
+          new StatusException(status, trailers, fillInStackTrace);
+      statusException.fillInStackTrace();
+      return statusException;
+    }
   }
 }
