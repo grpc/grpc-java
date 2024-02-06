@@ -108,6 +108,7 @@ public class RetryTest {
   @SuppressWarnings("unchecked")
   private ClientCall.Listener<Integer> mockCallListener =
       mock(ClientCall.Listener.class, delegatesTo(testCallListener));
+  private java.util.concurrent.ScheduledFuture<?> activeFuture = null;
 
   private CountDownLatch backoffLatch = new CountDownLatch(1);
   private final EventLoopGroup group = new DefaultEventLoopGroup() {
@@ -118,7 +119,7 @@ public class RetryTest {
       if (!command.getClass().getName().contains("RetryBackoffRunnable")) {
         return super.schedule(command, delay, unit);
       }
-      fakeClock.getScheduledExecutorService().schedule(
+      activeFuture = fakeClock.getScheduledExecutorService().schedule(
           new Runnable() {
             @Override
             public void run() {
@@ -248,6 +249,12 @@ public class RetryTest {
 
   private void assertRpcStatusRecorded(
       Status.Code code, long roundtripLatencyMs, long outboundMessages) throws Exception {
+    assertRpcStatusRecorded(code, roundtripLatencyMs, 0, outboundMessages);
+  }
+
+  private void assertRpcStatusRecorded(
+      Status.Code code, long roundtripLatencyMs, long toleranceMs, long outboundMessages)
+      throws Exception {
     MetricsRecord record = clientStatsRecorder.pollRecord(7, SECONDS);
     assertNotNull(record);
     TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
@@ -255,8 +262,9 @@ public class RetryTest {
     assertThat(statusTag.asString()).isEqualTo(code.toString());
     assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
         .isEqualTo(1);
-    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY))
-        .isEqualTo(roundtripLatencyMs);
+    long roundtripLatency =
+        record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY);
+    assertThat(Math.abs(roundtripLatency - roundtripLatencyMs)).isAtMost(toleranceMs);
     assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC))
         .isEqualTo(outboundMessages);
   }
@@ -303,10 +311,12 @@ public class RetryTest {
     call.sendMessage(message);
 
     // let attempt fail
-    testCallListener.clear();
+    testCallListener.reset();
     serverCall.close(
         Status.UNAVAILABLE.withDescription("2nd attempt failed"),
         new Metadata());
+    fakeClock.forwardTime(1, SECONDS);
+    activeFuture.get(1, SECONDS); // Make sure the close is done.
     // no more retry
     testCallListener.verifyDescription("2nd attempt failed", 5000);
   }
@@ -420,9 +430,12 @@ public class RetryTest {
     call.cancel("Cancelled before commit", null);
     // Let the netty substream listener be closed.
     streamClosedLatch.countDown();
+    assertNotNull("No activeFuture", activeFuture);
+    fakeClock.forwardTime(1, SECONDS);
+    activeFuture.get(1, SECONDS);
     // The call listener is closed.
     verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
-    assertRpcStatusRecorded(Code.CANCELLED, 17_000, 1);
+    assertRpcStatusRecorded(Code.CANCELLED, 18_000, 1);
     assertRetryStatsRecorded(1, 0, 0);
   }
 
@@ -551,7 +564,7 @@ public class RetryTest {
       closeLatch.countDown();
     }
 
-    void clear() {
+    void reset() {
       status = null;
       closeLatch = new CountDownLatch(1);
     }
