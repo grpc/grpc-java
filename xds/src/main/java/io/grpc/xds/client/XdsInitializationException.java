@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
+
+import io.grpc.Internal;
 
 /**
  * Throws when fail to bootstrap or initialize the XdsClient.
  */
+@Internal
 public final class XdsInitializationException extends Exception {
   private static final long serialVersionUID = 1L;
 

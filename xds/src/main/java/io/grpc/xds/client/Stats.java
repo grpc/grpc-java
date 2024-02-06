@@ -14,43 +14,45 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.xds.client.Locality;
+import io.grpc.Internal;
 import java.util.Map;
 import javax.annotation.Nullable;
 
 /** Represents client load stats. */
-final class Stats {
+@Internal
+public final class Stats {
   private Stats() {}
 
   /** Cluster-level load stats. */
   @AutoValue
-  abstract static class ClusterStats {
+  public abstract static class ClusterStats {
     abstract String clusterName();
 
     @Nullable
-    abstract String clusterServiceName();
+    public abstract String clusterServiceName();
 
-    abstract ImmutableList<UpstreamLocalityStats> upstreamLocalityStatsList();
+    public abstract ImmutableList<UpstreamLocalityStats> upstreamLocalityStatsList();
 
-    abstract ImmutableList<DroppedRequests> droppedRequestsList();
+    public abstract ImmutableList<DroppedRequests> droppedRequestsList();
 
-    abstract long totalDroppedRequests();
+    public abstract long totalDroppedRequests();
 
-    abstract long loadReportIntervalNano();
+    public abstract long loadReportIntervalNano();
 
-    static Builder newBuilder() {
+    public static Builder newBuilder() {
       return new AutoValue_Stats_ClusterStats.Builder()
           .totalDroppedRequests(0L)  // default initialization
           .loadReportIntervalNano(0L);
     }
 
+    @SuppressWarnings("UnusedReturnValue")
     @AutoValue.Builder
-    abstract static class Builder {
+    public abstract static class Builder {
       abstract Builder clusterName(String clusterName);
 
       abstract Builder clusterServiceName(String clusterServiceName);
@@ -81,33 +83,34 @@ final class Stats {
 
   /** Stats for dropped requests. */
   @AutoValue
-  abstract static class DroppedRequests {
-    abstract String category();
+  public abstract static class DroppedRequests {
+    public abstract String category();
 
-    abstract long droppedCount();
+    public abstract long droppedCount();
 
-    static DroppedRequests create(String category, long droppedCount) {
+    public static DroppedRequests create(String category, long droppedCount) {
       return new AutoValue_Stats_DroppedRequests(category, droppedCount);
     }
   }
 
   /** Load stats aggregated in locality level. */
   @AutoValue
-  abstract static class UpstreamLocalityStats {
-    abstract Locality locality();
+  public abstract static class UpstreamLocalityStats {
+    public abstract Locality locality();
 
-    abstract long totalIssuedRequests();
+    public abstract long totalIssuedRequests();
 
-    abstract long totalSuccessfulRequests();
+    public abstract long totalSuccessfulRequests();
 
-    abstract long totalErrorRequests();
+    public abstract long totalErrorRequests();
 
-    abstract long totalRequestsInProgress();
+    public abstract long totalRequestsInProgress();
 
-    abstract ImmutableMap<String, BackendLoadMetricStats> loadMetricStatsMap();
+    public abstract ImmutableMap<String, BackendLoadMetricStats> loadMetricStatsMap();
 
-    static UpstreamLocalityStats create(Locality locality, long totalIssuedRequests,
-                                        long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress,
+    public static UpstreamLocalityStats create(Locality locality, long totalIssuedRequests,
+                                        long totalSuccessfulRequests, long totalErrorRequests,
+                                        long totalRequestsInProgress,
                                         Map<String, BackendLoadMetricStats> loadMetricStatsMap) {
       return new AutoValue_Stats_UpstreamLocalityStats(locality, totalIssuedRequests,
           totalSuccessfulRequests, totalErrorRequests, totalRequestsInProgress,
@@ -118,7 +121,7 @@ final class Stats {
   /**
    * Load metric stats for multi-dimensional load balancing.
    */
-  static final class BackendLoadMetricStats {
+  public static final class BackendLoadMetricStats {
 
     private long numRequestsFinishedWithMetric;
     private double totalMetricValue;

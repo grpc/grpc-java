@@ -24,10 +24,15 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadReportClient;
+import io.grpc.xds.client.LoadStatsManager2;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsInitializationException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -66,23 +71,19 @@ public class XdsClientFederationTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private ObjectPool<XdsClient> xdsClientPool;
-  private XdsClient xdsClient;
+  private GrpcXdsClientImpl xdsClient;
   private boolean originalFederationStatus;
 
   @Before
   public void setUp() throws XdsInitializationException {
-    originalFederationStatus = BootstrapperImpl.enableFederation;
-    BootstrapperImpl.enableFederation = true;
-
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
     xdsClientPool = clientPoolProvider.getOrCreate();
-    xdsClient = xdsClientPool.getObject();
+    xdsClient = (GrpcXdsClientImpl)xdsClientPool.getObject();
   }
 
   @After
   public void cleanUp() throws InterruptedException {
-    BootstrapperImpl.enableFederation = originalFederationStatus;
     xdsClientPool.returnObject(xdsClient);
   }
 
@@ -119,7 +120,7 @@ public class XdsClientFederationTest {
         ControlPlaneRule.buildClientListener("new-server"));
     verify(mockWatcher, timeout(20000)).onResourceDoesNotExist("test-server");
     verify(mockDirectPathWatcher, times(0)).onResourceDoesNotExist(
-            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
   }
 
   /**
@@ -147,7 +148,7 @@ public class XdsClientFederationTest {
       xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
           Locality.create("", "", ""));
       waitForSyncContext(xdsClient);
-      assertThat(entry.getValue().lrsStream).isNotNull();
+      assertThat(entry.getValue().lrsStreamIsNull()).isFalse();
     }
   }
 
@@ -176,7 +177,7 @@ public class XdsClientFederationTest {
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
       waitForSyncContext(xdsClient);
-      assertThat(entry.getValue().lrsStream).isNotNull();
+      assertThat(entry.getValue().lrsStreamIsNull()).isFalse();
     }
   }
 

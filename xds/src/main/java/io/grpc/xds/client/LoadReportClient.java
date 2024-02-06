@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -27,7 +27,7 @@ import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
-import io.grpc.Context;
+import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -35,13 +35,13 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.xds.client.EnvoyProtoData.Node;
-import io.grpc.xds.Stats.ClusterStats;
-import io.grpc.xds.Stats.DroppedRequests;
-import io.grpc.xds.Stats.UpstreamLocalityStats;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsTransportFactory.EventHandler;
-import io.grpc.xds.XdsTransportFactory.StreamingCall;
-import io.grpc.xds.XdsTransportFactory.XdsTransport;
+import io.grpc.xds.client.Stats.ClusterStats;
+import io.grpc.xds.client.Stats.DroppedRequests;
+import io.grpc.xds.client.Stats.UpstreamLocalityStats;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsTransportFactory.EventHandler;
+import io.grpc.xds.client.XdsTransportFactory.StreamingCall;
+import io.grpc.xds.client.XdsTransportFactory.XdsTransport;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -54,33 +54,32 @@ import javax.annotation.Nullable;
  * Client of xDS load reporting service based on LRS protocol, which reports load stats of
  * gRPC client's perspective to a management server.
  */
-final class LoadReportClient {
+@Internal
+public final class LoadReportClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final XdsTransport xdsTransport;
-  private final Context context;
   private final Node node;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   @VisibleForTesting
-  final LoadStatsManager2 loadStatsManager;
+  public final LoadStatsManager2 loadStatsManager;
   private boolean started;
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
   private ScheduledHandle lrsRpcRetryTimer;
   @Nullable
-  @VisibleForTesting
-  LrsStream lrsStream;
+  private LrsStream lrsStream;
   private static final MethodDescriptor<LoadStatsRequest, LoadStatsResponse> method =
       LoadReportingServiceGrpc.getStreamLoadStatsMethod();
 
-  LoadReportClient(
+  @VisibleForTesting
+  public LoadReportClient(
       LoadStatsManager2 loadStatsManager,
       XdsTransport xdsTransport,
-      Context context,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
@@ -88,7 +87,6 @@ final class LoadReportClient {
       Supplier<Stopwatch> stopwatchSupplier) {
     this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
     this.xdsTransport = checkNotNull(xdsTransport, "xdsTransport");
-    this.context = checkNotNull(context, "context");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -100,12 +98,17 @@ final class LoadReportClient {
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
+  @VisibleForTesting
+  public boolean lrsStreamIsNull() {
+    return lrsStream == null;
+  }
+
   /**
    * Establishes load reporting communication and negotiates with traffic director to report load
    * stats periodically. Calling this method on an already started {@link LoadReportClient} is
    * no-op.
    */
-  void startLoadReporting() {
+  public void startLoadReporting() {
     syncContext.throwIfNotInThisSynchronizationContext();
     if (started) {
       return;
@@ -119,7 +122,7 @@ final class LoadReportClient {
    * Terminates load reporting. Calling this method on an already stopped
    * {@link LoadReportClient} is no-op.
    */
-  void stopLoadReporting() {
+  public void stopLoadReporting() {
     syncContext.throwIfNotInThisSynchronizationContext();
     if (!started) {
       return;
@@ -136,7 +139,7 @@ final class LoadReportClient {
   }
 
   @VisibleForTesting
-  static class LoadReportingTask implements Runnable {
+  public static class LoadReportingTask implements Runnable {
     private final LrsStream stream;
 
     LoadReportingTask(LrsStream stream) {
@@ -150,7 +153,7 @@ final class LoadReportClient {
   }
 
   @VisibleForTesting
-  class LrsRpcRetryTask implements Runnable {
+  public class LrsRpcRetryTask implements Runnable {
 
     @Override
     public void run() {
@@ -164,12 +167,7 @@ final class LoadReportClient {
     }
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
     retryStopwatch.reset().start();
-    Context prevContext = context.attach();
-    try {
-      lrsStream = new LrsStream();
-    } finally {
-      context.detach(prevContext);
-    }
+    lrsStream = new LrsStream();
   }
 
   private final class LrsStream implements EventHandler<LoadStatsResponse> {

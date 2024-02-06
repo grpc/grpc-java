@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertNotNull;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Status;
 import io.grpc.internal.FakeClock;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
-import io.grpc.xds.Stats.ClusterStats;
-import io.grpc.xds.Stats.DroppedRequests;
-import io.grpc.xds.Stats.UpstreamLocalityStats;
-import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.Stats.ClusterStats;
+import io.grpc.xds.client.Stats.DroppedRequests;
+import io.grpc.xds.client.Stats.UpstreamLocalityStats;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -92,6 +92,7 @@ public class LoadStatsManager2Test {
     assertThat(allStats).hasSize(3);  // three cluster:edsServiceName
 
     ClusterStats stats1 = findClusterStats(allStats, CLUSTER_NAME1, EDS_SERVICE_NAME1);
+    assertNotNull(stats1);
     assertThat(stats1.loadReportIntervalNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L + 10L));
     assertThat(stats1.droppedRequestsList()).hasSize(2);
     assertThat(findDroppedRequestCount(stats1.droppedRequestsList(), "lb")).isEqualTo(1L);
@@ -100,6 +101,7 @@ public class LoadStatsManager2Test {
     assertThat(stats1.upstreamLocalityStatsList()).hasSize(2);  // two localities
     UpstreamLocalityStats loadStats1 =
         findLocalityStats(stats1.upstreamLocalityStatsList(), LOCALITY1);
+    assertNotNull(loadStats1);
     assertThat(loadStats1.totalIssuedRequests()).isEqualTo(19L);
     assertThat(loadStats1.totalSuccessfulRequests()).isEqualTo(1L);
     assertThat(loadStats1.totalErrorRequests()).isEqualTo(0L);

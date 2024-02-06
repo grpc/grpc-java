@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,19 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.client;
+package io.grpc.xds;
 
-import com.google.auto.value.AutoValue;
-import io.grpc.Internal;
+import io.grpc.internal.ObjectPool;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsInitializationException;
+import java.util.Map;
+import javax.annotation.Nullable;
 
-/** Represents a network locality. */
-@AutoValue
-@Internal
-public abstract class Locality {
-  public abstract String region();
+interface XdsClientPoolFactory {
+  void setBootstrapOverride(Map<String, ?> bootstrap);
 
-  public abstract String zone();
+  @Nullable
+  ObjectPool<XdsClient> get();
 
-  public abstract String subZone();
-
-  public static Locality create(String region, String zone, String subZone) {
-    return new io.grpc.xds.client.AutoValue_Locality(region, zone, subZone);
-  }
+  ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException;
 }

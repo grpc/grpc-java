@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -28,22 +28,22 @@ import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
-import io.grpc.Context;
+import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.XdsClient.ProcessingTracker;
-import io.grpc.xds.XdsClient.ResourceStore;
-import io.grpc.xds.XdsClient.XdsResponseHandler;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsTransportFactory.EventHandler;
-import io.grpc.xds.XdsTransportFactory.StreamingCall;
-import io.grpc.xds.XdsTransportFactory.XdsTransport;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import io.grpc.xds.client.XdsClient.ProcessingTracker;
+import io.grpc.xds.client.XdsClient.ResourceStore;
+import io.grpc.xds.client.XdsClient.XdsResponseHandler;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsTransportFactory.EventHandler;
+import io.grpc.xds.client.XdsTransportFactory.StreamingCall;
+import io.grpc.xds.client.XdsTransportFactory.XdsTransport;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -59,7 +59,8 @@ import javax.annotation.Nullable;
  * Common base type for XdsClient implementations, which encapsulates the layer abstraction of
  * the xDS RPC stream.
  */
-final class ControlPlaneClient {
+@Internal
+public final class ControlPlaneClient {
 
   public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;
@@ -69,12 +70,11 @@ final class ControlPlaneClient {
   private final XdsTransport xdsTransport;
   private final XdsResponseHandler xdsResponseHandler;
   private final ResourceStore resourceStore;
-  private final Context context;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
   private final Node bootstrapNode;
-  private final XdsClient.TimerLaunch timerLaunch;
+  private final XdsClient xdsClient;
 
   // Last successfully applied version_info for each resource type. Starts with empty string.
   // A version_info is used to update management server with client's most recent knowledge of
@@ -88,32 +88,32 @@ final class ControlPlaneClient {
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
   private ScheduledHandle rpcRetryTimer;
+  private MessagePrettyPrinter messagePrinter;
 
   /** An entity that manages ADS RPCs over a single channel. */
-  // TODO: rename to XdsChannel
   ControlPlaneClient(
       XdsTransport xdsTransport,
       ServerInfo serverInfo,
       Node bootstrapNode,
       XdsResponseHandler xdsResponseHandler,
       ResourceStore resourceStore,
-      Context context,
       ScheduledExecutorService
       timeService,
       SynchronizationContext syncContext,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
-      XdsClient.TimerLaunch timerLaunch) {
+      XdsClient xdsClient,
+      MessagePrettyPrinter messagePrinter) {
     this.serverInfo = checkNotNull(serverInfo, "serverInfo");
     this.xdsTransport = checkNotNull(xdsTransport, "xdsTransport");
     this.xdsResponseHandler = checkNotNull(xdsResponseHandler, "xdsResponseHandler");
     this.resourceStore = checkNotNull(resourceStore, "resourcesSubscriber");
     this.bootstrapNode = checkNotNull(bootstrapNode, "bootstrapNode");
-    this.context = checkNotNull(context, "context");
     this.timeService = checkNotNull(timeService, "timeService");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.timerLaunch  = checkNotNull(timerLaunch, "timerLaunch");
+    this.xdsClient = checkNotNull(xdsClient, "xdsClient");
+    this.messagePrinter = checkNotNull(messagePrinter, "messagePrinter");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     logId = InternalLogId.allocate("xds-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
@@ -219,7 +219,7 @@ final class ControlPlaneClient {
       rpcRetryTimer = null;
     }
 
-    timerLaunch.startSubscriberTimersIfNeeded(serverInfo);
+    xdsClient.startSubscriberTimersIfNeeded(serverInfo);
   }
 
   /**
@@ -229,18 +229,13 @@ final class ControlPlaneClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    Context prevContext = context.attach();
-    try {
-      adsStream = new AdsStream();
-    } finally {
-      context.detach(prevContext);
-    }
+    adsStream = new AdsStream();
     logger.log(XdsLogLevel.INFO, "ADS stream started");
     stopwatch.reset().start();
   }
 
   @VisibleForTesting
-  final class RpcRetryTask implements Runnable {
+  public final class RpcRetryTask implements Runnable {
     @Override
     public void run() {
       if (shutdown) {
@@ -312,7 +307,7 @@ final class ControlPlaneClient {
       DiscoveryRequest request = builder.build();
       call.sendMessage(request);
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", MessagePrinter.print(request));
+        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", messagePrinter.print(request));
       }
     }
 
@@ -339,7 +334,7 @@ final class ControlPlaneClient {
           if (logger.isLoggable(XdsLogLevel.DEBUG)) {
             logger.log(
                 XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
-                MessagePrinter.print(response));
+                messagePrinter.print(response));
           }
           if (type == null) {
             logger.log(

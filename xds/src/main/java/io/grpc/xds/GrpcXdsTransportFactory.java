@@ -22,11 +22,14 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
+import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.XdsTransportFactory;
 import java.util.concurrent.TimeUnit;
 
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
@@ -51,7 +54,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
       String target = serverInfo.target();
-      ChannelCredentials channelCredentials = serverInfo.channelCredentials();
+      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
       this.channel = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
@@ -67,7 +70,13 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
         String fullMethodName,
         MethodDescriptor.Marshaller<ReqT> reqMarshaller,
         MethodDescriptor.Marshaller<RespT> respMarshaller) {
-      return new XdsStreamingCall<>(fullMethodName, reqMarshaller, respMarshaller);
+      Context prevContext = Context.ROOT.attach();
+      try {
+        return new XdsStreamingCall<>(fullMethodName, reqMarshaller, respMarshaller);
+      } finally {
+        Context.ROOT.detach(prevContext);
+      }
+
     }
 
     @Override

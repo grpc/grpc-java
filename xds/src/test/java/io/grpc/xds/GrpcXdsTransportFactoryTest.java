@@ -30,6 +30,8 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.XdsTransportFactory;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;

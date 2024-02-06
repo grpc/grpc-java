@@ -55,7 +55,6 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
-import io.grpc.xds.client.Locality;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -151,7 +150,7 @@ public class MessagePrinterTest {
         + "  \"typeUrl\": \"type.googleapis.com/envoy.config.listener.v3.Listener\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = MessagePrinter.print(response);
+    String res = MessagePrinter.INSTANCE.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 
@@ -202,7 +201,7 @@ public class MessagePrinterTest {
         + "  \"typeUrl\": \"type.googleapis.com/envoy.config.route.v3.RouteConfiguration\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = MessagePrinter.print(response);
+    String res = MessagePrinter.INSTANCE.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 
@@ -267,7 +266,7 @@ public class MessagePrinterTest {
         + "  \"typeUrl\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = MessagePrinter.print(response);
+    String res = MessagePrinter.INSTANCE.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 
@@ -356,7 +355,7 @@ public class MessagePrinterTest {
         + ".ClusterLoadAssignment\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = MessagePrinter.print(response);
+    String res = MessagePrinter.INSTANCE.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 }

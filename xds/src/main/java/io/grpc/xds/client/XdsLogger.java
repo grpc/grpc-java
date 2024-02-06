@@ -17,6 +17,7 @@
 package io.grpc.xds.client;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import java.text.MessageFormat;
 import java.util.logging.Level;
@@ -27,12 +28,13 @@ import java.util.logging.Logger;
  * An xDS-specific logger for collecting xDS specific events. Information logged here goes
  * to the Java logger of this class.
  */
-final class XdsLogger {
+@Internal
+public final class XdsLogger {
   private static final Logger logger = Logger.getLogger(XdsLogger.class.getName());
 
   private final String prefix;
 
-  static XdsLogger withLogId(InternalLogId logId) {
+  public static XdsLogger withLogId(InternalLogId logId) {
     Preconditions.checkNotNull(logId, "logId");
     return new XdsLogger(logId.toString());
   }
@@ -45,7 +47,7 @@ final class XdsLogger {
     this.prefix = Preconditions.checkNotNull(prefix, "prefix");
   }
 
-  boolean isLoggable(XdsLogLevel level) {
+  public boolean isLoggable(XdsLogLevel level) {
     Level javaLevel = toJavaLogLevel(level);
     return logger.isLoggable(javaLevel);
   }
@@ -55,7 +57,7 @@ final class XdsLogger {
     logOnly(prefix, javaLevel, msg);
   }
 
-  void log(XdsLogLevel level, String messageFormat, Object... args) {
+  public void log(XdsLogLevel level, String messageFormat, Object... args) {
     Level javaLogLevel = toJavaLogLevel(level);
     if (logger.isLoggable(javaLogLevel)) {
       String msg = MessageFormat.format(messageFormat, args);
@@ -111,7 +113,7 @@ final class XdsLogger {
    * +---------------------+-------------------+
    * </pre>
    */
-  enum XdsLogLevel {
+  public enum XdsLogLevel {
     DEBUG,
     INFO,
     WARNING,

@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+
+import io.grpc.Internal;
 
 /**
  * A reference count wrapper for objects. This class does not take the ownership for the object,
@@ -29,6 +31,7 @@ import static com.google.common.base.Preconditions.checkState;
  * counts being leaked.
  */
 // TODO(chengyuanzhang): move this class into LoadStatsManager2.
+@Internal
 final class ReferenceCounted<T> {
   private final T instance;
   private int refs;

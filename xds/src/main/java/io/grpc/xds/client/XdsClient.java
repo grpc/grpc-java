@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
+import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.net.UrlEscapers;
@@ -28,9 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
-import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -51,7 +48,7 @@ import javax.annotation.Nullable;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
 public abstract class XdsClient {
 
-  static boolean isResourceNameValid(String resourceName, String typeUrl) {
+  public static boolean isResourceNameValid(String resourceName, String typeUrl) {
     checkNotNull(resourceName, "resourceName");
     if (!resourceName.startsWith(XDSTP_SCHEME)) {
       return true;
@@ -153,7 +150,7 @@ public abstract class XdsClient {
   /**
    * The metadata of the xDS resource; used by the xDS config dump.
    */
-  static final class ResourceMetadata {
+  public static final class ResourceMetadata {
     private final String version;
     private final ResourceMetadataStatus status;
     private final long updateTimeNanos;
@@ -182,7 +179,7 @@ public abstract class XdsClient {
       return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, null, null);
     }
 
-    static ResourceMetadata newResourceMetadataAcked(
+    public static ResourceMetadata newResourceMetadataAcked(
         Any rawResource, String version, long updateTimeNanos) {
       checkNotNull(rawResource, "rawResource");
       return new ResourceMetadata(
@@ -199,29 +196,29 @@ public abstract class XdsClient {
     }
 
     /** The last successfully updated version of the resource. */
-    String getVersion() {
+    public String getVersion() {
       return version;
     }
 
     /** The client status of this resource. */
-    ResourceMetadataStatus getStatus() {
+    public ResourceMetadataStatus getStatus() {
       return status;
     }
 
     /** The timestamp when the resource was last successfully updated. */
-    long getUpdateTimeNanos() {
+    public long getUpdateTimeNanos() {
       return updateTimeNanos;
     }
 
     /** The last successfully updated xDS resource as it was returned by the server. */
     @Nullable
-    Any getRawResource() {
+    public Any getRawResource() {
       return rawResource;
     }
 
     /** The metadata capturing the error details of the last rejected update of the resource. */
     @Nullable
-    UpdateFailureState getErrorState() {
+    public UpdateFailureState getErrorState() {
       return errorState;
     }
 
@@ -233,7 +230,7 @@ public abstract class XdsClient {
      * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/admin/v3/config_dump.proto">
      * config_dump.proto</a>
      */
-    enum ResourceMetadataStatus {
+    public enum ResourceMetadataStatus {
       UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED
     }
 
@@ -244,7 +241,7 @@ public abstract class XdsClient {
      * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/admin/v3/config_dump.proto">
      * config_dump.proto</a>
      */
-    static final class UpdateFailureState {
+    public static final class UpdateFailureState {
       private final String failedVersion;
       private final long failedUpdateTimeNanos;
       private final String failedDetails;
@@ -257,17 +254,17 @@ public abstract class XdsClient {
       }
 
       /** The rejected version string of the last failed update attempt. */
-      String getFailedVersion() {
+      public String getFailedVersion() {
         return failedVersion;
       }
 
       /** Details about the last failed update attempt. */
-      long getFailedUpdateTimeNanos() {
+      public long getFailedUpdateTimeNanos() {
         return failedUpdateTimeNanos;
       }
 
       /** Timestamp of the last failed update attempt. */
-      String getFailedDetails() {
+      public String getFailedDetails() {
         return failedDetails;
       }
     }
@@ -276,28 +273,36 @@ public abstract class XdsClient {
   /**
    * Shutdown this {@link XdsClient} and release resources.
    */
-  void shutdown() {
+  public void shutdown() {
     throw new UnsupportedOperationException();
   }
 
   /**
    * Returns {@code true} if {@link #shutdown()} has been called.
    */
-  boolean isShutDown() {
+  public boolean isShutDown() {
     throw new UnsupportedOperationException();
   }
 
   /**
    * Returns the config used to bootstrap this XdsClient {@link Bootstrapper.BootstrapInfo}.
    */
-  Bootstrapper.BootstrapInfo getBootstrapInfo() {
+  public Bootstrapper.BootstrapInfo getBootstrapInfo() {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Returns the {@link TlsContextManager} used in this XdsClient.
+   * Returns the implementation specific security configuration used in this XdsClient.
    */
-  TlsContextManager getTlsContextManager() {
+  public Object getSecurityConfig() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * For all subscriber's for the specified server, if the resource hasn't yet been
+   * resolved then start a timer for it.
+   */
+  protected void startSubscriberTimersIfNeeded(ServerInfo serverInfo) {
     throw new UnsupportedOperationException();
   }
 
@@ -309,7 +314,7 @@ public abstract class XdsClient {
    * a map ("resource name": "resource metadata").
    */
   // Must be synchronized.
-  ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+  public ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
       getSubscribedResourcesMetadataSnapshot() {
     throw new UnsupportedOperationException();
   }
@@ -343,11 +348,11 @@ public abstract class XdsClient {
    * Adds drop stats for the specified cluster with edsServiceName by using the returned object
    * to record dropped requests. Drop stats recorded with the returned object will be reported
    * to the load reporting server. The returned object is reference counted and the caller should
-   * use {@link ClusterDropStats#release} to release its <i>hard</i> reference when it is safe to
-   * stop reporting dropped RPCs for the specified cluster in the future.
+   * use {@link LoadStatsManager2.ClusterDropStats#release} to release its <i>hard</i> reference
+   * when it is safe to stop reporting dropped RPCs for the specified cluster in the future.
    */
-  ClusterDropStats addClusterDropStats(
-      ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName) {
+  public LoadStatsManager2.ClusterDropStats addClusterDropStats(
+      Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName) {
     throw new UnsupportedOperationException();
   }
 
@@ -355,12 +360,12 @@ public abstract class XdsClient {
    * Adds load stats for the specified locality (in the specified cluster with edsServiceName) by
    * using the returned object to record RPCs. Load stats recorded with the returned object will
    * be reported to the load reporting server. The returned object is reference counted and the
-   * caller should use {@link ClusterLocalityStats#release} to release its <i>hard</i>
-   * reference when it is safe to stop reporting RPC loads for the specified locality in the
-   * future.
+   * caller should use {@link LoadStatsManager2.ClusterLocalityStats#release} to release its
+   * <i>hard</i> reference when it is safe to stop reporting RPC loads for the specified locality
+   * in the future.
    */
-  ClusterLocalityStats addClusterLocalityStats(
-      ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
+  public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
+      Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
     throw new UnsupportedOperationException();
   }
@@ -369,8 +374,7 @@ public abstract class XdsClient {
    * Returns a map of control plane server info objects to the LoadReportClients that are
    * responsible for sending load reports to the control plane servers.
    */
-  @VisibleForTesting
-  Map<ServerInfo, LoadReportClient> getServerLrsClientMap() {
+  protected Map<Bootstrapper.ServerInfo, LoadReportClient> getServerLrsClientMap() {
     throw new UnsupportedOperationException();
   }
 
@@ -410,7 +414,7 @@ public abstract class XdsClient {
     void handleStreamRestarted(ServerInfo serverInfo);
   }
 
-  interface ResourceStore {
+  public interface ResourceStore {
     /**
      * Returns the collection of resources currently subscribing to or {@code null} if not
      * subscribing to any resources for the given type.
@@ -424,13 +428,5 @@ public abstract class XdsClient {
                                               XdsResourceType<? extends ResourceUpdate> type);
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
-  }
-
-  interface TimerLaunch {
-    /**
-     * For all subscriber's for the specified server, if the resource hasn't yet been
-     * resolved then start a timer for it.
-     */
-    void startSubscriberTimersIfNeeded(ServerInfo serverInfo);
   }
 }

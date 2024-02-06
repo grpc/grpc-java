@@ -49,13 +49,10 @@ import io.grpc.testing.GrpcServerRule;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.EnvoyProtoDataTest;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
-import io.grpc.xds.client.XdsClientPoolFactory;
-import io.grpc.xds.client.XdsClusterResource;
-import io.grpc.xds.client.XdsEndpointResource;
-import io.grpc.xds.client.XdsListenerResource;
 import io.grpc.xds.client.XdsResourceType;
 import java.util.Collection;
 import java.util.HashMap;
@@ -137,7 +134,7 @@ public class CsdsServiceTest {
     public void fetchClientConfig_unexpectedException() {
       XdsClient throwingXdsClient = new FakeXdsClient() {
         @Override
-        ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+        public ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
               getSubscribedResourcesMetadataSnapshot() {
           return Futures.immediateFailedFuture(
               new IllegalArgumentException("IllegalArgumentException"));
@@ -161,7 +158,7 @@ public class CsdsServiceTest {
     public void fetchClientConfig_interruptedException() {
       XdsClient throwingXdsClient = new FakeXdsClient() {
         @Override
-        ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+        public ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
             getSubscribedResourcesMetadataSnapshot() {
           return Futures.submit(() -> {
             Thread.currentThread().interrupt();
@@ -409,7 +406,7 @@ public class CsdsServiceTest {
   }
 
   /**
-   * Assuming {@link io.grpc.xds.EnvoyProtoDataTest#convertNode} passes, perform a minimal check,
+   * Assuming {@link EnvoyProtoDataTest#convertNode} passes, perform a minimal check,
    * just verify the node itself is the one we expect.
    */
   private static void verifyClientConfigNode(ClientConfig clientConfig) {
@@ -439,13 +436,13 @@ public class CsdsServiceTest {
     }
 
     @Override
-    ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+    public ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
         getSubscribedResourcesMetadataSnapshot() {
       return Futures.immediateFuture(getSubscribedResourcesMetadata());
     }
 
     @Override
-    BootstrapInfo getBootstrapInfo() {
+    public BootstrapInfo getBootstrapInfo() {
       return BOOTSTRAP_INFO;
     }
 

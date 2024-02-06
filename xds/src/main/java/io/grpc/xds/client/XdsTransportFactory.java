@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.xds.client.Bootstrapper;
 
 /**
  * A factory for creating new XdsTransport instances.

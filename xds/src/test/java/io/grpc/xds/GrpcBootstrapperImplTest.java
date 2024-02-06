@@ -27,10 +27,13 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
-import io.grpc.xds.Bootstrapper.AuthorityInfo;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsInitializationException;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +47,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link Bootstrapper}. */
 @RunWith(JUnit4.class)
-public class BootstrapperImplTest {
+public class GrpcBootstrapperImplTest {
 
   private static final String BOOTSTRAP_FILE_PATH = "/fake/fs/path/bootstrap.json";
   private static final String SERVER_URI = "trafficdirector.googleapis.com:443";
@@ -52,7 +55,7 @@ public class BootstrapperImplTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
-  private final BootstrapperImpl bootstrapper = new BootstrapperImpl();
+  private final GrpcBootstrapperImpl bootstrapper = new GrpcBootstrapperImpl();
   private String originalBootstrapPathFromEnvVar;
   private String originalBootstrapPathFromSysProp;
   private String originalBootstrapConfigFromEnvVar;
@@ -62,24 +65,24 @@ public class BootstrapperImplTest {
   @Before
   public void setUp() {
     saveEnvironment();
-    BootstrapperImpl.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
+    bootstrapper.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
   }
 
   private void saveEnvironment() {
-    originalBootstrapPathFromEnvVar = BootstrapperImpl.bootstrapPathFromEnvVar;
-    originalBootstrapPathFromSysProp = BootstrapperImpl.bootstrapPathFromSysProp;
-    originalBootstrapConfigFromEnvVar = BootstrapperImpl.bootstrapConfigFromEnvVar;
-    originalBootstrapConfigFromSysProp = BootstrapperImpl.bootstrapConfigFromSysProp;
-    originalEnableFederation = BootstrapperImpl.enableFederation;
+    originalBootstrapPathFromEnvVar = bootstrapper.bootstrapPathFromEnvVar;
+    originalBootstrapPathFromSysProp = bootstrapper.bootstrapPathFromSysProp;
+    originalBootstrapConfigFromEnvVar = bootstrapper.bootstrapConfigFromEnvVar;
+    originalBootstrapConfigFromSysProp = bootstrapper.bootstrapConfigFromSysProp;
+    originalEnableFederation = bootstrapper.isFederationEnabled();
   }
 
   @After
   public void restoreEnvironment() {
-    BootstrapperImpl.bootstrapPathFromEnvVar = originalBootstrapPathFromEnvVar;
-    BootstrapperImpl.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
-    BootstrapperImpl.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
-    BootstrapperImpl.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
-    BootstrapperImpl.enableFederation = originalEnableFederation;
+    bootstrapper.bootstrapPathFromEnvVar = originalBootstrapPathFromEnvVar;
+    bootstrapper.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
+    bootstrapper.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
+    bootstrapper.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
+    bootstrapper.enableFederation(originalEnableFederation);
   }
 
   @Test
@@ -113,7 +116,7 @@ public class BootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -166,11 +169,11 @@ public class BootstrapperImplTest {
     List<ServerInfo> serverInfoList = info.servers();
     assertThat(serverInfoList.get(0).target())
         .isEqualTo("trafficdirector-foo.googleapis.com:443");
-    assertThat(serverInfoList.get(0).channelCredentials())
+    assertThat(serverInfoList.get(0).implSpecificConfig())
         .isInstanceOf(TlsChannelCredentials.class);
     assertThat(serverInfoList.get(1).target())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
-    assertThat(serverInfoList.get(1).channelCredentials())
+    assertThat(serverInfoList.get(1).implSpecificConfig())
         .isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
@@ -215,7 +218,7 @@ public class BootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -284,7 +287,7 @@ public class BootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
@@ -577,7 +580,7 @@ public class BootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -599,7 +602,7 @@ public class BootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -621,7 +624,7 @@ public class BootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -644,17 +647,17 @@ public class BootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
 
   @Test
   public void notFound() {
-    BootstrapperImpl.bootstrapPathFromEnvVar = null;
-    BootstrapperImpl.bootstrapPathFromSysProp = null;
-    BootstrapperImpl.bootstrapConfigFromEnvVar = null;
-    BootstrapperImpl.bootstrapConfigFromSysProp = null;
+    bootstrapper.bootstrapPathFromEnvVar = null;
+    bootstrapper.bootstrapPathFromSysProp = null;
+    bootstrapper.bootstrapConfigFromEnvVar = null;
+    bootstrapper.bootstrapConfigFromSysProp = null;
     BootstrapperImpl.FileReader reader = mock(BootstrapperImpl.FileReader.class);
     bootstrapper.setFileReader(reader);
     try {
@@ -669,8 +672,8 @@ public class BootstrapperImplTest {
   @Test
   public void fallbackToFilePathFromSystemProperty() throws XdsInitializationException {
     final String customPath = "/home/bootstrap.json";
-    BootstrapperImpl.bootstrapPathFromEnvVar = null;
-    BootstrapperImpl.bootstrapPathFromSysProp = customPath;
+    bootstrapper.bootstrapPathFromEnvVar = null;
+    bootstrapper.bootstrapPathFromSysProp = customPath;
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -699,9 +702,9 @@ public class BootstrapperImplTest {
         + "  ]\n"
         + "}";
 
-    BootstrapperImpl.bootstrapPathFromEnvVar = null;
-    BootstrapperImpl.bootstrapPathFromSysProp = null;
-    BootstrapperImpl.bootstrapConfigFromEnvVar = rawData;
+    bootstrapper.bootstrapPathFromEnvVar = null;
+    bootstrapper.bootstrapPathFromSysProp = null;
+    bootstrapper.bootstrapConfigFromEnvVar = rawData;
     bootstrapper.setFileReader(mock(BootstrapperImpl.FileReader.class));
     bootstrapper.bootstrap();
   }
@@ -718,18 +721,17 @@ public class BootstrapperImplTest {
         + "    }\n"
         + "  ]\n"
         + "}";
-    
-    BootstrapperImpl.bootstrapPathFromEnvVar = null;
-    BootstrapperImpl.bootstrapPathFromSysProp = null;
-    BootstrapperImpl.bootstrapConfigFromEnvVar = null;
-    BootstrapperImpl.bootstrapConfigFromSysProp = rawData;
+
+    bootstrapper.bootstrapPathFromEnvVar = null;
+    bootstrapper.bootstrapPathFromSysProp = null;
+    bootstrapper.bootstrapConfigFromEnvVar = null;
+    bootstrapper.bootstrapConfigFromSysProp = rawData;
     bootstrapper.setFileReader(mock(BootstrapperImpl.FileReader.class));
     bootstrapper.bootstrap();
   }
 
   @Test
   public void parseClientDefaultListenerResourceNameTemplate() throws Exception {
-    BootstrapperImpl.enableFederation = true;
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "  ]\n"
@@ -751,7 +753,6 @@ public class BootstrapperImplTest {
 
   @Test
   public void parseAuthorities() throws Exception {
-    BootstrapperImpl.enableFederation = true;
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -826,7 +827,6 @@ public class BootstrapperImplTest {
 
   @Test
   public void badFederationConfig() throws Exception {
-    BootstrapperImpl.enableFederation = true;
     String rawData = "{\n"
         + "  \"authorities\": {\n"
         + "    \"a.com\": {\n"
@@ -851,7 +851,7 @@ public class BootstrapperImplTest {
           "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
               + "xdstp://a.com/");
     }
-    BootstrapperImpl.enableFederation = false;
+    bootstrapper.enableFederation = false;
     bootstrapper.bootstrap();
   }
 
@@ -873,7 +873,7 @@ public class BootstrapperImplTest {
             .setBuildVersion(buildVersion.toString())
             .setUserAgentName(buildVersion.getUserAgent())
             .setUserAgentVersion(buildVersion.getImplementationVersion())
-            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING)
-            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_RESOURCE_IN_SOTW);
+            .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING)
+            .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_RESOURCE_IN_SOTW);
   }
 }

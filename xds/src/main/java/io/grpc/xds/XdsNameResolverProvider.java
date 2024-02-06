@@ -22,7 +22,6 @@ import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
-import io.grpc.internal.ObjectPool;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;

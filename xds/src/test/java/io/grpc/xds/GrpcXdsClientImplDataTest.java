@@ -120,7 +120,6 @@ import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
 import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -135,8 +134,11 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
-import io.grpc.xds.XdsResourceType.StructOrError;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.client.XdsResourceType.StructOrError;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
@@ -155,8 +157,9 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+@SuppressWarnings("DataFlowIssue")
 @RunWith(JUnit4.class)
-public class XdsClientImplDataTest {
+public class GrpcXdsClientImplDataTest {
 
   private static final ServerInfo LRS_SERVER_INFO =
       ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());

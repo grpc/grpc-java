@@ -34,12 +34,14 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
+import io.grpc.xds.client.MessagePrettyPrinter;
 
 /**
  * Converts protobuf message to human readable String format. Useful for protobuf messages
  * containing {@link com.google.protobuf.Any} fields.
  */
-final class MessagePrinter {
+final class MessagePrinter implements MessagePrettyPrinter {
+  public static final MessagePrinter INSTANCE = new MessagePrinter();
 
   private MessagePrinter() {}
 
@@ -90,7 +92,8 @@ final class MessagePrinter {
     }
   }
 
-  static String print(MessageOrBuilder message) {
+  @Override
+  public String print(MessageOrBuilder message) {
     String res;
     try {
       res = LazyHolder.printer.print(message);

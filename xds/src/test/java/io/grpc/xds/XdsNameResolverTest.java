@@ -70,11 +70,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ScParser;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.Bootstrapper.AuthorityInfo;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
-import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
@@ -88,8 +84,14 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsInitializationException;
+import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1909,7 +1911,7 @@ public class XdsNameResolverTest {
     private ResourceWatcher<RdsUpdate> rdsWatcher;
 
     @Override
-    BootstrapInfo getBootstrapInfo() {
+    public BootstrapInfo getBootstrapInfo() {
       return bootstrapInfo;
     }
 
@@ -1940,8 +1942,8 @@ public class XdsNameResolverTest {
 
     @Override
     public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-            String resourceName,
-            ResourceWatcher<T> watcher) {
+                                                                  String resourceName,
+                                                                  ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case "LDS":
           assertThat(ldsResource).isNotNull();

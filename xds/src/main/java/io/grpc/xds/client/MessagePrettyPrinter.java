@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,10 @@
 
 package io.grpc.xds.client;
 
-import com.google.auto.value.AutoValue;
+import com.google.protobuf.MessageOrBuilder;
 import io.grpc.Internal;
 
-/** Represents a network locality. */
-@AutoValue
 @Internal
-public abstract class Locality {
-  public abstract String region();
-
-  public abstract String zone();
-
-  public abstract String subZone();
-
-  public static Locality create(String region, String zone, String subZone) {
-    return new io.grpc.xds.client.AutoValue_Locality(region, zone, subZone);
-  }
+public interface MessagePrettyPrinter {
+  String print(MessageOrBuilder message);
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.client;
+package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -25,12 +25,12 @@ import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.xds.Endpoints;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.Locality;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
-import io.grpc.xds.client.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -63,12 +63,12 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  protected String typeName() {
+  public String typeName() {
     return "EDS";
   }
 
   @Override
-  protected String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_EDS;
   }
 

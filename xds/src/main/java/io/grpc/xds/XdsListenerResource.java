@@ -17,10 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.XdsClient.ResourceUpdate;
 import static io.grpc.xds.XdsClusterResource.validateCommonTlsContext;
-import static io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import static io.grpc.xds.XdsRouteConfigureResource.extractVirtualHosts;
+import static io.grpc.xds.client.XdsClient.ResourceUpdate;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.auto.value.AutoValue;
@@ -43,6 +42,7 @@ import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -51,7 +51,7 @@ import java.util.List;
 import java.util.Set;
 import javax.annotation.Nullable;
 
-class XdsListenerResource extends XdsResourceType<LdsUpdate> {
+public class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
   static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
@@ -59,6 +59,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           + ".HttpConnectionManager";
   private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   private static final XdsListenerResource instance = new XdsListenerResource();
+  protected final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
 
   public static XdsListenerResource getInstance() {
     return instance;
@@ -74,7 +75,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
-  protected String typeName() {
+  public String typeName() {
     return "LDS";
   }
 
@@ -84,7 +85,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
-  protected String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_LDS;
   }
 
@@ -127,11 +128,11 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   private LdsUpdate processServerSideListener(Listener proto, Args args)
       throws ResourceInvalidException {
     Set<String> certProviderInstances = null;
-    if (args.bootstrapInfo != null && args.bootstrapInfo.certProviders() != null) {
-      certProviderInstances = args.bootstrapInfo.certProviders().keySet();
+    if (args.getBootstrapInfo() != null && args.getBootstrapInfo().certProviders() != null) {
+      certProviderInstances = args.getBootstrapInfo().certProviders().keySet();
     }
     return LdsUpdate.forTcpListener(parseServerSideListener(proto,
-        (TlsContextManager) args.securityConfig,
+        (TlsContextManager) args.getSecurityConfig(),
         filterRegistry, certProviderInstances));
   }
 
@@ -599,12 +600,12 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
 
     static LdsUpdate forApiListener(io.grpc.xds.HttpConnectionManager httpConnectionManager) {
       checkNotNull(httpConnectionManager, "httpConnectionManager");
-      return new AutoValue_XdsListenerResource_LdsUpdate(httpConnectionManager, null);
+      return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(httpConnectionManager, null);
     }
 
     static LdsUpdate forTcpListener(EnvoyServerProtoData.Listener listener) {
       checkNotNull(listener, "listener");
-      return new AutoValue_XdsListenerResource_LdsUpdate(null, listener);
+      return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(null, listener);
     }
   }
 }

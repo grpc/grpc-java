@@ -48,7 +48,6 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
@@ -57,7 +56,8 @@ import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
-import io.grpc.xds.client.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
@@ -785,7 +785,7 @@ public class CdsLoadBalancer2Test {
     }
   }
 
-  private final class FakeXdsClient extends XdsClient {
+  private static class FakeXdsClient extends XdsClient {
     // watchers needs to support any non-cyclic shaped graphs
     private final Map<String, List<ResourceWatcher<CdsUpdate>>> watchers = new HashMap<>();
 
@@ -800,10 +800,9 @@ public class CdsLoadBalancer2Test {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-        String resourceName,
-        ResourceWatcher<T> watcher) {
+                                                                  String resourceName,
+                                                                  ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo("CDS");
       assertThat(watchers).containsKey(resourceName);
       List<ResourceWatcher<CdsUpdate>> watcherList = watchers.get(resourceName);

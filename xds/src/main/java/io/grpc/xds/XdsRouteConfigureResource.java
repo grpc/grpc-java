@@ -48,9 +48,9 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
@@ -78,6 +78,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           Status.Code.RESOURCE_EXHAUSTED, Status.Code.UNAVAILABLE));
 
   private static final XdsRouteConfigureResource instance = new XdsRouteConfigureResource();
+  protected final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
 
   public static XdsRouteConfigureResource getInstance() {
     return instance;
@@ -93,12 +94,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  protected String typeName() {
+  public String typeName() {
     return "RDS";
   }
 
   @Override
-  protected String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_RDS;
   }
 

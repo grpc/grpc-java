@@ -23,17 +23,20 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.VirtualHost.Route;
-import io.grpc.xds.client.EnvoyProtoData;
-import io.grpc.xds.client.XdsClientPoolFactory;
-import io.grpc.xds.client.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsInitializationException;
+import io.grpc.xds.client.XdsResourceType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -172,7 +175,7 @@ public class XdsServerTestHelper {
     final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
 
     @Override
-    public TlsContextManager getTlsContextManager() {
+    public TlsContextManager getSecurityConfig() {
       return null;
     }
 
@@ -184,9 +187,9 @@ public class XdsServerTestHelper {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-        String resourceName,
-        ResourceWatcher<T> watcher,
-        Executor syncContext) {
+                                                            String resourceName,
+                                                            ResourceWatcher<T> watcher,
+                                                            Executor syncContext) {
       switch (resourceType.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNull();
@@ -220,12 +223,12 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    void shutdown() {
+    public void shutdown() {
       shutdown = true;
     }
 
     @Override
-    boolean isShutDown() {
+    public boolean isShutDown() {
       return shutdown;
     }
 

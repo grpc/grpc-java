@@ -18,7 +18,9 @@ package io.grpc.xds;
 
 import io.grpc.Internal;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.client.SharedXdsClientPoolProvider;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsInitializationException;
+
 import java.util.Map;
 
 /**

@@ -51,9 +51,11 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.LoadReportClient;
+import io.grpc.xds.client.LoadStatsManager2;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.client.Locality;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -178,7 +180,7 @@ public class LoadReportClientTest {
     addFakeStatsData();
     lrsClient = new LoadReportClient(loadStatsManager,
         GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY.createForTest(channel),
-        Context.ROOT, NODE,
+        NODE,
         syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
         fakeClock.getStopwatchSupplier());
     syncContext.execute(new Runnable() {
