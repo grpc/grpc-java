@@ -30,7 +30,9 @@ import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.VirtualHost.Route;
-import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.XdsClientPoolFactory;
+import io.grpc.xds.client.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -125,7 +127,7 @@ public class XdsServerTestHelper {
   }
 
   static final class FakeXdsClientPoolFactory
-        implements XdsNameResolverProvider.XdsClientPoolFactory {
+        implements XdsClientPoolFactory {
 
     private XdsClient xdsClient;
     Map<String, ?> savedBootstrap;

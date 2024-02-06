@@ -34,7 +34,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.Stats.ClusterStats;
 import io.grpc.xds.Stats.DroppedRequests;
 import io.grpc.xds.Stats.UpstreamLocalityStats;

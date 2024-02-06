@@ -74,7 +74,7 @@ import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
-import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;

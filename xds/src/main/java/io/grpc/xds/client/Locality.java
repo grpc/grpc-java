@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import com.google.auto.value.AutoValue;
 
@@ -28,6 +28,6 @@ abstract class Locality {
   abstract String subZone();
 
   static Locality create(String region, String zone, String subZone) {
-    return new AutoValue_Locality(region, zone, subZone);
+    return new io.grpc.xds.AutoValue_Locality(region, zone, subZone);
   }
 }

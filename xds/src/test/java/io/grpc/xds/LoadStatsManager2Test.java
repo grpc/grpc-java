@@ -27,6 +27,7 @@ import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.Stats.ClusterStats;
 import io.grpc.xds.Stats.DroppedRequests;
 import io.grpc.xds.Stats.UpstreamLocalityStats;
+import io.grpc.xds.client.Locality;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;

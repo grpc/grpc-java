@@ -19,6 +19,7 @@ package io.grpc.xds;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.xds.client.Locality;
 import java.util.Map;
 import javax.annotation.Nullable;
 
@@ -106,8 +107,8 @@ final class Stats {
     abstract ImmutableMap<String, BackendLoadMetricStats> loadMetricStatsMap();
 
     static UpstreamLocalityStats create(Locality locality, long totalIssuedRequests,
-        long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress,
-        Map<String, BackendLoadMetricStats> loadMetricStatsMap) {
+                                        long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress,
+                                        Map<String, BackendLoadMetricStats> loadMetricStatsMap) {
       return new AutoValue_Stats_UpstreamLocalityStats(locality, totalIssuedRequests,
           totalSuccessfulRequests, totalErrorRequests, totalRequestsInProgress,
           ImmutableMap.copyOf(loadMetricStatsMap));

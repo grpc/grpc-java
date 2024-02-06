@@ -55,7 +55,7 @@ public abstract class Bootstrapper {
    */
   @AutoValue
   @Internal
-  abstract static class ServerInfo {
+  public abstract static class ServerInfo {
     abstract String target();
 
     abstract ChannelCredentials channelCredentials();
@@ -198,6 +198,12 @@ public abstract class Bootstrapper {
      */
     abstract ImmutableMap<String, AuthorityInfo> authorities();
 
+    /**
+     * A transport specific implementation representing any data that isn't common across all
+     * transports.  For example gRPC's XdsChannelCredentials.
+     */
+    abstract Object transportInfo();
+
     @VisibleForTesting
     static Builder builder() {
       return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
@@ -222,6 +228,8 @@ public abstract class Bootstrapper {
           String clientDefaultListenerResourceNameTemplate);
 
       abstract Builder authorities(Map<String, AuthorityInfo> authorities);
+
+      abstract Builder transportInfo(Object value);
 
       abstract BootstrapInfo build();
     }

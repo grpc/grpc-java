@@ -27,6 +27,7 @@ import io.grpc.xds.Stats.BackendLoadMetricStats;
 import io.grpc.xds.Stats.ClusterStats;
 import io.grpc.xds.Stats.DroppedRequests;
 import io.grpc.xds.Stats.UpstreamLocalityStats;
+import io.grpc.xds.client.Locality;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;

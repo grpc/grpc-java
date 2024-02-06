@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.Bootstrapper.ServerInfo;
+import static io.grpc.xds.client.Bootstrapper.ServerInfo;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -41,9 +41,9 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsClusterResource.CdsUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.LoadBalancerConfigFactory;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsClusterResource.CdsUpdate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -175,7 +175,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     String clusterName = cluster.getName();
     Bootstrapper.ServerInfo lrsServerInfo = null;
     Long maxConcurrentRequests = null;
-    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = null;
+    UpstreamTlsContext upstreamTlsContext = null;
     OutlierDetection outlierDetection = null;
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {
@@ -547,7 +547,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
       checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
-      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
+      return new io.grpc.xds.AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.AGGREGATE)
           .minRingSize(0)
@@ -560,7 +560,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
                           @Nullable UpstreamTlsContext upstreamTlsContext,
                           @Nullable OutlierDetection outlierDetection) {
-      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
+      return new io.grpc.xds.AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.EDS)
           .minRingSize(0)
@@ -577,7 +577,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                                  @Nullable ServerInfo lrsServerInfo,
                                  @Nullable Long maxConcurrentRequests,
                                  @Nullable UpstreamTlsContext upstreamTlsContext) {
-      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
+      return new io.grpc.xds.AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .minRingSize(0)

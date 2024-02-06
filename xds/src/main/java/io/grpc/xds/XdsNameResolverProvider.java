@@ -109,15 +109,6 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     return Collections.singleton(InetSocketAddress.class);
   }
 
-  interface XdsClientPoolFactory {
-    void setBootstrapOverride(Map<String, ?> bootstrap);
-
-    @Nullable
-    ObjectPool<XdsClient> get();
-
-    ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException;
-  }
-
   /**
    * Provides the counter for aggregating outstanding requests per cluster:eds_service_name.
    */

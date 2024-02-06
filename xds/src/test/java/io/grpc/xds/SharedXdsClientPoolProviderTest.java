@@ -24,10 +24,13 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.SharedXdsClientPoolProvider.RefCountedXdsClientObjectPool;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import io.grpc.xds.client.SharedXdsClientPoolProvider;
+import io.grpc.xds.client.SharedXdsClientPoolProvider.RefCountedXdsClientObjectPool;
+import io.grpc.xds.client.XdsClient;
 import java.util.Collections;
 import org.junit.Rule;
 import org.junit.Test;

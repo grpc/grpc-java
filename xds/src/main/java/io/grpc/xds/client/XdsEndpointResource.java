@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -25,11 +25,12 @@ import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.xds.Endpoints;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsEndpointResource.EdsUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.Locality;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsEndpointResource.EdsUpdate;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;

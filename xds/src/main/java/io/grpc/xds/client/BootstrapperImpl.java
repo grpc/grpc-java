@@ -40,7 +40,7 @@ import javax.annotation.Nullable;
 /**
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
  */
-class BootstrapperImpl extends Bootstrapper {
+public class BootstrapperImpl extends Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
   @VisibleForTesting
@@ -128,7 +128,12 @@ class BootstrapperImpl extends Bootstrapper {
   }
 
   @Override
-  BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
+  protected BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
+    return bootstrapBuilder(rawData).build();
+  }
+
+  protected BootstrapInfo.Builder bootstrapBuilder(Map<String, ?> rawData)
+      throws XdsInitializationException{
     BootstrapInfo.Builder builder = BootstrapInfo.builder();
 
     List<?> rawServerConfigs = JsonUtil.getList(rawData, "xds_servers");
@@ -208,7 +213,7 @@ class BootstrapperImpl extends Bootstrapper {
     builder.serverListenerResourceNameTemplate(grpcServerResourceId);
 
     if (!enableFederation) {
-      return builder.build();
+      return builder;
     }
     String grpcClientDefaultListener =
         JsonUtil.getString(rawData, "client_default_listener_resource_name_template");
@@ -253,7 +258,7 @@ class BootstrapperImpl extends Bootstrapper {
       builder.authorities(authorityInfoMapBuilder.buildOrThrow());
     }
 
-    return builder.build();
+    return builder;
   }
 
   private static List<ServerInfo> parseServerInfos(List<?> rawServerConfigs, XdsLogger logger)
