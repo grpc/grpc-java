@@ -30,6 +30,7 @@ abstract class RlqsFilterConfig implements FilterConfig {
   }
 
   abstract String domain();
+
   abstract GrpcService rlqsService();
 
   public static RlqsFilterConfig create(String domain, GrpcService rlqsService) {

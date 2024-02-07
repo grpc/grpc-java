@@ -132,6 +132,14 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
     public ResourceInvalidException(String message, Throwable cause) {
       super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
+
+    public static ResourceInvalidException ofResource(String resourceName, String reason) {
+      return new ResourceInvalidException("Error parsing " + resourceName + ": " + reason);
+    }
+
+    public static ResourceInvalidException ofResource(Message proto, String reason) {
+      return ResourceInvalidException.ofResource(proto.getClass().getCanonicalName(), reason);
+    }
   }
 
   ValidatedResourceUpdate<T> parse(Args args, List<Any> resources) {
