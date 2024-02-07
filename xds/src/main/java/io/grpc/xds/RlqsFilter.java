@@ -44,14 +44,14 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
   @Override
   public String[] typeUrls() {
-    return new String[] { TYPE_URL, TYPE_URL_OVERRIDE_CONFIG };
+    return new String[]{TYPE_URL, TYPE_URL_OVERRIDE_CONFIG};
   }
 
   @Override
   public ConfigOrError<RlqsFilterConfig> parseFilterConfig(Message rawProtoMessage) {
     try {
       RlqsFilterConfig rlqsFilterConfig =
-          parseRlqsFilter(unpackConfigMessage(rawProtoMessage, RateLimitQuotaFilterConfig.class));
+          parseRlqsFilter(unpackAny(rawProtoMessage, RateLimitQuotaFilterConfig.class));
       return ConfigOrError.fromConfig(rlqsFilterConfig);
     } catch (InvalidProtocolBufferException e) {
       return ConfigOrError.fromError("Can't unpack RateLimitQuotaFilterConfig proto: " + e);
@@ -63,14 +63,27 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   @Override
   public ConfigOrError<RlqsFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
     try {
-      RateLimitQuotaOverride rlqsFilterOverrideProto =
-          unpackConfigMessage(rawProtoMessage, RateLimitQuotaOverride.class);
-      return ConfigOrError.fromConfig(parseRlqsFilterOverride(rlqsFilterOverrideProto));
+      RlqsFilterConfig rlqsFilterConfig =
+          parseRlqsFilterOverride(unpackAny(rawProtoMessage, RateLimitQuotaOverride.class));
+      return ConfigOrError.fromConfig(rlqsFilterConfig);
     } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Can't unpack RateLimitQuotaFilterConfig proto: " + e);
+      return ConfigOrError.fromError("Can't unpack RateLimitQuotaOverride proto: " + e);
     } catch (ResourceInvalidException e) {
       return ConfigOrError.fromError(e.getMessage());
     }
+  }
+
+  @Nullable
+  @Override
+  public ServerInterceptor buildServerInterceptor(
+      FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    checkNotNull(config, "config");
+    if (overrideConfig != null) {
+      config = overrideConfig;
+    }
+    // todo
+    config.typeUrl(); // used
+    return null;
   }
 
   @VisibleForTesting
@@ -99,23 +112,11 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     return RlqsFilterConfig.create(domain, null);
   }
 
-  @Nullable
-  @Override
-  public ServerInterceptor buildServerInterceptor(
-      FilterConfig config, @Nullable FilterConfig overrideConfig) {
-    checkNotNull(config, "config");
-    if (overrideConfig != null) {
-      config = overrideConfig;
-    }
-    // todo
-    config.typeUrl(); // used
-    return null;
-  }
-
-  private static <T extends com.google.protobuf.Message> T unpackConfigMessage(
+  private static <T extends com.google.protobuf.Message> T unpackAny(
       Message message, Class<T> clazz) throws InvalidProtocolBufferException {
     if (!(message instanceof Any)) {
-      throw new InvalidProtocolBufferException("Invalid config type: " + message.getClass());
+      throw new InvalidProtocolBufferException(
+          "Invalid config type: " + message.getClass().getCanonicalName());
     }
     return ((Any) message).unpack(clazz);
   }
