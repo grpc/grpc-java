@@ -20,6 +20,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsResourceType.ResourceInvalidException;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -27,6 +28,7 @@ import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimit
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride;
 import io.grpc.ServerInterceptor;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
+import io.grpc.xds.internal.datatype.GrpcService;
 import javax.annotation.Nullable;
 
 /** RBAC Http filter implementation. */
@@ -71,6 +73,32 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     }
   }
 
+  @VisibleForTesting
+  static RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
+      throws ResourceInvalidException {
+    if (rlqsFilterProto.getDomain().isEmpty()) {
+      throw new ResourceInvalidException("RateLimitQuotaFilterConfig domain is required");
+    }
+
+    GrpcService rlqsService = GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer());
+
+    // TODO(sergiitk): parse rlqs_server, bucket_matchers.
+    return RlqsFilterConfig.create(rlqsFilterProto.getDomain(), rlqsService);
+  }
+
+  @VisibleForTesting
+  static RlqsFilterConfig parseRlqsFilterOverride(RateLimitQuotaOverride rlqsFilterProtoOverride)
+      throws ResourceInvalidException {
+    String domain;
+    if (!rlqsFilterProtoOverride.getDomain().isEmpty()) {
+      domain = rlqsFilterProtoOverride.getDomain();
+    } else {
+      domain = "MAGIC_USE_FILTER_CONFIG";
+    }
+    // todo: parse the rest
+    return RlqsFilterConfig.create(domain, null);
+  }
+
   @Nullable
   @Override
   public ServerInterceptor buildServerInterceptor(
@@ -82,29 +110,6 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     // todo
     config.typeUrl(); // used
     return null;
-  }
-
-  // @VisibleForTesting
-  static RlqsFilterConfig parseRlqsFilterOverride(RateLimitQuotaOverride rlqsFilterProtoOverride)
-      throws ResourceInvalidException {
-    String domain;
-    if (!rlqsFilterProtoOverride.getDomain().isEmpty()) {
-      domain = rlqsFilterProtoOverride.getDomain();
-    } else {
-      domain = "YOYOOYOYO";
-    }
-    // todo: parse the reset
-    return RlqsFilterConfig.create(domain);
-  }
-
-  // @VisibleForTesting
-  static RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
-      throws ResourceInvalidException {
-    if (rlqsFilterProto.getDomain().isEmpty()) {
-      throw new ResourceInvalidException("RateLimitQuotaFilterConfig domain is required");
-    }
-    // TODO(sergiitk): parse rlqs_server, bucket_matchers.
-    return RlqsFilterConfig.create(rlqsFilterProto.getDomain());
   }
 
   private static <T extends com.google.protobuf.Message> T unpackConfigMessage(
