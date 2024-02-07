@@ -26,6 +26,10 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaFilterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.internal.datatype.GrpcService;
@@ -73,43 +77,93 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     }
   }
 
-  @Nullable
   @Override
   public ServerInterceptor buildServerInterceptor(
       FilterConfig config, @Nullable FilterConfig overrideConfig) {
-    checkNotNull(config, "config");
+    RlqsFilterConfig rlqsFilterConfig = (RlqsFilterConfig) checkNotNull(config, "config");
+
+    // Per-route and per-host configuration overrides.
     if (overrideConfig != null) {
-      config = overrideConfig;
+      RlqsFilterConfig rlqsFilterOverride = (RlqsFilterConfig) overrideConfig;
+      // All fields are inherited from the main config, unless overriden.
+      RlqsFilterConfig.Builder overrideBuilder = rlqsFilterConfig.toBuilder();
+      if (!rlqsFilterOverride.domain().isEmpty()) {
+        overrideBuilder.domain(rlqsFilterOverride.domain());
+      }
+      // Override bucket matchers if not null.
+      rlqsFilterConfig = overrideBuilder.build();
     }
-    // todo
-    config.typeUrl(); // used
-    return null;
+
+    return generateRlqsInterceptor(rlqsFilterConfig);
+  }
+
+  private ServerInterceptor generateRlqsInterceptor(RlqsFilterConfig config) {
+    checkNotNull(config, "config");
+    checkNotNull(config.rlqsService(), "config.rlqsService");
+    // final GrpcAuthorizationEngine authEngine = new GrpcAuthorizationEngine(config);
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> Listener<ReqT> interceptCall(
+          ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        // TODO(sergiitk): Why `final call` in RbacFilter?
+
+        // Notes:
+        // map domain() -> object
+        // shared resource holder, acquire every rpc
+        // Store RLQS Client or channel in the config as a reference - FilterConfig config ref
+        // when parse.
+        //   - atomic maybe
+        //   - allocate channel on demand / ref counting
+        //   - and interface to notify service interceptor on shutdown
+        //   - destroy channel when ref count 0
+        // potentially many RLQS Clients sharing a channel to grpc RLQS service -
+        //   TODO(sergiitk): look up how cache is looked up
+        // now we create filters every RPC. will be change in RBAC.
+        //    we need to avoid recreating filter when config doesn't change
+        //    m: trigger close() after we create new instances
+        //    RBAC filter recreate? - has to be fixed for RBAC
+        // AI: follow up with Eric on how cache is shared, this changes if we need to cache
+        //     interceptor
+
+        // Example:
+        // AuthDecision authResult = authEngine.evaluate(headers, call);
+        // if (logger.isLoggable(Level.FINE)) {
+        //   logger.log(Level.FINE,
+        //       "Authorization result for serverCall {0}: {1}, matching policy: {2}.",
+        //       new Object[]{call, authResult.decision(), authResult.matchingPolicyName()});
+        // }
+        // if (GrpcAuthorizationEngine.Action.DENY.equals(authResult.decision())) {
+        //   Status status = Status.PERMISSION_DENIED.withDescription("Access Denied");
+        //   call.close(status, new Metadata());
+        //   return new ServerCall.Listener<ReqT>(){};
+        // }
+        return next.startCall(call, headers);
+      }
+    };
   }
 
   @VisibleForTesting
   static RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
       throws ResourceInvalidException {
+    RlqsFilterConfig.Builder builder = RlqsFilterConfig.builder();
     if (rlqsFilterProto.getDomain().isEmpty()) {
       throw new ResourceInvalidException("RateLimitQuotaFilterConfig domain is required");
     }
+    builder.domain(rlqsFilterProto.getDomain())
+        .rlqsService(GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer()));
 
-    GrpcService rlqsService = GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer());
+    // TODO(sergiitk): bucket_matchers.
 
-    // TODO(sergiitk): parse rlqs_server, bucket_matchers.
-    return RlqsFilterConfig.create(rlqsFilterProto.getDomain(), rlqsService);
+    return builder.build();
   }
 
   @VisibleForTesting
   static RlqsFilterConfig parseRlqsFilterOverride(RateLimitQuotaOverride rlqsFilterProtoOverride)
       throws ResourceInvalidException {
-    String domain;
-    if (!rlqsFilterProtoOverride.getDomain().isEmpty()) {
-      domain = rlqsFilterProtoOverride.getDomain();
-    } else {
-      domain = "MAGIC_USE_FILTER_CONFIG";
-    }
-    // todo: parse the rest
-    return RlqsFilterConfig.create(domain, null);
+    RlqsFilterConfig.Builder builder = RlqsFilterConfig.builder();
+    // TODO(sergiitk): bucket_matchers.
+
+    return builder.domain(rlqsFilterProtoOverride.getDomain()).build();
   }
 
   private static <T extends com.google.protobuf.Message> T unpackAny(
