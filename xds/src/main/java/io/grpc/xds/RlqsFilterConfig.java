@@ -18,20 +18,23 @@ package io.grpc.xds;
 
 import com.google.auto.value.AutoValue;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.internal.datatype.GrpcService;
 
 /** Parsed RateLimitQuotaFilterConfig. */
 @AutoValue
 abstract class RlqsFilterConfig implements FilterConfig {
+
   @Override
   public final String typeUrl() {
     return RlqsFilter.TYPE_URL;
   }
 
   abstract String domain();
+  abstract GrpcService rlqsService();
+
+  public static RlqsFilterConfig create(String domain, GrpcService rlqsService) {
+    return new AutoValue_RlqsFilterConfig(domain, rlqsService);
+  }
 
   // TODO(sergiitk): add rlqs_server, bucket_matchers.
-
-  static RlqsFilterConfig create(String domain) {
-    return new AutoValue_RlqsFilterConfig(domain);
-  }
 }
