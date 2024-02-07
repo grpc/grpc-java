@@ -48,6 +48,7 @@ import javax.annotation.Nullable;
  * protocols (e.g., LDS, RDS, VHDS, CDS and EDS) over a single channel. Watch-based interfaces
  * are provided for each set of data needed by gRPC.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
 public abstract class XdsClient {
 
   static boolean isResourceNameValid(String resourceName, String typeUrl) {
