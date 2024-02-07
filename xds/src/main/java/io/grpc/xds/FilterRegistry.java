@@ -37,7 +37,8 @@ final class FilterRegistry {
       instance = newRegistry().register(
               FaultFilter.INSTANCE,
               RouterFilter.INSTANCE,
-              RbacFilter.INSTANCE);
+              RbacFilter.INSTANCE,
+              RlqsFilter.INSTANCE);
     }
     return instance;
   }
