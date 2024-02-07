@@ -70,6 +70,8 @@ interface Filter {
         FilterConfig config, @Nullable FilterConfig overrideConfig);
   }
 
+  // shutdown/close
+
   /** Filter config with instance name. */
   final class NamedFilterConfig {
     // filter instance name
