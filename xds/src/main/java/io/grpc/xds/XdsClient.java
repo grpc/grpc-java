@@ -82,6 +82,7 @@ public abstract class XdsClient {
   /*
    * Convert the XDSTP resource name to its canonical version.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
   public static String canonifyResourceName(String resourceName) {
     checkNotNull(resourceName, "resourceName");
     if (!resourceName.startsWith(XDSTP_SCHEME)) {
@@ -109,6 +110,7 @@ public abstract class XdsClient {
   /*
    * Percent encode the input using the url path segment escaper.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
   public static String percentEncodePath(String input) {
     Iterable<String> pathSegs = Splitter.on('/').split(input);
     List<String> encodedSegs = new ArrayList<>();
