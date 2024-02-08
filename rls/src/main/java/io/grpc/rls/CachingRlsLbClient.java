@@ -726,9 +726,8 @@ final class CachingRlsLbClient {
               delayNanos,
               TimeUnit.NANOSECONDS,
               scheduledExecutorService);
-      logger.log(ChannelLogLevel.DEBUG,
-          "BackoffCacheEntry created with a delay of {0}s",
-          TimeUnit.NANOSECONDS.toSeconds(delayNanos));
+      logger.log(ChannelLogLevel.DEBUG, "BackoffCacheEntry created with a delay of {0} nanos",
+          delayNanos);
     }
 
     /** Forcefully refreshes cache entry by ignoring the backoff timer. */
