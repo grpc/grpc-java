@@ -77,6 +77,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -110,7 +111,7 @@ public class RetryTest {
       mock(ClientCall.Listener.class, delegatesTo(testCallListener));
 
   private CountDownLatch backoffLatch = new CountDownLatch(1);
-  private final EventLoopGroup group = new DefaultEventLoopGroup() {
+  private final EventLoopGroup clientGroup = new DefaultEventLoopGroup(1) {
     @SuppressWarnings("FutureReturnValueIgnored")
     @Override
     public ScheduledFuture<?> schedule(
@@ -122,7 +123,7 @@ public class RetryTest {
           new Runnable() {
             @Override
             public void run() {
-              group.execute(command);
+              clientGroup.execute(command);
             }
           },
           delay,
@@ -137,6 +138,7 @@ public class RetryTest {
           TimeUnit.NANOSECONDS);
     }
   };
+  private final EventLoopGroup serverGroup = new DefaultEventLoopGroup(1);
   private final FakeStatsRecorder clientStatsRecorder = new FakeStatsRecorder();
   private final ClientInterceptor statsInterceptor =
       InternalCensusStatsAccessor.getClientInterceptor(
@@ -173,11 +175,18 @@ public class RetryTest {
   private Map<String, Object> retryPolicy = null;
   private long bufferLimit = 1L << 20; // 1M
 
+  @After
+  @SuppressWarnings("FutureReturnValueIgnored")
+  public void tearDown() {
+    clientGroup.shutdownGracefully();
+    serverGroup.shutdownGracefully();
+  }
+
   private void startNewServer() throws Exception {
     localServer = cleanupRule.register(NettyServerBuilder.forAddress(localAddress)
         .channelType(LocalServerChannel.class)
-        .bossEventLoopGroup(group)
-        .workerEventLoopGroup(group)
+        .bossEventLoopGroup(serverGroup)
+        .workerEventLoopGroup(serverGroup)
         .addService(serviceDefinition)
         .build());
     localServer.start();
@@ -196,7 +205,7 @@ public class RetryTest {
     channel = cleanupRule.register(
         NettyChannelBuilder.forAddress(localAddress)
             .channelType(LocalChannel.class, LocalAddress.class)
-            .eventLoopGroup(group)
+            .eventLoopGroup(clientGroup)
             .usePlaintext()
             .enableRetry()
             .perRpcBufferLimit(bufferLimit)
