@@ -282,9 +282,10 @@ final class XdsClientImpl extends XdsClient
   }
 
   @Override
-  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher,
-                                                   Executor watcherExecutor) {
+  public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher,
+      Executor watcherExecutor) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
@@ -309,9 +310,9 @@ final class XdsClientImpl extends XdsClient
   }
 
   @Override
-  <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                         String resourceName,
-                                                         ResourceWatcher<T> watcher) {
+  public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
