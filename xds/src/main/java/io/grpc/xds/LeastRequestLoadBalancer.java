@@ -28,8 +28,6 @@ import static io.grpc.xds.LeastRequestLoadBalancerProvider.MIN_CHOICE_COUNT;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
@@ -46,7 +44,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.annotation.Nonnull;
 
 /**
  * A {@link LoadBalancer} that provides least request load balancing based on
@@ -57,12 +54,9 @@ import javax.annotation.Nonnull;
  * the "power of two choices" (P2C).
  */
 final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
-  private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
-  private static final EmptyPicker EMPTY_LR_PICKER = new EmptyPicker(EMPTY_OK);
-
   private final ThreadSafeRandom random;
 
-  private LeastRequestPicker currentPicker = EMPTY_LR_PICKER;
+  private SubchannelPicker currentPicker = new EmptyPicker();
   private int choiceCount = DEFAULT_CHOICE_COUNT;
 
   LeastRequestLoadBalancer(Helper helper) {
@@ -101,11 +95,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     return addressAcceptanceStatus;
   }
 
-  @Override
-  protected SubchannelPicker getErrorPicker(Status error) {
-    return new EmptyPicker(error);
-  }
-
   /**
    * Updates picker with the list of active subchannels (state == READY).
    *
@@ -132,7 +121,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
         }
       }
       if (isConnecting) {
-        updateBalancingState(CONNECTING, EMPTY_LR_PICKER);
+        updateBalancingState(CONNECTING, new EmptyPicker());
       } else {
         // Give it all the failing children and let it randomly pick among them
         updateBalancingState(TRANSIENT_FAILURE,
@@ -149,8 +138,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
   }
 
-  private void updateBalancingState(ConnectivityState state, LeastRequestPicker picker) {
-    if (state != currentConnectivityState || !picker.isEquivalentTo(currentPicker)) {
+  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+    if (state != currentConnectivityState || !picker.equals(currentPicker)) {
       getHelper().updateBalancingState(state, picker);
       currentConnectivityState = state;
       currentPicker = picker;
@@ -183,21 +172,23 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @VisibleForTesting
-  abstract static class LeastRequestPicker extends SubchannelPicker {
-    abstract boolean isEquivalentTo(LeastRequestPicker picker);
-  }
-
-  @VisibleForTesting
-  static final class ReadyPicker extends LeastRequestPicker {
+  static final class ReadyPicker extends SubchannelPicker {
     private final List<ChildLbState> childLbStates; // non-empty
     private final int choiceCount;
     private final ThreadSafeRandom random;
+    private final int hashCode;
 
     ReadyPicker(List<ChildLbState> childLbStates, int choiceCount, ThreadSafeRandom random) {
       checkArgument(!childLbStates.isEmpty(), "empty list");
       this.childLbStates = childLbStates;
       this.choiceCount = choiceCount;
       this.random = checkNotNull(random, "random");
+
+      int sum = 0;
+      for (ChildLbState child : childLbStates) {
+        sum += child.hashCode();
+      }
+      this.hashCode = sum ^ choiceCount;
     }
 
     @Override
@@ -244,49 +235,48 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
       return childLbStates;
     }
 
-    @VisibleForTesting
     @Override
-    boolean isEquivalentTo(LeastRequestPicker picker) {
-      if (!(picker instanceof ReadyPicker)) {
+    public int hashCode() {
+      return hashCode;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof ReadyPicker)) {
         return false;
       }
-      ReadyPicker other = (ReadyPicker) picker;
-      // the lists cannot contain duplicate subchannels
-      return other == this
-          || ((childLbStates.size() == other.childLbStates.size() && new HashSet<>(
-          childLbStates).containsAll(other.childLbStates))
-                && choiceCount == other.choiceCount);
+      ReadyPicker other = (ReadyPicker) o;
+      if (other == this) {
+        return true;
+      }
+      // the lists cannot contain duplicate children
+      return hashCode == other.hashCode
+          && choiceCount == other.choiceCount
+          && childLbStates.size() == other.childLbStates.size()
+          && new HashSet<>(childLbStates).containsAll(other.childLbStates);
     }
   }
 
   @VisibleForTesting
-  static final class EmptyPicker extends LeastRequestPicker {
-
-    private final Status status;
-
-    EmptyPicker(@Nonnull Status status) {
-      this.status = Preconditions.checkNotNull(status, "status");
-    }
-
+  static final class EmptyPicker extends SubchannelPicker {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return status.isOk() ? PickResult.withNoResult() : PickResult.withError(status);
+      return PickResult.withNoResult();
     }
 
     @Override
-    boolean isEquivalentTo(LeastRequestPicker picker) {
-      return picker instanceof EmptyPicker && (Objects.equal(status, ((EmptyPicker) picker).status)
-          || (status.isOk() && ((EmptyPicker) picker).status.isOk()));
+    public int hashCode() {
+      return getClass().hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      return o instanceof EmptyPicker;
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(EmptyPicker.class).add("status", status).toString();
-    }
-
-    @VisibleForTesting
-    Status getStatus() {
-      return status;
+      return MoreObjects.toStringHelper(EmptyPicker.class).toString();
     }
   }
 
