@@ -70,6 +70,7 @@ interface Filter {
         FilterConfig config, @Nullable FilterConfig overrideConfig);
   }
 
+  // TODO(sergiitk): important to cover and discuss in the design.
   // shutdown/close
 
   /** Filter config with instance name. */

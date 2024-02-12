@@ -80,6 +80,8 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   @Override
   public ServerInterceptor buildServerInterceptor(
       FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    // called when we get an xds update - when the LRS or RLS changes.
+    // TODO(sergiitk): this needs to be confirmed.
     RlqsFilterConfig rlqsFilterConfig = (RlqsFilterConfig) checkNotNull(config, "config");
 
     // Per-route and per-host configuration overrides.
@@ -105,10 +107,8 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       @Override
       public <ReqT, RespT> Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-        // TODO(sergiitk): Why `final call` in RbacFilter?
-
         // Notes:
-        // map domain() -> object
+        // map domain() -> an incarnation of bucket matchers, f.e. new RlqsEngine(domain, matchers).
         // shared resource holder, acquire every rpc
         // Store RLQS Client or channel in the config as a reference - FilterConfig config ref
         // when parse.
@@ -124,6 +124,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         //    RBAC filter recreate? - has to be fixed for RBAC
         // AI: follow up with Eric on how cache is shared, this changes if we need to cache
         //     interceptor
+        // AI: discuss the lifetime of RLQS channel and the cache - needs wider per-lang discussion.
 
         // Example:
         // AuthDecision authResult = authEngine.evaluate(headers, call);
