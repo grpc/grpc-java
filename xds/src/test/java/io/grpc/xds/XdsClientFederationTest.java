@@ -72,7 +72,6 @@ public class XdsClientFederationTest {
 
   private ObjectPool<XdsClient> xdsClientPool;
   private GrpcXdsClientImpl xdsClient;
-  private boolean originalFederationStatus;
 
   @Before
   public void setUp() throws XdsInitializationException {
@@ -83,7 +82,7 @@ public class XdsClientFederationTest {
   }
 
   @After
-  public void cleanUp() throws InterruptedException {
+  public void cleanUp() {
     xdsClientPool.returnObject(xdsClient);
   }
 
@@ -92,7 +91,7 @@ public class XdsClientFederationTest {
    * in watchers of resources on other control planes.
    */
   @Test
-  public void isolatedResourceDeletions() throws InterruptedException {
+  public void isolatedResourceDeletions() {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
@@ -186,7 +185,7 @@ public class XdsClientFederationTest {
    * only report on the traffic for their own control plane.
    */
   @Test
-  public void lrsClientsHaveDistinctLoadStatsManagers() throws InterruptedException {
+  public void lrsClientsHaveDistinctLoadStatsManagers() {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
