@@ -115,7 +115,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    AcceptResolvedAddressRetVal acceptRetVal;
+    AcceptResolvedAddrRetVal acceptRetVal;
     try {
       resolvingAddresses = true;
       acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
@@ -146,12 +146,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
         config.enableOobLoadReport, config.errorUtilizationPenalty, sequence);
-  }
-
-  // Expose for tests in this package.
-  @Override
-  protected ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
-    return super.getChildLbStateEag(eag);
   }
 
   @VisibleForTesting
