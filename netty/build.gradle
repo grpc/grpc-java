@@ -28,6 +28,7 @@ dependencies {
             libraries.errorprone.annotations,
             libraries.perfmark.api,
             libraries.netty.unix.common
+    runtimeOnly project(":grpc-util")  // need grpc-util to pull in round robin
 
     // Tests depend on base class defined by core module.
     testImplementation testFixtures(project(':grpc-core')),
