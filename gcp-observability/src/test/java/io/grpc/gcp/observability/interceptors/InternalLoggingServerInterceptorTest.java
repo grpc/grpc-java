@@ -39,14 +39,13 @@ import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.NoopServerCall;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.gcp.observability.interceptors.ConfigFilterHelper.FilterParams;
-import io.grpc.internal.NoopServerCall;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.opencensus.trace.SpanContext;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
@@ -87,7 +86,8 @@ public class InternalLoggingServerInterceptorTest {
   private AtomicReference<Metadata> actualTrailers;
   private LogHelper mockLogHelper;
   private ConfigFilterHelper mockFilterHelper;
-  private SocketAddress peer;
+  @SuppressWarnings("AddressSelection") // It will only be one address
+  private SocketAddress peer = new InetSocketAddress("127.0.0.1", 1234);
 
   @Before
   @SuppressWarnings("unchecked")
@@ -101,7 +101,6 @@ public class InternalLoggingServerInterceptorTest {
     actualResponse = new AtomicReference<>();
     actualStatus = new AtomicReference<>();
     actualTrailers = new AtomicReference<>();
-    peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
   }
 
   @Test

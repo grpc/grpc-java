@@ -230,7 +230,7 @@ public class DnsNameResolverTest {
       ResolutionResult result = invocation.getArgument(0);
       syncContext.execute(
           () -> result.getAttributes().get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)
-              .resolutionAttempted(true));
+              .resolutionAttempted(Status.OK));
       return null;
     }).when(mockListener).onResult(isA(ResolutionResult.class));
   }
@@ -591,7 +591,7 @@ public class DnsNameResolverTest {
     doAnswer(invocation -> {
       ResolutionResult result = invocation.getArgument(0);
       result.getAttributes().get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)
-          .resolutionAttempted(false);
+          .resolutionAttempted(Status.UNAVAILABLE);
       return null;
     }).when(mockListener).onResult(isA(ResolutionResult.class));
 
@@ -1293,8 +1293,7 @@ public class DnsNameResolverTest {
   }
 
   private void testValidUri(URI uri, String exportedAuthority, int expectedPort) {
-    DnsNameResolver resolver = (DnsNameResolver) ((RetryingNameResolver) provider.newNameResolver(
-        uri, args)).getRetriedNameResolver();
+    DnsNameResolver resolver = (DnsNameResolver) provider.newNameResolver(uri, args);
     assertNotNull(resolver);
     assertEquals(expectedPort, resolver.getPort());
     assertEquals(exportedAuthority, resolver.getServiceAuthority());

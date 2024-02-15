@@ -32,24 +32,24 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.StatusException;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NegotiationType;
-import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.alts.ComputeEngineChannelCredentials;
+import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TlsTesting;
-import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -57,6 +57,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -87,7 +90,9 @@ public class StressTestClient {
     try {
       client.startMetricsService();
       client.runStressTest();
+      client.startMetricsLogging();
       client.blockUntilStressTestComplete();
+      log.log(Level.INFO, "Total calls made: " + client.getTotalCallCount());
     } catch (Exception e) {
       log.log(Level.WARNING, "The stress test client encountered an error!", e);
     } finally {
@@ -104,14 +109,17 @@ public class StressTestClient {
   private String serverHostOverride;
   private boolean useTls = false;
   private boolean useTestCa = false;
+  private String customCredentialsType;
   private int durationSecs = -1;
   private int channelsPerServer = 1;
   private int stubsPerChannel = 1;
   private int metricsPort = 8081;
+  private int metricsLogRateSecs = -1;
 
   private Server metricsServer;
   private final Map<String, Metrics.GaugeResponse> gauges =
       new ConcurrentHashMap<>();
+  private final AtomicLong totalCallCount = new AtomicLong(0);
 
   private volatile boolean shutdown;
 
@@ -122,6 +130,7 @@ public class StressTestClient {
       new ArrayList<>();
   private final List<ManagedChannel> channels = new ArrayList<>();
   private ListeningExecutorService threadpool;
+  private ScheduledExecutorService metricsLoggingThreadpool;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -154,6 +163,8 @@ public class StressTestClient {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_test_ca".equals(key)) {
         useTestCa = Boolean.parseBoolean(value);
+      } else if ("custom_credentials_type".equals(key)) {
+        customCredentialsType = value;
       } else if ("test_cases".equals(key)) {
         testCaseWeightPairs = parseTestCases(value);
       } else if ("test_duration_secs".equals(key)) {
@@ -164,6 +175,8 @@ public class StressTestClient {
         stubsPerChannel = Integer.valueOf(value);
       } else if ("metrics_port".equals(key)) {
         metricsPort = Integer.valueOf(value);
+      } else if ("metrics_log_rate_secs".equals(key)) {
+        metricsLogRateSecs = Integer.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -194,12 +207,16 @@ public class StressTestClient {
               + "\n  --use_test_ca=true|false       Whether to trust our fake CA. Requires"
               + " --use_tls=true"
               + "\n                                 to have effect. Default: " + c.useTestCa
+              + "\n  --custom_credentials_type      Custom credentials type to use. Default "
+              + c.customCredentialsType
               + "\n  --test_duration_secs=SECONDS   '-1' for no limit. Default: " + c.durationSecs
               + "\n  --num_channels_per_server=INT  Number of connections to each server address."
               + " Default: " + c.channelsPerServer
               + "\n  --num_stubs_per_channel=INT    Default: " + c.stubsPerChannel
               + "\n  --metrics_port=PORT            Listening port of the metrics server."
               + " Default: " + c.metricsPort
+              + "\n  --metrics_log_rate_secs=INT    The rate (in secs) to log collected metrics"
+              + " Default: " + c.metricsLogRateSecs
       );
       System.exit(1);
     }
@@ -213,6 +230,24 @@ public class StressTestClient {
         .addService(new MetricsServiceImpl())
         .build()
         .start();
+  }
+
+  /** Starts logging gauge information at a given rate (if rate > -1). */
+  @SuppressWarnings("FutureReturnValueIgnored")
+  void startMetricsLogging() {
+    if (metricsLogRateSecs > -1) {
+      metricsLoggingThreadpool = Executors.newScheduledThreadPool(1);
+      metricsLoggingThreadpool.scheduleAtFixedRate(() -> {
+        long totalQps = 0;
+        for (Metrics.GaugeResponse gauge : gauges.values()) {
+          log.info("GAUGE: " + gauge);
+          if (gauge.getName().endsWith("/qps")) {
+            totalQps += gauge.getLongValue();
+          }
+        }
+        log.info("TOTAL QPS: " + totalQps);
+      }, metricsLogRateSecs, metricsLogRateSecs, SECONDS);
+    }
   }
 
   @VisibleForTesting
@@ -285,6 +320,14 @@ public class StressTestClient {
     } catch (Throwable t) {
       log.log(Level.WARNING, "Error shutting down threadpool.", t);
     }
+
+    try {
+      if (metricsLoggingThreadpool != null) {
+        metricsLoggingThreadpool.shutdownNow();
+      }
+    } catch (Throwable t) {
+      log.log(Level.WARNING, "Error shutting down metrics logging threadpool.", t);
+    }
   }
 
   @VisibleForTesting
@@ -296,19 +339,9 @@ public class StressTestClient {
     List<InetSocketAddress> addresses = new ArrayList<>();
 
     for (List<String> namePort : parseCommaSeparatedTuples(addressesStr)) {
-      InetAddress address;
       String name = namePort.get(0);
       int port = Integer.valueOf(namePort.get(1));
-      try {
-        address = InetAddress.getByName(name);
-        if (serverHostOverride != null) {
-          // Force the hostname to match the cert the server uses.
-          address = InetAddress.getByAddress(serverHostOverride, address.getAddress());
-        }
-      } catch (UnknownHostException ex) {
-        throw new RuntimeException(ex);
-      }
-      addresses.add(new InetSocketAddress(address, port));
+      addresses.add(new InetSocketAddress(name, port));
     }
 
     return addresses;
@@ -341,19 +374,47 @@ public class StressTestClient {
   }
 
   private ManagedChannel createChannel(InetSocketAddress address) {
-    SslContext sslContext = null;
-    if (useTestCa) {
-      try {
-        sslContext = GrpcSslContexts.forClient().trustManager(
-            TlsTesting.loadCert("ca.pem")).build();
-      } catch (Exception ex) {
-        throw new RuntimeException(ex);
+    ChannelCredentials channelCredentials;
+    if (customCredentialsType != null) {
+      if (customCredentialsType.equals("google_default_credentials")) {
+        channelCredentials = GoogleDefaultChannelCredentials.create();
+      } else if (customCredentialsType.equals("compute_engine_channel_creds")) {
+        channelCredentials = ComputeEngineChannelCredentials.create();
+      } else {
+        throw new IllegalArgumentException(
+            "Unknown custom credentials: " + customCredentialsType);
       }
+    } else if (useTls) {
+      if (useTestCa) {
+        try {
+          channelCredentials = TlsChannelCredentials.newBuilder()
+              .trustManager(TlsTesting.loadCert("ca.pem"))
+              .build();
+        } catch (Exception ex) {
+          throw new RuntimeException(ex);
+        }
+      } else {
+        channelCredentials = TlsChannelCredentials.create();
+      }
+    } else {
+      channelCredentials = InsecureChannelCredentials.create();
     }
-    return NettyChannelBuilder.forAddress(address)
-        .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
-        .sslContext(sslContext)
-        .build();
+    ManagedChannelBuilder<?> builder;
+    if (address.getPort() == 0) {
+      builder = Grpc.newChannelBuilder(address.getHostString(), channelCredentials);
+    } else {
+      builder = Grpc.newChannelBuilderForAddress(address.getHostString(), address.getPort(),
+          channelCredentials);
+    }
+
+    if (serverHostOverride != null) {
+      builder.overrideAuthority(serverHostOverride);
+    }
+    return builder.build();
+  }
+
+  private long getTotalCallCount() {
+    return totalCallCount.get();
   }
 
   private static String serverAddressesToString(List<InetSocketAddress> addresses) {
@@ -411,7 +472,11 @@ public class StressTestClient {
       Thread.currentThread().setName(gaugeName);
 
       Tester tester = new Tester();
+      // The client stream tracers that AbstractInteropTest installs by default would fill up the
+      // heap in no time in a long running stress test with many requests.
+      tester.setEnableClientStreamTracers(false);
       tester.setUp();
+
       WeightedTestCaseSelector testCaseSelector = new WeightedTestCaseSelector(testCaseWeightPairs);
       Long endTime = durationSec == null ? null : System.nanoTime() + SECONDS.toNanos(durationSecs);
       long lastMetricsCollectionTime = initLastMetricsCollectionTime();
@@ -427,6 +492,7 @@ public class StressTestClient {
         }
 
         testCasesSinceLastMetricsCollection++;
+        totalCallCount.incrementAndGet();
 
         double durationSecs = computeDurationSecs(lastMetricsCollectionTime);
         if (durationSecs >= METRICS_COLLECTION_INTERVAL_SECS) {
@@ -641,6 +707,11 @@ public class StressTestClient {
   }
 
   @VisibleForTesting
+  String customCredentialsType() {
+    return customCredentialsType;
+  }
+
+  @VisibleForTesting
   List<TestCaseWeightPair> testCaseWeightPairs() {
     return testCaseWeightPairs;
   }
@@ -663,5 +734,10 @@ public class StressTestClient {
   @VisibleForTesting
   int metricsPort() {
     return metricsPort;
+  }
+
+  @VisibleForTesting
+  int metricsLogRateSecs() {
+    return metricsLogRateSecs;
   }
 }

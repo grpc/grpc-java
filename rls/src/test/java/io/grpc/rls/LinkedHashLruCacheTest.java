@@ -150,13 +150,16 @@ public class LinkedHashLruCacheTest {
   }
 
   @Test
-  public void eviction_get_shouldNotReturnAlreadyExpired() {
+  public void eviction_cleanupShouldRemoveAlreadyExpired() {
     for (int i = 1; i <= MAX_SIZE; i++) {
       // last entry is already expired when added
-      cache.cache(i, new Entry("Entry" + i, ticker.read() + MAX_SIZE - i));
+      cache.cache(i, new Entry("Entry" + i,
+          ticker.read() + ((MAX_SIZE - i) * TimeUnit.MINUTES.toNanos(1)) + 1));
     }
 
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE);
+
+    fakeClock.forwardTime(1, TimeUnit.MINUTES);
     assertThat(cache.read(MAX_SIZE)).isNull();
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE - 1);
     verify(evictionListener).onEviction(eq(MAX_SIZE), any(Entry.class), eq(EvictionType.EXPIRED));

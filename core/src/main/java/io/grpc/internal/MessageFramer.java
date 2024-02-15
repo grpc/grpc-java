@@ -27,6 +27,7 @@ import io.grpc.Compressor;
 import io.grpc.Drainable;
 import io.grpc.KnownLength;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -147,6 +148,8 @@ public class MessageFramer implements Framer {
           .withDescription("Failed to frame message")
           .withCause(e)
           .asRuntimeException();
+    } catch (StatusRuntimeException e) {
+      throw e;
     } catch (RuntimeException e) {
       throw Status.INTERNAL
           .withDescription("Failed to frame message")
@@ -170,13 +173,6 @@ public class MessageFramer implements Framer {
     }
     BufferChainOutputStream bufferChain = new BufferChainOutputStream();
     int written = writeToOutputStream(message, bufferChain);
-    if (maxOutboundMessageSize >= 0 && written > maxOutboundMessageSize) {
-      throw Status.RESOURCE_EXHAUSTED
-          .withDescription(
-              String.format(
-                  Locale.US, "message too large %d > %d", written , maxOutboundMessageSize))
-          .asRuntimeException();
-    }
     writeBufferChain(bufferChain, false);
     return written;
   }
@@ -238,6 +234,13 @@ public class MessageFramer implements Framer {
    */
   private void writeBufferChain(BufferChainOutputStream bufferChain, boolean compressed) {
     int messageLength = bufferChain.readableBytes();
+    if (maxOutboundMessageSize >= 0 && messageLength > maxOutboundMessageSize) {
+      throw Status.RESOURCE_EXHAUSTED
+          .withDescription(
+              String.format(
+                  Locale.US, "message too large %d > %d", messageLength , maxOutboundMessageSize))
+          .asRuntimeException();
+    }
     headerScratch.clear();
     headerScratch.put(compressed ? COMPRESSED : UNCOMPRESSED).putInt(messageLength);
     WritableBuffer writeableHeader = bufferAllocator.allocate(HEADER_LENGTH);

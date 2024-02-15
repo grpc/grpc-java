@@ -29,25 +29,33 @@ import java.util.Map;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9381")
 public final class MetricReport {
   private double cpuUtilization;
+  private double applicationUtilization;
   private double memoryUtilization;
   private double qps;
   private double eps;
   private Map<String, Double> requestCostMetrics;
   private Map<String, Double> utilizationMetrics;
+  private Map<String, Double> namedMetrics;
 
-  MetricReport(double cpuUtilization, double memoryUtilization, double qps, double eps,
-               Map<String, Double> requestCostMetrics,
-               Map<String, Double> utilizationMetrics) {
+  MetricReport(double cpuUtilization, double applicationUtilization, double memoryUtilization,
+      double qps, double eps, Map<String, Double> requestCostMetrics,
+      Map<String, Double> utilizationMetrics, Map<String, Double> namedMetrics) {
     this.cpuUtilization = cpuUtilization;
+    this.applicationUtilization = applicationUtilization;
     this.memoryUtilization = memoryUtilization;
     this.qps = qps;
     this.eps = eps;
     this.requestCostMetrics = checkNotNull(requestCostMetrics, "requestCostMetrics");
     this.utilizationMetrics = checkNotNull(utilizationMetrics, "utilizationMetrics");
+    this.namedMetrics = checkNotNull(namedMetrics, "namedMetrics");
   }
 
   public double getCpuUtilization() {
     return cpuUtilization;
+  }
+
+  public double getApplicationUtilization() {
+    return applicationUtilization;
   }
 
   public double getMemoryUtilization() {
@@ -62,6 +70,10 @@ public final class MetricReport {
     return utilizationMetrics;
   }
 
+  public Map<String, Double> getNamedMetrics() {
+    return namedMetrics;
+  }
+
   public double getQps() {
     return qps;
   }
@@ -74,9 +86,11 @@ public final class MetricReport {
   public String toString() {
     return MoreObjects.toStringHelper(this)
         .add("cpuUtilization", cpuUtilization)
+        .add("applicationUtilization", applicationUtilization)
         .add("memoryUtilization", memoryUtilization)
         .add("requestCost", requestCostMetrics)
         .add("utilization", utilizationMetrics)
+        .add("named", namedMetrics)
         .add("qps", qps)
         .add("eps", eps)
         .toString();

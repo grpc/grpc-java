@@ -7,8 +7,9 @@ plugins {
     id 'com.google.cloud.tools.jib' apply false
 }
 
+import io.grpc.gradle.CheckForUpdatesTask
+import io.grpc.gradle.RequireUpperBoundDepsMatchTask
 import net.ltgt.gradle.errorprone.CheckSeverity
-import org.gradle.util.GUtil
 
 subprojects {
     apply plugin: "checkstyle"
@@ -20,7 +21,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.57.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.63.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -37,6 +38,9 @@ subprojects {
             "-Xlint:-try"
         ]
         it.options.encoding = "UTF-8"
+        // Avoid Gradle OOM.
+        // https://docs.gradle.org/current/userguide/performance.html#run_the_compiler_as_a_separate_process
+        it.options.fork = true
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
         }
@@ -68,11 +72,6 @@ subprojects {
                 }
                 generateProtoTasks {
                     all().each { task ->
-                        // Recompile protos when build.gradle has been changed, because
-                        // it's possible the version of protoc has been changed.
-                        task.inputs.file("${rootProject.projectDir}/build.gradle")
-                          .withPathSensitivity(PathSensitivity.RELATIVE)
-                          .withPropertyName('root build.gradle')
                         if (isAndroid) {
                             task.builtins {
                                 java { option 'lite' }
@@ -164,7 +163,8 @@ subprojects {
 
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
-        toolVersion = libs.checkstyle.get().version
+        toolVersion = JavaVersion.current().isJava11Compatible() ? libs.checkstyle.get().version : libs.checkstylejava8.get().version 
+
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
@@ -183,9 +183,6 @@ subprojects {
     }
 
     plugins.withId("java") {
-        sourceCompatibility = 1.8
-        targetCompatibility = 1.8
-
         dependencies {
             testImplementation libraries.junit,
                     libraries.mockito.core,
@@ -241,12 +238,25 @@ subprojects {
             }
         }
 
+        tasks.withType(JavaCompile).configureEach {
+            if (JavaVersion.current().isJava9Compatible()) {
+                options.release = 8
+            } else {
+                sourceCompatibility = JavaVersion.VERSION_1_8
+                targetCompatibility = JavaVersion.VERSION_1_8
+            }
+        }
         tasks.named("compileJava").configure {
             // This project targets Java 7 (no time.Duration class)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
+
+            // TODO(https://github.com/grpc/grpc-java/issues/10372): remove when fixed.
+            if (JavaVersion.current().isJava11Compatible()) {
+              options.errorprone.check("StringCaseLocaleUsage", CheckSeverity.OFF)
+            }
         }
         tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
@@ -266,25 +276,17 @@ subprojects {
     plugins.withId("java-library") {
         // Detect Maven Enforcer's dependencyConvergence failures. We only care
         // for artifacts used as libraries by others with Maven.
-        tasks.register('checkUpperBoundDeps') {
-            inputs.files(configurations.runtimeClasspath).withNormalizer(ClasspathNormalizer)
-            outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
-            doLast {
-                requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
-            }
+        tasks.register('checkUpperBoundDeps', RequireUpperBoundDepsMatchTask) {
+            configuration = configurations.getByName('runtimeClasspath')
         }
-        tasks.named('compileJava').configure {
-            dependsOn checkUpperBoundDeps
+        tasks.named('assemble').configure {
+            dependsOn tasks.named('checkUpperBoundDeps')
         }
     }
 
     plugins.withId("me.champeau.jmh") {
         // invoke jmh on a single benchmark class like so:
         //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
-	tasks.named("compileJmhJava").configure {
-	    sourceCompatibility = 1.8
-	    targetCompatibility = 1.8
-	}
         tasks.named("jmh").configure {
             warmupIterations = 10
             iterations = 10
@@ -412,31 +414,25 @@ subprojects {
         def baselineGrpcVersion = '1.6.1'
 
         // Get the baseline version's jar for this subproject
-        File baselineArtifact = null
-        // Use a detached configuration, otherwise the current version's jar will take precedence
-        // over the baseline jar.
+        configurations {
+            baselineArtifact
+        }
         // A necessary hack, the intuitive thing does NOT work:
         // https://discuss.gradle.org/t/is-the-default-configuration-leaking-into-independent-configurations/2088/6
         def oldGroup = project.group
         try {
             project.group = 'virtual_group_for_japicmp'
-            String depModule = "io.grpc:${project.name}:${baselineGrpcVersion}@jar"
-            String depJar = "${project.name}-${baselineGrpcVersion}.jar"
-            Configuration configuration = configurations.detachedConfiguration(
-                    dependencies.create(depModule)
-                    )
-            baselineArtifact = files(configuration.files).filter {
-                it.name.equals(depJar)
-            }.singleFile
+            dependencies {
+                baselineArtifact "io.grpc:${project.name}:${baselineGrpcVersion}@jar"
+            }
         } finally {
             project.group = oldGroup
         }
 
         // Add a japicmp task that compares the current .jar with baseline .jar
         tasks.register("japicmp", me.champeau.gradle.japicmp.JapicmpTask) {
-            dependsOn jar
-            oldClasspath = files(baselineArtifact)
-            newClasspath = files(jar.archiveFile)
+            oldClasspath.from configurations.baselineArtifact
+            newClasspath.from tasks.named("jar")
             onlyBinaryIncompatibleModified = false
             // Be quiet about things that did not change
             onlyModified = true
@@ -449,65 +445,10 @@ subprojects {
 
             // Also break on source incompatible changes, not just binary.
             // Eg adding abstract method to public class.
-            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/14
-            // breakOnSourceIncompatibility = true
+            failOnSourceIncompatibility = true
 
             // Ignore any classes or methods marked @ExperimentalApi
-            // TODO(zpencer): enable after japicmp-gradle-plugin/pull/15
-            // annotationExcludes = ['@io.grpc.ExperimentalApi']
-        }
-    }
-}
-
-class DepAndParents {
-    DependencyResult dep
-    List<String> parents
-}
-
-/**
- * Make sure that Maven would select the same versions as Gradle selected.
- * This is essentially the same as if we used Maven Enforcer's
- * requireUpperBoundDeps for our artifacts.
- */
-def requireUpperBoundDepsMatch(Configuration conf, Project project) {
-    // artifact name => version
-    Map<String,String> golden = conf.resolvedConfiguration.resolvedArtifacts.collectEntries {
-        ResolvedArtifact it ->
-            ModuleVersionIdentifier id = it.moduleVersion.id
-            [id.group + ":" + id.name, id.version]
-    }
-    // Breadth-first search like Maven for dependency resolution
-    Queue<DepAndParents> queue = new ArrayDeque<>()
-    conf.incoming.resolutionResult.root.dependencies.each {
-        queue.add(new DepAndParents(dep: it, parents: [project.displayName]))
-    }
-    Set<String> found = new HashSet<>()
-    while (!queue.isEmpty()) {
-        DepAndParents depAndParents = queue.remove()
-        ResolvedDependencyResult result = (ResolvedDependencyResult) depAndParents.dep
-        ModuleVersionIdentifier id = result.selected.moduleVersion
-        String artifact = id.group + ":" + id.name
-        if (found.contains(artifact))
-            continue
-        found.add(artifact)
-        String version
-        if (result.requested instanceof ProjectComponentSelector) {
-            ProjectComponentSelector selector = (ProjectComponentSelector) result.requested
-            version = project.findProject(selector.projectPath).version
-        } else {
-            version = ((ModuleComponentSelector) result.requested).version
-        }
-        String goldenVersion = golden[artifact]
-        if (goldenVersion != version && "[$goldenVersion]" != version) {
-            throw new RuntimeException(
-                "Maven version skew: $artifact ($version != $goldenVersion) "
-                + "Bad version dependency path: " + depAndParents.parents
-                + " Run './gradlew $project.path:dependencies --configuration $conf.name' "
-                + "to diagnose")
-        }
-        result.selected.dependencies.each {
-            queue.add(new DepAndParents(
-                dep: it, parents: depAndParents.parents + [artifact + ":" + version]))
+            annotationExcludes = ['@io.grpc.ExperimentalApi']
         }
     }
 }
@@ -544,34 +485,4 @@ configurations {
     }
 }
 
-// Checks every dependency in the version catalog to see if there is a newer
-// version available. The 'checkForUpdates' configuration restricts the
-// versions considered.
-tasks.register('checkForUpdates') {
-    doLast {
-        def updateConf = project.configurations.checkForUpdates
-        updateConf.setVisible(false)
-        updateConf.setTransitive(false)
-        def versionCatalog = project.extensions.getByType(VersionCatalogsExtension).named("libs")
-        versionCatalog.libraryAliases.each { name ->
-            def dep = versionCatalog.findLibrary(name).get().get()
-
-            def oldConf = updateConf.copy()
-            def oldDep = project.dependencies.create(
-                group: dep.group, name: dep.name, version: dep.versionConstraint, classifier: 'pom')
-            oldConf.dependencies.add(oldDep)
-            def oldResolved = oldConf.resolvedConfiguration.resolvedArtifacts.iterator().next()
-
-            def newConf = updateConf.copy()
-            def newDep = project.dependencies.create(
-                group: dep.group, name: dep.name, version: '+', classifier: 'pom')
-            newConf.dependencies.add(newDep)
-            def newResolved = newConf.resolvedConfiguration.resolvedArtifacts.iterator().next()
-            if (oldResolved != newResolved) {
-                def oldId = oldResolved.id.componentIdentifier
-                def newId = newResolved.id.componentIdentifier
-                println("${newId.group}:${newId.module} ${oldId.version} -> ${newId.version}")
-            }
-        }
-    }
-}
+tasks.register('checkForUpdates', CheckForUpdatesTask, project.configurations.checkForUpdates, "libs")

@@ -23,18 +23,16 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
+import io.grpc.ChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -353,15 +351,8 @@ public final class Http2Client {
   }
 
   private ManagedChannel createChannel() {
-    InetAddress address;
-    try {
-      address = InetAddress.getByName(serverHost);
-    } catch (UnknownHostException ex) {
-      throw new RuntimeException(ex);
-    }
-    return NettyChannelBuilder.forAddress(new InetSocketAddress(address, serverPort))
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .build();
+    ChannelCredentials creds = InsecureChannelCredentials.create();
+    return NettyChannelBuilder.forAddress(serverHost, serverPort, creds).build();
   }
 
   private static String validTestCasesHelpText() {

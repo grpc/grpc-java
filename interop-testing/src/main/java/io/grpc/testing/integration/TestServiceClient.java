@@ -88,7 +88,6 @@ public class TestServiceClient {
   private String defaultServiceAccount;
   private String serviceAccountKeyFile;
   private String oauthScope;
-  private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
   private Map<String, ?> serviceConfig = null;
   private int soakIterations = 10;
@@ -97,6 +96,8 @@ public class TestServiceClient {
   private int soakMinTimeMsBetweenRpcs = 0;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
+  private int soakRequestSize = 271828;
+  private int soakResponseSize = 314159;
   private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
@@ -157,8 +158,6 @@ public class TestServiceClient {
         serviceAccountKeyFile = value;
       } else if ("oauth_scope".equals(key)) {
         oauthScope = value;
-      } else if ("full_stream_decompression".equals(key)) {
-        fullStreamDecompression = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
       } else if ("service_config_json".equals(key)) {
@@ -175,6 +174,10 @@ public class TestServiceClient {
         soakMinTimeMsBetweenRpcs = Integer.parseInt(value);
       } else if ("soak_overall_timeout_seconds".equals(key)) {
         soakOverallTimeoutSeconds = Integer.parseInt(value);
+      } else if ("soak_request_size".equals(key)) {
+        soakRequestSize = Integer.parseInt(value);
+      } else if ("soak_response_size".equals(key)) {
+        soakResponseSize = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
       } else {
@@ -220,8 +223,6 @@ public class TestServiceClient {
           + "\n  --service_account_key_file  Path to service account json key file."
             + c.serviceAccountKeyFile
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
-          + "\n  --full_stream_decompression Enable full-stream decompression. Default "
-            + c.fullStreamDecompression
           + "\n --service_config_json=SERVICE_CONFIG_JSON"
           + "\n                              Disables service config lookups and sets the provided "
           + "\n                              string as the default service config."
@@ -247,6 +248,12 @@ public class TestServiceClient {
           + "\n                              should stop and fail, if the desired number of "
           + "\n                              iterations have not yet completed. Default "
             + c.soakOverallTimeoutSeconds
+          + "\n --soak_request_size "
+          + "\n                              The request size in a soak RPC. Default "
+            + c.soakRequestSize
+          + "\n --soak_response_size "
+          + "\n                              The response size in a soak RPC. Default "
+            + c.soakResponseSize
           + "\n --additional_metadata "
           + "\n                              Additional metadata to send in each request, as a "
           + "\n                              semicolon-separated list of key:value pairs. Default "
@@ -481,7 +488,9 @@ public class TestServiceClient {
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds);
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
         break;
       }
 
@@ -493,7 +502,9 @@ public class TestServiceClient {
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds);
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
         break;
 
       }
@@ -622,9 +633,6 @@ public class TestServiceClient {
         if (serverHostOverride != null) {
           nettyBuilder.overrideAuthority(serverHostOverride);
         }
-        if (fullStreamDecompression) {
-          nettyBuilder.enableFullStreamDecompression();
-        }
         // Disable the default census stats interceptor, use testing interceptor instead.
         InternalNettyChannelBuilder.setStatsEnabled(nettyBuilder, false);
         if (serviceConfig != null) {
@@ -647,9 +655,6 @@ public class TestServiceClient {
         // Force the hostname to match the cert the server uses.
         okBuilder.overrideAuthority(
             GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
-      }
-      if (fullStreamDecompression) {
-        okBuilder.enableFullStreamDecompression();
       }
       // Disable the default census stats interceptor, use testing interceptor instead.
       InternalOkHttpChannelBuilder.setStatsEnabled(okBuilder, false);

@@ -1,9 +1,9 @@
 import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
 import com.github.jengelman.gradle.plugins.shadow.transformers.CacheableTransformer
 import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
+import org.apache.tools.zip.ZipOutputStream
+import org.apache.tools.zip.ZipEntry
 import org.gradle.api.file.FileTreeElement
-import shadow.org.apache.tools.zip.ZipOutputStream
-import shadow.org.apache.tools.zip.ZipEntry
 
 plugins {
     id "java"
@@ -70,6 +70,9 @@ dependencies {
 tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.netty.shaded')
+    }
 }
 
 tasks.named("shadowJar").configure {

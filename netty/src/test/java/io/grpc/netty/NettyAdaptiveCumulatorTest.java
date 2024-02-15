@@ -369,6 +369,7 @@ public class NettyAdaptiveCumulatorTest {
     @Test
     public void mergeWithCompositeTail_tailExpandable_reallocateInMemory() {
       int tailFastCapacity = tail.writerIndex() + tail.maxFastWritableBytes();
+      @SuppressWarnings("InlineMeInliner") // Requires Java 11
       String inSuffixOverFastBytes = Strings.repeat("a", tailFastCapacity + 1);
       int newTailSize =  tail.readableBytes() + inSuffixOverFastBytes.length();
       composite.addFlattenedComponents(true, tail);
@@ -431,6 +432,7 @@ public class NettyAdaptiveCumulatorTest {
     @Test
     public void mergeWithCompositeTail_tailNotExpandable_maxCapacityReached() {
       // Fill in tail to the maxCapacity.
+      @SuppressWarnings("InlineMeInliner") // Requires Java 11
       String tailSuffixFullCapacity = Strings.repeat("a", tail.maxWritableBytes());
       tail.writeCharSequence(tailSuffixFullCapacity, US_ASCII);
       composite.addFlattenedComponents(true, tail);
@@ -533,11 +535,12 @@ public class NettyAdaptiveCumulatorTest {
 
       try {
         NettyAdaptiveCumulator.mergeWithCompositeTail(alloc, compositeThrows, in);
+        in = null; // On success it would be released
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
-        // Input must be released unless its ownership has been to the composite cumulation.
-        assertEquals(0, in.refCnt());
+        // Because of error, ownership shouldn't have changed so should not have been released.
+        assertEquals(1, in.refCnt());
         // Tail released
         assertEquals(0, tail.refCnt());
         // Composite cumulation is retained
@@ -545,6 +548,9 @@ public class NettyAdaptiveCumulatorTest {
         // Composite cumulation loses the tail
         assertEquals(0, compositeThrows.numComponents());
       } finally {
+        if (in != null) {
+          in.release();
+        }
         compositeThrows.release();
       }
     }
@@ -569,11 +575,12 @@ public class NettyAdaptiveCumulatorTest {
 
       try {
         NettyAdaptiveCumulator.mergeWithCompositeTail(mockAlloc, compositeRo, in);
+        in = null; // On success it would be released
         fail("Cumulator didn't throw");
       } catch (UnsupportedOperationException actualError) {
         assertSame(expectedError, actualError);
-        // Input must be released unless its ownership has been to the composite cumulation.
-        assertEquals(0, in.refCnt());
+        // Because of error, ownership shouldn't have changed so should not have been released.
+        assertEquals(1, in.refCnt());
         // New buffer released
         assertEquals(0, newTail.refCnt());
         // Composite cumulation is retained
@@ -581,6 +588,9 @@ public class NettyAdaptiveCumulatorTest {
         // Composite cumulation loses the tail
         assertEquals(0, compositeRo.numComponents());
       } finally {
+        if (in != null) {
+          in.release();
+        }
         compositeRo.release();
       }
     }

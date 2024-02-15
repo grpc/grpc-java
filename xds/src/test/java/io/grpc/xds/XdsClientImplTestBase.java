@@ -18,9 +18,12 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.XdsClientImpl.XdsChannelFactory.DEFAULT_XDS_CHANNEL_FACTORY;
+import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -82,18 +85,18 @@ import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
+import io.grpc.xds.GrpcXdsTransportFactory.GrpcXdsTransport;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClient.ResourceWatcher;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
-import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
@@ -104,6 +107,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -121,8 +127,10 @@ import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link XdsClientImpl}.
@@ -279,8 +287,6 @@ public abstract class XdsClientImplTestBase {
   private ResourceWatcher<CdsUpdate> cdsResourceWatcher;
   @Mock
   private ResourceWatcher<EdsUpdate> edsResourceWatcher;
-  @Mock
-  private TlsContextManager tlsContextManager;
 
   private ManagedChannel channel;
   private ManagedChannel channelForCustomAuthority;
@@ -314,25 +320,25 @@ public abstract class XdsClientImplTestBase {
         .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
-    XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
+    XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
       @Override
-      ManagedChannel create(ServerInfo serverInfo) {
+      public XdsTransport create(ServerInfo serverInfo) {
         if (serverInfo.target().equals(SERVER_URI)) {
-          return channel;
+          return new GrpcXdsTransport(channel);
         }
         if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
           if (channelForCustomAuthority == null) {
             channelForCustomAuthority = cleanupRule.register(
                 InProcessChannelBuilder.forName(serverName).directExecutor().build());
           }
-          return channelForCustomAuthority;
+          return new GrpcXdsTransport(channelForCustomAuthority);
         }
         if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
           if (channelForEmptyAuthority == null) {
             channelForEmptyAuthority = cleanupRule.register(
                 InProcessChannelBuilder.forName(serverName).directExecutor().build());
           }
-          return channelForEmptyAuthority;
+          return new GrpcXdsTransport(channelForEmptyAuthority);
         }
         throw new IllegalArgumentException("Can not create channel for " + serverInfo);
       }
@@ -360,14 +366,13 @@ public abstract class XdsClientImplTestBase {
             .build();
     xdsClient =
         new XdsClientImpl(
-            xdsChannelFactory,
+            xdsTransportFactory,
             bootstrapInfo,
             Context.ROOT,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
-            timeProvider,
-            tlsContextManager);
+            timeProvider);
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -2234,7 +2239,7 @@ public abstract class XdsClientImplTestBase {
     // The response NACKed with errors indicating indices of the failed resources.
     String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
             + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
-            + "io.grpc.xds.XdsClientImpl$ResourceInvalidException: "
+            + "io.grpc.xds.XdsResourceType$ResourceInvalidException: "
             + "ca_certificate_provider_instance is required in upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -2341,7 +2346,7 @@ public abstract class XdsClientImplTestBase {
 
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "Cluster cluster.googleapis.com: malformed outlier_detection: "
-        + "io.grpc.xds.XdsClientImpl$ResourceInvalidException: outlier_detection "
+        + "io.grpc.xds.XdsResourceType$ResourceInvalidException: outlier_detection "
         + "max_ejection_percent is > 100";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -2442,6 +2447,34 @@ public abstract class XdsClientImplTestBase {
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
+  }
+
+  @Test
+  public void cdsResponseErrorHandling_xdstpWithoutEdsConfig() {
+    String cdsResourceName = "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1";
+
+    final Any testClusterRoundRobin =
+        Any.pack(mf.buildEdsCluster(cdsResourceName, null, "round_robin", null,
+            null, false, null, "envoy.transport_sockets.tls", null, null
+        ));
+    final Any okClusterRoundRobin =
+        Any.pack(mf.buildEdsCluster(cdsResourceName, "eds-service-bar.googleapis.com",
+            "round_robin", null,null, false, null, "envoy.transport_sockets.tls", null, null));
+
+
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(),
+        cdsResourceName, cdsResourceWatcher);
+    call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
+
+    List<String> errors = ImmutableList.of("CDS response Cluster "
+        + "\'xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1\' "
+        + "validation error: EDS service_name must be set when Cluster resource has an xdstp name");
+    call.verifyRequest(CDS, cdsResourceName, "", "", NODE); // get this out of the way
+    call.verifyRequestNack(CDS, cdsResourceName, "", "0000", NODE, errors);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+
+    call.sendResponse(CDS, okClusterRoundRobin, VERSION_1, "0001");
+    call.verifyRequest(CDS, cdsResourceName, VERSION_1, "0001", NODE);
   }
 
   @Test
@@ -2921,6 +2954,135 @@ public abstract class XdsClientImplTestBase {
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void flowControlAbsent() throws Exception {
+    String anotherCdsResource = CDS_RESOURCE + "2";
+    FakeClock fakeWatchClock = new FakeClock();
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher, fakeWatchClock.getScheduledExecutorService());
+    ResourceWatcher<CdsUpdate> anotherWatcher = mock(ResourceWatcher.class);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), anotherCdsResource,
+        anotherWatcher, fakeWatchClock.getScheduledExecutorService());
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+    verifyResourceMetadataRequested(CDS, anotherCdsResource);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    call.verifyRequest(CDS, Arrays.asList(CDS_RESOURCE, anotherCdsResource), "", "", NODE);
+    assertThat(fakeWatchClock.runDueTasks()).isEqualTo(2);
+    call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
+    verifyResourceMetadataAcked(
+        CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1, TIME_INCREMENT);
+    call.verifyRequest(CDS, Arrays.asList(CDS_RESOURCE, anotherCdsResource), VERSION_1,
+        "0000", NODE);
+    verifyNoInteractions(cdsResourceWatcher, anotherWatcher);
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    assertThat(fakeWatchClock.getPendingTasks().size()).isEqualTo(2);
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    doAnswer(blockUpdate(barrier)).when(cdsResourceWatcher).onChanged(any(CdsUpdate.class));
+
+    CountDownLatch latch = new CountDownLatch(1);
+    new Thread(() -> {
+      try {
+        fakeWatchClock.runDueTasks();
+        latch.countDown();
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
+    }).start();
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+        CDS_RESOURCE, Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "A.2", "round_robin", null,
+            null, false, null,
+            "envoy.transport_sockets.tls", null, null
+        )),
+        anotherCdsResource, Any.pack(mf.buildClusterInvalid(anotherCdsResource)));
+    call.sendResponse(CDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    assertThat(call.isReady()).isFalse();
+    verifyResourceMetadataAcked(
+        CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1, TIME_INCREMENT);
+    barrier.await();
+    verify(cdsResourceWatcher, atLeastOnce()).onChanged(any());
+    String errorMsg = "CDS response Cluster 'cluster.googleapis.com2' validation error: "
+        + "Cluster cluster.googleapis.com2: unspecified cluster discovery type";
+    call.verifyRequestNack(CDS, Arrays.asList(CDS_RESOURCE, anotherCdsResource), VERSION_1, "0001",
+        NODE, Arrays.asList(errorMsg));
+    barrier.await();
+    latch.await(10, TimeUnit.SECONDS);
+    verify(cdsResourceWatcher, times(2)).onChanged(any());
+    verify(anotherWatcher).onResourceDoesNotExist(eq(anotherCdsResource));
+    verify(anotherWatcher).onError(any());
+  }
+
+  private Answer<Void> blockUpdate(CyclicBarrier barrier) {
+    return new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        barrier.await();
+        return null;
+      }
+    };
+  }
+
+  @Test
+  public void simpleFlowControl() throws Exception {
+    FakeClock fakeWatchClock = new FakeClock();
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher, fakeWatchClock.getScheduledExecutorService());
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+    assertThat(fakeWatchClock.runDueTasks()).isEqualTo(1);
+
+    call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT);
+    verifyNoInteractions(edsResourceWatcher);
+    assertThat(fakeWatchClock.getPendingTasks().size()).isEqualTo(1);
+
+    // Updated EDS response.
+    Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+        ImmutableList.<Message>of()));
+    call.sendResponse(EDS, updatedClusterLoadAssignment, VERSION_2, "0001");
+    // message not processed due to flow control
+    call.verifyNoMoreRequest();
+    assertThat(call.isReady()).isFalse();
+
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    doAnswer(blockUpdate(barrier)).when(edsResourceWatcher).onChanged(any(EdsUpdate.class));
+
+    CountDownLatch latch = new CountDownLatch(1);
+    new Thread(() -> {
+      try {
+        fakeWatchClock.runDueTasks();
+        latch.countDown();
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
+    }).start();
+
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT);
+    barrier.await();
+    verify(edsResourceWatcher, atLeastOnce()).onChanged(edsUpdateCaptor.capture());
+    EdsUpdate edsUpdate = edsUpdateCaptor.getAllValues().get(0);
+    validateGoldenClusterLoadAssignment(edsUpdate);
+    barrier.await();
+    latch.await(10, TimeUnit.SECONDS);
+    verify(edsResourceWatcher, times(2)).onChanged(any());
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
+        TIME_INCREMENT * 2);
+  }
+
+  @Test
+  public void flowControlUnknownType() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
+        edsResourceWatcher);
+    call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
+    call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher).onChanged(any());
   }
 
   @Test
@@ -3578,14 +3740,13 @@ public abstract class XdsClientImplTestBase {
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
-        DEFAULT_XDS_CHANNEL_FACTORY,
+        DEFAULT_XDS_TRANSPORT_FACTORY,
         bootstrapInfo,
         Context.ROOT,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,
         fakeClock.getStopwatchSupplier(),
-        timeProvider,
-        tlsContextManager);
+        timeProvider);
   }
 
   private  BootstrapInfo buildBootStrap(String serverUri) {
@@ -3613,36 +3774,39 @@ public abstract class XdsClientImplTestBase {
   }
 
   private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
-      XdsResourceType<T> type, String name, ResourceWatcher<T> watcher) {
+      XdsResourceType<T> type, String name, ResourceWatcher<T> watcher, Executor executor) {
+    xdsClient.watchXdsResource(type, name, watcher, executor);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
+
     FakeClock.TaskFilter timeoutTaskFilter;
     switch (type.typeName()) {
       case "LDS":
         timeoutTaskFilter = LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
         break;
       case "RDS":
         timeoutTaskFilter = RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
         break;
       case "CDS":
         timeoutTaskFilter = CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
         break;
       case "EDS":
         timeoutTaskFilter = EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER;
-        xdsClient.watchXdsResource(type, name, watcher);
         break;
       default:
         throw new AssertionError("should never be here");
     }
-
-    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
-    call.verifyRequest(type, Collections.singletonList(name), "", "", NODE);
     ScheduledTask timeoutTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(timeoutTaskFilter));
     assertThat(timeoutTask.getDelay(TimeUnit.SECONDS))
         .isEqualTo(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC);
     return call;
+  }
+
+  private <T extends ResourceUpdate> DiscoveryRpcCall startResourceWatcher(
+      XdsResourceType<T> type, String name, ResourceWatcher<T> watcher) {
+    return startResourceWatcher(type, name, watcher, MoreExecutors.directExecutor());
   }
 
   protected abstract static class DiscoveryRpcCall {
@@ -3689,6 +3853,10 @@ public abstract class XdsClientImplTestBase {
     }
 
     protected void sendCompleted() {
+      throw new UnsupportedOperationException();
+    }
+
+    protected boolean isReady() {
       throw new UnsupportedOperationException();
     }
   }

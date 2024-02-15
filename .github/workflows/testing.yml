@@ -76,10 +76,10 @@ jobs:
   bazel:
     runs-on: ubuntu-latest
     env:
-      USE_BAZEL_VERSION: 5.0.0
+      USE_BAZEL_VERSION: 6.0.0
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Bazel cache
       uses: actions/cache@v3

@@ -24,7 +24,9 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
@@ -36,6 +38,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
@@ -44,7 +48,8 @@ import javax.annotation.Nullable;
  * protocols (e.g., LDS, RDS, VHDS, CDS and EDS) over a single channel. Watch-based interfaces
  * are provided for each set of data needed by gRPC.
  */
-abstract class XdsClient {
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
+public abstract class XdsClient {
 
   static boolean isResourceNameValid(String resourceName, String typeUrl) {
     checkNotNull(resourceName, "resourceName");
@@ -74,7 +79,11 @@ abstract class XdsClient {
     return true;
   }
 
-  static String canonifyResourceName(String resourceName) {
+  /*
+   * Convert the XDSTP resource name to its canonical version.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
+  public static String canonifyResourceName(String resourceName) {
     checkNotNull(resourceName, "resourceName");
     if (!resourceName.startsWith(XDSTP_SCHEME)) {
       return resourceName;
@@ -98,7 +107,11 @@ abstract class XdsClient {
     return resourceName.replace(rawQuery, canonifiedQuery);
   }
 
-  static String percentEncodePath(String input) {
+  /*
+   * Percent encode the input using the url path segment escaper.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
+  public static String percentEncodePath(String input) {
     Iterable<String> pathSegs = Splitter.on('/').split(input);
     List<String> encodedSegs = new ArrayList<>();
     for (String pathSeg : pathSegs) {
@@ -107,13 +120,13 @@ abstract class XdsClient {
     return Joiner.on('/').join(encodedSegs);
   }
 
-  interface ResourceUpdate {
-  }
+  public interface ResourceUpdate {}
 
   /**
    * Watcher interface for a single requested xDS resource.
    */
-  interface ResourceWatcher<T extends ResourceUpdate> {
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
+  public interface ResourceWatcher<T extends ResourceUpdate> {
 
     /**
      * Called when the resource discovery RPC encounters some transient error.
@@ -121,7 +134,7 @@ abstract class XdsClient {
      * <p>Note that we expect that the implementer to:
      * - Comply with the guarantee to not generate certain statuses by the library:
      *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
-     *   propagated to the channel, override it with {@link Status.Code#UNAVAILABLE}.
+     *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
      * - Keep {@link Status} description in one form or another, as it contains valuable debugging
      *   information.
      */
@@ -304,17 +317,25 @@ abstract class XdsClient {
   /**
    * Registers a data watcher for the given Xds resource.
    */
-  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher) {
+  public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher,
+      Executor executor) {
     throw new UnsupportedOperationException();
+  }
+
+  public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher) {
+    watchXdsResource(type, resourceName, watcher, MoreExecutors.directExecutor());
   }
 
   /**
    * Unregisters the given resource watcher.
    */
-  <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                         String resourceName,
-                                                         ResourceWatcher<T> watcher) {
+  public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher) {
     throw new UnsupportedOperationException();
   }
 
@@ -353,11 +374,32 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
+  static final class ProcessingTracker {
+    private final AtomicInteger pendingTask = new AtomicInteger(1);
+    private final Executor executor;
+    private final Runnable completionListener;
+
+    ProcessingTracker(Runnable completionListener, Executor executor) {
+      this.executor = executor;
+      this.completionListener = completionListener;
+    }
+
+    void startTask() {
+      pendingTask.incrementAndGet();
+    }
+
+    void onComplete() {
+      if (pendingTask.decrementAndGet() == 0) {
+        executor.execute(completionListener);
+      }
+    }
+  }
+
   interface XdsResponseHandler {
     /** Called when a xds response is received. */
     void handleResourceResponse(
         XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
-        List<Any> resources, String nonce);
+        List<Any> resources, String nonce, ProcessingTracker processingTracker);
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.

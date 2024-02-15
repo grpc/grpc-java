@@ -20,9 +20,7 @@ dependencies {
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
             testFixtures(project(':grpc-core'))
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
 
     def xdsDependency = implementation project(':grpc-xds')
     shadow configurations.implementation.getDependencies().minus([xdsDependency])

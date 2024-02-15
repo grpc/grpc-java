@@ -77,7 +77,7 @@ final class MultiMessageServerStream implements ServerStream {
   }
 
   @Override
-  public void writeHeaders(Metadata headers) {
+  public void writeHeaders(Metadata headers, boolean flush) {
     try {
       synchronized (outbound) {
         outbound.sendHeaders(headers);

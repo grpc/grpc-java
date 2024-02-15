@@ -1,6 +1,6 @@
 plugins {
     id "application"
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "com.google.protobuf"
@@ -21,17 +21,20 @@ dependencies {
             project(':grpc-googleapis'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
-            project(':grpc-protobuf'),
             project(':grpc-rls'),
             project(':grpc-services'),
-            project(':grpc-stub'),
             project(':grpc-testing'),
+            project(':grpc-protobuf-lite'),
             project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.hdrhistogram,
-            libraries.junit,
             libraries.truth,
             libraries.opencensus.contrib.grpc.metrics,
-            libraries.google.auth.oauth2Http
+            libraries.google.auth.oauth2Http,
+            libraries.guava.jre // Fix checkUpperBoundDeps using -android
+    api project(':grpc-api'),
+            project(':grpc-stub'),
+            project(':grpc-protobuf'),
+            libraries.junit
     compileOnly libraries.javax.annotation
     // TODO(sergiitk): replace with com.google.cloud:google-cloud-logging
     // Used instead of google-cloud-logging because it's failing
@@ -45,9 +48,10 @@ dependencies {
             libraries.netty.tcnative.classes,
             project(':grpc-grpclb'),
             project(':grpc-rls')
-    testImplementation testFixtures(project(':grpc-context')),
-            testFixtures(project(':grpc-api')),
+    testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
+            project(':grpc-inprocess'),
+            project(':grpc-core'),
             libraries.mockito.core,
             libraries.okhttp
     alpnagent libraries.jetty.alpn.agent
@@ -159,22 +163,24 @@ def xds_federation_test_client = tasks.register("xds_federation_test_client", Cr
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into("bin") {
-    from(test_client)
-    from(test_server)
-    from(reconnect_test_client)
-    from(stresstest_client)
-    from(http2_client)
-    from(grpclb_long_lived_affinity_test_client)
-    from(grpclb_fallback_test_client)
-    from(xds_test_client)
-    from(xds_test_server)
-    from(xds_federation_test_client)
-    fileMode = 0755
-}
+application {
+    applicationDistribution.into("bin") {
+        from(test_client)
+        from(test_server)
+        from(reconnect_test_client)
+        from(stresstest_client)
+        from(http2_client)
+        from(grpclb_long_lived_affinity_test_client)
+        from(grpclb_fallback_test_client)
+        from(xds_test_client)
+        from(xds_test_server)
+        from(xds_federation_test_client)
+        fileMode = 0755
+    }
 
-applicationDistribution.into("lib") {
-    from(configurations.alpnagent)
+    applicationDistribution.into("lib") {
+        from(configurations.alpnagent)
+    }
 }
 
 publishing {

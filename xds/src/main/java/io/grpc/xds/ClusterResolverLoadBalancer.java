@@ -55,7 +55,6 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildCo
 import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -113,7 +112,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     if (xdsClientPool == null) {
       xdsClientPool = resolvedAddresses.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL);
@@ -127,7 +126,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       this.config = config;
       delegate.handleResolvedAddresses(resolvedAddresses);
     }
-    return true;
+    return Status.OK;
   }
 
   @Override
@@ -171,7 +170,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       this.resolvedAddresses = resolvedAddresses;
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -190,7 +189,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         clusterStates.put(instance.cluster, state);
         state.start();
       }
-      return true;
+      return Status.OK;
     }
 
     @Override
@@ -198,7 +197,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       if (childLb != null) {
         childLb.handleNameResolutionError(error);
       } else {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
       }
     }
 
@@ -241,7 +241,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               Status.UNAVAILABLE.withCause(endpointNotFound.getCause())
                   .withDescription(endpointNotFound.getDescription());
         }
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(endpointNotFound));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(endpointNotFound)));
         if (childLb != null) {
           childLb.shutdown();
           childLb = null;
@@ -276,7 +277,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (childLb != null) {
           childLb.handleNameResolutionError(error);
         } else {
-          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          helper.updateBalancingState(
+              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
         }
       }
     }
@@ -364,7 +366,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         String resourceName = edsServiceName != null ? edsServiceName : name;
         logger.log(XdsLogLevel.INFO, "Start watching EDS resource {0}", resourceName);
-        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), resourceName, this);
+        xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),
+            resourceName, this, syncContext);
       }
 
       @Override
@@ -450,7 +453,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           }
         }
 
-        syncContext.execute(new EndpointsUpdated());
+        new EndpointsUpdated().run();
       }
 
       private List<String> generatePriorityNames(String name,
@@ -489,38 +492,28 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       @Override
       public void onResourceDoesNotExist(final String resourceName) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (shutdown) {
-              return;
-            }
-            logger.log(XdsLogLevel.INFO, "Resource {0} unavailable", resourceName);
-            status = Status.OK;
-            resolved = true;
-            result = null;  // resource revoked
-            handleEndpointResourceUpdate();
-          }
-        });
+        if (shutdown) {
+          return;
+        }
+        logger.log(XdsLogLevel.INFO, "Resource {0} unavailable", resourceName);
+        status = Status.OK;
+        resolved = true;
+        result = null;  // resource revoked
+        handleEndpointResourceUpdate();
       }
 
       @Override
       public void onError(final Status error) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (shutdown) {
-              return;
-            }
-            String resourceName = edsServiceName != null ? edsServiceName : name;
-            status = Status.UNAVAILABLE
-                .withDescription(String.format("Unable to load EDS %s. xDS server returned: %s: %s",
-                      resourceName, error.getCode(), error.getDescription()))
-                .withCause(error.getCause());
-            logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
-            handleEndpointResolutionError();
-          }
-        });
+        if (shutdown) {
+          return;
+        }
+        String resourceName = edsServiceName != null ? edsServiceName : name;
+        status = Status.UNAVAILABLE
+            .withDescription(String.format("Unable to load EDS %s. xDS server returned: %s: %s",
+                  resourceName, error.getCode(), error.getDescription()))
+            .withCause(error.getCause());
+        logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
+        handleEndpointResolutionError();
       }
     }
 

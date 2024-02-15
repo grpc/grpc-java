@@ -26,8 +26,7 @@ dependencies {
 
     runtimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
-    testImplementation testFixtures(project(':grpc-context')),
-            testFixtures(project(':grpc-api')),
+    testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
             libraries.mockito.core,
             libraries.junit,
@@ -57,7 +56,7 @@ tasks.named("compileJava").configure {
 
 // For releasing to Docker Hub
 jib {
-    from.image = "gcr.io/distroless/java:8"
+    from.image = "gcr.io/distroless/java17-debian12"
     container {
         ports = ['50051']
         mainClass="io.grpc.testing.istio.EchoTestServer"

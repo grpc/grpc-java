@@ -13,14 +13,14 @@ gRPC-Java - An RPC library and framework
 </table>
 
 [![Join the chat at https://gitter.im/grpc/grpc](https://badges.gitter.im/grpc/grpc.svg)](https://gitter.im/grpc/grpc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Build Status](https://travis-ci.org/grpc/grpc-java.svg?branch=master)](https://travis-ci.org/grpc/grpc-java)
+[![GitHub Actions Linux Testing](https://github.com/grpc/grpc-java/actions/workflows/testing.yml/badge.svg?branch=master)](https://github.com/grpc/grpc-java/actions/workflows/testing.yml?branch=master)
 [![Line Coverage Status](https://coveralls.io/repos/grpc/grpc-java/badge.svg?branch=master&service=github)](https://coveralls.io/github/grpc/grpc-java?branch=master)
 [![Branch-adjusted Line Coverage Status](https://codecov.io/gh/grpc/grpc-java/branch/master/graph/badge.svg)](https://codecov.io/gh/grpc/grpc-java)
 
 Supported Platforms
 -------------------
 
-gRPC-Java supports Java 8 and later. Android minSdkVersion 19 (KitKat) and
+gRPC-Java supports Java 8 and later. Android minSdkVersion 21 (Lollipop) and
 later are supported with [Java 8 language desugaring][android-java-8].
 
 TLS usage on Android typically requires Play Services Dynamic Security Provider.
@@ -44,8 +44,8 @@ For a guided tour, take a look at the [quick start
 guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
 basics](https://grpc.io/docs/languages/java/basics).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.54.1/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.54.1/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.61.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.61.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
@@ -56,18 +56,18 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.54.1</version>
+  <version>1.61.0</version>
   <scope>runtime</scope>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.54.1</version>
+  <version>1.61.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.54.1</version>
+  <version>1.61.0</version>
 </dependency>
 <dependency> <!-- necessary for Java 9+ -->
   <groupId>org.apache.tomcat</groupId>
@@ -79,18 +79,18 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-runtimeOnly 'io.grpc:grpc-netty-shaded:1.54.1'
-implementation 'io.grpc:grpc-protobuf:1.54.1'
-implementation 'io.grpc:grpc-stub:1.54.1'
+runtimeOnly 'io.grpc:grpc-netty-shaded:1.61.0'
+implementation 'io.grpc:grpc-protobuf:1.61.0'
+implementation 'io.grpc:grpc-stub:1.61.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-implementation 'io.grpc:grpc-okhttp:1.54.1'
-implementation 'io.grpc:grpc-protobuf-lite:1.54.1'
-implementation 'io.grpc:grpc-stub:1.54.1'
+implementation 'io.grpc:grpc-okhttp:1.61.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.61.0'
+implementation 'io.grpc:grpc-stub:1.61.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
@@ -99,7 +99,7 @@ For [Bazel](https://bazel.build), you can either
 (with the GAVs from above), or use `@io_grpc_grpc_java//api` et al (see below).
 
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.54.1
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.61.0
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -129,9 +129,9 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <artifactId>protobuf-maven-plugin</artifactId>
       <version>0.6.1</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.21.7:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.25.1:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.54.1:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.61.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -152,16 +152,16 @@ For non-Android protobuf-based codegen integrated with the Gradle build system,
 you can use [protobuf-gradle-plugin][]:
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.9.1'
+    id 'com.google.protobuf' version '0.9.4'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.21.7"
+    artifact = "com.google.protobuf:protoc:3.25.1"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.54.1'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.61.0'
     }
   }
   generateProtoTasks {
@@ -185,16 +185,16 @@ use protobuf-gradle-plugin but specify the 'lite' options:
 
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.9.1'
+    id 'com.google.protobuf' version '0.9.4'
 }
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.21.7"
+    artifact = "com.google.protobuf:protoc:3.25.1"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.54.1'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.61.0'
     }
   }
   generateProtoTasks {

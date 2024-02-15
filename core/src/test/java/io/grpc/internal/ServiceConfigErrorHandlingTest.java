@@ -48,6 +48,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -158,6 +159,8 @@ public class ServiceConfigErrorHandlingTest {
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
 
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel =
         new ManagedChannelImpl(
             channelBuilder,
@@ -192,7 +195,7 @@ public class ServiceConfigErrorHandlingTest {
 
   @Before
   public void setUp() throws Exception {
-    mockLoadBalancer.setAcceptAddresses(true);
+    mockLoadBalancer.setAddressAcceptanceStatus(Status.OK);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     when(mockTransportFactory.getScheduledExecutorService())
@@ -280,7 +283,7 @@ public class ServiceConfigErrorHandlingTest {
     nameResolverFactory.servers.clear();
 
     // 2nd resolution
-    mockLoadBalancer.setAcceptAddresses(false);
+    mockLoadBalancer.setAddressAcceptanceStatus(Status.UNAVAILABLE);
     nameResolverFactory.allResolved();
 
     // 2nd service config without addresses
@@ -542,7 +545,7 @@ public class ServiceConfigErrorHandlingTest {
     final URI expectedUri;
     final List<EquivalentAddressGroup> servers;
     final boolean resolvedAtStart;
-    final ArrayList<RetryingNameResolver> resolvers = new ArrayList<>();
+    final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<Map<String, ?>> nextRawServiceConfig = new AtomicReference<>();
     final AtomicReference<Attributes> nextAttributes = new AtomicReference<>(Attributes.EMPTY);
 
@@ -561,13 +564,7 @@ public class ServiceConfigErrorHandlingTest {
         return null;
       }
       assertEquals(DEFAULT_PORT, args.getDefaultPort());
-      RetryingNameResolver resolver = new RetryingNameResolver(
-          new FakeNameResolver(args.getServiceConfigParser()),
-          new BackoffPolicyRetryScheduler(
-              new FakeBackoffPolicyProvider(),
-              args.getScheduledExecutorService(),
-              args.getSynchronizationContext()),
-          args.getSynchronizationContext());
+      FakeNameResolver resolver = new FakeNameResolver(args.getServiceConfigParser());
       resolvers.add(resolver);
       return resolver;
     }
@@ -578,8 +575,8 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     void allResolved() {
-      for (RetryingNameResolver resolver : resolvers) {
-        ((FakeNameResolver)resolver.getRetriedNameResolver()).resolved();
+      for (FakeNameResolver resolver : resolvers) {
+        resolver.resolved();
       }
     }
 
@@ -655,7 +652,7 @@ public class ServiceConfigErrorHandlingTest {
 
   private static class FakeLoadBalancer extends LoadBalancer {
 
-    private boolean acceptAddresses = true;
+    private Status addressAcceptanceStatus = Status.OK;
 
     @Nullable
     private Helper helper;
@@ -665,12 +662,12 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      return acceptAddresses;
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return addressAcceptanceStatus;
     }
 
-    public void setAcceptAddresses(boolean acceptAddresses) {
-      this.acceptAddresses = acceptAddresses;
+    public void setAddressAcceptanceStatus(Status addressAcceptanceStatus) {
+      this.addressAcceptanceStatus = addressAcceptanceStatus;
     }
 
     @Override

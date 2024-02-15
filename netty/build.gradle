@@ -13,10 +13,17 @@ configurations {
     alpnagent
 }
 
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.netty')
+    }
+}
+
 dependencies {
-    api project(':grpc-core'),
+    api project(':grpc-api'),
             libraries.netty.codec.http2
-    implementation libs.netty.handler.proxy,
+    implementation project(':grpc-core'),
+            libs.netty.handler.proxy,
             libraries.guava,
             libraries.errorprone.annotations,
             libraries.perfmark.api,
@@ -75,7 +82,10 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 tasks.named("javadoc").configure {
     options.links 'http://netty.io/4.1/api/'
+    exclude 'io/grpc/netty/*Provider.java'
+    exclude 'io/grpc/netty/GrpcHttp2ConnectionHandler.java'
     exclude 'io/grpc/netty/Internal*'
+    exclude 'io/grpc/netty/ProtocolNegotiationEvent.java'
 }
 
 tasks.named("test").configure {

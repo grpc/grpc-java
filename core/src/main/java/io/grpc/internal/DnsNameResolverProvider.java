@@ -46,6 +46,9 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "dns";
 
+  private static final boolean IS_ANDROID = InternalServiceProviders
+      .isAndroid(DnsNameResolverProvider.class.getClassLoader());
+
   @Override
   public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
@@ -53,19 +56,13 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
       Preconditions.checkArgument(targetPath.startsWith("/"),
           "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
       String name = targetPath.substring(1);
-      return new RetryingNameResolver(
-          new DnsNameResolver(
-              targetUri.getAuthority(),
-              name,
-              args,
-              GrpcUtil.SHARED_CHANNEL_EXECUTOR,
-              Stopwatch.createUnstarted(),
-              InternalServiceProviders.isAndroid(getClass().getClassLoader())),
-          new BackoffPolicyRetryScheduler(
-              new ExponentialBackoffPolicy.Provider(),
-              args.getScheduledExecutorService(),
-              args.getSynchronizationContext()),
-          args.getSynchronizationContext());
+      return new DnsNameResolver(
+          targetUri.getAuthority(),
+          name,
+          args,
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR,
+          Stopwatch.createUnstarted(),
+          IS_ANDROID);
     } else {
       return null;
     }
@@ -87,7 +84,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
 }

@@ -88,6 +88,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -153,13 +154,13 @@ public class ClusterResolverLoadBalancerTest {
   private final NameResolverRegistry nsRegistry = new NameResolverRegistry();
   private final PolicySelection roundRobin = new PolicySelection(
       new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-      new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null)));
+          new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null)));
   private final PolicySelection ringHash = new PolicySelection(
       new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L));
   private final PolicySelection leastRequest = new PolicySelection(
       new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-      new PolicySelection(new FakeLoadBalancerProvider("least_request_experimental"),
-          new LeastRequestConfig(3))));
+          new PolicySelection(new FakeLoadBalancerProvider("least_request_experimental"),
+              new LeastRequestConfig(3))));
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final List<FakeNameResolver> resolvers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
@@ -1181,11 +1182,12 @@ public class ClusterResolverLoadBalancerTest {
   private static final class FakeXdsClient extends XdsClient {
     private final Map<String, ResourceWatcher<EdsUpdate>> watchers = new HashMap<>();
 
-
     @Override
     @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                          ResourceWatcher<T> watcher) {
+    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+            String resourceName,
+            ResourceWatcher<T> watcher,
+            Executor syncContext) {
       assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).doesNotContainKey(resourceName);
       watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
@@ -1193,9 +1195,9 @@ public class ClusterResolverLoadBalancerTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                           String resourceName,
-                                                           ResourceWatcher<T> watcher) {
+    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+            String resourceName,
+            ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);
@@ -1335,10 +1337,10 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       addresses = resolvedAddresses.getAddresses();
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
-      return true;
+      return Status.OK;
     }
 
     @Override

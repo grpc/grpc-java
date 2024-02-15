@@ -236,7 +236,11 @@ public class ClientInterceptors {
         // to a NO-OP one to prevent the IllegalStateException. The user will finally get notified
         // about the error through the listener.
         delegate = (ClientCall<ReqT, RespT>) NOOP_CALL;
-        responseListener.onClose(Status.fromThrowable(e), new Metadata());
+        Metadata trailers = Status.trailersFromThrowable(e);
+        responseListener.onClose(
+            Status.fromThrowable(e),
+            trailers != null ? trailers : new Metadata()
+        );
       }
     }
   }

@@ -37,6 +37,7 @@ import io.envoyproxy.envoy.service.status.v3.ClientStatusDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusRequest;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
 import io.envoyproxy.envoy.type.matcher.v3.NodeMatcher;
+import io.grpc.Deadline;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -54,7 +55,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
@@ -97,7 +98,11 @@ public class CsdsServiceTest {
 
     @Before
     public void setUp() {
-      csdsStub = ClientStatusDiscoveryServiceGrpc.newBlockingStub(grpcServerRule.getChannel());
+      // The deadline is needed to prevent CsdsService#handleRequest mutation tests from hanging,
+      // because true->false return mutation prevents fetchClientStatus from completing the request.
+      csdsStub = ClientStatusDiscoveryServiceGrpc
+          .newBlockingStub(grpcServerRule.getChannel())
+          .withDeadline(Deadline.after(3, TimeUnit.SECONDS));
       csdsAsyncStub = ClientStatusDiscoveryServiceGrpc.newStub(grpcServerRule.getChannel());
     }
 
@@ -152,14 +157,10 @@ public class CsdsServiceTest {
         @Override
         ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
             getSubscribedResourcesMetadataSnapshot() {
-          return Futures.submit(
-              new Callable<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>() {
-                @Override
-                public Map<XdsResourceType<?>, Map<String, ResourceMetadata>> call() {
-                  Thread.currentThread().interrupt();
-                  return null;
-                }
-              }, MoreExecutors.directExecutor());
+          return Futures.submit(() -> {
+            Thread.currentThread().interrupt();
+            return null;
+          }, MoreExecutors.directExecutor());
         }
       };
       grpcServerRule.getServiceRegistry()
@@ -214,7 +215,7 @@ public class CsdsServiceTest {
       requestObserver.onCompleted();
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
-      assertThat(responses.size()).isEqualTo(3);
+      assertThat(responses).hasSize(3);
       // Empty response on XdsClient not ready.
       assertThat(responses.get(0)).isEqualTo(ClientStatusResponse.getDefaultInstance());
       // The following calls return ClientConfig's successfully.
@@ -236,7 +237,7 @@ public class CsdsServiceTest {
       requestObserver.onCompleted();
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
-      assertThat(responses.size()).isEqualTo(1);
+      assertThat(responses).hasSize(1);
       verifyResponse(responses.get(0));
       assertThat(responseObserver.getError()).isNotNull();
       verifyRequestInvalidResponseStatus(Status.fromThrowable(responseObserver.getError()));
@@ -254,7 +255,7 @@ public class CsdsServiceTest {
       requestObserver.onError(new StatusRuntimeException(Status.DATA_LOSS));
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
-      assertThat(responses.size()).isEqualTo(1);
+      assertThat(responses).hasSize(1);
       verifyResponse(responses.get(0));
       // Server quietly closes its side.
       assertThat(responseObserver.getError()).isNull();

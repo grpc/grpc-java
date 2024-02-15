@@ -57,6 +57,8 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.NoopClientCall;
+import io.grpc.NoopClientCall.NoopClientCallListener;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -64,8 +66,6 @@ import io.grpc.internal.AutoConfiguredLoadBalancerFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.NoopClientCall;
-import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ScParser;
@@ -96,6 +96,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -261,6 +262,31 @@ public class XdsNameResolverTest {
     resolver = new XdsNameResolver(
         null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    resolver.start(mockListener);
+    verify(mockListener, never()).onError(any(Status.class));
+  }
+
+  @Test
+  public void resolving_noTargetAuthority_xdstpWithMultipleSlashes() {
+    bootstrapInfo = BootstrapInfo.builder()
+        .servers(ImmutableList.of(ServerInfo.create(
+            "td.googleapis.com", InsecureChannelCredentials.create())))
+        .node(Node.newBuilder().build())
+        .clientDefaultListenerResourceNameTemplate(
+            "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
+        .build();
+    String serviceAuthority = "path/to/service";
+    expectedLdsResourceName =
+        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+            + "path/to/service?id=1";
+    resolver = new XdsNameResolver(
+        null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+
+
+    // The Service Authority must be URL encoded, but unlike the LDS resource name.
+    assertThat(resolver.getServiceAuthority()).isEqualTo("path%2Fto%2Fservice");
+
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
@@ -1889,9 +1915,10 @@ public class XdsNameResolverTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                    String resourceName,
-                                                    ResourceWatcher<T> watcher) {
+    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
+            String resourceName,
+            ResourceWatcher<T> watcher,
+            Executor syncContext) {
 
       switch (resourceType.typeName()) {
         case "LDS":
@@ -1912,9 +1939,9 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                           String resourceName,
-                                                           ResourceWatcher<T> watcher) {
+    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+            String resourceName,
+            ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case "LDS":
           assertThat(ldsResource).isNotNull();
@@ -1934,8 +1961,10 @@ public class XdsNameResolverTest {
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          httpMaxStreamDurationNano, virtualHosts, null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null)));
+      });
     }
 
     void deliverLdsUpdate(final List<Route> routes) {
@@ -1943,8 +1972,10 @@ public class XdsNameResolverTest {
           VirtualHost.create(
               "virtual-host", Collections.singletonList(expectedLdsResourceName), routes,
               ImmutableMap.of());
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), null)));
+      });
     }
 
     void deliverLdsUpdateWithFaultInjection(
@@ -1988,8 +2019,10 @@ public class XdsNameResolverTest {
           Collections.singletonList(expectedLdsResourceName),
           Collections.singletonList(route),
           overrideConfig);
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), filterChain)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), filterChain)));
+      });
     }
 
     void deliverLdsUpdateForRdsNameWithFaultInjection(
@@ -2001,17 +2034,23 @@ public class XdsNameResolverTest {
       ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-          0L, rdsName, filterChain)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0L, rdsName, filterChain)));
+      });
     }
 
     void deliverLdsUpdateForRdsName(String rdsName) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-          0, rdsName, null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0, rdsName, null)));
+      });
     }
 
     void deliverLdsResourceNotFound() {
-      ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+      syncContext.execute(() -> {
+        ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+      });
     }
 
     void deliverRdsUpdateWithFaultInjection(
@@ -2047,29 +2086,39 @@ public class XdsNameResolverTest {
           Collections.singletonList(expectedLdsResourceName),
           Collections.singletonList(route),
           overrideConfig);
-      rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+      syncContext.execute(() -> {
+        rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+      });
     }
 
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
       if (!resourceName.equals(rdsResource)) {
         return;
       }
-      rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+      syncContext.execute(() -> {
+        rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+      });
     }
 
     void deliverRdsResourceNotFound(String resourceName) {
       if (!resourceName.equals(rdsResource)) {
         return;
       }
-      rdsWatcher.onResourceDoesNotExist(rdsResource);
+      syncContext.execute(() -> {
+        rdsWatcher.onResourceDoesNotExist(rdsResource);
+      });
     }
 
     void deliverError(final Status error) {
       if (ldsWatcher != null) {
-        ldsWatcher.onError(error);
+        syncContext.execute(() -> {
+          ldsWatcher.onError(error);
+        });
       }
       if (rdsWatcher != null) {
-        rdsWatcher.onError(error);
+        syncContext.execute(() -> {
+          rdsWatcher.onError(error);
+        });
       }
     }
   }

@@ -75,7 +75,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    *
    * @return the {@link SocketAddress} types this provider's name-resolver is capable of producing.
    */
-  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
 }

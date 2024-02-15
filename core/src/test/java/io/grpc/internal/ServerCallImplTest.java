@@ -47,7 +47,6 @@ import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
-import io.grpc.internal.SingleMessageProducer;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -154,7 +153,7 @@ public class ServerCallImplTest {
 
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, false);
   }
 
   @Test
@@ -163,7 +162,7 @@ public class ServerCallImplTest {
     headers.put(CONTENT_LENGTH_KEY, "123");
     call.sendHeaders(headers);
 
-    verify(stream).writeHeaders(headers);
+    verify(stream).writeHeaders(headers, false);
     assertNull(headers.get(CONTENT_LENGTH_KEY));
   }
 
@@ -220,7 +219,7 @@ public class ServerCallImplTest {
 
     call.sendMessage(1234L);
 
-    verify(stream).close(isA(Status.class), isA(Metadata.class));
+    verify(stream).cancel(isA(Status.class));
   }
 
   @Test

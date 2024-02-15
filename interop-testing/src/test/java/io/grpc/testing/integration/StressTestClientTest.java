@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
@@ -32,8 +33,6 @@ import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.LockSupport;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.Timeout;
@@ -67,6 +66,8 @@ public class StressTestClientTest {
     assertEquals(1, client.channelsPerServer());
     assertEquals(1, client.stubsPerChannel());
     assertEquals(8081, client.metricsPort());
+    assertEquals(-1, client.metricsLogRateSecs());
+    assertNull(client.customCredentialsType());
   }
 
   @Test
@@ -81,7 +82,9 @@ public class StressTestClientTest {
         "--metrics_port=9090",
         "--server_host_override=foo.test.google.fr",
         "--use_tls=true",
-        "--use_test_ca=true"
+        "--use_test_ca=true",
+        "--custom_credentials_type=google_default_credentials",
+        "--metrics_log_rate_secs=60"
     });
 
     List<InetSocketAddress> addresses = Arrays.asList(new InetSocketAddress("localhost", 8080),
@@ -101,29 +104,23 @@ public class StressTestClientTest {
     assertEquals(10, client.channelsPerServer());
     assertEquals(5, client.stubsPerChannel());
     assertEquals(9090, client.metricsPort());
-  }
-
-  @Test
-  public void serverHostOverrideShouldBeApplied() {
-    StressTestClient client = new StressTestClient();
-    client.parseArgs(new String[] {
-        "--server_addresses=localhost:8080",
-        "--server_host_override=foo.test.google.fr",
-    });
-
-    assertEquals("foo.test.google.fr", client.addresses().get(0).getHostName());
+    assertEquals("google_default_credentials", client.customCredentialsType());
+    assertEquals(60, client.metricsLogRateSecs());
   }
 
   @Test
   public void gaugesShouldBeExported() throws Exception {
 
     TestServiceServer server = new TestServiceServer();
-    server.parseArgs(new String[]{"--port=" + 0, "--use_tls=false"});
+    server.parseArgs(new String[]{"--port=" + 0, "--use_tls=true"});
     server.start();
 
     StressTestClient client = new StressTestClient();
     client.parseArgs(new String[] {"--test_cases=empty_unary:1",
         "--server_addresses=localhost:" + server.getPort(), "--metrics_port=" + 0,
+        "--server_host_override=foo.test.google.fr",
+        "--use_tls=true",
+        "--use_test_ca=true",
         "--num_stubs_per_channel=2"});
     client.startMetricsService();
     client.runStressTest();
@@ -142,7 +139,7 @@ public class StressTestClientTest {
     List<GaugeResponse> allGauges =
         ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
     while (allGauges.size() < gaugeNames.size()) {
-      LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(100));
+      Thread.sleep(100);
       allGauges = ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
     }
 

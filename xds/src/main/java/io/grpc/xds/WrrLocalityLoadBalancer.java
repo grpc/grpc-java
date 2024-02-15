@@ -32,7 +32,6 @@ import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -63,7 +62,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
 
     // The configuration with the child policy is combined with the locality weights
@@ -79,15 +78,18 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
       Integer localityWeight = eagAttrs.get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT);
 
       if (locality == null) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(
-            Status.UNAVAILABLE.withDescription("wrr_locality error: no locality provided")));
-        return false;
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+            "wrr_locality error: no locality provided");
+        helper.updateBalancingState(TRANSIENT_FAILURE,
+            new FixedResultPicker(PickResult.withError(unavailableStatus)));
+        return unavailableStatus;
       }
       if (localityWeight == null) {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(
-            Status.UNAVAILABLE.withDescription(
-                "wrr_locality error: no weight provided for locality " + locality)));
-        return false;
+        Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+                "wrr_locality error: no weight provided for locality " + locality);
+        helper.updateBalancingState(TRANSIENT_FAILURE,
+            new FixedResultPicker(PickResult.withError(unavailableStatus)));
+        return unavailableStatus;
       }
 
       if (!localityWeights.containsKey(locality)) {
@@ -114,7 +116,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(weightedPolicySelections))
             .build());
 
-    return true;
+    return Status.OK;
   }
 
   @Override

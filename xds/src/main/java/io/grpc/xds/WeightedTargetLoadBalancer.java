@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
@@ -34,7 +33,6 @@ import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -61,7 +59,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
       return acceptResolvedAddressesInternal(resolvedAddresses);
@@ -70,7 +68,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     }
   }
 
-  public boolean acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddressesInternal(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbConfig, "missing weighted_target lb config");
@@ -109,14 +107,15 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     childBalancers.keySet().retainAll(targets.keySet());
     childHelpers.keySet().retainAll(targets.keySet());
     updateOverallBalancingState();
-    return true;
+    return Status.OK;
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     if (childBalancers.isEmpty()) {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
     for (LoadBalancer childBalancer : childBalancers.values()) {
       childBalancer.handleNameResolutionError(error);
@@ -159,7 +158,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       if (overallState == TRANSIENT_FAILURE) {
         picker = new WeightedRandomPicker(errorPickers);
       } else {
-        picker = XdsSubchannelPickers.BUFFER_PICKER;
+        picker = new FixedResultPicker(PickResult.withNoResult());
       }
     } else {
       picker = new WeightedRandomPicker(childPickers);
@@ -191,7 +190,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   private final class ChildHelper extends ForwardingLoadBalancerHelper {
     String name;
     ConnectivityState currentState = CONNECTING;
-    SubchannelPicker currentPicker = BUFFER_PICKER;
+    SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
     private ChildHelper(String name) {
       this.name = name;

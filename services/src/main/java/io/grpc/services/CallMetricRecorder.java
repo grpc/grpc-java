@@ -41,7 +41,10 @@ public final class CallMetricRecorder {
       new AtomicReference<>();
   private final AtomicReference<ConcurrentHashMap<String, Double>> requestCostMetrics =
       new AtomicReference<>();
+  private final AtomicReference<ConcurrentHashMap<String, Double>> namedMetrics =
+      new AtomicReference<>();
   private double cpuUtilizationMetric = 0;
+  private double applicationUtilizationMetric = 0;
   private double memoryUtilizationMetric = 0;
   private double qps = 0;
   private double eps = 0;
@@ -127,7 +130,28 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Records a call metric measurement for CPU utilization in the range [0, 1]. Values outside the
+   * Records an application-specific opaque custom metric measurement. If RPC has already finished,
+   * this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   */
+  public CallMetricRecorder recordNamedMetric(String name, double value) {
+    if (disabled) {
+      return this;
+    }
+    if (namedMetrics.get() == null) {
+      // The chance of race of creation of the map should be very small, so it should be fine
+      // to create these maps that might be discarded.
+      namedMetrics.compareAndSet(null, new ConcurrentHashMap<String, Double>());
+    }
+    namedMetrics.get().put(name, value);
+    return this;
+  }
+
+  /**
+   * Records a call metric measurement for CPU utilization in the range [0, inf). Values outside the
    * valid range are ignored. If RPC has already finished, this method is no-op.
    *
    * <p>A latter record will overwrite its former name-sakes.
@@ -136,10 +160,26 @@ public final class CallMetricRecorder {
    * @since 1.47.0
    */
   public CallMetricRecorder recordCpuUtilizationMetric(double value) {
-    if (disabled || !MetricRecorderHelper.isCpuUtilizationValid(value)) {
+    if (disabled || !MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
       return this;
     }
     cpuUtilizationMetric = value;
+    return this;
+  }
+
+  /**
+   * Records a call metric measurement for application specific utilization in the range [0, inf).
+   * Values outside the valid range are ignored. If RPC has already finished, this method is no-op.
+   *
+   * <p>A latter record will overwrite its former name-sakes.
+   *
+   * @return this recorder object
+   */
+  public CallMetricRecorder recordApplicationUtilizationMetric(double value) {
+    if (disabled || !MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
+      return this;
+    }
+    applicationUtilizationMetric = value;
     return this;
   }
 
@@ -218,12 +258,17 @@ public final class CallMetricRecorder {
   MetricReport finalizeAndDump2() {
     Map<String, Double> savedRequestCostMetrics = finalizeAndDump();
     Map<String, Double> savedUtilizationMetrics = utilizationMetrics.get();
+    Map<String, Double> savedNamedMetrics = namedMetrics.get();
     if (savedUtilizationMetrics == null) {
       savedUtilizationMetrics = Collections.emptyMap();
     }
-    return new MetricReport(cpuUtilizationMetric, memoryUtilizationMetric, qps, eps,
-        Collections.unmodifiableMap(savedRequestCostMetrics),
-        Collections.unmodifiableMap(savedUtilizationMetrics)
+    if (savedNamedMetrics == null) {
+      savedNamedMetrics = Collections.emptyMap();
+    }
+    return new MetricReport(cpuUtilizationMetric, applicationUtilizationMetric,
+        memoryUtilizationMetric, qps, eps, Collections.unmodifiableMap(savedRequestCostMetrics),
+        Collections.unmodifiableMap(savedUtilizationMetrics),
+        Collections.unmodifiableMap(savedNamedMetrics)
     );
   }
 

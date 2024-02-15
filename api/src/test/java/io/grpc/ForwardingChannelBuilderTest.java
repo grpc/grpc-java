@@ -39,6 +39,7 @@ public class ForwardingChannelBuilderTest {
 
   private final class TestBuilder extends ForwardingChannelBuilder<TestBuilder> {
     @Override
+    @SuppressWarnings("deprecation")
     protected ManagedChannelBuilder<?> delegate() {
       return mockDelegate;
     }

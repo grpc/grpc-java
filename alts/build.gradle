@@ -10,8 +10,9 @@ plugins {
 description = "gRPC: ALTS"
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api')
     implementation project(':grpc-auth'),
+            project(':grpc-core'),
             project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
@@ -27,15 +28,14 @@ dependencies {
 
     testImplementation project(':grpc-testing'),
             testFixtures(project(':grpc-core')),
+            project(':grpc-inprocess'),
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.junit,
             libraries.mockito.core,
             libraries.truth
 
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
     testRuntimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
     testRuntimeOnly (libraries.netty.transport.epoll) {
@@ -51,10 +51,6 @@ configureProtoCompilation()
 import net.ltgt.gradle.errorprone.CheckSeverity
 
 [tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
-    // protobuf calls valueof. Will be fixed in next release (google/protobuf#4046)
-    options.compilerArgs += [
-        "-Xlint:-deprecation"
-    ]
     // ALTS returns a lot of futures that we mostly don't care about.
     options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
@@ -67,6 +63,9 @@ tasks.named("javadoc").configure {
 tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.alts')
+    }
 }
 
 // We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
