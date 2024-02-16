@@ -345,13 +345,11 @@ public final class BinderClientTransportTest {
   }
 
   private static final class TestTransportListener implements ManagedClientTransport.Listener {
-
     @GuardedBy("this")
     private boolean ready;
 
     public boolean inUse;
-    @Nullable
-    public Status shutdownStatus;
+    @Nullable public Status shutdownStatus;
     public boolean terminated;
 
     @Override
