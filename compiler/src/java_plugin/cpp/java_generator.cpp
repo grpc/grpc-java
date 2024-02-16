@@ -1128,12 +1128,26 @@ static void PrintService(const ServiceDescriptor* service,
   #endif
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
   GrpcWriteServiceDocComment(p, service, NONE);
-  p->Print(
-      *vars,
-      "@$Generated$(\n"
-      "    value = \"by gRPC proto compiler$grpc_version$\",\n"
-      "    comments = \"Source: $file_name$\")\n"
-      "@$GrpcGenerated$\n");
+
+  if (vars["javax_mode"].compare("javax") == 0) {
+    p->Print(
+        *vars,
+        "@javax.annotation.Generated(\n"
+        "    value = \"by gRPC proto compiler$grpc_version$\",\n"
+        "    comments = \"Source: $file_name$\")\n"
+        "@$GrpcGenerated$\n");
+  } else if (vars["javax_mode"].compare("omit") == 0) {
+    p->Print(
+        *vars,
+        "@$GrpcGenerated$\n");
+  } else {
+    p->Print(
+        *vars,
+        "@javax.annotation.Generated(\n"
+        "    value = \"by gRPC proto compiler$grpc_version$\",\n"
+        "    comments = \"Source: $file_name$\")\n"
+        "@$GrpcGenerated$\n");
+  }
 
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");
@@ -1217,7 +1231,8 @@ void PrintImports(Printer* p) {
 void GenerateService(const ServiceDescriptor* service,
                      protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
-                     bool disable_version) {
+                     bool disable_version,
+                     string jakarta_mode) {
   // All non-generated classes must be referred by fully qualified names to
   // avoid collision with generated classes.
   std::map<std::string, std::string> vars;
@@ -1249,7 +1264,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
   vars["Iterator"] = "java.util.Iterator";
-  vars["Generated"] = "javax.annotation.Generated";
+  vars["JakartaMode"] = jakarta_mode;
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
