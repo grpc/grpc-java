@@ -59,7 +59,13 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     java_grpc_generator::ProtoFlavor flavor =
         java_grpc_generator::ProtoFlavor::NORMAL;
 
-    std::string jakarta_mode;
+    /*
+        jakarta_mode has these values:
+        0 = javax, the original behavior
+        1 = omit, the "less controversial" behavior
+        and maybe others in the future
+    */
+    unsigned char jakarta_mode = 0;
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {
       if (options[i].first == "lite") {
@@ -67,9 +73,9 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
       } else if (options[i].first == "noversion") {
         disable_version = true;
       } else if (options[i].first == "jakarta_javax") {
-        jakarta_mode = "javax";
+        jakarta_mode = 0;
       } else if (options[i].first == "jakarta_omit") {
-        jakarta_mode = "omit";
+        jakarta_mode = 1;
       }
     }
 

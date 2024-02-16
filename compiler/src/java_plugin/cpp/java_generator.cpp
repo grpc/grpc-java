@@ -1129,14 +1129,14 @@ static void PrintService(const ServiceDescriptor* service,
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
   GrpcWriteServiceDocComment(p, service, NONE);
 
-  if (vars["JakartaMode"].compare("javax") == 0) {
+  if (vars["JakartaMode"][0] == 0) {
     p->Print(
         *vars,
         "@javax.annotation.Generated(\n"
         "    value = \"by gRPC proto compiler$grpc_version$\",\n"
         "    comments = \"Source: $file_name$\")\n"
         "@$GrpcGenerated$\n");
-  } else if (vars["JakartaMode"].compare("omit") == 0) {
+  } else if (vars["JakartaMode"][0] == 1) {
     p->Print(
         *vars,
         "@$GrpcGenerated$\n");
@@ -1232,7 +1232,7 @@ void GenerateService(const ServiceDescriptor* service,
                      protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
                      bool disable_version,
-                     std::string jakarta_mode) {
+                     unsigned char jakarta_mode) {
   // All non-generated classes must be referred by fully qualified names to
   // avoid collision with generated classes.
   std::map<std::string, std::string> vars;
@@ -1264,7 +1264,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
   vars["Iterator"] = "java.util.Iterator";
-  vars["JakartaMode"] = jakarta_mode;
+  vars["JakartaMode"] = std::string(1, jakarta_mode);
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
