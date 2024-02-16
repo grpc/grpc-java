@@ -30,8 +30,26 @@ public class OneWayBinderProxies {
    */
   public static class BlockingBinderDecorator<T extends OneWayBinderProxy> implements
       OneWayBinderProxy.Decorator {
-    public final BlockingQueue<OneWayBinderProxy> inbox = new LinkedBlockingQueue<>();
-    public final BlockingQueue<T> outbox = new LinkedBlockingQueue<>();
+    private final BlockingQueue<OneWayBinderProxy> inbox = new LinkedBlockingQueue<>();
+    private final BlockingQueue<T> outbox = new LinkedBlockingQueue<>();
+
+    /**
+     * Returns the next {@link OneWayBinderProxy} that needs decorating, blocking if it hasn't yet
+     * been provided to {@link #decorate}.
+     *
+     * <p>Follow this with a call to {@link #put(OneWayBinderProxy)} to provide the result of
+     * {@link #decorate} and unblock the waiting caller.
+     */
+    public OneWayBinderProxy take() throws InterruptedException {
+      return inbox.take();
+    }
+
+    /**
+     * Provides the next value to return from {@link #decorate}.
+     */
+    public void put(T next) throws InterruptedException {
+      inbox.put(next);
+    }
 
     @Override
     public OneWayBinderProxy decorate(OneWayBinderProxy in) {

@@ -291,11 +291,10 @@ public final class BinderClientTransportTest {
         .setBinderDecorator(decorator)
         .build();
     transport.start(transportListener).run();
-    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(
-        decorator.inbox.take());
+    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(decorator.take());
     DeadObjectException doe = new DeadObjectException("ouch");
     endpointBinder.setRemoteException(doe);
-    decorator.outbox.put(endpointBinder);
+    decorator.put(endpointBinder);
 
     Status shutdownStatus = transportListener.awaitShutdown();
     assertThat(shutdownStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
@@ -318,12 +317,12 @@ public final class BinderClientTransportTest {
         .setBinderDecorator(decorator)
         .build();
     transport.start(transportListener).run();
-    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(decorator.inbox.take());
-    decorator.outbox.put(endpointBinder);
-    ThrowingOneWayBinderProxy serverBinder = new ThrowingOneWayBinderProxy(decorator.inbox.take());
+    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(decorator.take());
+    decorator.put(endpointBinder);
+    ThrowingOneWayBinderProxy serverBinder = new ThrowingOneWayBinderProxy(decorator.take());
     DeadObjectException doe = new DeadObjectException("ouch");
     serverBinder.setRemoteException(doe);
-    decorator.outbox.put(serverBinder);
+    decorator.put(serverBinder);
     transportListener.awaitReady();
 
     ClientStream stream =
