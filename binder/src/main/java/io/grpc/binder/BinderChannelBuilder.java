@@ -30,6 +30,7 @@ import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.binder.internal.BinderTransport;
+import io.grpc.binder.internal.OneWayBinderProxy;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FixedObjectPool;
@@ -384,6 +385,7 @@ public final class BinderChannelBuilder
           offloadExecutorPool,
           securityPolicy,
           inboundParcelablePolicy,
+          OneWayBinderProxy.IDENTITY_DECORATOR,
           options.getEagAttributes());
     }
 

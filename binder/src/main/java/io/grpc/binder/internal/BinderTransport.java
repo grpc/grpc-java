@@ -191,6 +191,7 @@ public abstract class BinderTransport
   private final LeakSafeOneWayBinder incomingBinder;
 
   protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
+  protected final OneWayBinderProxy.Decorator binderDecorator;
 
   @GuardedBy("this")
   private final LinkedHashSet<Integer> callIdsToNotifyWhenReady = new LinkedHashSet<>();
@@ -218,7 +219,9 @@ public abstract class BinderTransport
   private BinderTransport(
       ObjectPool<ScheduledExecutorService> executorServicePool,
       Attributes attributes,
+      OneWayBinderProxy.Decorator binderDecorator,
       InternalLogId logId) {
+    this.binderDecorator = binderDecorator;
     this.executorServicePool = executorServicePool;
     this.attributes = attributes;
     this.logId = logId;
@@ -283,6 +286,7 @@ public abstract class BinderTransport
 
   @GuardedBy("this")
   protected boolean setOutgoingBinder(OneWayBinderProxy binder) {
+    binder = binderDecorator.decorate(binder);
     this.outgoingBinder = binder;
     try {
       binder.getDelegate().linkToDeath(this, 0);
@@ -577,10 +581,12 @@ public abstract class BinderTransport
         ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
         InboundParcelablePolicy inboundParcelablePolicy,
+        OneWayBinderProxy.Decorator binderDecorator,
         Attributes eagAttrs) {
       super(
           executorServicePool,
           buildClientAttributes(eagAttrs, sourceContext, targetAddress, inboundParcelablePolicy),
+          binderDecorator,
           buildLogId(sourceContext, targetAddress));
       this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
@@ -607,7 +613,7 @@ public abstract class BinderTransport
 
     @Override
     public synchronized void onBound(IBinder binder) {
-      sendSetupTransaction(OneWayBinderProxy.wrap(binder, offloadExecutor));
+      sendSetupTransaction(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
     }
 
     @Override
@@ -823,8 +829,9 @@ public abstract class BinderTransport
         ObjectPool<ScheduledExecutorService> executorServicePool,
         Attributes attributes,
         List<ServerStreamTracer.Factory> streamTracerFactories,
+        OneWayBinderProxy.Decorator binderDecorator,
         IBinder callbackBinder) {
-      super(executorServicePool, attributes, buildLogId(attributes));
+      super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
       this.streamTracerFactories = streamTracerFactories;
       // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
       setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));

@@ -108,6 +108,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
         offloadExecutorPool,
         SecurityPolicies.internalOnly(),
         InboundParcelablePolicy.DEFAULT,
+        OneWayBinderProxy.IDENTITY_DECORATOR,
         eagAttrs());
   }
 
