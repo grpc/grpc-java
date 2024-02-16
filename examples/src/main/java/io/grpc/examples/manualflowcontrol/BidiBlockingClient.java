@@ -20,7 +20,7 @@ import com.google.protobuf.ByteString;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.StatusRuntimeException;
+import io.grpc.StatusException;
 import io.grpc.examples.manualflowcontrol.StreamingGreeterGrpc.StreamingGreeterBlockingV2Stub;
 import io.grpc.stub.BlockingClientCall;
 import java.nio.ByteBuffer;
@@ -120,7 +120,7 @@ public class BidiBlockingClient {
             } catch (InterruptedException e) {
               Thread.currentThread().interrupt();
               stream.cancel("Interrupted", e);
-            } catch (StatusRuntimeException e) {
+            } catch (StatusException e) {
               logger.warning("Encountered error while reading: " + e);
             }
           }
@@ -153,6 +153,8 @@ public class BidiBlockingClient {
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           stream.cancel("Interrupted", e);
+        } catch (StatusException e) {
+          logger.warning("Encountered error while writing: " + e);
         }
       }
     }, "writer");

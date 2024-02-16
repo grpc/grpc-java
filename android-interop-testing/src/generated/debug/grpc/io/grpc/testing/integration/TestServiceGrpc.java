@@ -610,7 +610,8 @@ public final class TestServiceGrpc {
      * </pre>
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
-        streamingOutputCall(io.grpc.testing.integration.Messages.StreamingOutputCallRequest request) throws java.lang.InterruptedException {
+        streamingOutputCall(io.grpc.testing.integration.Messages.StreamingOutputCallRequest request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
       return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
           getChannel(), getStreamingOutputCallMethod(), getCallOptions(), request);
     }

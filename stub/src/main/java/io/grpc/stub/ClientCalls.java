@@ -277,7 +277,7 @@ public final class ClientCalls {
    * which returns an iterator, which would leave the stream open if not completely consumed.
    *
    * @return A {@link BlockingClientCall} which can be used by the client to write and receive
-   * messages over the grpc channel.
+   *     messages over the grpc channel.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
   public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingClientStreamingCall(
