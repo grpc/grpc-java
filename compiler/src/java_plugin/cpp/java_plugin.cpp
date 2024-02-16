@@ -61,11 +61,11 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
 
     /*
         jakarta_mode has these values:
-        0 = javax, the original behavior
-        1 = omit, the "less controversial" behavior
+        javax, the original behavior - add @javax.annotation.Generated
+        omit, "less controversial" = just add @io.grpc.stub.annotations.GrpcGenerated
         and maybe others in the future
     */
-    unsigned char jakarta_mode = 0;
+    std::string jakarta_mode;
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {
       if (options[i].first == "lite") {
@@ -73,9 +73,9 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
       } else if (options[i].first == "noversion") {
         disable_version = true;
       } else if (options[i].first == "jakarta_javax") {
-        jakarta_mode = 0;
+        jakarta_mode = "javax";
       } else if (options[i].first == "jakarta_omit") {
-        jakarta_mode = 1;
+        jakarta_mode = "omit";
       }
     }
 

@@ -68,7 +68,8 @@ std::string ServiceClassName(const impl::protobuf::ServiceDescriptor* service);
 void GenerateService(const impl::protobuf::ServiceDescriptor* service,
                      impl::protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
-                     bool disable_version);
+                     bool disable_version,
+                     std::string jakarta_mode);
 
 }  // namespace java_grpc_generator
 
