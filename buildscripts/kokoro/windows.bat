@@ -11,6 +11,8 @@ cd /d %~dp0\..\..
 
 set WORKSPACE=T:\src\github\grpc-java
 set ESCWORKSPACE=%WORKSPACE:\=\\%
+@rem vswhere is too old, so it crashes gradle. https://github.com/gradle/gradle/issues/21993
+rename "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" vswhere-disabled.exe
 
 
 @rem Clear JAVA_HOME to prevent a different Java version from being used
