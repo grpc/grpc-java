@@ -59,7 +59,7 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     java_grpc_generator::ProtoFlavor flavor =
         java_grpc_generator::ProtoFlavor::NORMAL;
 
-    string jakarta_mode;
+    std::string jakarta_mode;
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {
       if (options[i].first == "lite") {

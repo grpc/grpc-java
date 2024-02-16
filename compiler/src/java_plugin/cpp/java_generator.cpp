@@ -1232,7 +1232,7 @@ void GenerateService(const ServiceDescriptor* service,
                      protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
                      bool disable_version,
-                     string jakarta_mode) {
+                     std::string jakarta_mode) {
   // All non-generated classes must be referred by fully qualified names to
   // avoid collision with generated classes.
   std::map<std::string, std::string> vars;
