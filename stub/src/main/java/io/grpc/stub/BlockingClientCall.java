@@ -19,8 +19,10 @@ package io.grpc.stub;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.ClientCall;
+import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.stub.ClientCalls.ThreadSafeThreadlessExecutor;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -30,17 +32,33 @@ import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-// TODO Change StatusRuntimeException to StatusException?
 /**
  * Represents a bidirectional streaming call from a client.  Allows in a blocking manner, sending
  * over the stream and receiving from the stream.  Also supports terminating the call.
- * Wraps a ClientCall and converts from async communication to the public sync paradigm.
+ * Wraps a ClientCall and converts from async communication to the sync paradigm used by the
+ * various blocking stream methods in {@link ClientCalls} which are used by the generated stubs.
  *
- * <p>Supports separate threads for reads and writes, but only 1 of each</p>
+ * <p>Supports separate threads for reads and writes, but only 1 of each
+ *
+ * <p>Read methods consist of:
+ * <ul>
+ *   <li>{@link #read()}
+ *   <li>{@link #read(long timeout, TimeUnit unit)}
+ *   <li>{@link #hasNext()}
+ *   <li>{@link #cancel(String, Throwable)}
+ * </ul>
+ *
+ * <p>Write methods consist of:
+ * <ul>
+ *   <li>{@link #write(Object)}
+ *   <li>{@link #write(Object, long timeout, TimeUnit unit)}
+ *   <li>{@link #halfClose()}
+ * </ul>
  *
  * @param <ReqT> Type of the Request Message
  * @param <RespT> Type of the Response Message
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
 public final class BlockingClientCall<ReqT, RespT> {
 
   private static final Logger logger = Logger.getLogger(BlockingClientCall.class.getName());
@@ -51,7 +69,7 @@ public final class BlockingClientCall<ReqT, RespT> {
   private final ThreadSafeThreadlessExecutor executor;
 
   private boolean writeClosed;
-  private volatile Status closedStatus; // TODO(lsafran) audit the uses
+  private volatile Status closedStatus; // null if not closed
 
   BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadSafeThreadlessExecutor executor) {
     this.call = call;
@@ -65,9 +83,9 @@ public final class BlockingClientCall<ReqT, RespT> {
    * available or the stream to be closed
    *
    * @return value from server or null if stream has been closed
-   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
+   * @throws StatusException If the stream has closed in an error state
    */
-  public RespT read() throws InterruptedException {
+  public RespT read() throws InterruptedException, StatusException {
     try {
       return read(true, 0, TimeUnit.NANOSECONDS);
     } catch (TimeoutException e) {
@@ -84,14 +102,15 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @param unit a TimeUnit determining how to interpret the timeout parameter
    * @return value from server or null (if stream has been closed)
    * @throws TimeoutException if no read becomes ready before the specified timeout expires
-   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
+   * @throws StatusException If the stream has closed in an error state
    */
-  public RespT read(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException {
+  public RespT read(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException,
+      StatusException {
     return read(false, timeout, unit);
   }
 
   private RespT read(boolean waitForever, long timeout, TimeUnit unit)
-      throws InterruptedException, TimeoutException {
+      throws InterruptedException, TimeoutException, StatusException {
     long start = System.nanoTime();
     long end = start + unit.toNanos(timeout);
 
@@ -103,14 +122,15 @@ public final class BlockingClientCall<ReqT, RespT> {
       logger.finer("Client Blocking read had value:  " + bufferedValue);
     }
 
+    Status currentClosedStatus;
     if (bufferedValue != null) {
       call.request(1);
       return bufferedValue;
-    } else if (closedStatus == null) {
+    } else if ((currentClosedStatus = closedStatus) == null) {
       throw new IllegalStateException(
           "The message disappeared... are you reading from multiple threads?");
-    } else if (!closedStatus.isOk()) {
-      throw closedStatus.asRuntimeException();
+    } else if (!currentClosedStatus.isOk()) {
+      throw currentClosedStatus.asException();
     } else {
       return null;
     }
@@ -127,13 +147,14 @@ public final class BlockingClientCall<ReqT, RespT> {
    * for a value to be available or the stream to be closed.
    *
    * @return True when there is a value to read.  Return false if stream closed cleanly.
-   * @throws io.grpc.StatusRuntimeException If the stream was closed in an error state
+   * @throws StatusException If the stream was closed in an error state
    */
-  public boolean hasNext() throws InterruptedException {
+  public boolean hasNext() throws InterruptedException, StatusException {
     executor.waitAndDrain((x) -> !x.buffer.isEmpty() || x.closedStatus != null, this);
 
-    if (closedStatus != null && !closedStatus.isOk()) {
-      throw closedStatus.asRuntimeException();
+    Status currentClosedStatus = closedStatus;
+    if (currentClosedStatus != null && !currentClosedStatus.isOk()) {
+      throw currentClosedStatus.asException();
     }
 
     return !buffer.isEmpty();
@@ -142,25 +163,24 @@ public final class BlockingClientCall<ReqT, RespT> {
   /**
    * Send a value to the stream for sending to server, wait if necessary for the grpc stream to be
    * ready.
-   * <br>
-   * If write is not legal at the time of call, immediately returns false
-   * <br><br>
-   * <b>NOTE:  </b>This method will return as soon as it passes the request to the grpc stream
+   *
+   * <p>If write is not legal at the time of call, immediately returns false
+   *
+   * <p><br><b>NOTE: </b>This method will return as soon as it passes the request to the grpc stream
    * layer. It will not block while the message is being sent on the wire and returning true does
    * not guarantee that the server gets the message.
-   * <p><br>
-   * <b>WARNING:  </b>Doing only writes without reads can lead to deadlocks.  This is because
+   *
+   * <p><br><b>WARNING: </b>Doing only writes without reads can lead to deadlocks.  This is because
    * flow control, imposed by networks to protect intermediary routers and endpoints that are
    * operating under resource constraints, requires reads to be done in order to progress writes.
    * Furthermore, the server closing the stream will only be identified after
    * the last sent value is read.
-   * </p>
    *
    * @param request Message to send to the server
    * @return true if the request is sent to stream, false if skipped
-   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
+   * @throws StatusException If the stream has closed in an error state
    */
-  public boolean write(ReqT request) throws InterruptedException {
+  public boolean write(ReqT request) throws InterruptedException, StatusException {
     try {
       return write(true, request, Integer.MAX_VALUE, TimeUnit.DAYS);
     } catch (TimeoutException e) {
@@ -171,34 +191,31 @@ public final class BlockingClientCall<ReqT, RespT> {
   /**
    * Send a value to the stream for sending to server, wait if necessary for the grpc stream to be
    * ready up to specified timeout.
-   * <br>
-   * If write is not legal at the time of call, immediately returns false
-   * <br><br>
-   * <p>
-   * <b>NOTE:  </b>This method will return as soon as it passes the request to the grpc stream
+   *
+   * <p>If write is not legal at the time of call, immediately returns false
+   *
+   * <p><br><b>NOTE: </b>This method will return as soon as it passes the request to the grpc stream
    * layer. It will not block while the message is being sent on the wire and returning true does
    * not guarantee that the server gets the message.
-   * </p>
-   * <p>
-   * <b>WARNING:  </b>Doing only writes without reads can lead to deadlocks as a result of flow
-   * control.  Furthermore, the server closing the stream will only be identified after the last
-   * sent value is read.
-   * </p>
+   *
+   * <p><br><b>WARNING: </b>Doing only writes without reads can lead to deadlocks as a result of
+   * flow control.  Furthermore, the server closing the stream will only be identified after the
+   * last sent value is read.
    *
    * @param request Message to send to the server
    * @param timeout How long to wait before giving up.  Values &lt;= 0 are no wait
    * @param unit A TimeUnit determining how to interpret the timeout parameter
    * @return true if the request is sent to stream, false if skipped
    * @throws TimeoutException if write does not become ready before the specified timeout expires
-   * @throws io.grpc.StatusRuntimeException If the stream has closed in an error state
+   * @throws StatusException If the stream has closed in an error state
    */
   public boolean write(ReqT request, long timeout, TimeUnit unit)
-      throws InterruptedException, TimeoutException {
+      throws InterruptedException, TimeoutException, StatusException {
     return write(false, request, timeout, unit);
   }
 
   private boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
-      throws InterruptedException, TimeoutException {
+      throws InterruptedException, TimeoutException, StatusException {
 
     if (writeClosed) {
       throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
@@ -217,7 +234,7 @@ public final class BlockingClientCall<ReqT, RespT> {
       return false;
     } else {
       // Propagate any errors returned from the server
-      throw savedClosedStatus.asRuntimeException();
+      throw savedClosedStatus.asException();
     }
   }
 
@@ -235,8 +252,8 @@ public final class BlockingClientCall<ReqT, RespT> {
 
   /**
    * Indicate that no more writes will be done and the stream will be closed from the client side.
-   * <br>
-   * See {@link ClientCall#halfClose()}
+   *
+   * @see ClientCall#halfClose()
    */
   public void halfClose() {
     if (writeClosed) {

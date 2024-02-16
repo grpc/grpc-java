@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -46,6 +47,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -189,7 +191,6 @@ public final class ClientCalls {
    *
    * @return an iterator over the response stream.
    */
-  // TODO(louiscryan): Not clear if we want to use this idiom for 'simple' stubs.
   public static <ReqT, RespT> Iterator<RespT> blockingServerStreamingCall(
       ClientCall<ReqT, RespT> call, ReqT req) {
     BlockingResponseStream<RespT> result = new BlockingResponseStream<>(call);
@@ -218,33 +219,25 @@ public final class ClientCalls {
   }
 
   /**
-   * The better way to do server streaming calls.<br>
-   * Call {@link BlockingClientCall#read()} for
-   * retrieving values.  A {@code null} will be returned after the server has closed the stream.
-   * <br>
-   * The methods {@link BlockingClientCall#hasNext()} and {@link
+   * Initiates a client streaming call over the specified channel.  It returns an
+   * object which can be used in a blocking manner to send values to the server and retrieve a
+   * response.
+   *
+   * <p>Call {@link BlockingClientCall#write} for each value to send to the server. After the last
+   * value has been written, call {@link BlockingClientCall#halfClose} to indicate that writing is
+   * complete and then {@link BlockingClientCall#read} to get the response.
+   *
+   * <p>The methods {@link BlockingClientCall#hasNext()} and {@link
    * BlockingClientCall#cancel(String, Throwable)} can be used for more extensive control.
-   * <br>
-   * <p> Example usage:</p>
-   * <pre>
-   * {@code  while ((response = call.read()) != null) { ... } }
-   * </pre>
-   * or
-   * <pre>
-   * {@code
-   *   while (call.hasNext()) {
-   *     response = call.read();
-   *     ...
-   *   }
-   * }
-   * </pre>
    *
    * @return A {@link BlockingClientCall} that has had the request sent and halfClose called
    * @throws InterruptedException if it receives an interrupt while sending the request
+   * @throws StatusException if the write to the server failed
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
   public static <ReqT, RespT> BlockingClientCall<?, RespT> blockingV2ServerStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req)
-      throws InterruptedException {
+      throws InterruptedException, StatusException {
     BlockingClientCall<ReqT, RespT> call =
         blockingBidiStreamingCall(channel, method, callOptions);
 
@@ -258,6 +251,35 @@ public final class ClientCalls {
     }
   }
 
+  /**
+   * Initiates a server streaming call and sends the specified request to the server.  It returns an
+   * object which can be used in a blocking manner to retrieve values from the server.  After the
+   * last value has been read, the next read call will return null.
+   *
+   * <p>Call {@link BlockingClientCall#read()} for
+   * retrieving values.  A {@code null} will be returned after the server has closed the stream.
+   *
+   * <p>The methods {@link BlockingClientCall#hasNext()} and {@link
+   * BlockingClientCall#cancel(String, Throwable)} can be used for more extensive control.
+   *
+   * <p><br> Example usage:
+   * <pre> {@code  while ((response = call.read()) != null) { ... } } </pre>
+   * or
+   * <pre> {@code
+   *   while (call.hasNext()) {
+   *     response = call.read();
+   *     ...
+   *   }
+   * } </pre>
+   *
+   * <p>Note that this paradigm is different from the original
+   * {@link #blockingServerStreamingCall(Channel, MethodDescriptor, CallOptions, Object)}
+   * which returns an iterator, which would leave the stream open if not completely consumed.
+   *
+   * @return A {@link BlockingClientCall} which can be used by the client to write and receive
+   * messages over the grpc channel.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
   public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingClientStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
     return blockingBidiStreamingCall(channel, method, callOptions);
@@ -270,6 +292,7 @@ public final class ClientCalls {
    *
    * @return an object representing the call which can be used to read, write and terminate it.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
   public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingBidiStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
     ThreadSafeThreadlessExecutor executor = new ThreadSafeThreadlessExecutor();
@@ -763,33 +786,6 @@ public final class ClientCalls {
     }
   }
 
-  /**
-   * Represents a thread and a function with object to determine if the thread is ready to be
-   * released (or skip waiting).
-   */
-  static final class ValidatingThread<T> {
-    private Thread thread;
-    private Predicate<T> predicate;
-    private T testTarget;
-
-    public ValidatingThread(Thread thread, Predicate<T> predicate, T testTarget) {
-      this.thread = thread;
-      this.predicate = predicate;
-      this.testTarget = testTarget;
-    }
-
-    public Thread getThread() {
-      return thread;
-    }
-
-    public boolean skipWaiting() {
-      if (predicate == null) {
-        return true;
-      }
-      return predicate.test(testTarget);
-    }
-  }
-
   @SuppressWarnings("serial")
   static final class ThreadlessExecutor extends ConcurrentLinkedQueue<Runnable>
       implements Executor {
@@ -808,14 +804,12 @@ public final class ClientCalls {
      * Must only be called by one thread at a time.
      */
     public void waitAndDrain() throws InterruptedException {
-      throwIfInterrupted();
       Runnable runnable = poll();
       if (runnable == null) {
         waiter = Thread.currentThread();
         try {
           while ((runnable = poll()) == null) {
             LockSupport.park(this);
-            throwIfInterrupted();
           }
         } finally {
           waiter = null;
@@ -845,12 +839,6 @@ public final class ClientCalls {
       }
     }
 
-    private static void throwIfInterrupted() throws InterruptedException {
-      if (Thread.interrupted()) {
-        throw new InterruptedException();
-      }
-    }
-
     @Override
     public void execute(Runnable runnable) {
       add(runnable);
@@ -869,8 +857,8 @@ public final class ClientCalls {
     private static final Logger log =
         Logger.getLogger(ThreadSafeThreadlessExecutor.class.getName());
 
-    private Lock waiterLock = new java.util.concurrent.locks.ReentrantLock();
-    private Condition waiterCondition = waiterLock.newCondition();
+    private Lock waiterLock = new ReentrantLock();
+    private final Condition waiterCondition = waiterLock.newCondition();
 
     // Non private to avoid synthetic class
     ThreadSafeThreadlessExecutor() {}

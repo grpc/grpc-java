@@ -127,7 +127,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testReadSuccess_withoutBlocking() throws InterruptedException, TimeoutException {
+  public void testReadSuccess_withoutBlocking() throws Exception {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
@@ -142,7 +142,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testReadSuccess_withBlocking() throws InterruptedException, TimeoutException {
+  public void testReadSuccess_withBlocking() throws Exception {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
@@ -179,7 +179,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testCancel() throws InterruptedException, TimeoutException {
+  public void testCancel() throws Exception {
     testMethod.disableAutoRequest();
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
@@ -231,7 +231,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testIsActivityReady() throws InterruptedException, TimeoutException {
+  public void testIsActivityReady() throws Exception {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
@@ -260,7 +260,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testWriteSuccess_withBlocking() throws InterruptedException, TimeoutException {
+  public void testWriteSuccess_withBlocking() throws Exception {
     testMethod.disableAutoRequest();
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
@@ -275,7 +275,7 @@ public class BlockingClientCallTest {
 
 
   @Test
-  public void testReadNonblocking_whenWriteBlocked() throws InterruptedException {
+  public void testReadNonblocking_whenWriteBlocked() throws Exception {
     testMethod.disableAutoRequest();
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
@@ -295,8 +295,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testReadsAndWritesInterleaved_withBlocking()
-      throws InterruptedException, TimeoutException {
+  public void testReadsAndWritesInterleaved_withBlocking() throws Exception {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
@@ -317,8 +316,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testReadsAndWritesInterleaved_BlockingWrites()
-      throws InterruptedException, TimeoutException {
+  public void testReadsAndWritesInterleaved_BlockingWrites() throws Exception {
     testMethod.disableAutoRequest();
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel, BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
@@ -359,7 +357,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testWriteCompleted() throws InterruptedException, TimeoutException {
+  public void testWriteCompleted() throws Exception {
     testMethod.disableAutoRequest();
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
