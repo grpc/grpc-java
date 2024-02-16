@@ -736,7 +736,8 @@ static void PrintStub(
           p->Print(
               *vars,
               "$BlockingClientCall$<?, $output_type$>\n"
-              "    $lower_method_name$($input_type$ request) throws java.lang.InterruptedException");
+              "    $lower_method_name$($input_type$ request) throws java.lang.InterruptedException,\n"
+              "        io.grpc.StatusException");
        } else {
           // Simple RPC
           p->Print(
