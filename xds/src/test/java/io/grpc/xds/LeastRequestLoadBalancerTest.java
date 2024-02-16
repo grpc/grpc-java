@@ -63,7 +63,6 @@ import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.LeastRequestLoadBalancer.EmptyPicker;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestLbState;
-import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestPicker;
 import io.grpc.xds.LeastRequestLoadBalancer.ReadyPicker;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -365,7 +364,7 @@ public class LeastRequestLoadBalancerTest {
     }
     inOrder.verify(helper)
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertThat(getStatusString((LeastRequestPicker)pickerCaptor.getValue()))
+    assertThat(getStatusString(pickerCaptor.getValue()))
         .contains("Status{code=UNKNOWN, description=connection broken");
     inOrder.verifyNoMoreInteractions();
 
@@ -379,38 +378,25 @@ public class LeastRequestLoadBalancerTest {
     verifyNoMoreInteractions(helper);
   }
 
-  private String getStatusString(LeastRequestPicker picker) {
+  private String getStatusString(SubchannelPicker picker) {
     if (picker == null) {
       return "";
     }
 
-    if (picker instanceof EmptyPicker) {
-      if (((EmptyPicker) picker).getStatus() == null) {
-        return "";
-      }
-      return ((EmptyPicker) picker).getStatus().toString();
-    } else if (picker instanceof ReadyPicker) {
+    if (picker instanceof ReadyPicker) {
       List<ChildLbState> childLbStates = ((ReadyPicker)picker).getChildLbStates();
       if (childLbStates == null || childLbStates.isEmpty()) {
         return "";
-      };
+      }
 
-      // Note that this is dependent on PickFirst's picker toString retaining the representation
-      // of the status, but since it is a test and we don't want to expose this value it seems
-      // a reasonable tradeoff
-      String pickerStr = childLbStates.get(0).getCurrentPicker().toString();
-      int beg = pickerStr.indexOf(", status=Status{");
-      if (beg < 0) {
-        return "";
-      }
-      int end = pickerStr.indexOf('}', beg);
-      if (end < 0) {
-        return "";
-      }
-      return pickerStr.substring(beg + ", status=".length(), end + 1);
+      picker = childLbStates.get(0).getCurrentPicker();
     }
 
-    throw new IllegalArgumentException("Unrecognized picker: " + picker);
+    Status status = picker.pickSubchannel(mockArgs).getStatus();
+    if (status == null) {
+      return "";
+    }
+    return status.toString();
   }
 
   @Test
@@ -508,11 +494,10 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void pickerEmptyList() throws Exception {
-    SubchannelPicker picker = new EmptyPicker(Status.UNKNOWN);
+    SubchannelPicker picker = new EmptyPicker();
 
     assertNull(picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(Status.UNKNOWN,
-        picker.pickSubchannel(mockArgs).getStatus());
+    assertEquals(Status.OK, picker.pickSubchannel(mockArgs).getStatus());
   }
 
   @Test
@@ -623,9 +608,8 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void internalPickerComparisons() {
-    EmptyPicker emptyOk1 = new EmptyPicker(Status.OK);
-    EmptyPicker emptyOk2 = new EmptyPicker(Status.OK.withDescription("different OK"));
-    EmptyPicker emptyErr = new EmptyPicker(Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯"));
+    EmptyPicker empty1 = new EmptyPicker();
+    EmptyPicker empty2 = new EmptyPicker();
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
@@ -641,15 +625,14 @@ public class LeastRequestLoadBalancerTest {
     ReadyPicker ready5 = new ReadyPicker(Arrays.asList(child2, child1), 2, mockRandom);
     ReadyPicker ready6 = new ReadyPicker(Arrays.asList(child2, child1), 8, mockRandom);
 
-    assertTrue(emptyOk1.isEquivalentTo(emptyOk2));
-    assertFalse(emptyOk1.isEquivalentTo(emptyErr));
-    assertFalse(ready1.isEquivalentTo(ready2));
-    assertTrue(ready1.isEquivalentTo(ready3));
-    assertTrue(ready3.isEquivalentTo(ready4));
-    assertTrue(ready4.isEquivalentTo(ready5));
-    assertFalse(emptyOk1.isEquivalentTo(ready1));
-    assertFalse(ready1.isEquivalentTo(emptyOk1));
-    assertFalse(ready5.isEquivalentTo(ready6));
+    assertTrue(empty1.equals(empty2));
+    assertFalse(ready1.equals(ready2));
+    assertTrue(ready1.equals(ready3));
+    assertTrue(ready3.equals(ready4));
+    assertTrue(ready4.equals(ready5));
+    assertFalse(empty1.equals(ready1));
+    assertFalse(ready1.equals(empty1));
+    assertFalse(ready5.equals(ready6));
   }
 
   @Test

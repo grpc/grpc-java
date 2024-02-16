@@ -337,14 +337,27 @@ public class MultiChildLoadBalancerTest {
   }
 
   private class TestLb extends MultiChildLoadBalancer {
-
     protected TestLb(Helper mockHelper) {
       super(mockHelper);
     }
 
     @Override
-    protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-      return new TestSubchannelPicker(childPickers);
+    protected void updateOverallBalancingState() {
+      ConnectivityState overallState = null;
+      final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
+      for (ChildLbState childLbState : getChildLbStates()) {
+        if (childLbState.isDeactivated()) {
+          continue;
+        }
+        childPickers.put(childLbState.getKey(), childLbState.getCurrentPicker());
+        overallState = aggregateState(overallState, childLbState.getCurrentState());
+      }
+
+      if (overallState != null) {
+        getHelper().updateBalancingState(overallState, new TestSubchannelPicker(childPickers));
+        currentConnectivityState = overallState;
+      }
+
     }
 
     private class TestSubchannelPicker extends SubchannelPicker {

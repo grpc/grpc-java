@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -49,11 +48,6 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   public RoundRobinLoadBalancer(Helper helper) {
     super(helper);
-  }
-
-  @Override
-  protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-    throw new UnsupportedOperationException(); // local updateOverallBalancingState doesn't use this
   }
 
   /**
