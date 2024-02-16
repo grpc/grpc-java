@@ -570,6 +570,12 @@ public abstract class BinderTransport
     @GuardedBy("this")
     private int latestCallId = FIRST_CALL_ID;
 
+    /**
+     * Constructs a new transport instance.
+     *
+     * @param binderDecorator used to decorate both the "endpoint" and "server" binders, for fault
+     *     injection.
+     */
     public BinderClientTransport(
         Context sourceContext,
         BinderChannelCredentials channelCredentials,
@@ -825,6 +831,11 @@ public abstract class BinderTransport
     private final List<ServerStreamTracer.Factory> streamTracerFactories;
     @Nullable private ServerTransportListener serverTransportListener;
 
+    /**
+     * Constructs a new transport instance.
+     *
+     * @param binderDecorator used to decorate 'callbackBinder', for fault injection.
+     */
     public BinderServerTransport(
         ObjectPool<ScheduledExecutorService> executorServicePool,
         Attributes attributes,

@@ -73,4 +73,7 @@ public class OneWayBinderProxies {
       wrapped.transact(code, data);
     }
   }
+
+  // Cannot be instantiated.
+  private OneWayBinderProxies() {};
 }
