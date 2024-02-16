@@ -188,7 +188,7 @@ public final class BinderSecurityTest {
         ServerSecurityPolicy.newBuilder()
             .servicePolicy("foo", new AsyncSecurityPolicy() {
               @Override
-              ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+              public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
                 return Futures.immediateFailedFuture(originalException);
               }
             })
@@ -207,7 +207,7 @@ public final class BinderSecurityTest {
         ServerSecurityPolicy.newBuilder()
             .servicePolicy("foo", new AsyncSecurityPolicy() {
               @Override
-              ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+              public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
                 if (firstAttempt.getAndSet(false)) {
                   return Futures.immediateFailedFuture(new IllegalStateException());
                 }
@@ -229,7 +229,7 @@ public final class BinderSecurityTest {
         ServerSecurityPolicy.newBuilder()
             .servicePolicy("foo", new AsyncSecurityPolicy() {
               @Override
-              ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+              public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
                 if (firstAttempt.getAndSet(false)) {
                   return Futures.immediateCancelledFuture();
                 }

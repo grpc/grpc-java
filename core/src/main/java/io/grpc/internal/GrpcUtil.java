@@ -24,6 +24,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -220,7 +221,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  public static final String IMPLEMENTATION_VERSION = "1.62.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  public static final String IMPLEMENTATION_VERSION = "1.63.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -947,6 +948,20 @@ public final class GrpcUtil {
       return encoded_authority.toString();
     }
   }
+
+  public static boolean getFlag(String envVarName, boolean enableByDefault) {
+    String envVar = System.getenv(envVarName);
+    if (envVar == null) {
+      envVar = System.getProperty(envVarName);
+    }
+    if (enableByDefault) {
+      return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);
+    } else {
+      return !Strings.isNullOrEmpty(envVar) && Boolean.parseBoolean(envVar);
+    }
+  }
+
+
 
   private GrpcUtil() {}
 }

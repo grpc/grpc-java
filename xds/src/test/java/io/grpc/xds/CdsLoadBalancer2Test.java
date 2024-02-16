@@ -789,8 +789,9 @@ public class CdsLoadBalancer2Test {
 
     @Override
     @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                          ResourceWatcher<T> watcher, Executor syncContext) {
+    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+        String resourceName,
+        ResourceWatcher<T> watcher, Executor syncContext) {
       assertThat(type.typeName()).isEqualTo("CDS");
       watchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
           .add((ResourceWatcher<CdsUpdate>)watcher);
@@ -798,9 +799,9 @@ public class CdsLoadBalancer2Test {
 
     @Override
     @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                           String resourceName,
-                                                           ResourceWatcher<T> watcher) {
+    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+        String resourceName,
+        ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo("CDS");
       assertThat(watchers).containsKey(resourceName);
       List<ResourceWatcher<CdsUpdate>> watcherList = watchers.get(resourceName);

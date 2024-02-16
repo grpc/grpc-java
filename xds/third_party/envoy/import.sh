@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=0478eba2a495027bf6ac8e787c42e2f5b9eb553b
+VERSION=147e6b9523d8d2ae0d9d2205254d6e633644c6fe
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
@@ -79,6 +79,7 @@ envoy/config/core/v3/event_service_config.proto
 envoy/config/core/v3/extension.proto
 envoy/config/core/v3/grpc_service.proto
 envoy/config/core/v3/health_check.proto
+envoy/config/core/v3/http_service.proto
 envoy/config/core/v3/http_uri.proto
 envoy/config/core/v3/protocol.proto
 envoy/config/core/v3/proxy_protocol.proto
@@ -124,6 +125,7 @@ envoy/config/trace/v3/opentelemetry.proto
 envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/trace.proto
 envoy/config/trace/v3/zipkin.proto
+envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
 envoy/extensions/filters/http/fault/v3/fault.proto

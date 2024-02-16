@@ -31,12 +31,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
-import io.grpc.ChannelCredentials;
 import io.grpc.Context;
-import io.grpc.Grpc;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancerRegistry;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -50,6 +46,7 @@ import io.grpc.xds.XdsClient.ResourceStore;
 import io.grpc.xds.XdsClient.TimerLaunch;
 import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
@@ -90,9 +87,7 @@ final class XdsClientImpl extends XdsClient
           throw new AssertionError(e);
         }
       });
-  private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
-  private final LoadBalancerRegistry loadBalancerRegistry
-      = LoadBalancerRegistry.getDefaultRegistry();
+
   private final Map<ServerInfo, ControlPlaneClient> serverChannelMap = new HashMap<>();
   private final Map<XdsResourceType<? extends ResourceUpdate>,
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
@@ -100,7 +95,7 @@ final class XdsClientImpl extends XdsClient
   private final Map<String, XdsResourceType<?>> subscribedResourceTypeUrls = new HashMap<>();
   private final Map<ServerInfo, LoadStatsManager2> loadStatsManagerMap = new HashMap<>();
   private final Map<ServerInfo, LoadReportClient> serverLrsClientMap = new HashMap<>();
-  private final XdsChannelFactory xdsChannelFactory;
+  private final XdsTransportFactory xdsTransportFactory;
   private final Bootstrapper.BootstrapInfo bootstrapInfo;
   private final Context context;
   private final ScheduledExecutorService timeService;
@@ -113,22 +108,21 @@ final class XdsClientImpl extends XdsClient
   private volatile boolean isShutdown;
 
   XdsClientImpl(
-      XdsChannelFactory xdsChannelFactory,
+      XdsTransportFactory xdsTransportFactory,
       Bootstrapper.BootstrapInfo bootstrapInfo,
       Context context,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
-      TimeProvider timeProvider,
-      TlsContextManager tlsContextManager) {
-    this.xdsChannelFactory = xdsChannelFactory;
+      TimeProvider timeProvider) {
+    this.xdsTransportFactory = xdsTransportFactory;
     this.bootstrapInfo = bootstrapInfo;
     this.context = context;
     this.timeService = timeService;
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.stopwatchSupplier = stopwatchSupplier;
     this.timeProvider = timeProvider;
-    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
+    this.tlsContextManager = new TlsContextManagerImpl(bootstrapInfo);
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -142,8 +136,9 @@ final class XdsClientImpl extends XdsClient
     if (serverChannelMap.containsKey(serverInfo)) {
       return;
     }
+    XdsTransportFactory.XdsTransport xdsTransport = xdsTransportFactory.create(serverInfo);
     ControlPlaneClient xdsChannel = new ControlPlaneClient(
-        xdsChannelFactory,
+        xdsTransport,
         serverInfo,
         bootstrapInfo.node(),
         this,
@@ -157,7 +152,7 @@ final class XdsClientImpl extends XdsClient
     LoadStatsManager2 loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     loadStatsManagerMap.put(serverInfo, loadStatsManager);
     LoadReportClient lrsClient = new LoadReportClient(
-        loadStatsManager, xdsChannel.channel(), context, bootstrapInfo.node(), syncContext,
+        loadStatsManager, xdsTransport, context, bootstrapInfo.node(), syncContext,
         timeService, backoffPolicyProvider, stopwatchSupplier);
     serverChannelMap.put(serverInfo, xdsChannel);
     serverLrsClientMap.put(serverInfo, lrsClient);
@@ -176,8 +171,7 @@ final class XdsClientImpl extends XdsClient
       toParseResourceNames = resourceSubscribers.get(xdsResourceType).keySet();
     }
     XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
-        bootstrapInfo, filterRegistry, loadBalancerRegistry, tlsContextManager,
-        toParseResourceNames);
+        bootstrapInfo, tlsContextManager, toParseResourceNames);
     handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
   }
 
@@ -288,9 +282,10 @@ final class XdsClientImpl extends XdsClient
   }
 
   @Override
-  <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type, String resourceName,
-                                                   ResourceWatcher<T> watcher,
-                                                   Executor watcherExecutor) {
+  public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher,
+      Executor watcherExecutor) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
@@ -315,9 +310,9 @@ final class XdsClientImpl extends XdsClient
   }
 
   @Override
-  <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                         String resourceName,
-                                                         ResourceWatcher<T> watcher) {
+  public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+      String resourceName,
+      ResourceWatcher<T> watcher) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
@@ -746,32 +741,5 @@ final class XdsClientImpl extends XdsClient
     private void notifyWatcher(ResourceWatcher<T> watcher, T update) {
       watcher.onChanged(update);
     }
-  }
-
-  static final class ResourceInvalidException extends Exception {
-    private static final long serialVersionUID = 0L;
-
-    ResourceInvalidException(String message) {
-      super(message, null, false, false);
-    }
-
-    ResourceInvalidException(String message, Throwable cause) {
-      super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
-    }
-  }
-
-  abstract static class XdsChannelFactory {
-    static final XdsChannelFactory DEFAULT_XDS_CHANNEL_FACTORY = new XdsChannelFactory() {
-      @Override
-      ManagedChannel create(ServerInfo serverInfo) {
-        String target = serverInfo.target();
-        ChannelCredentials channelCredentials = serverInfo.channelCredentials();
-        return Grpc.newChannelBuilder(target, channelCredentials)
-            .keepAliveTime(5, TimeUnit.MINUTES)
-            .build();
-      }
-    };
-
-    abstract ManagedChannel create(ServerInfo serverInfo);
   }
 }
