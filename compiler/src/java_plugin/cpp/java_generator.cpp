@@ -1129,14 +1129,14 @@ static void PrintService(const ServiceDescriptor* service,
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
   GrpcWriteServiceDocComment(p, service, NONE);
 
-  if (vars["javax_mode"].compare("javax") == 0) {
+  if (vars["JakartaMode"].compare("javax") == 0) {
     p->Print(
         *vars,
         "@javax.annotation.Generated(\n"
         "    value = \"by gRPC proto compiler$grpc_version$\",\n"
         "    comments = \"Source: $file_name$\")\n"
         "@$GrpcGenerated$\n");
-  } else if (vars["javax_mode"].compare("omit") == 0) {
+  } else if (vars["JakartaMode"].compare("omit") == 0) {
     p->Print(
         *vars,
         "@$GrpcGenerated$\n");
