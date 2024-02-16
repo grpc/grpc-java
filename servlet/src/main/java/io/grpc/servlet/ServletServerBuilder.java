@@ -101,6 +101,13 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
     return new ServletAdapter(buildAndStart(), streamTracerFactories, maxInboundMessageSize);
   }
 
+  /**
+   * Creates a {@link GrpcServlet}.
+   */
+  public GrpcServlet buildServlet() {
+    return new GrpcServlet(buildServletAdapter());
+  }
+
   private ServerTransportListener buildAndStart() {
     Server server;
     try {
