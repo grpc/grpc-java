@@ -384,12 +384,12 @@ public class LeastRequestLoadBalancerTest {
     }
 
     if (picker instanceof ReadyPicker) {
-      List<ChildLbState> childLbStates = ((ReadyPicker)picker).getChildLbStates();
-      if (childLbStates == null || childLbStates.isEmpty()) {
+      List<SubchannelPicker> childPickers = ((ReadyPicker)picker).getChildPickers();
+      if (childPickers == null || childPickers.isEmpty()) {
         return "";
       }
 
-      picker = childLbStates.get(0).getCurrentPicker();
+      picker = childPickers.get(0);
     }
 
     Status status = picker.pickSubchannel(mockArgs).getStatus();
@@ -460,7 +460,8 @@ public class LeastRequestLoadBalancerTest {
 
     ReadyPicker picker = (ReadyPicker) pickerCaptor.getValue();
 
-    assertThat(picker.getChildLbStates()).containsExactlyElementsIn(childLbStates);
+    assertThat(picker.getChildEags())
+        .containsExactlyElementsIn(childLbStates.stream().map(ChildLbState::getEag).toArray());
 
     // Make random return 0, then 2 for the sample indexes.
     when(mockRandom.nextInt(childLbStates.size())).thenReturn(0, 2);
@@ -647,7 +648,7 @@ public class LeastRequestLoadBalancerTest {
 
   private List<Subchannel> getList(SubchannelPicker picker) {
     if (picker instanceof ReadyPicker) {
-      return ((ReadyPicker) picker).getChildLbStates().stream()
+      return ((ReadyPicker) picker).getChildEags().stream()
           .map(this::getSubchannel)
           .collect(Collectors.toList());
     } else {
