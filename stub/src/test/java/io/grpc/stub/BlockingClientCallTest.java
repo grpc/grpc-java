@@ -34,7 +34,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.StatusRuntimeException;
+import io.grpc.StatusException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.ServerCalls.BidiStreamingMethod;
@@ -190,7 +190,7 @@ public class BlockingClientCallTest {
     try {
       assertNull(biDiStream.read(2 * DELAY_MILLIS, TimeUnit.MILLISECONDS));
       fail("No exception thrown by read after cancel");
-    } catch (StatusRuntimeException e) {
+    } catch (StatusException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
       assertThat(System.currentTimeMillis() - start).isLessThan(2 * DELAY_MILLIS);
     }
@@ -205,7 +205,7 @@ public class BlockingClientCallTest {
     try {
       assertFalse(biDiStream.write(30)); // this is interrupted by cancel
       fail("No exception thrown when write was interrupted by cancel");
-    } catch (StatusRuntimeException e) {
+    } catch (StatusException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
     }
 
@@ -223,7 +223,7 @@ public class BlockingClientCallTest {
     try {
       start = System.currentTimeMillis();
       assertNull(biDiStream.read(2, TimeUnit.SECONDS));
-    } catch (StatusRuntimeException e) {
+    } catch (StatusException e) {
       assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
       assertThat(System.currentTimeMillis() - start).isLessThan(200);
     }
@@ -385,7 +385,7 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testClose_withException() throws InterruptedException {
+  public void testClose_withException() throws Exception {
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
@@ -397,7 +397,7 @@ public class BlockingClientCallTest {
     assertEquals(descr, closedStatus.getDescription());
     try {
       assertFalse(biDiStream.write(1));
-    } catch (StatusRuntimeException e) {
+    } catch (StatusException e) {
       assertThat(e.getMessage()).startsWith("FAILED_PRECONDITION");
     }
   }
