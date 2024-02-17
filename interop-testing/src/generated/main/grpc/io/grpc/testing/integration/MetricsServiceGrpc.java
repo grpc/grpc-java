@@ -236,7 +236,8 @@ public final class MetricsServiceGrpc {
      * </pre>
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.integration.Metrics.GaugeResponse>
-        getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request) throws java.lang.InterruptedException {
+        getAllGauges(io.grpc.testing.integration.Metrics.EmptyMessage request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
       return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
           getChannel(), getGetAllGaugesMethod(), getCallOptions(), request);
     }

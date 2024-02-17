@@ -438,7 +438,8 @@ public final class BenchmarkServiceGrpc {
      * </pre>
      */
     public io.grpc.stub.BlockingClientCall<?, io.grpc.benchmarks.proto.Messages.SimpleResponse>
-        streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request) throws java.lang.InterruptedException {
+        streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
       return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
           getChannel(), getStreamingFromServerMethod(), getCallOptions(), request);
     }
