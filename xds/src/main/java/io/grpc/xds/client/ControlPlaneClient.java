@@ -60,7 +60,7 @@ import javax.annotation.Nullable;
  * the xDS RPC stream.
  */
 @Internal
-public final class ControlPlaneClient {
+final class ControlPlaneClient {
 
   public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;

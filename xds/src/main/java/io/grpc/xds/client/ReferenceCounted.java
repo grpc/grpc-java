@@ -19,8 +19,6 @@ package io.grpc.xds.client;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import io.grpc.Internal;
-
 /**
  * A reference count wrapper for objects. This class does not take the ownership for the object,
  * but only provides usage counting. The real owner of the wrapped object is responsible for
@@ -31,7 +29,6 @@ import io.grpc.Internal;
  * counts being leaked.
  */
 // TODO(chengyuanzhang): move this class into LoadStatsManager2.
-@Internal
 final class ReferenceCounted<T> {
   private final T instance;
   private int refs;

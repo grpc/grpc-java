@@ -96,7 +96,7 @@ public class LoadReportClientTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClient.LoadReportingTask.class.getSimpleName());
+              .contains("LoadReportingTask");
         }
       };
   private static final FakeClock.TaskFilter LRS_RPC_RETRY_TASK_FILTER =
@@ -104,7 +104,7 @@ public class LoadReportClientTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClient.LrsRpcRetryTask.class.getSimpleName());
+              .contains("LrsRpcRetryTask");
         }
       };
 

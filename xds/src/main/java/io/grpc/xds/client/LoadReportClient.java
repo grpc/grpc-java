@@ -135,11 +135,10 @@ public final class LoadReportClient {
     if (lrsStream != null) {
       lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
     }
-    // Do not shutdown channel as it is not owned by LrsClient.
+    // Do not shut down channel as it is not owned by LrsClient.
   }
 
-  @VisibleForTesting
-  public static class LoadReportingTask implements Runnable {
+  private static class LoadReportingTask implements Runnable {
     private final LrsStream stream;
 
     LoadReportingTask(LrsStream stream) {
@@ -152,8 +151,7 @@ public final class LoadReportClient {
     }
   }
 
-  @VisibleForTesting
-  public class LrsRpcRetryTask implements Runnable {
+  private class LrsRpcRetryTask implements Runnable {
 
     @Override
     public void run() {
@@ -297,7 +295,7 @@ public final class LoadReportClient {
       }
       // The back-off policy determines the interval between consecutive RPC upstarts, thus the
       // actual delay may be smaller than the value from the back-off policy, or even negative,
-      // depending how much time was spent in the previous RPC.
+      // depending on how much time was spent in the previous RPC.
       long delayNanos =
           lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       logger.log(XdsLogLevel.INFO, "Retry LRS stream in {0} ns", delayNanos);

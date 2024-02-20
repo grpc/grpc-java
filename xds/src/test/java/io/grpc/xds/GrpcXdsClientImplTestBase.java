@@ -91,7 +91,6 @@ import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.ControlPlaneClient;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.client.Locality;
@@ -173,7 +172,7 @@ public abstract class GrpcXdsClientImplTestBase {
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(ControlPlaneClient.RpcRetryTask.class.getSimpleName());
+          return command.toString().contains("RpcRetryTask");
         }
       };
 
