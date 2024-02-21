@@ -158,7 +158,7 @@ public final class MethodDescriptor<ReqT, RespT> {
   }
 
   /**
-   * A marshaller that supports retrieving it's type parameter {@code T} at runtime.
+   * A marshaller that supports retrieving its type parameter {@code T} at runtime.
    *
    * @since 1.1.0
    */
