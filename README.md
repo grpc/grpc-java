@@ -269,6 +269,9 @@ gRPC comes with multiple Transport implementations:
 
 1. The Netty-based HTTP/2 transport is the main transport implementation based
    on [Netty](https://netty.io). It is not officially supported on Android.
+   There is a "grpc-netty-shaded" version of this transport. It is generally
+   preferred over using the Netty-based transport directly as it requires less
+   dependency management and is easier to upgrade within many applications.
 2. The OkHttp-based HTTP/2 transport is a lightweight transport based on
    [Okio](https://square.github.io/okio/) and forked low-level parts of
    [OkHttp](https://square.github.io/okhttp/). It is mainly for use on Android.
