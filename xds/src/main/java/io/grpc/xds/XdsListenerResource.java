@@ -90,6 +90,11 @@ public class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return false;
+  }
+
+  @Override
   protected boolean isFullStateOfTheWorld() {
     return true;
   }

@@ -78,7 +78,6 @@ public class SharedXdsClientPoolProviderTest {
     assertThat(provider.get()).isNull();
     ObjectPool<XdsClient> xdsClientPool = provider.getOrCreate();
     verify(bootstrapper).bootstrap();
-    verify(bootstrapper).isFederationEnabled();
     assertThat(provider.getOrCreate()).isSameInstanceAs(xdsClientPool);
     assertThat(provider.get()).isNotNull();
     assertThat(provider.get()).isSameInstanceAs(xdsClientPool);
@@ -91,7 +90,7 @@ public class SharedXdsClientPoolProviderTest {
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(bootstrapInfo, true);
+        new RefCountedXdsClientObjectPool(bootstrapInfo);
     assertThat(xdsClientPool.getXdsClientForTest()).isNull();
     XdsClient xdsClient = xdsClientPool.getObject();
     assertThat(xdsClientPool.getXdsClientForTest()).isNotNull();
@@ -104,7 +103,7 @@ public class SharedXdsClientPoolProviderTest {
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(bootstrapInfo, true);
+        new RefCountedXdsClientObjectPool(bootstrapInfo);
     // getObject once
     XdsClient xdsClient = xdsClientPool.getObject();
     assertThat(xdsClient).isNotNull();
@@ -124,7 +123,7 @@ public class SharedXdsClientPoolProviderTest {
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(bootstrapInfo, true);
+        new RefCountedXdsClientObjectPool(bootstrapInfo);
     XdsClient xdsClient1 = xdsClientPool.getObject();
     assertThat(xdsClientPool.returnObject(xdsClient1)).isNull();
     assertThat(xdsClient1.isShutDown()).isTrue();

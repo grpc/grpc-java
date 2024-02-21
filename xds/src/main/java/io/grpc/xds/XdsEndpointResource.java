@@ -73,6 +73,11 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return true;
+  }
+
+  @Override
   protected boolean isFullStateOfTheWorld() {
     return false;
   }

@@ -60,7 +60,6 @@ public class GrpcBootstrapperImplTest {
   private String originalBootstrapPathFromSysProp;
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
-  private boolean originalEnableFederation;
 
   @Before
   public void setUp() {
@@ -73,7 +72,6 @@ public class GrpcBootstrapperImplTest {
     originalBootstrapPathFromSysProp = bootstrapper.bootstrapPathFromSysProp;
     originalBootstrapConfigFromEnvVar = bootstrapper.bootstrapConfigFromEnvVar;
     originalBootstrapConfigFromSysProp = bootstrapper.bootstrapConfigFromSysProp;
-    originalEnableFederation = bootstrapper.isFederationEnabled();
   }
 
   @After
@@ -82,7 +80,6 @@ public class GrpcBootstrapperImplTest {
     bootstrapper.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
     bootstrapper.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     bootstrapper.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
-    bootstrapper.enableFederation(originalEnableFederation);
   }
 
   @Test
@@ -851,8 +848,6 @@ public class GrpcBootstrapperImplTest {
           "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
               + "xdstp://a.com/");
     }
-    bootstrapper.enableFederation = false;
-    bootstrapper.bootstrap();
   }
 
   private static BootstrapperImpl.FileReader createFileReader(

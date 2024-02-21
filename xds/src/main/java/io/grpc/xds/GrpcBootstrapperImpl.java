@@ -19,7 +19,6 @@ package io.grpc.xds;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
@@ -42,10 +41,8 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   @VisibleForTesting
   String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY);
 
-  // Feature-gating environment variables.
   GrpcBootstrapperImpl() {
-    enableFederation =
-        GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_FEDERATION", true);
+    super();
   }
 
   @Override
@@ -95,16 +92,6 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   protected Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException {
     return getChannelCredentials(serverConfig, serverUri);
-  }
-
-  @VisibleForTesting
-  @Override
-  protected boolean isFederationEnabled() {
-    return super.isFederationEnabled();
-  }
-
-  void enableFederation(boolean enable) {
-    enableFederation = enable;
   }
 
   private static ChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,

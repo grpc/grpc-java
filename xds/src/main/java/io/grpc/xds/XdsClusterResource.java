@@ -87,6 +87,11 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return true;
+  }
+
+  @Override
   protected boolean isFullStateOfTheWorld() {
     return true;
   }

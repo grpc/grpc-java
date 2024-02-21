@@ -74,6 +74,8 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
 
   public abstract String typeUrl();
 
+  public abstract boolean shouldRetrieveResourceKeysForArgs();
+
   // Do not confuse with the SotW approach: it is the mechanism in which the client must specify all
   // resource names it is interested in with each request. Different resource types may behave
   // differently in this approach. For LDS and CDS resources, the server must return all resources

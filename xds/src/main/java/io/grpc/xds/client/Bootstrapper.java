@@ -48,10 +48,6 @@ public abstract class Bootstrapper {
     throw new UnsupportedOperationException();
   }
 
-  protected boolean isFederationEnabled() {
-    return true;
-  }
-
   /**
    * Data class containing xDS server information, such as server URI and channel credentials
    * to be used for communication.

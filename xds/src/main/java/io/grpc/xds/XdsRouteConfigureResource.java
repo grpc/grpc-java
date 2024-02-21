@@ -104,6 +104,11 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return false;
+  }
+
+  @Override
   protected boolean isFullStateOfTheWorld() {
     return false;
   }

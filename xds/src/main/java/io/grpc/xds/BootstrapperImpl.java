@@ -58,7 +58,6 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   protected final XdsLogger logger;
 
   protected FileReader reader = LocalFileReader.INSTANCE;
-  protected boolean enableFederation;
 
   protected BootstrapperImpl() {
     logger = XdsLogger.withLogId(InternalLogId.allocate("bootstrapper", null));
@@ -66,16 +65,11 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   protected abstract String getJsonContent() throws IOException, XdsInitializationException;
 
+  protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
+      throws XdsInitializationException;
+
   /**
-   * Reads and parses bootstrap config. Searches the config (or file of config) with the
-   * following order:
-   *
-   * <ol>
-   *   <li>A filesystem path defined by environment variable "GRPC_XDS_BOOTSTRAP"</li>
-   *   <li>A filesystem path defined by Java System Property "io.grpc.xds.bootstrap"</li>
-   *   <li>Environment variable value of "GRPC_XDS_BOOTSTRAP_CONFIG"</li>
-   *   <li>Java System Property value of "io.grpc.xds.bootstrapConfig"</li>
-   * </ol>
+   * Reads and parses bootstrap config. The config is expected to be in JSON format.
    */
   @SuppressWarnings("unchecked")
   @Override
@@ -177,22 +171,19 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       builder.certProviders(certProviders);
     }
 
-    String grpcServerResourceId =
+    String serverResourceId =
         JsonUtil.getString(rawData, "server_listener_resource_name_template");
     logger.log(
-        XdsLogLevel.INFO, "server_listener_resource_name_template: {0}", grpcServerResourceId);
-    builder.serverListenerResourceNameTemplate(grpcServerResourceId);
+        XdsLogLevel.INFO, "server_listener_resource_name_template: {0}", serverResourceId);
+    builder.serverListenerResourceNameTemplate(serverResourceId);
 
-    if (!enableFederation) {
-      return builder;
-    }
-    String grpcClientDefaultListener =
+    String clientDefaultListener =
         JsonUtil.getString(rawData, "client_default_listener_resource_name_template");
     logger.log(
         XdsLogLevel.INFO, "client_default_listener_resource_name_template: {0}",
-        grpcClientDefaultListener);
-    if (grpcClientDefaultListener != null) {
-      builder.clientDefaultListenerResourceNameTemplate(grpcClientDefaultListener);
+        clientDefaultListener);
+    if (clientDefaultListener != null) {
+      builder.clientDefaultListenerResourceNameTemplate(clientDefaultListener);
     }
 
     Map<String, ?> rawAuthoritiesMap =
@@ -258,17 +249,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
     return servers.build();
   }
 
-  protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
-      throws XdsInitializationException;
-
   @VisibleForTesting
   public void setFileReader(FileReader reader) {
     this.reader = reader;
-  }
-
-  @Override
-  protected boolean isFederationEnabled() {
-    return enableFederation;
   }
 
   /**

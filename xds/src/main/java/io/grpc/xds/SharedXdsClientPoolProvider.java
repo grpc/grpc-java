@@ -89,8 +89,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           if (bootstrapInfo.servers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
-          ref = xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo,
-              ((GrpcBootstrapperImpl)bootstrapper).isFederationEnabled());
+          ref = xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
         }
       }
     }
@@ -112,12 +111,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private XdsClient xdsClient;
     @GuardedBy("lock")
     private int refCount;
-    private final boolean isFederationEnabled;
 
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, boolean isFederationEnabled) {
+    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
-      this.isFederationEnabled = isFederationEnabled;
     }
 
     @Override
@@ -128,7 +125,6 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           xdsClient = new GrpcXdsClientImpl(
               DEFAULT_XDS_TRANSPORT_FACTORY,
               bootstrapInfo,
-              isFederationEnabled,
               scheduler,
               new ExponentialBackoffPolicy.Provider(),
               GrpcUtil.STOPWATCH_SUPPLIER,

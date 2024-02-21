@@ -30,7 +30,7 @@ import java.util.logging.Logger;
  */
 @Internal
 public final class XdsLogger {
-  private static final Logger logger = Logger.getLogger(XdsLogger.class.getName());
+  private static final Logger logger = Logger.getLogger("io.grpc.xds.XdsLogger");
 
   private final String prefix;
 

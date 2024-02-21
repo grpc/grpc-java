@@ -18,6 +18,7 @@ package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 import static io.grpc.xds.client.XdsResourceType.ParsedResource;
 import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
 
@@ -41,6 +42,7 @@ import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient.ResourceStore;
 import io.grpc.xds.client.XdsClient.XdsResponseHandler;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -129,17 +131,16 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
     }
   }
 
-  protected Set<String> getResourceNamesToParse(XdsResourceType<?> xdsResourceType) {
-    throw new UnsupportedOperationException("Not implemented");
-  }
-
   @Override
   public void handleResourceResponse(
       XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
       List<Any> resources, String nonce, ProcessingTracker processingTracker) {
     checkNotNull(xdsResourceType, "xdsResourceType");
     syncContext.throwIfNotInThisSynchronizationContext();
-    Set<String> toParseResourceNames = getResourceNamesToParse(xdsResourceType);
+    Set<String> toParseResourceNames =
+        xdsResourceType.shouldRetrieveResourceKeysForArgs()
+            ? getResourceKeys(xdsResourceType)
+            : null;
     XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
         bootstrapInfo, securityConfig, toParseResourceNames);
     handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
@@ -419,8 +420,21 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
 
 
   @Nullable
-  protected ServerInfo getServerInfo(String resource) {
-    return bootstrapInfo.servers().get(0); // use first server
+  private ServerInfo getServerInfo(String resource) {
+    if (resource.startsWith(XDSTP_SCHEME)) {
+      URI uri = URI.create(resource);
+      String authority = uri.getAuthority();
+      if (authority == null) {
+        authority = "";
+      }
+      Bootstrapper.AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
+      if (authorityInfo == null || authorityInfo.xdsServers().isEmpty()) {
+        return null;
+      }
+      return authorityInfo.xdsServers().get(0);
+    } else {
+      return bootstrapInfo.servers().get(0); // use first server
+    }
   }
 
   @SuppressWarnings("unchecked")

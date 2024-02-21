@@ -371,7 +371,6 @@ public abstract class GrpcXdsClientImplTestBase {
         new GrpcXdsClientImpl(
             xdsTransportFactory,
             bootstrapInfo,
-            true,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
@@ -3736,7 +3735,6 @@ public abstract class GrpcXdsClientImplTestBase {
     return new GrpcXdsClientImpl(
         DEFAULT_XDS_TRANSPORT_FACTORY,
         bootstrapInfo,
-        true,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,
         fakeClock.getStopwatchSupplier(),
