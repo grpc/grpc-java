@@ -297,7 +297,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
-    logger.log(Level.FINE, "Shutdown");
+    logger.log(Level.INFO, "Shutdown");
     for (ChildLbState state : childLbStates.values()) {
       state.shutdown();
     }
