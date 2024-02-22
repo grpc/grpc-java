@@ -199,6 +199,7 @@ final class ControlPlaneClient {
     return rpcRetryTimer != null && rpcRetryTimer.isPending();
   }
 
+  // Must be synchronized.
   boolean isReady() {
     return adsStream != null && adsStream.call != null && adsStream.call.isReady();
   }
@@ -207,6 +208,7 @@ final class ControlPlaneClient {
    * Starts a timer for each requested resource that hasn't been responded to and
    * has been waiting for the channel to get ready.
    */
+  // Must be synchronized.
   void readyHandler() {
     if (!isReady()) {
       return;
@@ -325,7 +327,7 @@ final class ControlPlaneClient {
 
     @Override
     public void onReady() {
-      readyHandler();
+      syncContext.execute(ControlPlaneClient.this::readyHandler);
     }
 
     @Override
