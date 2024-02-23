@@ -284,17 +284,20 @@ publishing {
 }
 
 def configureTestTask(Task task, String dep, String serviceName) {
+    def genDir = files(tasks.named("generateTest${dep}Proto")).singleFile
+    def genFile = "${genDir}/grpc/io/grpc/testing/compiler/${serviceName}Grpc.java"
     task.dependsOn "generateTest${dep}Proto"
+    task.inputs.file genFile
     if (osdetector.os != 'windows') {
         task.executable "diff"
         task.args "-u"
     } else {
         task.executable "fc"
     }
-    // File isn't found on Windows if last slash is forward-slash
-    def slash = System.getProperty("file.separator")
-    task.args "$buildDir/generated/source/proto/test${dep}/grpc/io/grpc/testing/compiler${slash}${serviceName}Grpc.java",
-            "$projectDir/src/test${dep}/golden/${serviceName}.java.txt"
+    task.args layout.projectDirectory.file("src/test${dep}/golden/${serviceName}.java.txt")
+    task.args genFile
+    // Register an output to allow up-to-date checking
+    task.outputs.file(layout.buildDirectory.file(task.name))
 }
 
 def testGolden = tasks.register("testGolden", Exec) {
