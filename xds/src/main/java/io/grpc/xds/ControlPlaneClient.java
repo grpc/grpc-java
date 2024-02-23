@@ -390,7 +390,9 @@ final class ControlPlaneClient {
         // has never been initialized.
         retryBackoffPolicy = backoffPolicyProvider.get();
       }
-      // Need this here to avoid tsan race condition in XdsClientImplTestBase.sendToNonexistentHost
+      // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
+      // to avoid TSAN races, since tests may wait until callbacks are called but then would run
+      // concurrently with the stopwatch and schedule.
       long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
       rpcRetryTimer = syncContext.schedule(
