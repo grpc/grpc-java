@@ -3726,9 +3726,12 @@ public abstract class XdsClientImplTestBase {
   }
 
   @Test
-  public void sendToNonexistentHost() throws Exception {
+  public void sendToNonexistentServer() throws Exception {
     // Setup xdsClient to fail on stream creation
-    XdsClientImpl client = createXdsClient("some.garbage");
+    // The Windows CI takes ~11 seconds to resolve "doesnotexist.invalid.". That seems broken, since
+    // it should take no I/O, but let's limit ourselves to IP literals and hostnames in the hosts
+    // file. Assume localhost doesn't speak HTTP/2 on the finger port
+    XdsClientImpl client = createXdsClient("localhost:79");
     client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
     assertThat(fakeClock.numPendingTasks()).isEqualTo(1); //retry
