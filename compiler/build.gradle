@@ -283,8 +283,7 @@ publishing {
     }
 }
 
-def configureTestTask(Task task, String dep, String extraPackage, String serviceName) {
-    test.dependsOn task
+def configureTestTask(Task task, String dep, String serviceName) {
     task.dependsOn "generateTest${dep}Proto"
     if (osdetector.os != 'windows') {
         task.executable "diff"
@@ -294,19 +293,25 @@ def configureTestTask(Task task, String dep, String extraPackage, String service
     }
     // File isn't found on Windows if last slash is forward-slash
     def slash = System.getProperty("file.separator")
-    task.args "$buildDir/generated/source/proto/test${dep}/grpc/io/grpc/testing/compiler${extraPackage}${slash}${serviceName}Grpc.java",
+    task.args "$buildDir/generated/source/proto/test${dep}/grpc/io/grpc/testing/compiler${slash}${serviceName}Grpc.java",
             "$projectDir/src/test${dep}/golden/${serviceName}.java.txt"
 }
 
-tasks.register("testGolden", Exec) {
-    configureTestTask(it, '', '', 'TestService')
+def testGolden = tasks.register("testGolden", Exec) {
+    configureTestTask(it, '', 'TestService')
 }
-tasks.register("testLiteGolden", Exec) {
-    configureTestTask(it, 'Lite', '', 'TestService')
+def testLiteGolden = tasks.register("testLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', 'TestService')
 }
-tasks.register("testDeprecatedGolden", Exec) {
-    configureTestTask(it, '', '', 'TestDeprecatedService')
+def testDeprecatedGolden = tasks.register("testDeprecatedGolden", Exec) {
+    configureTestTask(it, '', 'TestDeprecatedService')
 }
-tasks.register("testDeprecatedLiteGolden", Exec) {
-    configureTestTask(it, 'Lite', '', 'TestDeprecatedService')
+def testDeprecatedLiteGolden = tasks.register("testDeprecatedLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', 'TestDeprecatedService')
+}
+tasks.named("test").configure {
+    dependsOn testGolden
+    dependsOn testLiteGolden
+    dependsOn testDeprecatedGolden
+    dependsOn testDeprecatedLiteGolden
 }
