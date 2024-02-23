@@ -32,7 +32,8 @@ public final class InternalSharedXdsClientPoolProvider {
     SharedXdsClientPoolProvider.getDefaultProvider().setBootstrapOverride(bootstrap);
   }
 
-  public static ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+  public static ObjectPool<XdsClient> getOrCreate(String target)
+      throws XdsInitializationException {
     return SharedXdsClientPoolProvider.getDefaultProvider().getOrCreate();
   }
 }
