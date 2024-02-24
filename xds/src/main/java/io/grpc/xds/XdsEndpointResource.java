@@ -49,7 +49,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
 
   private static final XdsEndpointResource instance = new XdsEndpointResource();
 
-  public static XdsEndpointResource getInstance() {
+  static XdsEndpointResource getInstance() {
     return instance;
   }
 

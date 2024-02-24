@@ -374,7 +374,7 @@ public abstract class XdsClient {
    * Returns a map of control plane server info objects to the LoadReportClients that are
    * responsible for sending load reports to the control plane servers.
    */
-  protected Map<Bootstrapper.ServerInfo, LoadReportClient> getServerLrsClientMap() {
+  public Map<Bootstrapper.ServerInfo, LoadReportClient> getServerLrsClientMap() {
     throw new UnsupportedOperationException();
   }
 

@@ -51,7 +51,7 @@ import javax.annotation.Nullable;
 
 class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   @VisibleForTesting
-  protected static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
+  static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
@@ -554,7 +554,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
       checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
-      return new io.grpc.xds.AutoValue_XdsClusterResource_CdsUpdate.Builder()
+      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.AGGREGATE)
           .minRingSize(0)
@@ -567,7 +567,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
                           @Nullable UpstreamTlsContext upstreamTlsContext,
                           @Nullable OutlierDetection outlierDetection) {
-      return new io.grpc.xds.AutoValue_XdsClusterResource_CdsUpdate.Builder()
+      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.EDS)
           .minRingSize(0)
@@ -584,7 +584,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                                  @Nullable ServerInfo lrsServerInfo,
                                  @Nullable Long maxConcurrentRequests,
                                  @Nullable UpstreamTlsContext upstreamTlsContext) {
-      return new io.grpc.xds.AutoValue_XdsClusterResource_CdsUpdate.Builder()
+      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .minRingSize(0)

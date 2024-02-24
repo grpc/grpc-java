@@ -31,6 +31,7 @@ import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsInitializationException;

@@ -38,6 +38,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
+import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient.ResourceStore;
 import io.grpc.xds.client.XdsClient.XdsResponseHandler;
@@ -62,7 +63,7 @@ import javax.annotation.Nullable;
  * XdsClient implementation.
  */
 @Internal
-public class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
+public final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
 
   private static final boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
       System.getenv("GRPC_LOG_XDS_NODE_ID"));
@@ -71,7 +72,8 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   public static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
-  protected final SynchronizationContext syncContext = new SynchronizationContext(
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
@@ -84,9 +86,9 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
         }
       });
 
-  protected final Map<Bootstrapper.ServerInfo, LoadStatsManager2> loadStatsManagerMap =
+  private final Map<ServerInfo, LoadStatsManager2> loadStatsManagerMap =
       new HashMap<>();
-  protected final Map<Bootstrapper.ServerInfo, LoadReportClient> serverLrsClientMap =
+  final Map<ServerInfo, LoadReportClient> serverLrsClientMap =
       new HashMap<>();
 
   private final Map<ServerInfo, ControlPlaneClient> serverCpClientMap = new HashMap<>();
@@ -95,10 +97,10 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
       resourceSubscribers = new HashMap<>();
   private final Map<String, XdsResourceType<?>> subscribedResourceTypeUrls = new HashMap<>();
   private final XdsTransportFactory xdsTransportFactory;
-  protected final Bootstrapper.BootstrapInfo bootstrapInfo;
-  protected final ScheduledExecutorService timeService;
-  protected final BackoffPolicy.Provider backoffPolicyProvider;
-  protected final Supplier<Stopwatch> stopwatchSupplier;
+  private final Bootstrapper.BootstrapInfo bootstrapInfo;
+  private final ScheduledExecutorService timeService;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final Supplier<Stopwatch> stopwatchSupplier;
   private final TimeProvider timeProvider;
   private final Object securityConfig;
   private final InternalLogId logId;
@@ -106,7 +108,7 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
   private volatile boolean isShutdown;
   private final MessagePrettyPrinter messagePrinter;
 
-  protected XdsClientImpl(
+  public XdsClientImpl(
       XdsTransportFactory xdsTransportFactory,
       Bootstrapper.BootstrapInfo bootstrapInfo,
       ScheduledExecutorService timeService,
@@ -234,9 +236,9 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
         ImmutableMap.Builder<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataSnapshot =
             ImmutableMap.builder();
         for (XdsResourceType<?> resourceType: resourceSubscribers.keySet()) {
-          Map<String, ResourceMetadata> metadataMap =
+          Map<String, ResourceMetadata> metadataMap = ImmutableMap.copyOf(
               resourceSubscribers.get(resourceType).entrySet().stream()
-                  .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().metadata));
+                  .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().metadata)));
           metadataSnapshot.put(resourceType, metadataMap);
         }
         future.set(metadataSnapshot.buildOrThrow());
@@ -306,7 +308,7 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
 
   @Override
   public LoadStatsManager2.ClusterDropStats addClusterDropStats(
-      final Bootstrapper.ServerInfo serverInfo, String clusterName,
+      final ServerInfo serverInfo, String clusterName,
       @Nullable String edsServiceName) {
     LoadStatsManager2 loadStatsManager = loadStatsManagerMap.get(serverInfo);
     LoadStatsManager2.ClusterDropStats dropCounter =
@@ -322,7 +324,7 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
 
   @Override
   public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
-      final Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
+      final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
     LoadStatsManager2 loadStatsManager = loadStatsManagerMap.get(serverInfo);
     LoadStatsManager2.ClusterLocalityStats loadCounter =
@@ -371,7 +373,7 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
     });
   }
 
-  protected Set<String> getResourceKeys(XdsResourceType<?> xdsResourceType) {
+  private Set<String> getResourceKeys(XdsResourceType<?> xdsResourceType) {
     if (!resourceSubscribers.containsKey(xdsResourceType)) {
       return null;
     }
@@ -387,7 +389,7 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
     }
   }
 
-  public ControlPlaneClient getOrCreateControlPlaneClient(Bootstrapper.ServerInfo serverInfo) {
+  public ControlPlaneClient getOrCreateControlPlaneClient(ServerInfo serverInfo) {
     syncContext.throwIfNotInThisSynchronizationContext();
     if (serverCpClientMap.containsKey(serverInfo)) {
       return serverCpClientMap.get(serverInfo);
@@ -418,6 +420,11 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
     return controlPlaneClient;
   }
 
+  @VisibleForTesting
+  @Override
+  public Map<ServerInfo, LoadReportClient> getServerLrsClientMap() {
+    return ImmutableMap.copyOf(serverLrsClientMap);
+  }
 
   @Nullable
   private ServerInfo getServerInfo(String resource) {
@@ -427,7 +434,7 @@ public class XdsClientImpl extends XdsClient implements XdsResponseHandler, Reso
       if (authority == null) {
         authority = "";
       }
-      Bootstrapper.AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
+      AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
       if (authorityInfo == null || authorityInfo.xdsServers().isEmpty()) {
         return null;
       }

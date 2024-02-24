@@ -51,7 +51,7 @@ import java.util.List;
 import java.util.Set;
 import javax.annotation.Nullable;
 
-public class XdsListenerResource extends XdsResourceType<LdsUpdate> {
+class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
   static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
@@ -59,9 +59,9 @@ public class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           + ".HttpConnectionManager";
   private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   private static final XdsListenerResource instance = new XdsListenerResource();
-  protected final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
+  private static final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
 
-  public static XdsListenerResource getInstance() {
+  static XdsListenerResource getInstance() {
     return instance;
   }
 
@@ -126,8 +126,8 @@ public class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       throw new ResourceInvalidException(
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
-    return LdsUpdate.forApiListener(parseHttpConnectionManager(
-        hcm, filterRegistry, true /* isForClient */));
+    return LdsUpdate.forApiListener(
+        parseHttpConnectionManager(hcm, filterRegistry, true /* isForClient */));
   }
 
   private LdsUpdate processServerSideListener(Listener proto, Args args)

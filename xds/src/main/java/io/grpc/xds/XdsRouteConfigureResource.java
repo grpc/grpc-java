@@ -78,9 +78,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           Status.Code.RESOURCE_EXHAUSTED, Status.Code.UNAVAILABLE));
 
   private static final XdsRouteConfigureResource instance = new XdsRouteConfigureResource();
-  protected final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
 
-  public static XdsRouteConfigureResource getInstance() {
+  static XdsRouteConfigureResource getInstance() {
     return instance;
   }
 
@@ -124,7 +123,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
-    return processRouteConfiguration((RouteConfiguration) unpackedMessage, filterRegistry);
+    return processRouteConfiguration(
+        (RouteConfiguration) unpackedMessage, FilterRegistry.getDefaultRegistry());
   }
 
   private static RdsUpdate processRouteConfiguration(

@@ -71,14 +71,14 @@ public class XdsClientFederationTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private ObjectPool<XdsClient> xdsClientPool;
-  private GrpcXdsClientImpl xdsClient;
+  private XdsClient xdsClient;
 
   @Before
   public void setUp() throws XdsInitializationException {
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
     xdsClientPool = clientPoolProvider.getOrCreate();
-    xdsClient = (GrpcXdsClientImpl)xdsClientPool.getObject();
+    xdsClient = xdsClientPool.getObject();
   }
 
   @After

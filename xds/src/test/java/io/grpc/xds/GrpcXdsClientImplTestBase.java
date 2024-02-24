@@ -104,6 +104,7 @@ import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.client.XdsTransportFactory;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -138,7 +139,7 @@ import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
- * Tests for {@link GrpcXdsClientImpl}.
+ * Tests for {@link XdsClientImpl}.
  */
 @RunWith(JUnit4.class)
 // The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
@@ -296,7 +297,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private ManagedChannel channel;
   private ManagedChannel channelForCustomAuthority;
   private ManagedChannel channelForEmptyAuthority;
-  private GrpcXdsClientImpl xdsClient;
+  private XdsClientImpl xdsClient;
   private boolean originalEnableLeastRequest;
   private Server xdsServer;
   private final String serverName = InProcessServerBuilder.generateName();
@@ -368,13 +369,15 @@ public abstract class GrpcXdsClientImplTestBase {
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();
     xdsClient =
-        new GrpcXdsClientImpl(
+        new XdsClientImpl(
             xdsTransportFactory,
             bootstrapInfo,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
-            timeProvider);
+            timeProvider,
+            MessagePrinter.INSTANCE,
+            new TlsContextManagerImpl(bootstrapInfo));
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -3732,13 +3735,15 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
-    return new GrpcXdsClientImpl(
+    return new XdsClientImpl(
         DEFAULT_XDS_TRANSPORT_FACTORY,
         bootstrapInfo,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,
         fakeClock.getStopwatchSupplier(),
-        timeProvider);
+        timeProvider,
+        MessagePrinter.INSTANCE,
+        new TlsContextManagerImpl(bootstrapInfo));
   }
 
   private  BootstrapInfo buildBootStrap(String serverUri) {

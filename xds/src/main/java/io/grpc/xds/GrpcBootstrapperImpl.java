@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
+import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import java.io.IOException;

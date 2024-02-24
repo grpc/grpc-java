@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -25,11 +25,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
-import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.EnvoyProtoData.Node;
-import io.grpc.xds.client.Locality;
-import io.grpc.xds.client.XdsInitializationException;
-import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

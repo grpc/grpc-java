@@ -785,7 +785,7 @@ public class CdsLoadBalancer2Test {
     }
   }
 
-  private static class FakeXdsClient extends XdsClient {
+  private static final class FakeXdsClient extends XdsClient {
     // watchers needs to support any non-cyclic shaped graphs
     private final Map<String, List<ResourceWatcher<CdsUpdate>>> watchers = new HashMap<>();
 

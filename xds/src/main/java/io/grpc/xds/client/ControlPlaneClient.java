@@ -28,7 +28,6 @@ import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
-import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -59,7 +58,6 @@ import javax.annotation.Nullable;
  * Common base type for XdsClient implementations, which encapsulates the layer abstraction of
  * the xDS RPC stream.
  */
-@Internal
 final class ControlPlaneClient {
 
   public static final String CLOSED_BY_SERVER = "Closed by server";
