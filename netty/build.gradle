@@ -82,7 +82,8 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 }
 
 tasks.named("javadoc").configure {
-    options.links 'http://netty.io/4.1/api/'
+    options.linksOffline 'https://netty.io/4.1/api/',
+        "${rootProject.projectDir}/gradle/javadoc/netty.io-4.1-api/"
     exclude 'io/grpc/netty/*Provider.java'
     exclude 'io/grpc/netty/GrpcHttp2ConnectionHandler.java'
     exclude 'io/grpc/netty/Internal*'

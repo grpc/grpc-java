@@ -49,7 +49,7 @@ tasks.named("javadoc").configure {
             continue;
         }
         source subproject.javadoc.source
-        options.links subproject.javadoc.options.links.toArray(new String[0])
+        options.linksOffline.addAll subproject.javadoc.options.linksOffline
     }
 }
 
