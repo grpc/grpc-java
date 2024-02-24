@@ -207,7 +207,8 @@ subprojects {
             options {
                 encoding = 'UTF-8'
                 use = true
-                links 'https://docs.oracle.com/javase/8/docs/api/'
+                linksOffline 'https://docs.oracle.com/javase/8/docs/api/',
+		    "${rootProject.projectDir}/gradle/javadoc/docs.oracle.com-javase-8-docs-api/"
                 source = "8"
             }
         }
