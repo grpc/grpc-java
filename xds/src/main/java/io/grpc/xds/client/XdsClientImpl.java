@@ -236,10 +236,12 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
         ImmutableMap.Builder<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataSnapshot =
             ImmutableMap.builder();
         for (XdsResourceType<?> resourceType: resourceSubscribers.keySet()) {
-          Map<String, ResourceMetadata> metadataMap = ImmutableMap.copyOf(
-              resourceSubscribers.get(resourceType).entrySet().stream()
-                  .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().metadata)));
-          metadataSnapshot.put(resourceType, metadataMap);
+          ImmutableMap.Builder<String, ResourceMetadata> metadataMap = ImmutableMap.builder();
+          for (Map.Entry<String, ResourceSubscriber<? extends ResourceUpdate>> resourceEntry
+              : resourceSubscribers.get(resourceType).entrySet()) {
+            metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
+          }
+          metadataSnapshot.put(resourceType, metadataMap.buildOrThrow());
         }
         future.set(metadataSnapshot.buildOrThrow());
       }

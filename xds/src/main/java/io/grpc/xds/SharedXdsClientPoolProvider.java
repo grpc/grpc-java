@@ -130,7 +130,8 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               scheduler,
               new ExponentialBackoffPolicy.Provider(),
               GrpcUtil.STOPWATCH_SUPPLIER,
-              TimeProvider.SYSTEM_TIME_PROVIDER,MessagePrinter.INSTANCE,
+              TimeProvider.SYSTEM_TIME_PROVIDER,
+              MessagePrinter.INSTANCE,
               new TlsContextManagerImpl(bootstrapInfo));
         }
         refCount++;
