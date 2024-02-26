@@ -333,6 +333,18 @@ public class XdsNameResolverTest {
         RouteAction.forCluster(
             cluster2, Collections.emptyList(), TimeUnit.SECONDS.toNanos(20L), null),
         ImmutableMap.of());
+    bootstrapInfo = BootstrapInfo.builder()
+        .servers(ImmutableList.of(ServerInfo.create(
+            "td.googleapis.com", InsecureChannelCredentials.create())))
+        .clientDefaultListenerResourceNameTemplate("test-%s")
+        .node(Node.newBuilder().build())
+        .build();
+    resolver = new XdsNameResolver(null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    // use different ldsResourceName and service authority. The virtualhost lookup should use
+    // service authority.
+    expectedLdsResourceName = "test-" + expectedLdsResourceName;
 
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
