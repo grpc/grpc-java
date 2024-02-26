@@ -120,7 +120,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       Set<SocketAddress> endpoint = ImmutableSet.copyOf(addressGroup.getAddresses());
       endpoints.add(endpoint);
       for (SocketAddress address : addressGroup.getAddresses()) {
-        addressEndpointMap.putIfAbsent(address, endpoint);
+        if (addressEndpointMap.containsKey(address)) {
+          logger.log(ChannelLogLevel.WARNING,
+              "Unexpected duplicated address {0} belongs to multiple endpoints", address);
+        }
+        addressEndpointMap.put(address, endpoint);
       }
     }
     endpointTrackerMap.keySet().retainAll(endpoints);
@@ -496,8 +500,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Tracks additional information about a set of equivalent addresses needed for outlier
-   * detection.
+   * Tracks additional information about the endpoint needed for outlier detection.
    */
   static class EndpointTracker {
 
@@ -662,7 +665,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Maintains a mapping from addresses to their trackers.
+   * Maintains a mapping from endpoint (a set of addresses) to their trackers.
    */
   static class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
     private final Map<Set<SocketAddress>, EndpointTracker> trackerMap;
@@ -685,12 +688,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     /** Adds a new tracker for every given address. */
     void putNewTrackers(OutlierDetectionLoadBalancerConfig config,
         Set<Set<SocketAddress>> endpoints) {
-      for (Set<SocketAddress> endpointAddresses : endpoints) {
-        if (!trackerMap.containsKey(endpointAddresses)) {
-          EndpointTracker t = new EndpointTracker(config);
-          trackerMap.put(endpointAddresses, t);
-        }
-      }
+      endpoints.forEach(e -> trackerMap.putIfAbsent(e, new EndpointTracker(config)));
     }
 
     /** Resets the call counters for all the trackers in the map. */
@@ -886,10 +884,10 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     @Override
     public void ejectOutliers(EndpointTrackerMap trackerMap, long ejectionTimeNanos) {
 
-      // Only consider addresses that have the minimum request volume specified in the config.
+      // Only consider endpoints that have the minimum request volume specified in the config.
       List<EndpointTracker> trackersWithVolume = trackersWithVolume(trackerMap,
           config.failurePercentageEjection.requestVolume);
-      // If we don't have enough addresses with significant volume then there's nothing to do.
+      // If we don't have enough endpoints with significant volume then there's nothing to do.
       if (trackersWithVolume.size() < config.failurePercentageEjection.minimumHosts
           || trackersWithVolume.size() == 0) {
         return;
