@@ -59,7 +59,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * XdsClient implementation
+ * XdsClient implementation.
  */
 @Internal
 public final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
