@@ -19,7 +19,9 @@ package io.grpc.binder.internal;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.content.Context;
+import android.os.DeadObjectException;
 import android.os.Parcel;
+import android.os.RemoteException;
 import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -41,13 +43,14 @@ import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.SecurityPolicy;
+import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
+import io.grpc.binder.internal.OneWayBinderProxies.ThrowingOneWayBinderProxy;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.StreamListener;
-import io.grpc.internal.StreamListener.MessageProducer;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ServerCalls;
 import java.io.IOException;
@@ -140,9 +143,16 @@ public final class BinderClientTransportTest {
 
   private class BinderClientTransportBuilder {
     private SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
+    private OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
 
     public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
       this.securityPolicy = securityPolicy;
+      return this;
+    }
+
+    public BinderClientTransportBuilder setBinderDecorator(
+        OneWayBinderProxy.Decorator binderDecorator) {
+      this.binderDecorator = binderDecorator;
       return this;
     }
 
@@ -158,6 +168,7 @@ public final class BinderClientTransportTest {
           executorServicePool,
           securityPolicy,
           InboundParcelablePolicy.DEFAULT,
+          binderDecorator,
           Attributes.EMPTY);
     }
   }
@@ -273,6 +284,62 @@ public final class BinderClientTransportTest {
     transportListener.awaitReady();
   }
 
+  @Test
+  public void testTxnFailureDuringSetup() throws InterruptedException {
+    BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
+    transport = new BinderClientTransportBuilder()
+        .setBinderDecorator(decorator)
+        .build();
+    transport.start(transportListener).run();
+    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(
+        decorator.takeNextRequest());
+    DeadObjectException doe = new DeadObjectException("ouch");
+    endpointBinder.setRemoteException(doe);
+    decorator.putNextResult(endpointBinder);
+
+    Status shutdownStatus = transportListener.awaitShutdown();
+    assertThat(shutdownStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(shutdownStatus.getCause()).isInstanceOf(RemoteException.class);
+    transportListener.awaitTermination();
+
+    ClientStream stream =
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(streamListener);
+
+    Status streamStatus = streamListener.awaitClose();
+    assertThat(streamStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(streamStatus.getCause()).isSameInstanceAs(doe);
+  }
+
+  @Test
+  public void testTxnFailurePostSetup() throws InterruptedException {
+    BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
+    transport = new BinderClientTransportBuilder()
+        .setBinderDecorator(decorator)
+        .build();
+    transport.start(transportListener).run();
+    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(
+        decorator.takeNextRequest());
+    decorator.putNextResult(endpointBinder);
+    ThrowingOneWayBinderProxy serverBinder = new ThrowingOneWayBinderProxy(
+        decorator.takeNextRequest());
+    DeadObjectException doe = new DeadObjectException("ouch");
+    serverBinder.setRemoteException(doe);
+    decorator.putNextResult(serverBinder);
+    transportListener.awaitReady();
+
+    ClientStream stream =
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(streamListener);
+    stream.writeMessage(marshaller.stream(Empty.getDefaultInstance()));
+    stream.halfClose();
+    stream.request(1);
+
+    Status streamStatus = streamListener.awaitClose();
+    assertThat(streamStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(streamStatus.getCause()).isSameInstanceAs(doe);
+  }
+
   private static void startAndAwaitReady(
       BinderTransport.BinderClientTransport transport, TestTransportListener transportListener) {
     transport.start(transportListener).run();
@@ -288,13 +355,28 @@ public final class BinderClientTransportTest {
     public boolean terminated;
 
     @Override
-    public void transportShutdown(Status shutdownStatus) {
+    public synchronized void transportShutdown(Status shutdownStatus) {
       this.shutdownStatus = shutdownStatus;
+      notifyAll();
+    }
+
+    public synchronized Status awaitShutdown() throws InterruptedException {
+      while (shutdownStatus == null) {
+        wait();
+      }
+      return shutdownStatus;
     }
 
     @Override
-    public void transportTerminated() {
+    public synchronized void transportTerminated() {
       terminated = true;
+      notifyAll();
+    }
+
+    public synchronized void awaitTermination() throws InterruptedException {
+      while (!terminated) {
+        wait();
+      }
     }
 
     @Override

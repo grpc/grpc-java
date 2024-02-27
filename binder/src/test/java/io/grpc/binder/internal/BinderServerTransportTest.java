@@ -71,6 +71,7 @@ public final class BinderServerTransportTest {
             new FixedObjectPool<>(executorService),
             Attributes.EMPTY,
             ImmutableList.of(),
+            OneWayBinderProxy.IDENTITY_DECORATOR,
             mockBinder);
   }
 
