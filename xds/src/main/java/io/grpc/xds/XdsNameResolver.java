@@ -696,7 +696,7 @@ final class XdsNameResolver extends NameResolver {
     // called in syncContext
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
-      String authority = overrideAuthority != null ? overrideAuthority : ldsResourceName;
+      String authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
       if (virtualHost == null) {
         String error = "Failed to find virtual host matching hostname: " + authority;
