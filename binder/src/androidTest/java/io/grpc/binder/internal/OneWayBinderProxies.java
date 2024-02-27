@@ -23,39 +23,39 @@ import javax.annotation.Nullable;
 /**
  * A collection of {@link OneWayBinderProxy}-related test helpers.
  */
-public class OneWayBinderProxies {
+public final class OneWayBinderProxies {
   /**
    * A {@link OneWayBinderProxy.Decorator} that blocks calling threads while an (external) test
    * provides the actual decoration.
    */
-  public static class BlockingBinderDecorator<T extends OneWayBinderProxy> implements
+  public static final class BlockingBinderDecorator<T extends OneWayBinderProxy> implements
       OneWayBinderProxy.Decorator {
-    private final BlockingQueue<OneWayBinderProxy> inbox = new LinkedBlockingQueue<>();
-    private final BlockingQueue<T> outbox = new LinkedBlockingQueue<>();
+    private final BlockingQueue<OneWayBinderProxy> requests = new LinkedBlockingQueue<>();
+    private final BlockingQueue<T> results = new LinkedBlockingQueue<>();
 
     /**
      * Returns the next {@link OneWayBinderProxy} that needs decorating, blocking if it hasn't yet
      * been provided to {@link #decorate}.
      *
-     * <p>Follow this with a call to {@link #put(OneWayBinderProxy)} to provide the result of
-     * {@link #decorate} and unblock the waiting caller.
+     * <p>Follow this with a call to {@link #putNextResult(OneWayBinderProxy)} to provide
+     * the result of {@link #decorate} and unblock the waiting caller.
      */
-    public OneWayBinderProxy take() throws InterruptedException {
-      return inbox.take();
+    public OneWayBinderProxy takeNextRequest() throws InterruptedException {
+      return requests.take();
     }
 
     /**
      * Provides the next value to return from {@link #decorate}.
      */
-    public void put(T next) throws InterruptedException {
-      inbox.put(next);
+    public void putNextResult(T next) throws InterruptedException {
+      results.put(next);
     }
 
     @Override
     public OneWayBinderProxy decorate(OneWayBinderProxy in) {
       try {
-        inbox.put(in);
-        return outbox.take();
+        requests.put(in);
+        return results.take();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new RuntimeException(e);
@@ -66,7 +66,7 @@ public class OneWayBinderProxies {
   /**
    * A {@link OneWayBinderProxy} decorator whose transact method can artificially throw.
    */
-  public static class ThrowingOneWayBinderProxy extends OneWayBinderProxy {
+  public static final class ThrowingOneWayBinderProxy extends OneWayBinderProxy {
     private final OneWayBinderProxy wrapped;
     @Nullable
     private RemoteException remoteException;
@@ -78,6 +78,9 @@ public class OneWayBinderProxies {
 
     /**
      * Causes all future invocations of transact to throw `remoteException`.
+     *
+     * <p>Users are responsible for ensuring their calls "happen-before" the relevant calls to
+     * {@link #transact(int, ParcelHolder)}.
      */
     public void setRemoteException(RemoteException remoteException) {
       this.remoteException = remoteException;
