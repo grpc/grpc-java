@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,26 +16,17 @@
 
 package io.grpc.xds;
 
-import io.grpc.Internal;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import java.util.Map;
+import javax.annotation.Nullable;
 
-/**
- * Accessor for global factory for managing XdsClient instance.
- */
-@Internal
-public final class InternalSharedXdsClientPoolProvider {
-  // Prevent instantiation
-  private InternalSharedXdsClientPoolProvider() {}
+interface XdsClientPoolFactory {
+  void setBootstrapOverride(Map<String, ?> bootstrap);
 
-  public static void setDefaultProviderBootstrapOverride(Map<String, ?> bootstrap) {
-    SharedXdsClientPoolProvider.getDefaultProvider().setBootstrapOverride(bootstrap);
-  }
+  @Nullable
+  ObjectPool<XdsClient> get();
 
-  public static ObjectPool<XdsClient> getOrCreate(String target)
-      throws XdsInitializationException {
-    return SharedXdsClientPoolProvider.getDefaultProvider().getOrCreate();
-  }
+  ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException;
 }

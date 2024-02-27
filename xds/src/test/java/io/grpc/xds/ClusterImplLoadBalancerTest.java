@@ -47,18 +47,22 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.protobuf.ProtoUtils;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
-import io.grpc.xds.Stats.ClusterStats;
-import io.grpc.xds.Stats.UpstreamLocalityStats;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadReportClient;
+import io.grpc.xds.client.LoadStatsManager2;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.Stats.ClusterStats;
+import io.grpc.xds.client.Stats.UpstreamLocalityStats;
+import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProvider;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
@@ -833,21 +837,26 @@ public class ClusterImplLoadBalancerTest {
 
   private final class FakeXdsClient extends XdsClient {
     @Override
-    ClusterDropStats addClusterDropStats(
+    public ClusterDropStats addClusterDropStats(
         ServerInfo lrsServerInfo, String clusterName, @Nullable String edsServiceName) {
       return loadStatsManager.getClusterDropStats(clusterName, edsServiceName);
     }
 
     @Override
-    ClusterLocalityStats addClusterLocalityStats(
+    public ClusterLocalityStats addClusterLocalityStats(
         ServerInfo lrsServerInfo, String clusterName, @Nullable String edsServiceName,
         Locality locality) {
       return loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
     }
 
     @Override
-    TlsContextManager getTlsContextManager() {
+    public TlsContextManager getSecurityConfig() {
       return tlsContextManager;
+    }
+
+    @Override
+    public Map<ServerInfo, LoadReportClient> getServerLrsClientMap() {
+      return null;
     }
   }
 

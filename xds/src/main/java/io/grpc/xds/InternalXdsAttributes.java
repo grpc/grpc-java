@@ -23,6 +23,8 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 
 /**

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -22,9 +22,8 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
-import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -35,7 +34,7 @@ import javax.annotation.Nullable;
 @Internal
 public abstract class Bootstrapper {
 
-  static final String XDSTP_SCHEME = "xdstp:";
+  public static final String XDSTP_SCHEME = "xdstp:";
 
   /**
    * Returns system-loaded bootstrap configuration.
@@ -45,7 +44,7 @@ public abstract class Bootstrapper {
   /**
    * Returns bootstrap configuration given by the raw data in JSON format.
    */
-  BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
+  public BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
     throw new UnsupportedOperationException();
   }
 
@@ -55,24 +54,22 @@ public abstract class Bootstrapper {
    */
   @AutoValue
   @Internal
-  abstract static class ServerInfo {
-    abstract String target();
+  public abstract static class ServerInfo {
+    public abstract String target();
 
-    abstract ChannelCredentials channelCredentials();
+    public abstract Object implSpecificConfig();
 
-    abstract boolean ignoreResourceDeletion();
+    public abstract boolean ignoreResourceDeletion();
 
     @VisibleForTesting
-    static ServerInfo create(
-        String target, ChannelCredentials channelCredentials) {
-      return new AutoValue_Bootstrapper_ServerInfo(target, channelCredentials, false);
+    public static ServerInfo create(String target, @Nullable Object implSpecificConfig) {
+      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig, false);
     }
 
     @VisibleForTesting
-    static ServerInfo create(
-        String target, ChannelCredentials channelCredentials,
-        boolean ignoreResourceDeletion) {
-      return new AutoValue_Bootstrapper_ServerInfo(target, channelCredentials,
+    public static ServerInfo create(
+        String target, Object implSpecificConfig, boolean ignoreResourceDeletion) {
+      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
           ignoreResourceDeletion);
     }
   }
@@ -96,7 +93,7 @@ public abstract class Bootstrapper {
   }
 
   @AutoValue
-  abstract static class AuthorityInfo {
+  public abstract static class AuthorityInfo {
 
     /**
      * A template for the name of the Listener resource to subscribe to for a gRPC client
@@ -108,7 +105,7 @@ public abstract class Bootstrapper {
      *
      * <p>Return value must start with {@code "xdstp://<authority_name>/"}.
      */
-    abstract String clientListenerResourceNameTemplate();
+    public abstract String clientListenerResourceNameTemplate();
 
     /**
      * Ordered list of xDS servers to contact for this authority.
@@ -118,9 +115,9 @@ public abstract class Bootstrapper {
      *
      * <p>Defaults to the top-level server list {@link BootstrapInfo#servers()}. Must not be empty.
      */
-    abstract ImmutableList<ServerInfo> xdsServers();
+    public abstract ImmutableList<ServerInfo> xdsServers();
 
-    static AuthorityInfo create(
+    public static AuthorityInfo create(
         String clientListenerResourceNameTemplate, List<ServerInfo> xdsServers) {
       checkArgument(!xdsServers.isEmpty(), "xdsServers must not be empty");
       return new AutoValue_Bootstrapper_AuthorityInfo(
@@ -135,7 +132,7 @@ public abstract class Bootstrapper {
   @Internal
   public abstract static class BootstrapInfo {
     /** Returns the list of xDS servers to be connected to. Must not be empty. */
-    abstract ImmutableList<ServerInfo> servers();
+    public abstract ImmutableList<ServerInfo> servers();
 
     /** Returns the node identifier to be included in xDS requests. */
     public abstract Node node();
@@ -172,7 +169,7 @@ public abstract class Bootstrapper {
      *
      * <p>Defaults to {@code "%s"}.
      */
-    abstract String clientDefaultListenerResourceNameTemplate();
+    public abstract String clientDefaultListenerResourceNameTemplate();
 
     /**
      * A map of authority name to corresponding configuration.
@@ -196,10 +193,10 @@ public abstract class Bootstrapper {
      *
      * <p>Defaults to an empty map.
      */
-    abstract ImmutableMap<String, AuthorityInfo> authorities();
+    public abstract ImmutableMap<String, AuthorityInfo> authorities();
 
     @VisibleForTesting
-    static Builder builder() {
+    public static Builder builder() {
       return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
           .clientDefaultListenerResourceNameTemplate("%s")
           .authorities(ImmutableMap.<String, AuthorityInfo>of());
@@ -207,23 +204,24 @@ public abstract class Bootstrapper {
 
     @AutoValue.Builder
     @VisibleForTesting
-    abstract static class Builder {
+    public abstract static class Builder {
 
-      abstract Builder servers(List<ServerInfo> servers);
+      public abstract Builder servers(List<ServerInfo> servers);
 
-      abstract Builder node(Node node);
+      public abstract Builder node(Node node);
 
-      abstract Builder certProviders(@Nullable Map<String, CertificateProviderInfo> certProviders);
+      public abstract Builder certProviders(@Nullable Map<String,
+          CertificateProviderInfo> certProviders);
 
-      abstract Builder serverListenerResourceNameTemplate(
+      public abstract Builder serverListenerResourceNameTemplate(
           @Nullable String serverListenerResourceNameTemplate);
 
-      abstract Builder clientDefaultListenerResourceNameTemplate(
+      public abstract Builder clientDefaultListenerResourceNameTemplate(
           String clientDefaultListenerResourceNameTemplate);
 
-      abstract Builder authorities(Map<String, AuthorityInfo> authorities);
+      public abstract Builder authorities(Map<String, AuthorityInfo> authorities);
 
-      abstract BootstrapInfo build();
+      public abstract BootstrapInfo build();
     }
   }
 }

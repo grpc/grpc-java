@@ -73,32 +73,38 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.Bootstrapper.AuthorityInfo;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
 import io.grpc.xds.GrpcXdsTransportFactory.GrpcXdsTransport;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.XdsClient.ResourceMetadata;
-import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
-import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient.ResourceMetadata;
+import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
+import io.grpc.xds.client.XdsClient.ResourceMetadata.UpdateFailureState;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsClientImpl;
+import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.client.XdsTransportFactory;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -138,7 +144,7 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 // The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
 // necessary. Still keep it for future version usage. Remove if too much trouble to maintain.
-public abstract class XdsClientImplTestBase {
+public abstract class GrpcXdsClientImplTestBase {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
@@ -167,7 +173,7 @@ public abstract class XdsClientImplTestBase {
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(ControlPlaneClient.RpcRetryTask.class.getSimpleName());
+          return command.toString().contains("RpcRetryTask");
         }
       };
 
@@ -293,7 +299,6 @@ public abstract class XdsClientImplTestBase {
   private ManagedChannel channelForEmptyAuthority;
   private XdsClientImpl xdsClient;
   private boolean originalEnableLeastRequest;
-  private boolean originalEnableFederation;
   private Server xdsServer;
   private final String serverName = InProcessServerBuilder.generateName();
   private BindableService adsService = createAdsService();
@@ -308,7 +313,6 @@ public abstract class XdsClientImplTestBase {
     // Start the server and the client.
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     XdsResourceType.enableLeastRequest = true;
-    originalEnableFederation = BootstrapperImpl.enableFederation;
     xdsServer = cleanupRule.register(InProcessServerBuilder
         .forName(serverName)
         .addService(adsService)
@@ -346,7 +350,7 @@ public abstract class XdsClientImplTestBase {
 
     xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS,
         ignoreResourceDeletion());
-    Bootstrapper.BootstrapInfo bootstrapInfo =
+    BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
             .node(NODE)
@@ -368,11 +372,12 @@ public abstract class XdsClientImplTestBase {
         new XdsClientImpl(
             xdsTransportFactory,
             bootstrapInfo,
-            Context.ROOT,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
-            timeProvider);
+            timeProvider,
+            MessagePrinter.INSTANCE,
+            new TlsContextManagerImpl(bootstrapInfo));
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -381,7 +386,6 @@ public abstract class XdsClientImplTestBase {
   @After
   public void tearDown() {
     XdsResourceType.enableLeastRequest = originalEnableLeastRequest;
-    BootstrapperImpl.enableFederation = originalEnableFederation;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
@@ -635,7 +639,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withUnknownAuthority() {
-    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://unknown.example.com/envoy.api.v2.Listener/listener1";
@@ -970,7 +973,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName() {
-    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
@@ -991,7 +993,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
-    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp:///envoy.config.listener.v3.Listener/listener1"
         : "xdstp:///envoy.api.v2.Listener/listener1";
@@ -1012,7 +1013,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_witUnorderedContextParams() {
-    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?bar=2&foo=1";
@@ -1033,7 +1033,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withWrongType() {
-    BootstrapperImpl.enableFederation = true;
     String ldsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
         : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
@@ -1055,7 +1054,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void rdsResourceUpdated_withXdstpResourceName_withWrongType() {
-    BootstrapperImpl.enableFederation = true;
     String rdsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1"
         : "xdstp://authority.xds.com/envoy.api.v2.RouteConfiguration/route1";
@@ -1076,7 +1074,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void rdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
-    BootstrapperImpl.enableFederation = true;
     String rdsResourceName = useProtocolV3()
         ? "xdstp://unknown.example.com/envoy.config.route.v3.RouteConfiguration/route1"
         : "xdstp://unknown.example.com/envoy.api.v2.RouteConfiguration/route1";
@@ -1095,7 +1092,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
-    BootstrapperImpl.enableFederation = true;
     String cdsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1"
         : "xdstp://authority.xds.com/envoy.api.v2.Cluster/cluster1";
@@ -1117,7 +1113,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void cdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
-    BootstrapperImpl.enableFederation = true;
     String cdsResourceName = useProtocolV3()
         ? "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1"
         : "xdstp://unknown.example.com/envoy.api.v2.Cluster/cluster1";
@@ -1136,7 +1131,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void edsResourceUpdated_withXdstpResourceName_withWrongType() {
-    BootstrapperImpl.enableFederation = true;
     String edsResourceName = useProtocolV3()
         ? "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
         : "xdstp://authority.xds.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
@@ -1161,7 +1155,6 @@ public abstract class XdsClientImplTestBase {
 
   @Test
   public void edsResourceUpdated_withXdstpResourceName_unknownAuthority() {
-    BootstrapperImpl.enableFederation = true;
     String edsResourceName = useProtocolV3()
         ? "xdstp://unknown.example.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
         : "xdstp://unknown.example.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
@@ -2239,7 +2232,7 @@ public abstract class XdsClientImplTestBase {
     // The response NACKed with errors indicating indices of the failed resources.
     String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
             + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
-            + "io.grpc.xds.XdsResourceType$ResourceInvalidException: "
+            + "io.grpc.xds.client.XdsResourceType$ResourceInvalidException: "
             + "ca_certificate_provider_instance is required in upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -2346,7 +2339,7 @@ public abstract class XdsClientImplTestBase {
 
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "Cluster cluster.googleapis.com: malformed outlier_detection: "
-        + "io.grpc.xds.XdsResourceType$ResourceInvalidException: outlier_detection "
+        + "io.grpc.xds.client.XdsResourceType$ResourceInvalidException: outlier_detection "
         + "max_ejection_percent is > 100";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -3551,7 +3544,7 @@ public abstract class XdsClientImplTestBase {
   @Test
   public void serverSideListenerFound() {
     Assume.assumeTrue(useProtocolV3());
-    XdsClientImplTestBase.DiscoveryRpcCall call =
+    GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3587,7 +3580,7 @@ public abstract class XdsClientImplTestBase {
   @Test
   public void serverSideListenerNotFound() {
     Assume.assumeTrue(useProtocolV3());
-    XdsClientImplTestBase.DiscoveryRpcCall call =
+    GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3614,7 +3607,7 @@ public abstract class XdsClientImplTestBase {
   @Test
   public void serverSideListenerResponseErrorHandling_badDownstreamTlsContext() {
     Assume.assumeTrue(useProtocolV3());
-    XdsClientImplTestBase.DiscoveryRpcCall call =
+    GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
             startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
                 ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3641,7 +3634,7 @@ public abstract class XdsClientImplTestBase {
   @Test
   public void serverSideListenerResponseErrorHandling_badTransportSocketName() {
     Assume.assumeTrue(useProtocolV3());
-    XdsClientImplTestBase.DiscoveryRpcCall call =
+    GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
@@ -3745,11 +3738,12 @@ public abstract class XdsClientImplTestBase {
     return new XdsClientImpl(
         DEFAULT_XDS_TRANSPORT_FACTORY,
         bootstrapInfo,
-        Context.ROOT,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,
         fakeClock.getStopwatchSupplier(),
-        timeProvider);
+        timeProvider,
+        MessagePrinter.INSTANCE,
+        new TlsContextManagerImpl(bootstrapInfo));
   }
 
   private  BootstrapInfo buildBootStrap(String serverUri) {

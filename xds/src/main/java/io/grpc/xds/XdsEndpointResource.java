@@ -27,9 +27,10 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,7 +49,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
 
   private static final XdsEndpointResource instance = new XdsEndpointResource();
 
-  public static XdsEndpointResource getInstance() {
+  static XdsEndpointResource getInstance() {
     return instance;
   }
 
@@ -62,13 +63,18 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  protected String typeName() {
+  public String typeName() {
     return "EDS";
   }
 
   @Override
-  protected String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_EDS;
+  }
+
+  @Override
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return true;
   }
 
   @Override

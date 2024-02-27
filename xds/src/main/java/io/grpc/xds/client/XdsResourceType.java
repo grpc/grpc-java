@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.XdsClient.canonifyResourceName;
-import static io.grpc.xds.XdsClient.isResourceNameValid;
+import static io.grpc.xds.client.XdsClient.canonifyResourceName;
+import static io.grpc.xds.client.XdsClient.isResourceNameValid;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -27,8 +27,8 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.ExperimentalApi;
-import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,32 +41,28 @@ import javax.annotation.Nullable;
 public abstract class XdsResourceType<T extends ResourceUpdate> {
   static final String TYPE_URL_RESOURCE =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
-  static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
+  protected static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   @VisibleForTesting
-  static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
+  public static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
   @VisibleForTesting
-  static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
+  public static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
   @VisibleForTesting
-  static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
-  @VisibleForTesting
-  static boolean enableLeastRequest =
+  public static boolean enableLeastRequest =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
 
   @VisibleForTesting
-  static boolean enableWrr = getFlag("GRPC_EXPERIMENTAL_XDS_WRR_LB", true);
+  public static boolean enableWrr = getFlag("GRPC_EXPERIMENTAL_XDS_WRR_LB", true);
 
   @VisibleForTesting
-  static boolean enablePickFirst = getFlag("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG", true);
+  protected static boolean enablePickFirst = getFlag("GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG", true);
 
-  protected final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
-
-  static final String TYPE_URL_CLUSTER_CONFIG =
+  protected static final String TYPE_URL_CLUSTER_CONFIG =
       "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
-  static final String TYPE_URL_TYPED_STRUCT_UDPA =
+  protected static final String TYPE_URL_TYPED_STRUCT_UDPA =
       "type.googleapis.com/udpa.type.v1.TypedStruct";
-  static final String TYPE_URL_TYPED_STRUCT =
+  protected static final String TYPE_URL_TYPED_STRUCT =
       "type.googleapis.com/xds.type.v3.TypedStruct";
 
   @Nullable
@@ -74,9 +70,11 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
 
   protected abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
 
-  protected abstract String typeName();
+  public abstract String typeName();
 
-  protected abstract String typeUrl();
+  public abstract String typeUrl();
+
+  public abstract boolean shouldRetrieveResourceKeysForArgs();
 
   // Do not confuse with the SotW approach: it is the mechanism in which the client must specify all
   // resource names it is interested in with each request. Different resource types may behave
@@ -108,6 +106,22 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       this.bootstrapInfo = bootstrapInfo;
       this.securityConfig = securityConfig;
       this.subscribedResources = subscribedResources;
+    }
+
+    public ServerInfo getServerInfo() {
+      return serverInfo;
+    }
+
+    public String getNonce() {
+      return nonce;
+    }
+
+    public Bootstrapper.BootstrapInfo getBootstrapInfo() {
+      return bootstrapInfo;
+    }
+
+    public Object getSecurityConfig() {
+      return securityConfig;
     }
   }
 
@@ -186,7 +200,7 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
    * @return Unpacked message
    * @throws InvalidProtocolBufferException if the message couldn't be unpacked
    */
-  static <T extends com.google.protobuf.Message> T unpackCompatibleType(
+  protected static <T extends com.google.protobuf.Message> T unpackCompatibleType(
       Any any, Class<T> clazz, String typeUrl, String compatibleTypeUrl)
       throws InvalidProtocolBufferException {
     if (any.getTypeUrl().equals(compatibleTypeUrl)) {
@@ -251,19 +265,19 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
   }
 
   @VisibleForTesting
-  static final class StructOrError<T> {
+  public static final class StructOrError<T> {
 
     /**
     * Returns a {@link StructOrError} for the successfully converted data object.
     */
-    static <T> StructOrError<T> fromStruct(T struct) {
+    public static <T> StructOrError<T> fromStruct(T struct) {
       return new StructOrError<>(struct);
     }
 
     /**
      * Returns a {@link StructOrError} for the failure to convert the data object.
      */
-    static <T> StructOrError<T> fromError(String errorDetail) {
+    public static <T> StructOrError<T> fromError(String errorDetail) {
       return new StructOrError<>(errorDetail);
     }
 
@@ -285,7 +299,7 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
      */
     @VisibleForTesting
     @Nullable
-    T getStruct() {
+    public T getStruct() {
       return struct;
     }
 
@@ -294,7 +308,7 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
      */
     @VisibleForTesting
     @Nullable
-    String getErrorDetail() {
+    public String getErrorDetail() {
       return errorDetail;
     }
   }

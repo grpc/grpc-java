@@ -60,7 +60,6 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancerProvider;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
@@ -77,6 +76,10 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildCo
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -1196,8 +1199,8 @@ public class ClusterResolverLoadBalancerTest {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-            String resourceName,
-            ResourceWatcher<T> watcher) {
+                                                                  String resourceName,
+                                                                  ResourceWatcher<T> watcher) {
       assertThat(type.typeName()).isEqualTo("EDS");
       assertThat(watchers).containsKey(resourceName);
       watchers.remove(resourceName);

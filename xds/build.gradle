@@ -160,6 +160,7 @@ tasks.named("javadoc").configure {
     exclude 'com/google/security/**'
     exclude 'io/envoyproxy/**'
     // Need to clean up the class structure to reduce how much is exposed
+    exclude 'io/grpc/xds/client/**'
     exclude 'io/grpc/xds/*LoadBalancer*'
     exclude 'io/grpc/xds/Bootstrapper.java'
     exclude 'io/grpc/xds/Envoy*'

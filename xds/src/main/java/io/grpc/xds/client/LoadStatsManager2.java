@@ -14,19 +14,21 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
+import io.grpc.Internal;
 import io.grpc.Status;
-import io.grpc.xds.Stats.BackendLoadMetricStats;
-import io.grpc.xds.Stats.ClusterStats;
-import io.grpc.xds.Stats.DroppedRequests;
-import io.grpc.xds.Stats.UpstreamLocalityStats;
+import io.grpc.xds.client.Stats.BackendLoadMetricStats;
+import io.grpc.xds.client.Stats.ClusterStats;
+import io.grpc.xds.client.Stats.DroppedRequests;
+import io.grpc.xds.client.Stats.UpstreamLocalityStats;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -46,7 +48,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * granularity and load stats (request counts) are maintained in locality granularity.
  */
 @ThreadSafe
-final class LoadStatsManager2 {
+@Internal
+public final class LoadStatsManager2 {
   // Recorders for drops of each cluster:edsServiceName.
   private final Map<String, Map<String, ReferenceCounted<ClusterDropStats>>> allDropStats =
       new HashMap<>();
@@ -55,7 +58,8 @@ final class LoadStatsManager2 {
       Map<Locality, ReferenceCounted<ClusterLocalityStats>>>> allLoadStats = new HashMap<>();
   private final Supplier<Stopwatch> stopwatchSupplier;
 
-  LoadStatsManager2(Supplier<Stopwatch> stopwatchSupplier) {
+  @VisibleForTesting
+  public LoadStatsManager2(Supplier<Stopwatch> stopwatchSupplier) {
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
 
@@ -65,7 +69,8 @@ final class LoadStatsManager2 {
    * ClusterDropStats#release()} to release its <i>hard</i> reference when it is safe to discard
    * future stats for the cluster.
    */
-  synchronized ClusterDropStats getClusterDropStats(
+  @VisibleForTesting
+  public synchronized ClusterDropStats getClusterDropStats(
       String cluster, @Nullable String edsServiceName) {
     if (!allDropStats.containsKey(cluster)) {
       allDropStats.put(cluster, new HashMap<String, ReferenceCounted<ClusterDropStats>>());
@@ -97,7 +102,8 @@ final class LoadStatsManager2 {
    * caller should use {@link ClusterLocalityStats#release} to release its <i>hard</i> reference
    * when it is safe to discard the future stats for the locality.
    */
-  synchronized ClusterLocalityStats getClusterLocalityStats(
+  @VisibleForTesting
+  public synchronized ClusterLocalityStats getClusterLocalityStats(
       String cluster, @Nullable String edsServiceName, Locality locality) {
     if (!allLoadStats.containsKey(cluster)) {
       allLoadStats.put(
@@ -141,7 +147,7 @@ final class LoadStatsManager2 {
    * #getAllClusterStatsReports}. A {@link ClusterStats} includes stats for a specific cluster with
    * edsServiceName.
    */
-  synchronized List<ClusterStats> getClusterStatsReports(String cluster) {
+  public synchronized List<ClusterStats> getClusterStatsReports(String cluster) {
     if (!allDropStats.containsKey(cluster) && !allLoadStats.containsKey(cluster)) {
       return Collections.emptyList();
     }
@@ -238,7 +244,7 @@ final class LoadStatsManager2 {
    * Recorder for dropped requests. One instance per cluster with edsServiceName.
    */
   @ThreadSafe
-  final class ClusterDropStats {
+  public final class ClusterDropStats {
     private final String clusterName;
     @Nullable
     private final String edsServiceName;
@@ -257,7 +263,7 @@ final class LoadStatsManager2 {
     /**
      * Records a dropped request with the specified category.
      */
-    void recordDroppedRequest(String category) {
+    public void recordDroppedRequest(String category) {
       // There is a race between this method and snapshot(), causing one drop recorded but may not
       // be included in any snapshot. This is acceptable and the race window is extremely small.
       AtomicLong counter = categorizedDrops.putIfAbsent(category, new AtomicLong(1L));
@@ -269,7 +275,7 @@ final class LoadStatsManager2 {
     /**
      * Records a dropped request without category.
      */
-    void recordDroppedRequest() {
+    public void recordDroppedRequest() {
       uncategorizedDrops.getAndIncrement();
     }
 
@@ -279,7 +285,7 @@ final class LoadStatsManager2 {
      * drops after this method, but there is no guarantee drops recorded after this point will
      * be included in load reports.
      */
-    void release() {
+    public void release() {
       LoadStatsManager2.this.releaseClusterDropCounter(clusterName, edsServiceName);
     }
 
@@ -313,7 +319,7 @@ final class LoadStatsManager2 {
    * Recorder for client loads. One instance per locality (in cluster with edsService).
    */
   @ThreadSafe
-  final class ClusterLocalityStats {
+  public final class ClusterLocalityStats {
     private final String clusterName;
     @Nullable
     private final String edsServiceName;
@@ -338,7 +344,7 @@ final class LoadStatsManager2 {
     /**
      * Records a request being issued.
      */
-    void recordCallStarted() {
+    public void recordCallStarted() {
       callsIssued.getAndIncrement();
       callsInProgress.getAndIncrement();
     }
@@ -346,7 +352,7 @@ final class LoadStatsManager2 {
     /**
      * Records a request finished with the given status.
      */
-    void recordCallFinished(Status status) {
+    public void recordCallFinished(Status status) {
       callsInProgress.getAndDecrement();
       if (status.isOk()) {
         callsSucceeded.getAndIncrement();
@@ -362,7 +368,7 @@ final class LoadStatsManager2 {
      * increments the finished requests counter and adds the {@code value} to the existing
      * {@link BackendLoadMetricStats}.
      */
-    synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
+    public synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
       namedMetrics.forEach((name, value) -> {
         if (!loadMetricStatsMap.containsKey(name)) {
           loadMetricStatsMap.put(name, new BackendLoadMetricStats(1, value));
@@ -378,7 +384,7 @@ final class LoadStatsManager2 {
      * recording loads after this method, but there is no guarantee loads recorded after this
      * point will be included in load reports.
      */
-    void release() {
+    public void release() {
       LoadStatsManager2.this.releaseClusterLocalityLoadCounter(
           clusterName, edsServiceName, locality);
     }

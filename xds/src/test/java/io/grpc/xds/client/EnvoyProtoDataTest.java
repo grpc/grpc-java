@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import io.grpc.xds.EnvoyProtoData.Address;
-import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.client.EnvoyProtoData.Address;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

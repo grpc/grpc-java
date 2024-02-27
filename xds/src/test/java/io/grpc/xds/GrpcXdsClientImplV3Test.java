@@ -100,6 +100,9 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.XdsClientImpl;
+import io.grpc.xds.client.XdsResourceType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -120,7 +123,7 @@ import org.mockito.Mockito;
  * Tests for {@link XdsClientImpl} with protocol version v3.
  */
 @RunWith(Parameterized.class)
-public class XdsClientImplV3Test extends XdsClientImplTestBase {
+public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
 
   /** Parameterized test cases. */
   @Parameters(name = "ignoreResourceDeletion={0}")
@@ -525,7 +528,7 @@ public class XdsClientImplV3Test extends XdsClientImplTestBase {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
-              .setName(XdsResourceType.AGGREGATE_CLUSTER_TYPE_NAME)
+              .setName(XdsClusterResource.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
       Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);

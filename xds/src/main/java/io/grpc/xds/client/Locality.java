@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2021 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
-/**
- * Throws when fail to bootstrap or initialize the XdsClient.
- */
-public final class XdsInitializationException extends Exception {
-  private static final long serialVersionUID = 1L;
+import com.google.auto.value.AutoValue;
+import io.grpc.Internal;
 
-  public XdsInitializationException(String message) {
-    super(message);
-  }
+/** Represents a network locality. */
+@AutoValue
+@Internal
+public abstract class Locality {
+  public abstract String region();
 
-  public XdsInitializationException(String message, Throwable cause) {
-    super(message, cause);
+  public abstract String zone();
+
+  public abstract String subZone();
+
+  public static Locality create(String region, String zone, String subZone) {
+    return new io.grpc.xds.client.AutoValue_Locality(region, zone, subZone);
   }
 }

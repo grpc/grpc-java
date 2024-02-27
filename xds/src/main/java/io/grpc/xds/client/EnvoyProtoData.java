@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.NullValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import io.grpc.Internal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -45,8 +47,8 @@ import javax.annotation.Nullable;
  * gRPC. If the protobuf message contains invalid data, the conversion should fail and no object
  * should be instantiated.
  */
-// TODO(chengyuanzhang): put data types into smaller categories.
-final class EnvoyProtoData {
+@Internal
+public final class EnvoyProtoData {
 
   // Prevent instantiation.
   private EnvoyProtoData() {
@@ -129,7 +131,7 @@ final class EnvoyProtoData {
               userAgentVersion, clientFeatures);
     }
 
-    static final class Builder {
+    public static final class Builder {
       private String id = "";
       private String cluster = "";
       @Nullable
@@ -147,63 +149,72 @@ final class EnvoyProtoData {
       private Builder() {
       }
 
-      Builder setId(String id) {
+      @VisibleForTesting
+      public Builder setId(String id) {
         this.id = checkNotNull(id, "id");
         return this;
       }
 
-      Builder setCluster(String cluster) {
+      @CanIgnoreReturnValue
+      public Builder setCluster(String cluster) {
         this.cluster = checkNotNull(cluster, "cluster");
         return this;
       }
 
-      Builder setMetadata(Map<String, ?> metadata) {
+      @CanIgnoreReturnValue
+      public Builder setMetadata(Map<String, ?> metadata) {
         this.metadata = checkNotNull(metadata, "metadata");
         return this;
       }
 
-      Builder setLocality(Locality locality) {
+      @CanIgnoreReturnValue
+      public Builder setLocality(Locality locality) {
         this.locality = checkNotNull(locality, "locality");
         return this;
       }
 
+      @CanIgnoreReturnValue
       Builder addListeningAddresses(Address address) {
         listeningAddresses.add(checkNotNull(address, "address"));
         return this;
       }
 
-      Builder setBuildVersion(String buildVersion) {
+      @CanIgnoreReturnValue
+      public Builder setBuildVersion(String buildVersion) {
         this.buildVersion = checkNotNull(buildVersion, "buildVersion");
         return this;
       }
 
-      Builder setUserAgentName(String userAgentName) {
+      @CanIgnoreReturnValue
+      public Builder setUserAgentName(String userAgentName) {
         this.userAgentName = checkNotNull(userAgentName, "userAgentName");
         return this;
       }
 
-      Builder setUserAgentVersion(String userAgentVersion) {
+      @CanIgnoreReturnValue
+      public Builder setUserAgentVersion(String userAgentVersion) {
         this.userAgentVersion = checkNotNull(userAgentVersion, "userAgentVersion");
         return this;
       }
 
-      Builder addClientFeatures(String clientFeature) {
+      @CanIgnoreReturnValue
+      public Builder addClientFeatures(String clientFeature) {
         this.clientFeatures.add(checkNotNull(clientFeature, "clientFeature"));
         return this;
       }
 
-      Node build() {
+      public Node build() {
         return new Node(
             id, cluster, metadata, locality, listeningAddresses, buildVersion, userAgentName,
             userAgentVersion, clientFeatures);
       }
     }
 
-    static Builder newBuilder() {
+    public static Builder newBuilder() {
       return new Builder();
     }
 
-    Builder toBuilder() {
+    public Builder toBuilder() {
       Builder builder = new Builder();
       builder.id = id;
       builder.cluster = cluster;
@@ -217,7 +228,7 @@ final class EnvoyProtoData {
       return builder;
     }
 
-    String getId() {
+    public String getId() {
       return id;
     }
 

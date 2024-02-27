@@ -48,9 +48,9 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
@@ -79,7 +79,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
   private static final XdsRouteConfigureResource instance = new XdsRouteConfigureResource();
 
-  public static XdsRouteConfigureResource getInstance() {
+  static XdsRouteConfigureResource getInstance() {
     return instance;
   }
 
@@ -93,13 +93,18 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  protected String typeName() {
+  public String typeName() {
     return "RDS";
   }
 
   @Override
-  protected String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_RDS;
+  }
+
+  @Override
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return false;
   }
 
   @Override
@@ -118,7 +123,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
-    return processRouteConfiguration((RouteConfiguration) unpackedMessage, filterRegistry);
+    return processRouteConfiguration(
+        (RouteConfiguration) unpackedMessage, FilterRegistry.getDefaultRegistry());
   }
 
   private static RdsUpdate processRouteConfiguration(

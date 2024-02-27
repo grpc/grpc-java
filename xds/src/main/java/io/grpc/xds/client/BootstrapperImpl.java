@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ChannelCredentials;
+import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
-import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -35,100 +34,67 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
 /**
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
  */
-class BootstrapperImpl extends Bootstrapper {
-
-  private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
-  @VisibleForTesting
-  static String bootstrapPathFromEnvVar = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
-  private static final String BOOTSTRAP_PATH_SYS_PROPERTY = "io.grpc.xds.bootstrap";
-  @VisibleForTesting
-  static String bootstrapPathFromSysProp = System.getProperty(BOOTSTRAP_PATH_SYS_PROPERTY);
-  private static final String BOOTSTRAP_CONFIG_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP_CONFIG";
-  @VisibleForTesting
-  static String bootstrapConfigFromEnvVar = System.getenv(BOOTSTRAP_CONFIG_SYS_ENV_VAR);
-  private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY = "io.grpc.xds.bootstrapConfig";
-  @VisibleForTesting
-  static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY);
-
-  // Feature-gating environment variables.
-  static boolean enableFederation =
-      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
+@Internal
+public abstract class BootstrapperImpl extends Bootstrapper {
 
   // Client features.
   @VisibleForTesting
-  static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
+  public static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
   @VisibleForTesting
-  static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
+  public static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
 
   // Server features.
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
 
-  private final XdsLogger logger;
-  private FileReader reader = LocalFileReader.INSTANCE;
+  protected final XdsLogger logger;
 
-  public BootstrapperImpl() {
+  protected FileReader reader = LocalFileReader.INSTANCE;
+
+  protected BootstrapperImpl() {
     logger = XdsLogger.withLogId(InternalLogId.allocate("bootstrapper", null));
   }
 
+  protected abstract String getJsonContent() throws IOException, XdsInitializationException;
+
+  protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
+      throws XdsInitializationException;
+
   /**
-   * Reads and parses bootstrap config. Searches the config (or file of config) with the
-   * following order:
-   *
-   * <ol>
-   *   <li>A filesystem path defined by environment variable "GRPC_XDS_BOOTSTRAP"</li>
-   *   <li>A filesystem path defined by Java System Property "io.grpc.xds.bootstrap"</li>
-   *   <li>Environment variable value of "GRPC_XDS_BOOTSTRAP_CONFIG"</li>
-   *   <li>Java System Property value of "io.grpc.xds.bootstrapConfig"</li>
-   * </ol>
+   * Reads and parses bootstrap config. The config is expected to be in JSON format.
    */
   @SuppressWarnings("unchecked")
   @Override
   public BootstrapInfo bootstrap() throws XdsInitializationException {
-    String filePath =
-        bootstrapPathFromEnvVar != null ? bootstrapPathFromEnvVar : bootstrapPathFromSysProp;
-    String fileContent;
-    if (filePath != null) {
-      logger.log(XdsLogLevel.INFO, "Reading bootstrap file from {0}", filePath);
-      try {
-        fileContent = reader.readFile(filePath);
-      } catch (IOException e) {
-        throw new XdsInitializationException("Fail to read bootstrap file", e);
-      }
-    } else {
-      fileContent = bootstrapConfigFromEnvVar != null
-          ? bootstrapConfigFromEnvVar : bootstrapConfigFromSysProp;
-    }
-    if (fileContent == null) {
-      throw new XdsInitializationException(
-          "Cannot find bootstrap configuration\n"
-              + "Environment variables searched:\n"
-              + "- " + BOOTSTRAP_PATH_SYS_ENV_VAR + "\n"
-              + "- " + BOOTSTRAP_CONFIG_SYS_ENV_VAR + "\n\n"
-              + "Java System Properties searched:\n"
-              + "- " + BOOTSTRAP_PATH_SYS_PROPERTY + "\n"
-              + "- " + BOOTSTRAP_CONFIG_SYS_PROPERTY + "\n\n");
+    String jsonContent;
+    try {
+      jsonContent = getJsonContent();
+    } catch (IOException e) {
+      throw new XdsInitializationException("Fail to read bootstrap file", e);
     }
 
-    logger.log(XdsLogLevel.INFO, "Reading bootstrap from " + filePath);
     Map<String, ?> rawBootstrap;
     try {
-      rawBootstrap = (Map<String, ?>) JsonParser.parse(fileContent);
+      rawBootstrap = (Map<String, ?>) JsonParser.parse(jsonContent);
     } catch (IOException e) {
       throw new XdsInitializationException("Failed to parse JSON", e);
     }
+
     logger.log(XdsLogLevel.DEBUG, "Bootstrap configuration:\n{0}", rawBootstrap);
     return bootstrap(rawBootstrap);
   }
 
   @Override
-  BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
+  public BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
+    return bootstrapBuilder(rawData).build();
+  }
+
+  protected BootstrapInfo.Builder bootstrapBuilder(Map<String, ?> rawData)
+      throws XdsInitializationException {
     BootstrapInfo.Builder builder = BootstrapInfo.builder();
 
     List<?> rawServerConfigs = JsonUtil.getList(rawData, "xds_servers");
@@ -201,22 +167,19 @@ class BootstrapperImpl extends Bootstrapper {
       builder.certProviders(certProviders);
     }
 
-    String grpcServerResourceId =
+    String serverResourceId =
         JsonUtil.getString(rawData, "server_listener_resource_name_template");
     logger.log(
-        XdsLogLevel.INFO, "server_listener_resource_name_template: {0}", grpcServerResourceId);
-    builder.serverListenerResourceNameTemplate(grpcServerResourceId);
+        XdsLogLevel.INFO, "server_listener_resource_name_template: {0}", serverResourceId);
+    builder.serverListenerResourceNameTemplate(serverResourceId);
 
-    if (!enableFederation) {
-      return builder.build();
-    }
-    String grpcClientDefaultListener =
+    String clientDefaultListener =
         JsonUtil.getString(rawData, "client_default_listener_resource_name_template");
     logger.log(
         XdsLogLevel.INFO, "client_default_listener_resource_name_template: {0}",
-        grpcClientDefaultListener);
-    if (grpcClientDefaultListener != null) {
-      builder.clientDefaultListenerResourceNameTemplate(grpcClientDefaultListener);
+        clientDefaultListener);
+    if (clientDefaultListener != null) {
+      builder.clientDefaultListenerResourceNameTemplate(clientDefaultListener);
     }
 
     Map<String, ?> rawAuthoritiesMap =
@@ -253,10 +216,10 @@ class BootstrapperImpl extends Bootstrapper {
       builder.authorities(authorityInfoMapBuilder.buildOrThrow());
     }
 
-    return builder.build();
+    return builder;
   }
 
-  private static List<ServerInfo> parseServerInfos(List<?> rawServerConfigs, XdsLogger logger)
+  private List<ServerInfo> parseServerInfos(List<?> rawServerConfigs, XdsLogger logger)
       throws XdsInitializationException {
     logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", rawServerConfigs.size());
     ImmutableList.Builder<ServerInfo> servers = ImmutableList.builder();
@@ -268,17 +231,7 @@ class BootstrapperImpl extends Bootstrapper {
       }
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
 
-      List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
-      if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
-        throw new XdsInitializationException(
-            "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
-      }
-      ChannelCredentials channelCredentials =
-          parseChannelCredentials(JsonUtil.checkObjectList(rawChannelCredsList), serverUri);
-      if (channelCredentials == null) {
-        throw new XdsInitializationException(
-            "Server " + serverUri + ": no supported channel credentials found");
-      }
+      Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
       boolean ignoreResourceDeletion = false;
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
@@ -287,24 +240,24 @@ class BootstrapperImpl extends Bootstrapper {
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
       }
       servers.add(
-          ServerInfo.create(serverUri, channelCredentials, ignoreResourceDeletion));
+          ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion));
     }
     return servers.build();
   }
 
   @VisibleForTesting
-  void setFileReader(FileReader reader) {
+  public void setFileReader(FileReader reader) {
     this.reader = reader;
   }
 
   /**
    * Reads the content of the file with the given path in the file system.
    */
-  interface FileReader {
+  public interface FileReader {
     String readFile(String path) throws IOException;
   }
 
-  private enum LocalFileReader implements FileReader {
+  protected enum LocalFileReader implements FileReader {
     INSTANCE;
 
     @Override
@@ -321,26 +274,4 @@ class BootstrapperImpl extends Bootstrapper {
     return value;
   }
 
-  @Nullable
-  private static ChannelCredentials parseChannelCredentials(List<Map<String, ?>> jsonList,
-      String serverUri) throws XdsInitializationException {
-    for (Map<String, ?> channelCreds : jsonList) {
-      String type = JsonUtil.getString(channelCreds, "type");
-      if (type == null) {
-        throw new XdsInitializationException(
-            "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
-      }
-      XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
-          .getProvider(type);
-      if (provider != null) {
-        Map<String, ?> config = JsonUtil.getObject(channelCreds, "config");
-        if (config == null) {
-          config = ImmutableMap.of();
-        }
-
-        return provider.newChannelCredentials(config);
-      }
-    }
-    return null;
-  }
 }

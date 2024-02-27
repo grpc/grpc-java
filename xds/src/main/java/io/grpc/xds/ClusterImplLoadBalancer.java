@@ -36,15 +36,18 @@ import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.GracefulSwitchLoadBalancer;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
@@ -106,13 +109,19 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
       xdsClientPool = attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL);
+      assert xdsClientPool != null;
       xdsClient = xdsClientPool.getObject();
     }
     if (callCounterProvider == null) {
       callCounterProvider = attributes.get(InternalXdsAttributes.CALL_COUNTER_PROVIDER);
     }
+
     ClusterImplConfig config =
         (ClusterImplConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (config == null) {
+      return Status.INTERNAL.withDescription("No cluster configuration found");
+    }
+
     if (cluster == null) {
       cluster = config.cluster;
       edsServiceName = config.edsServiceName;
@@ -125,6 +134,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         dropStats = xdsClient.addClusterDropStats(config.lrsServerInfo, cluster, edsServiceName);
       }
     }
+
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
@@ -205,8 +215,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       if (locality == null) {
         locality = Locality.create("", "", "");
       }
-      final ClusterLocalityStats localityStats = lrsServerInfo == null ? null
-          : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster, edsServiceName, locality);
+      final ClusterLocalityStats localityStats =
+          (lrsServerInfo == null)
+              ? null
+              : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster,
+              edsServiceName, locality);
+
       Attributes attrs = args.getAttributes().toBuilder().set(
           ATTR_CLUSTER_LOCALITY_STATS, localityStats).build();
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrs).build();
@@ -285,7 +299,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
       sslContextProviderSupplier =
           tlsContext != null
-              ? new SslContextProviderSupplier(tlsContext, xdsClient.getTlsContextManager())
+              ? new SslContextProviderSupplier(tlsContext,
+                                               (TlsContextManager) xdsClient.getSecurityConfig())
               : null;
     }
 
@@ -348,7 +363,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   private static final class CountingStreamTracerFactory extends
       ClientStreamTracer.Factory {
-    private ClusterLocalityStats stats;
+    private final ClusterLocalityStats stats;
     private final AtomicLong inFlights;
     @Nullable
     private final ClientStreamTracer.Factory delegate;

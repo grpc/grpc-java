@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.Bootstrapper.ServerInfo;
+import static io.grpc.xds.client.Bootstrapper.ServerInfo;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -41,15 +41,17 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsClient.ResourceUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
-import io.grpc.xds.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsClusterResource extends XdsResourceType<CdsUpdate> {
+  @VisibleForTesting
+  static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
@@ -75,13 +77,18 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   @Override
-  protected String typeName() {
+  public String typeName() {
     return "CDS";
   }
 
   @Override
-  protected String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_CDS;
+  }
+
+  @Override
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return true;
   }
 
   @Override
@@ -101,17 +108,17 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
     Set<String> certProviderInstances = null;
-    if (args.bootstrapInfo != null && args.bootstrapInfo.certProviders() != null) {
-      certProviderInstances = args.bootstrapInfo.certProviders().keySet();
+    if (args.getBootstrapInfo() != null && args.getBootstrapInfo().certProviders() != null) {
+      certProviderInstances = args.getBootstrapInfo().certProviders().keySet();
     }
     return processCluster((Cluster) unpackedMessage, certProviderInstances,
-        args.serverInfo, loadBalancerRegistry);
+        args.getServerInfo(), loadBalancerRegistry);
   }
 
   @VisibleForTesting
   static CdsUpdate processCluster(Cluster cluster,
                                   Set<String> certProviderInstances,
-                                  Bootstrapper.ServerInfo serverInfo,
+                                  ServerInfo serverInfo,
                                   LoadBalancerRegistry loadBalancerRegistry)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
@@ -171,11 +178,11 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   }
 
   private static StructOrError<CdsUpdate.Builder> parseNonAggregateCluster(
-      Cluster cluster, Set<String> certProviderInstances, Bootstrapper.ServerInfo serverInfo) {
+      Cluster cluster, Set<String> certProviderInstances, ServerInfo serverInfo) {
     String clusterName = cluster.getName();
-    Bootstrapper.ServerInfo lrsServerInfo = null;
+    ServerInfo lrsServerInfo = null;
     Long maxConcurrentRequests = null;
-    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext = null;
+    UpstreamTlsContext upstreamTlsContext = null;
     OutlierDetection outlierDetection = null;
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {

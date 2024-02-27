@@ -42,6 +42,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
+import io.grpc.xds.client.Locality;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
