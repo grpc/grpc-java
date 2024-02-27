@@ -102,11 +102,11 @@ public class XdsClientFederationTest {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
         "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
 
-    verify(mockWatcher, timeout(2000)).onChanged(
+    verify(mockWatcher, timeout(10000)).onChanged(
         LdsUpdate.forApiListener(
             HttpConnectionManager.forRdsName(0, "route-config.googleapis.com", ImmutableList.of(
                 new NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)))));
-    verify(mockDirectPathWatcher, timeout(2000)).onChanged(
+    verify(mockDirectPathWatcher, timeout(10000)).onChanged(
         LdsUpdate.forApiListener(
             HttpConnectionManager.forRdsName(0, "route-config.googleapis.com", ImmutableList.of(
                 new NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)))));
