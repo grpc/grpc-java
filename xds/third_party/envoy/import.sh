@@ -27,7 +27,6 @@ FILES=(
 envoy/admin/v3/config_dump.proto
 envoy/admin/v3/config_dump_shared.proto
 envoy/annotations/deprecation.proto
-envoy/annotations/resource.proto
 envoy/config/accesslog/v3/accesslog.proto
 envoy/config/bootstrap/v3/bootstrap.proto
 envoy/config/cluster/v3/circuit_breaker.proto
@@ -95,13 +94,7 @@ envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v3/lrs.proto
 envoy/service/status/v3/csds.proto
-envoy/type/http.proto
 envoy/type/http/v3/path_transformation.proto
-envoy/type/matcher/metadata.proto
-envoy/type/matcher/number.proto
-envoy/type/matcher/path.proto
-envoy/type/matcher/regex.proto
-envoy/type/matcher/string.proto
 envoy/type/matcher/v3/filter_state.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
@@ -111,11 +104,7 @@ envoy/type/matcher/v3/regex.proto
 envoy/type/matcher/v3/string.proto
 envoy/type/matcher/v3/struct.proto
 envoy/type/matcher/v3/value.proto
-envoy/type/matcher/value.proto
 envoy/type/metadata/v3/metadata.proto
-envoy/type/percent.proto
-envoy/type/range.proto
-envoy/type/semantic_version.proto
 envoy/type/tracing/v3/custom_tag.proto
 envoy/type/v3/http.proto
 envoy/type/v3/percent.proto
