@@ -130,6 +130,21 @@ public final class RouteDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static RouteDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public RouteDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return RouteDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static RouteDiscoveryServiceBlockingStub newBlockingStub(
@@ -260,6 +275,53 @@ public final class RouteDiscoveryServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service RouteDiscoveryService.
+   * <pre>
+   * The resource_names field in DiscoveryRequest specifies a route configuration.
+   * This allows an Envoy configuration with multiple HTTP listeners (and
+   * associated HTTP connection manager filters) to use different route
+   * configurations. Each listener will bind its HTTP connection manager filter to
+   * a route table via this identifier.
+   * </pre>
+   */
+  public static final class RouteDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<RouteDiscoveryServiceBlockingV2Stub> {
+    private RouteDiscoveryServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected RouteDiscoveryServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new RouteDiscoveryServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+        streamRoutes() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamRoutesMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+        deltaRoutes() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getDeltaRoutesMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getFetchRoutesMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service RouteDiscoveryService.
    * <pre>
    * The resource_names field in DiscoveryRequest specifies a route configuration.
    * This allows an Envoy configuration with multiple HTTP listeners (and

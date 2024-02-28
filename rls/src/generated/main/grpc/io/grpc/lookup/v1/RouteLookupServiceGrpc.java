@@ -61,6 +61,21 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static RouteLookupServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public RouteLookupServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteLookupServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return RouteLookupServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static RouteLookupServiceBlockingStub newBlockingStub(
@@ -146,6 +161,33 @@ public final class RouteLookupServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service RouteLookupService.
+   */
+  public static final class RouteLookupServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingV2Stub> {
+    private RouteLookupServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected RouteLookupServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new RouteLookupServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Lookup returns a target for a single key.
+     * </pre>
+     */
+    public io.grpc.lookup.v1.RouteLookupResponse routeLookup(io.grpc.lookup.v1.RouteLookupRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getRouteLookupMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service RouteLookupService.
    */
   public static final class RouteLookupServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {

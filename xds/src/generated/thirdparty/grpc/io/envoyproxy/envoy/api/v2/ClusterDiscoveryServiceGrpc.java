@@ -126,6 +126,21 @@ public final class ClusterDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ClusterDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public ClusterDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClusterDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ClusterDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ClusterDiscoveryServiceBlockingStub newBlockingStub(
@@ -244,6 +259,49 @@ public final class ClusterDiscoveryServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service ClusterDiscoveryService.
+   * <pre>
+   * Return list of all clusters this proxy will load balance to.
+   * </pre>
+   */
+  public static final class ClusterDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingV2Stub> {
+    private ClusterDiscoveryServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ClusterDiscoveryServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ClusterDiscoveryServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+        streamClusters() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamClustersMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+        deltaClusters() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getDeltaClustersMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchClusters(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getFetchClustersMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service ClusterDiscoveryService.
    * <pre>
    * Return list of all clusters this proxy will load balance to.
    * </pre>

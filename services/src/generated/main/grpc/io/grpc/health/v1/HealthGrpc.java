@@ -92,6 +92,21 @@ public final class HealthGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static HealthBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<HealthBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthBlockingV2Stub>() {
+        @java.lang.Override
+        public HealthBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return HealthBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static HealthBlockingStub newBlockingStub(
@@ -224,6 +239,58 @@ public final class HealthGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service Health.
+   */
+  public static final class HealthBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<HealthBlockingV2Stub> {
+    private HealthBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected HealthBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new HealthBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * If the requested service is unknown, the call will fail with status
+     * NOT_FOUND.
+     * </pre>
+     */
+    public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getCheckMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Performs a watch for the serving status of the requested service.
+     * The server will immediately send back a message indicating the current
+     * serving status.  It will then subsequently send a new message whenever
+     * the service's serving status changes.
+     * If the requested service is unknown when the call is received, the
+     * server will send a message setting the serving status to
+     * SERVICE_UNKNOWN but will *not* terminate the call.  If at some
+     * future point, the serving status of the service becomes known, the
+     * server will send a new message with the service's serving status.
+     * If the call terminates with status UNIMPLEMENTED, then clients
+     * should assume this method is not supported and should not retry the
+     * call.  If the call terminates with any other status (including OK),
+     * clients should retry the call with appropriate exponential backoff.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.health.v1.HealthCheckResponse>
+        watch(io.grpc.health.v1.HealthCheckRequest request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getWatchMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service Health.
    */
   public static final class HealthBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {

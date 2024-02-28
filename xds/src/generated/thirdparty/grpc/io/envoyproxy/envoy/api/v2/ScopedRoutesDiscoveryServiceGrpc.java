@@ -132,6 +132,21 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ScopedRoutesDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public ScopedRoutesDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ScopedRoutesDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ScopedRoutesDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ScopedRoutesDiscoveryServiceBlockingStub newBlockingStub(
@@ -268,6 +283,55 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service ScopedRoutesDiscoveryService.
+   * <pre>
+   * The Scoped Routes Discovery Service (SRDS) API distributes
+   * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`
+   * resources. Each ScopedRouteConfiguration resource represents a "routing
+   * scope" containing a mapping that allows the HTTP connection manager to
+   * dynamically assign a routing table (specified via a
+   * :ref:`RouteConfiguration&lt;envoy_api_msg_RouteConfiguration&gt;` message) to each
+   * HTTP request.
+   * </pre>
+   */
+  public static final class ScopedRoutesDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ScopedRoutesDiscoveryServiceBlockingV2Stub> {
+    private ScopedRoutesDiscoveryServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ScopedRoutesDiscoveryServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ScopedRoutesDiscoveryServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+        streamScopedRoutes() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamScopedRoutesMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+        deltaScopedRoutes() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getDeltaScopedRoutesMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchScopedRoutes(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getFetchScopedRoutesMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service ScopedRoutesDiscoveryService.
    * <pre>
    * The Scoped Routes Discovery Service (SRDS) API distributes
    * :ref:`ScopedRouteConfiguration&lt;envoy_api_msg.ScopedRouteConfiguration&gt;`

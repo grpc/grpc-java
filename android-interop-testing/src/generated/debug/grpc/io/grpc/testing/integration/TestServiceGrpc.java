@@ -274,6 +274,21 @@ public final class TestServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static TestServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public TestServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new TestServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return TestServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static TestServiceBlockingStub newBlockingStub(
@@ -538,6 +553,122 @@ public final class TestServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service TestService.
+   * <pre>
+   * A simple service to test the various types of RPCs and experiment with
+   * performance with various types of payload.
+   * </pre>
+   */
+  public static final class TestServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingV2Stub> {
+    private TestServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected TestServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new TestServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * One empty request followed by one empty response.
+     * </pre>
+     */
+    public io.grpc.testing.integration.EmptyProtos.Empty emptyCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getEmptyCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * One request followed by one response.
+     * </pre>
+     */
+    public io.grpc.testing.integration.Messages.SimpleResponse unaryCall(io.grpc.testing.integration.Messages.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getUnaryCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * One request followed by one response. Response has cache control
+     * headers set such that a caching HTTP proxy (such as GFE) can
+     * satisfy subsequent requests.
+     * </pre>
+     */
+    public io.grpc.testing.integration.Messages.SimpleResponse cacheableUnaryCall(io.grpc.testing.integration.Messages.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getCacheableUnaryCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * One request followed by a sequence of responses (streamed download).
+     * The server returns the payload with client desired type and sizes.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
+        streamingOutputCall(io.grpc.testing.integration.Messages.StreamingOutputCallRequest request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getStreamingOutputCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * A sequence of requests followed by one response (streamed upload).
+     * The server returns the aggregated size of client payload as the result.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingInputCallRequest, io.grpc.testing.integration.Messages.StreamingInputCallResponse>
+        streamingInputCall() {
+      return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
+          getChannel(), getStreamingInputCallMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
+     * A sequence of requests with each request served by the server immediately.
+     * As one request could lead to multiple responses, this interface
+     * demonstrates the idea of full duplexing.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
+        fullDuplexCall() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getFullDuplexCallMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
+     * A sequence of requests followed by a sequence of responses.
+     * The server buffers all the client requests and then serves them in order. A
+     * stream of responses are returned to the client when the server starts with
+     * first request.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
+        halfDuplexCall() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getHalfDuplexCallMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
+     * The test server will not implement this method. It will be used
+     * to test the behavior when clients call unimplemented methods.
+     * </pre>
+     */
+    public io.grpc.testing.integration.EmptyProtos.Empty unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getUnimplementedCallMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service TestService.
    * <pre>
    * A simple service to test the various types of RPCs and experiment with
    * performance with various types of payload.

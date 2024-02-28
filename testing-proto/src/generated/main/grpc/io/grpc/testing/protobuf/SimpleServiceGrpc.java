@@ -157,6 +157,21 @@ public final class SimpleServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static SimpleServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public SimpleServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SimpleServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return SimpleServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static SimpleServiceBlockingStub newBlockingStub(
@@ -314,6 +329,70 @@ public final class SimpleServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service SimpleService.
+   * <pre>
+   * A simple service for test.
+   * </pre>
+   */
+  public static final class SimpleServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingV2Stub> {
+    private SimpleServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected SimpleServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new SimpleServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Simple unary RPC.
+     * </pre>
+     */
+    public io.grpc.testing.protobuf.SimpleResponse unaryRpc(io.grpc.testing.protobuf.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getUnaryRpcMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Simple client-to-server streaming RPC.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>
+        clientStreamingRpc() {
+      return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
+          getChannel(), getClientStreamingRpcMethod(), getCallOptions());
+    }
+
+    /**
+     * <pre>
+     * Simple server-to-client streaming RPC.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.protobuf.SimpleResponse>
+        serverStreamingRpc(io.grpc.testing.protobuf.SimpleRequest request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getServerStreamingRpcMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Simple bidirectional streaming RPC.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>
+        bidiStreamingRpc() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getBidiStreamingRpcMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service SimpleService.
    * <pre>
    * A simple service for test.
    * </pre>

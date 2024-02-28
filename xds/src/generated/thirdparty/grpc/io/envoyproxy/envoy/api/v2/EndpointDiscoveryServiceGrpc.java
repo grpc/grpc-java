@@ -123,6 +123,21 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static EndpointDiscoveryServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public EndpointDiscoveryServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EndpointDiscoveryServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return EndpointDiscoveryServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static EndpointDiscoveryServiceBlockingStub newBlockingStub(
@@ -240,6 +255,50 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service EndpointDiscoveryService.
+   */
+  public static final class EndpointDiscoveryServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingV2Stub> {
+    private EndpointDiscoveryServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected EndpointDiscoveryServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new EndpointDiscoveryServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * The resource_names field in DiscoveryRequest specifies a list of clusters
+     * to subscribe to updates for.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>
+        streamEndpoints() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getStreamEndpointsMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>
+        deltaEndpoints() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getDeltaEndpointsMethod(), getCallOptions());
+    }
+
+    /**
+     */
+    public io.envoyproxy.envoy.api.v2.DiscoveryResponse fetchEndpoints(io.envoyproxy.envoy.api.v2.DiscoveryRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getFetchEndpointsMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service EndpointDiscoveryService.
    */
   public static final class EndpointDiscoveryServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {

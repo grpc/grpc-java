@@ -71,6 +71,21 @@ public final class OpenRcaServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static OpenRcaServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public OpenRcaServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new OpenRcaServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return OpenRcaServiceBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static OpenRcaServiceBlockingStub newBlockingStub(
@@ -180,6 +195,42 @@ public final class OpenRcaServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service OpenRcaService.
+   * <pre>
+   * Out-of-band (OOB) load reporting service for the additional load reporting
+   * agent that does not sit in the request path. Reports are periodically sampled
+   * with sufficient frequency to provide temporal association with requests.
+   * OOB reporting compensates the limitation of in-band reporting in revealing
+   * costs for backends that do not provide a steady stream of telemetry such as
+   * long running stream operations and zero QPS services. This is a server
+   * streaming service, client needs to terminate current RPC and initiate
+   * a new call to change backend reporting frequency.
+   * </pre>
+   */
+  public static final class OpenRcaServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingV2Stub> {
+    private OpenRcaServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected OpenRcaServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new OpenRcaServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     */
+    public io.grpc.stub.BlockingClientCall<?, com.github.xds.data.orca.v3.OrcaLoadReport>
+        streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request) throws java.lang.InterruptedException,
+            io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
+          getChannel(), getStreamCoreMetricsMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service OpenRcaService.
    * <pre>
    * Out-of-band (OOB) load reporting service for the additional load reporting
    * agent that does not sit in the request path. Reports are periodically sampled
