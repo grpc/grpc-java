@@ -180,11 +180,16 @@ envoy/type/v3/range.proto
 envoy/type/v3/semantic_version.proto
 )
 
-pushd `git rev-parse --show-toplevel`/xds/third_party/envoy
+pushd "$(git rev-parse --show-toplevel)/xds/third_party/envoy" > /dev/null
 
 # put the repo in a tmp directory
 tmpdir="$(mktemp -d)"
+echo "Using tmp dir: ${tmpdir}"
+
+# Intentionally expand at the execution time rather than when signalled.
+# shellcheck disable=SC2064
 trap "rm -rf ${tmpdir}" EXIT
+
 curl -Ls "${DOWNLOAD_URL}" | tar xz -C "${tmpdir}"
 
 cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/LICENSE" LICENSE
@@ -192,14 +197,22 @@ cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/NOTICE" NOTICE
 
 rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"
-pushd "${TARGET_PROTO_BASE_DIR}"
+pushd "${TARGET_PROTO_BASE_DIR}" > /dev/null
 
 # copy proto files to project directory
+TOTAL=${#FILES[@]}
+COPIED=0
 for file in "${FILES[@]}"
 do
   mkdir -p "$(dirname "${file}")"
-  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}"
+  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}" && (( COPIED++ ))
 done
-popd
+popd > /dev/null
 
-popd
+popd > /dev/null
+
+echo "Imported ${COPIED} files."
+if (( COPIED != TOTAL )); then
+  echo "Failed importing $(( TOTAL - COPIED )) files." 1>&2
+  exit 1
+fi
