@@ -188,11 +188,6 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
   }
 
   @Override
-  protected boolean useProtocolV3() {
-    return true;
-  }
-
-  @Override
   protected boolean ignoreResourceDeletion() {
     return ignoreResourceDeletion;
   }
