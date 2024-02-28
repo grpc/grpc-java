@@ -203,12 +203,13 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See
    * {@link DevicePolicyManager}.
    */
+  @androidx.annotation.RequiresApi(21)
   public static SecurityPolicy isProfileOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
     return anyPackageWithUidSatisfies(
         applicationContext,
-        pkg -> VERSION.SDK_INT >= 21 && devicePolicyManager.isProfileOwnerApp(pkg),
+        pkg -> devicePolicyManager.isProfileOwnerApp(pkg),
         "Rejected by profile owner policy. No packages found for UID.",
         "Rejected by profile owner policy");
   }
