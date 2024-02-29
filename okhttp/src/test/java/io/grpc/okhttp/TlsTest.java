@@ -117,6 +117,7 @@ public class TlsTest {
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance());
+    server.shutdown();
   }
 
   @Test
@@ -144,6 +145,7 @@ public class TlsTest {
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     assertRpcFails(channel);
+    server.shutdown();
   }
 
   @Test
@@ -168,6 +170,7 @@ public class TlsTest {
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance());
+    server.shutdown();
   }
 
   @Test
@@ -192,6 +195,7 @@ public class TlsTest {
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     assertRpcFails(channel);
+    server.shutdown();
   }
 
   @Test
@@ -208,6 +212,7 @@ public class TlsTest {
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     assertRpcFails(channel);
+    server.shutdown();
   }
 
   @Test
@@ -231,6 +236,7 @@ public class TlsTest {
         .build());
 
     assertRpcFails(channel);
+    server.shutdown();
   }
 
   @Test
@@ -255,6 +261,7 @@ public class TlsTest {
           .build());
 
     SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance());
+    server.shutdown();
   }
 
   @Test
@@ -280,6 +287,7 @@ public class TlsTest {
 
     Status status = assertRpcFails(channel);
     assertThat(status.getCause()).isInstanceOf(SSLPeerUnverifiedException.class);
+    server.shutdown();
   }
 
   private static Server server(ServerCredentials creds) throws IOException {

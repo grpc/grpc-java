@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
@@ -293,7 +294,7 @@ public class OkHttpClientTransportTest {
     Buffer buffer = createMessageFrame(message);
     frameHandler().data(false, 3, buffer, (int) buffer.size(),
         (int) buffer.size());
-    assertThat(logs).hasSize(1);
+    assertWithMessage("log messages: " + logs).that(logs).hasSize(1);
     log = logs.remove(0);
     assertThat(log.getMessage()).startsWith(Direction.INBOUND + " DATA: streamId=" + 3);
     assertThat(log.getLevel()).isEqualTo(Level.FINE);

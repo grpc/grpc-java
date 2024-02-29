@@ -106,6 +106,7 @@ final class OkHttpServerTransport implements ServerTransport,
   private final KeepAliveEnforcer keepAliveEnforcer;
 
   private final Object lock = new Object();
+  private final Object handShakeLock = new Object();
   @GuardedBy("lock")
   private boolean abruptShutdown;
   @GuardedBy("lock")
@@ -164,15 +165,17 @@ final class OkHttpServerTransport implements ServerTransport,
       // The socket implementation is lazily initialized, but had broken thread-safety 
       // for that laziness https://bugs.openjdk.org/browse/JDK-8278326. 
       // As a workaround, we lock to synchronize initialization with shutdown().
+      HandshakerSocketFactory.HandshakeResult result;
       synchronized (lock) {
         socket.setTcpNoDelay(true);
       }
-      HandshakerSocketFactory.HandshakeResult result =
-          config.handshakerSocketFactory.handshake(socket, Attributes.EMPTY);
+      synchronized (handShakeLock) {
+        result = config.handshakerSocketFactory.handshake(socket, Attributes.EMPTY);
+      }
       synchronized (lock) {
         this.socket = result.socket;
+        this.attributes = result.attributes;
       }
-      this.attributes = result.attributes;
 
       int maxQueuedControlFrames = 10000;
       AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this, maxQueuedControlFrames);
