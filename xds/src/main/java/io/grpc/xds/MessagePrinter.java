@@ -53,29 +53,19 @@ final class MessagePrinter implements MessagePrettyPrinter {
       TypeRegistry.Builder registry =
           TypeRegistry.newBuilder()
               .add(Listener.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
               .add(HttpConnectionManager.getDescriptor())
-              .add(io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2
-                  .HttpConnectionManager.getDescriptor())
               .add(HTTPFault.getDescriptor())
-              .add(io.envoyproxy.envoy.config.filter.http.fault.v2.HTTPFault.getDescriptor())
               .add(RBAC.getDescriptor())
               .add(RBACPerRoute.getDescriptor())
               .add(Router.getDescriptor())
-              .add(io.envoyproxy.envoy.config.filter.http.router.v2.Router.getDescriptor())
               // UpstreamTlsContext and DownstreamTlsContext in v3 are not transitively imported
               // by top-level resource types.
               .add(UpstreamTlsContext.getDescriptor())
               .add(DownstreamTlsContext.getDescriptor())
               .add(RouteConfiguration.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.RouteConfiguration.getDescriptor())
               .add(Cluster.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Cluster.getDescriptor())
               .add(ClusterConfig.getDescriptor())
-              .add(io.envoyproxy.envoy.config.cluster.aggregate.v2alpha.ClusterConfig
-                  .getDescriptor())
-              .add(ClusterLoadAssignment.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor());
+              .add(ClusterLoadAssignment.getDescriptor());
       try {
         @SuppressWarnings("unchecked")
         Class<? extends Message> routeLookupClusterSpecifierClass =
