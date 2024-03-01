@@ -81,9 +81,6 @@ import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
-import io.grpc.xds.GrpcXdsClientImplTestBase.DiscoveryRpcCall;
-import io.grpc.xds.GrpcXdsClientImplTestBase.LrsRpcCall;
-import io.grpc.xds.GrpcXdsClientImplTestBase.MessageFactory;
 import io.grpc.xds.GrpcXdsTransportFactory.GrpcXdsTransport;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
@@ -882,7 +879,8 @@ public abstract class GrpcXdsClientImplTestBase {
             mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
 
     // Client sends an ACK LDS request.
-    call.sendResponse(LDS, mf.buildWrappedResourceWithName(innerResource, LDS_RESOURCE), VERSION_1, "0000");
+    call.sendResponse(LDS, mf.buildWrappedResourceWithName(innerResource, LDS_RESOURCE), VERSION_1,
+            "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
@@ -900,7 +898,8 @@ public abstract class GrpcXdsClientImplTestBase {
             mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
 
     // Client sends an ACK LDS request.
-    call.sendResponse(LDS, mf.buildWrappedResourceWithResourceName(innerResource, LDS_RESOURCE), VERSION_1, "0000");
+    call.sendResponse(LDS, mf.buildWrappedResourceWithResourceName(innerResource, LDS_RESOURCE),
+            VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());

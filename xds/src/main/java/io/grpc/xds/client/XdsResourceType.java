@@ -151,12 +151,15 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       String wrappedResourceName = null;
       try {
         if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
-          Resource wrappedResource = unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE,
-              null);
+          Resource wrappedResource = unpackCompatibleType(resource, Resource.class,
+              TYPE_URL_RESOURCE, null);
           resource = wrappedResource.getResource();
-          // Check for resource name in Name of the wrapped Resource, if not also check the ResourceName field.
+          // Check for resource name in Name of the wrapped Resource, if not also check
+          // the ResourceName field.
           if (wrappedResource.getName().isEmpty()) {
-            wrappedResourceName = wrappedResource.hasResourceName() ? wrappedResource.getResourceName().getName() : null;
+            wrappedResourceName = wrappedResource.hasResourceName()
+                ? wrappedResource.getResourceName().getName()
+                : null;
           } else {
             wrappedResourceName = wrappedResource.getName();
           }
