@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -88,6 +89,7 @@ import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.A
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
+import io.envoyproxy.envoy.service.discovery.v3.ResourceName;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -100,6 +102,9 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.GrpcXdsClientImplTestBase.DiscoveryRpcCall;
+import io.grpc.xds.GrpcXdsClientImplTestBase.LrsRpcCall;
+import io.grpc.xds.GrpcXdsClientImplTestBase.MessageFactory;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsResourceType;
@@ -293,6 +298,22 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
       return Any.pack(Resource.newBuilder()
           .setResource(originalResource)
           .build());
+    }
+
+    @Override
+    protected  Any buildWrappedResourceWithName(Any originalResource, String name) {
+      return Any.pack(Resource.newBuilder()
+      .setResource(originalResource)
+      .setName(name)
+      .build());
+    }
+
+    @Override
+    protected Any buildWrappedResourceWithResourceName(Any originalResource, String name) {
+      return Any.pack(Resource.newBuilder()
+      .setResource(originalResource)
+      .setResourceName(ResourceName.newBuilder().setName(name).build())
+      .build());
     }
 
     @SuppressWarnings("unchecked")

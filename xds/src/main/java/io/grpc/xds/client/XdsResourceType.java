@@ -148,8 +148,18 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       Any resource = resources.get(i);
 
       Message unpackedMessage;
+      String wrappedResourceName = null;
       try {
-        resource = maybeUnwrapResources(resource);
+        if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
+          Resource wrappedResource = unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE,
+              null);
+          resource = wrappedResource.getResource();
+          if (wrappedResource.getName().isEmpty()) {
+            wrappedResourceName = wrappedResource.hasResourceName() ? wrappedResource.getResourceName().getName() : null;
+          } else {
+            wrappedResourceName = wrappedResource.getName();
+          }
+        } 
         unpackedMessage = unpackCompatibleType(resource, unpackedClassName(), typeUrl(), null);
       } catch (InvalidProtocolBufferException e) {
         errors.add(String.format("%s response Resource index %d - can't decode %s: %s",
@@ -157,6 +167,10 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
         continue;
       }
       String name = extractResourceName(unpackedMessage);
+      // Fallback to wrapped resource name, if the inner resource doesn't produce a name.
+      if (name.isEmpty()) {
+        name = wrappedResourceName;
+      }
       if (name == null || !isResourceNameValid(name, resource.getTypeUrl())) {
         errors.add(
             "Unsupported resource name: " + name + " for type: " + typeName());
@@ -207,16 +221,6 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       any = any.toBuilder().setTypeUrl(typeUrl).build();
     }
     return any.unpack(clazz);
-  }
-
-  private Any maybeUnwrapResources(Any resource)
-      throws InvalidProtocolBufferException {
-    if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
-      return unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE,
-          null).getResource();
-    } else {
-      return resource;
-    }
   }
 
   static final class ParsedResource<T extends ResourceUpdate> {

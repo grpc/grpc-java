@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
+import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -80,6 +81,9 @@ import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
+import io.grpc.xds.GrpcXdsClientImplTestBase.DiscoveryRpcCall;
+import io.grpc.xds.GrpcXdsClientImplTestBase.LrsRpcCall;
+import io.grpc.xds.GrpcXdsClientImplTestBase.MessageFactory;
 import io.grpc.xds.GrpcXdsTransportFactory.GrpcXdsTransport;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
@@ -103,6 +107,7 @@ import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.client.XdsTransportFactory;
+import io.grpc.xds.client.XdsTransportFactory.XdsTransport;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.io.IOException;
@@ -865,6 +870,42 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+  }
+
+  @Test
+  public void wrappedLdsResource_fallbackToWrappedName() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+
+    Any innerResource = Any.pack(mf.buildListenerWithApiListener("" /* name */,
+            mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+
+    // Client sends an ACK LDS request.
+    call.sendResponse(LDS, mf.buildWrappedResourceWithName(innerResource, LDS_RESOURCE), VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, innerResource, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+  }
+
+  @Test
+  public void wrappedLdsResource_fallbackToWrappedResourceName() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+
+    Any innerResource = Any.pack(mf.buildListenerWithApiListener("" /* name */,
+            mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+
+    // Client sends an ACK LDS request.
+    call.sendResponse(LDS, mf.buildWrappedResourceWithResourceName(innerResource, LDS_RESOURCE), VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, innerResource, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
@@ -3877,6 +3918,10 @@ public abstract class GrpcXdsClientImplTestBase {
     protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
 
     protected abstract Any buildWrappedResource(Any originalResource);
+
+    protected abstract Any buildWrappedResourceWithName(Any originalResource, String name);
+
+    protected abstract Any buildWrappedResourceWithResourceName(Any originalResource, String name);
 
     protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
       return buildListenerWithApiListener(
