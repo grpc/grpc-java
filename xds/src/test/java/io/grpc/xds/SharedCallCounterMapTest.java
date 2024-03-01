@@ -54,6 +54,7 @@ public class SharedCallCounterMapTest {
     final CounterReference ref = counters.get(CLUSTER).get(EDS_SERVICE_NAME);
     counter = null;
     GcFinalization.awaitDone(new FinalizationPredicate() {
+      @SuppressWarnings("deprecation") // Use refersTo(null) once we require Java 17+
       @Override
       public boolean isDone() {
         return ref.isEnqueued();
@@ -71,6 +72,7 @@ public class SharedCallCounterMapTest {
     assertThat(counter.get()).isEqualTo(0);
     counter = null;
     GcFinalization.awaitDone(new FinalizationPredicate() {
+      @SuppressWarnings("deprecation") // Use refersTo(null) once we require Java 17+
       @Override
       public boolean isDone() {
         return ref.isEnqueued();
