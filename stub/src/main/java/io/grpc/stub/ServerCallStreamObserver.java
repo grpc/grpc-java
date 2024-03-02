@@ -64,6 +64,18 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    */
   public abstract void setOnCancelHandler(Runnable onCancelHandler);
 
+
+  /**
+   * A hint to the call that specifies how many bytes must be queued before
+   * {@link #isReady()} will return true. A call may ignore this property if
+   * unsupported. This must be set before any messages are sent.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public abstract void setOnReadyThreshold(int numBytes);
+
   /**
    * Sets the compression algorithm to use for the call. May only be called before sending any
    * messages. Default gRPC servers support the "gzip" compressor.

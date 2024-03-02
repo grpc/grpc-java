@@ -31,6 +31,7 @@ import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
@@ -696,6 +697,20 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       @Override
       public int streamId() {
         return -1;
+      }
+
+      /**
+       * A hint to the stream that specifies how many bytes must be queued before
+       * {@link StreamListener#onReady()} will be called. A stream may ignore this property if
+       * unsupported. This must be set before any messages are sent.
+       *
+       * @param numBytes The number of bytes that must be queued. Must be a
+       *                 positive integer.
+       */
+      @Override
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+      public void setOnReadyThreshold(int numBytes) {
+        // noop
       }
     }
 

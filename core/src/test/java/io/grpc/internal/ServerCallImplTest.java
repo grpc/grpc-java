@@ -148,6 +148,12 @@ public class ServerCallImplTest {
   }
 
   @Test
+  public void setOnReadyThreshold() {
+    call.setOnReadyThreshold(10);
+    verify(stream).setOnReadyThreshold(10);
+  }
+
+  @Test
   public void sendHeader_firstCall() {
     Metadata headers = new Metadata();
 

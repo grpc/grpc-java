@@ -210,6 +210,19 @@ public abstract class ServerCall<ReqT, RespT> {
   }
 
   /**
+   * A hint to the call that specifies how many bytes must be queued before
+   * {@link #isReady()} will return true. A call may ignore this property if
+   * unsupported. This must be set before any messages are sent.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public void setOnReadyThreshold(int numBytes) {
+    // noop
+  }
+
+  /**
    * Returns the level of security guarantee in communications
    *
    * <p>Determining the level of security offered by the transport for RPCs on server-side.

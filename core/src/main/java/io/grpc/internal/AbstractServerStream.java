@@ -19,6 +19,7 @@ package io.grpc.internal;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Decompressor;
+import io.grpc.ExperimentalApi;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -178,6 +179,20 @@ public abstract class AbstractServerStream extends AbstractStream
   }
 
   /**
+   * A hint to the stream that specifies how many bytes must be queued before
+   * {@link StreamListener#onReady()} will be called. A stream may ignore this property if
+   * unsupported. This must be set before any messages are sent.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public void setOnReadyThreshold(int numBytes) {
+    super.setOnReadyThreshold(numBytes);
+  }
+
+  /**
    * This should only be called from the transport thread (except for private interactions with
    * {@code AbstractServerStream}).
    */
@@ -242,6 +257,8 @@ public abstract class AbstractServerStream extends AbstractStream
         deframerClosedTask = null;
       }
     }
+
+
 
     @Override
     protected ServerStreamListener listener() {

@@ -34,6 +34,7 @@ import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
@@ -182,6 +183,20 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @Override
   public void setMessageCompression(boolean enable) {
     stream.setMessageCompression(enable);
+  }
+
+  /**
+   * A hint to the call that specifies how many bytes must be queued before
+   * {@link #isReady()} will return true. A call may ignore this property if
+   * unsupported. This must be set before any messages are sent.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public void setOnReadyThreshold(int numBytes) {
+    stream.setOnReadyThreshold(numBytes);
   }
 
   @Override

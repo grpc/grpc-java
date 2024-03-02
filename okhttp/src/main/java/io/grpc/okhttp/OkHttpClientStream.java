@@ -100,6 +100,9 @@ class OkHttpClientStream extends AbstractClientStream {
             transport,
             initialWindowSize,
             method.getFullMethodName());
+    if (callOptions.getOnReadyThreshold() != null) {
+      this.setOnReadyThreshold(callOptions.getOnReadyThreshold());
+    }
   }
 
   @Override

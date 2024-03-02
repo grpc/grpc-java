@@ -219,6 +219,25 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       });
     }
 
+    /**
+     * A hint to the call that specifies how many bytes must be queued before
+     * {@link #isReady()} will return true. A call may ignore this property if
+     * unsupported. This must be set before any messages are sent.
+     *
+     * @param numBytes The number of bytes that must be queued. Must be a
+     *                 positive integer.
+     */
+    @Override
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+    public void setOnReadyThreshold(final int numBytes) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.setOnReadyThreshold(numBytes);
+        }
+      });
+    }
+
     @Override
     public void setCompression(final String compressor) {
       serializingExecutor.execute(new Runnable() {

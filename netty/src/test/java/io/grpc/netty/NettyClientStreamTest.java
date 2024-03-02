@@ -69,6 +69,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -503,6 +504,32 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         .containsEntry(
             AsciiString.of(":path"),
             AsciiString.of("/testService/test?" + BaseEncoding.base64().encode(msg)));
+  }
+
+
+  @Test
+  public void overrideOnReadyThreshold() throws Exception {
+    AtomicInteger mutableReadyThreshold = new AtomicInteger(0);
+    when(handler.getWriteQueue()).thenReturn(writeQueue);
+    NettyClientStream unused = new NettyClientStream(
+        new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
+        methodDescriptor,
+        new Metadata(),
+        channel,
+        AsciiString.of("localhost"),
+        AsciiString.of("http"),
+        AsciiString.of("agent"),
+        StatsTraceContext.NOOP,
+        transportTracer,
+        CallOptions.DEFAULT.withOnReadyThreshold(Integer.MAX_VALUE),
+        false) {
+      @Override
+      protected void setOnReadyThreshold(int numBytes) {
+        mutableReadyThreshold.set(numBytes);
+        super.setOnReadyThreshold(numBytes);
+      }
+    };
+    assertEquals(Integer.MAX_VALUE, mutableReadyThreshold.get());
   }
 
   @Override

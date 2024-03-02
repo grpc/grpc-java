@@ -92,6 +92,9 @@ class NettyClientStream extends AbstractClientStream {
     this.authority = checkNotNull(authority, "authority");
     this.scheme = checkNotNull(scheme, "scheme");
     this.userAgent = userAgent;
+    if (callOptions.getOnReadyThreshold() != null) {
+      this.setOnReadyThreshold(callOptions.getOnReadyThreshold());
+    }
   }
 
   @Override

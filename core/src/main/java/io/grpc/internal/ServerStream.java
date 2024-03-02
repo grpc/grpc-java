@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import io.grpc.Attributes;
 import io.grpc.Decompressor;
+import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import javax.annotation.Nullable;
@@ -96,4 +97,15 @@ public interface ServerStream extends Stream {
    * The HTTP/2 stream id, or {@code -1} if not supported.
    */
   int streamId();
+
+  /**
+   * A hint to the stream that specifies how many bytes must be queued before
+   * {@link StreamListener#onReady()} will be called. A stream may ignore this property if
+   * unsupported. This must be set before any messages are sent.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  void setOnReadyThreshold(int numBytes);
 }
