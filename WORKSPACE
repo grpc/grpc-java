@@ -40,8 +40,10 @@ maven_install(
         "https://repo.maven.apache.org/maven2/",
     ],
     strict_visibility = True,
+    maven_install_json = "//:maven_install.json",
 )
 
+load("@maven//:defs.bzl", "pinned_maven_install")
+pinned_maven_install()
 load("@maven//:compat.bzl", "compat_repositories")
-
 compat_repositories()
