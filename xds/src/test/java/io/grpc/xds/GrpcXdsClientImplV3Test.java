@@ -89,7 +89,6 @@ import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.A
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
-import io.envoyproxy.envoy.service.discovery.v3.ResourceName;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -297,14 +296,6 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
       return Any.pack(Resource.newBuilder()
       .setResource(originalResource)
       .setName(name)
-      .build());
-    }
-
-    @Override
-    protected Any buildWrappedResourceWithResourceName(Any originalResource, String name) {
-      return Any.pack(Resource.newBuilder()
-      .setResource(originalResource)
-      .setResourceName(ResourceName.newBuilder().setName(name).build())
       .build());
     }
 

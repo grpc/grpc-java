@@ -3857,8 +3857,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
     protected abstract Any buildWrappedResourceWithName(Any originalResource, String name);
 
-    protected abstract Any buildWrappedResourceWithResourceName(Any originalResource, String name);
-
     protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
       return buildListenerWithApiListener(
           name, routeConfiguration, Collections.<Message>emptyList());
