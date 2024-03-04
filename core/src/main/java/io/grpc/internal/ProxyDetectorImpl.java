@@ -135,7 +135,6 @@ class ProxyDetectorImpl implements ProxyDetector {
             Level.WARNING,
             "failed to create URL for Authenticator: {0} {1}", new Object[] {protocol, host});
       }
-      // TODO(spencerfang): consider using java.security.AccessController here
       return Authenticator.requestPasswordAuthentication(
           host, addr, port, protocol, prompt, scheme, url, Authenticator.RequestorType.PROXY);
     }
@@ -144,7 +143,6 @@ class ProxyDetectorImpl implements ProxyDetector {
       new Supplier<ProxySelector>() {
         @Override
         public ProxySelector get() {
-          // TODO(spencerfang): consider using java.security.AccessController here
           return ProxySelector.getDefault();
         }
       };
