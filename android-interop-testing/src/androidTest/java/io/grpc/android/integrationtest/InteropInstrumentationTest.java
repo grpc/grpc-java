@@ -111,19 +111,15 @@ public class InteropInstrumentationTest {
       testCa = null;
     }
 
+    String result = null;
     try {
-      String result = executor.submit(new TestCallable(
+      result = executor.submit(new TestCallable(
               TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, useTls, testCa),
               testCase)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-      assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
-    } catch (ExecutionException e) {
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
       Log.e(LOG_TAG, "Error while executing test case " + testCase, e);
-
-    } catch (InterruptedException e) {
-      Log.e(LOG_TAG, "Interrupted while executing test case " + testCase, e);
-
-    } catch (TimeoutException e) {
-      Log.e(LOG_TAG, "Timed out while executing test case " + testCase, e);
+      result = e.getMessage();
     }
+    assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
   }
 }
