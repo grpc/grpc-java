@@ -172,7 +172,7 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       }
       String name = extractResourceName(unpackedMessage);
       // Fallback to wrapped resource name, if the inner resource finally didn't have a name.
-      if (name.isEmpty()) {
+      if (name == null) {
         name = wrappedResourceName;
       }
       if (name == null || !isResourceNameValid(name, resource.getTypeUrl())) {
