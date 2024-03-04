@@ -58,8 +58,7 @@ public final class BinderServerTransportTest {
 
   @Rule public MockitoRule mocks = MockitoJUnit.rule();
 
-  private final ScheduledExecutorService executorService =
-      new MainThreadScheduledExecutorService();
+  private final ScheduledExecutorService executorService = new MainThreadScheduledExecutorService();
   private final TestTransportListener transportListener = new TestTransportListener();
 
   @Mock IBinder mockBinder;
