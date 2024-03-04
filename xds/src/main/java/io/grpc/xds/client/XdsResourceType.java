@@ -154,15 +154,7 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
           Resource wrappedResource = unpackCompatibleType(resource, Resource.class,
               TYPE_URL_RESOURCE, null);
           resource = wrappedResource.getResource();
-          // Check for resource name in Name of the wrapped Resource, if not also check
-          // the ResourceName field.
-          if (wrappedResource.getName().isEmpty()) {
-            wrappedResourceName = wrappedResource.hasResourceName()
-                ? wrappedResource.getResourceName().getName()
-                : null;
-          } else {
-            wrappedResourceName = wrappedResource.getName();
-          }
+          wrappedResourceName = wrappedResource.getName();
         } 
         unpackedMessage = unpackCompatibleType(resource, unpackedClassName(), typeUrl(), null);
       } catch (InvalidProtocolBufferException e) {
@@ -170,10 +162,10 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
                 typeName(), i, unpackedClassName().getSimpleName(), e.getMessage()));
         continue;
       }
-      String name = extractResourceName(unpackedMessage);
-      // Fallback to wrapped resource name, if the inner resource finally didn't have a name.
-      if (name == null) {
-        name = wrappedResourceName;
+      String name = wrappedResourceName;
+      // Fallback to inner resource name if the outer resource didn't have a name.
+      if (wrappedResourceName == null || wrappedResourceName.isEmpty()) {
+        name = extractResourceName(unpackedMessage);
       }
       if (name == null || !isResourceNameValid(name, resource.getTypeUrl())) {
         errors.add(

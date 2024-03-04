@@ -857,31 +857,12 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
 
-    Any innerResource = Any.pack(mf.buildListenerWithApiListener("" /* name */,
+    Any innerResource = Any.pack(mf.buildListenerWithApiListener("random_name" /* name */,
             mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
 
     // Client sends an ACK LDS request.
     call.sendResponse(LDS, mf.buildWrappedResourceWithName(innerResource, LDS_RESOURCE), VERSION_1,
             "0000");
-    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
-    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
-    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, innerResource, VERSION_1, TIME_INCREMENT);
-    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
-  }
-
-  @Test
-  public void wrappedLdsResource_fallbackToWrappedResourceName() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
-        ldsResourceWatcher);
-
-    Any innerResource = Any.pack(mf.buildListenerWithApiListener("" /* name */,
-            mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
-
-    // Client sends an ACK LDS request.
-    call.sendResponse(LDS, mf.buildWrappedResourceWithResourceName(innerResource, LDS_RESOURCE),
-            VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
