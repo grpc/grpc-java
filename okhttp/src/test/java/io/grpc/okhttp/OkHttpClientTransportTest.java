@@ -294,7 +294,8 @@ public class OkHttpClientTransportTest {
     Buffer buffer = createMessageFrame(message);
     frameHandler().data(false, 3, buffer, (int) buffer.size(),
         (int) buffer.size());
-    assertWithMessage("log messages: " + logs).that(logs).hasSize(1);
+    assertWithMessage("log messages: " + logs.stream().map(LogRecord::getMessage).toArray())
+        .that(logs).hasSize(1);
     log = logs.remove(0);
     assertThat(log.getMessage()).startsWith(Direction.INBOUND + " DATA: streamId=" + 3);
     assertThat(log.getLevel()).isEqualTo(Level.FINE);

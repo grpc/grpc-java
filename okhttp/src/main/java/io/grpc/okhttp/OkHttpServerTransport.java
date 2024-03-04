@@ -174,8 +174,8 @@ final class OkHttpServerTransport implements ServerTransport,
       }
       synchronized (lock) {
         this.socket = result.socket;
-        this.attributes = result.attributes;
       }
+      this.attributes = result.attributes;
 
       int maxQueuedControlFrames = 10000;
       AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this, maxQueuedControlFrames);
