@@ -296,8 +296,8 @@ public class OkHttpClientTransportTest {
     frameHandler().data(false, 3, buffer, (int) buffer.size(),
         (int) buffer.size());
 
-    assertWithMessage("log messages: " +
-        logs.stream().map(LogRecord::getMessage).collect(Collectors.toList()))
+    assertWithMessage("log messages: "
+        + logs.stream().map(LogRecord::getMessage).collect(Collectors.toList()))
         .that(logs).hasSize(1);
     log = logs.remove(0);
     assertThat(log.getMessage()).startsWith(Direction.INBOUND + " DATA: streamId=" + 3);
