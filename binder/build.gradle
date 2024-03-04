@@ -27,6 +27,7 @@ android {
             withJavadocJar()
         }
     }
+    testFixtures { enable true }
 }
 
 repositories {
@@ -70,6 +71,8 @@ dependencies {
     androidTestImplementation libraries.androidx.lifecycle.service
     androidTestImplementation libraries.guava.testlib
     androidTestImplementation testFixtures(project(':grpc-core'))
+
+    testFixturesImplementation libraries.guava.testlib
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -122,4 +125,9 @@ publishing {
             }
         }
     }
+}
+
+afterEvaluate {
+    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseApiPublication) { skip() }
+    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseApiPublication) { skip() }
 }

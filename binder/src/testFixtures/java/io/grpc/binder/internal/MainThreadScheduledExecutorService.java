@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.binder;
+package io.grpc.binder.internal;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -37,7 +37,7 @@ import java.util.concurrent.TimeoutException;
  *
  * <p>Use {@link org.robolectric.shadows.ShadowLooper#idle()} to run queued work.
  */
-class MainThreadScheduledExecutorService extends AbstractExecutorService
+public class MainThreadScheduledExecutorService extends AbstractExecutorService
     implements ScheduledExecutorService {
 
   private final Handler handler = new Handler(Looper.getMainLooper());

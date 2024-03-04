@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static org.robolectric.Shadows.shadowOf;
 
+import io.grpc.binder.internal.MainThreadScheduledExecutorService;
 import android.app.Application;
 import android.content.ComponentName;
 import android.content.Intent;
