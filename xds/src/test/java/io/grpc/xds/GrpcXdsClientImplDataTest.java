@@ -170,22 +170,18 @@ public class GrpcXdsClientImplDataTest {
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
-  private boolean originalEnableWrr;
 
   @Before
   public void setUp() {
     originalEnableRouteLookup = XdsResourceType.enableRouteLookup;
     originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
     assertThat(originalEnableLeastRequest).isFalse();
-    originalEnableWrr = XdsResourceType.enableWrr;
-    assertThat(originalEnableWrr).isTrue();
   }
 
   @After
   public void tearDown() {
     XdsResourceType.enableRouteLookup = originalEnableRouteLookup;
     XdsResourceType.enableLeastRequest = originalEnableLeastRequest;
-    XdsResourceType.enableWrr = originalEnableWrr;
   }
 
   @Test
