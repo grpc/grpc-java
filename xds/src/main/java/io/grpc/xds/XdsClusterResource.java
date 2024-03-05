@@ -141,7 +141,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     ImmutableMap<String, ?> lbPolicyConfig = LoadBalancerConfigFactory.newConfig(cluster,
-        enableLeastRequest, enableWrr, enablePickFirst);
+        enableLeastRequest);
 
     // Validate the LB config by trying to parse it with the corresponding LB provider.
     LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbPolicyConfig);
