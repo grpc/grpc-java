@@ -129,5 +129,5 @@ publishing {
 
 afterEvaluate {
     components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseApiPublication) { skip() }
-    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseApiPublication) { skip() }
+    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseRuntimePublication) { skip() }
 }
