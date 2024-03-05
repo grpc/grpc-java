@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import android.content.Context;
 import android.os.UserHandle;
+import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
@@ -297,6 +298,7 @@ public final class BinderChannelBuilder
    * @return this
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
+  @RequiresApi(30)
   public BinderChannelBuilder bindAsUser(UserHandle targetUserHandle) {
     this.targetUserHandle = targetUserHandle;
     return this;

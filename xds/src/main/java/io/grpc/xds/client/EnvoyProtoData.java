@@ -339,13 +339,6 @@ public final class EnvoyProtoData {
                   .setPortValue(port)).build();
     }
 
-    io.envoyproxy.envoy.api.v2.core.Address toEnvoyProtoAddressV2() {
-      return
-          io.envoyproxy.envoy.api.v2.core.Address.newBuilder().setSocketAddress(
-              io.envoyproxy.envoy.api.v2.core.SocketAddress.newBuilder().setAddress(address)
-                  .setPortValue(port)).build();
-    }
-
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)

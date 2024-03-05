@@ -77,7 +77,7 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api')
-    compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0',
+    compileOnly libraries.jakarta.servlet.api,
             libraries.javax.annotation
 
     implementation project(':grpc-util'),
@@ -94,12 +94,12 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:10.0.14'
+    tomcatTestImplementation libraries.tomcat.embed.core
 
-    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:11.0.7",
-            "org.eclipse.jetty.http2:http2-server:11.0.7"
+    jettyTestImplementation libraries.jetty.servlet,
+            libraries.jetty.http2.server
 
-    undertowTestImplementation 'io.undertow:undertow-servlet-jakartaee9:2.2.13.Final'
+    undertowTestImplementation libraries.undertow.servlet.jakartaee9
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,

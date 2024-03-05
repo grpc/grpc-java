@@ -43,15 +43,12 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.config.cluster.v3.OutlierDetection;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.grpc.BindableService;
 import io.grpc.ChannelCredentials;
 import io.grpc.Context;
@@ -71,7 +68,6 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
-import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -217,10 +213,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private final FakeClock fakeClock = new FakeClock();
   protected final BlockingDeque<DiscoveryRpcCall> resourceDiscoveryCalls =
       new LinkedBlockingDeque<>(1);
-  protected final BlockingDeque<DiscoveryRpcCall> resourceDiscoveryCallsV2 =
-      new LinkedBlockingDeque<>(1);
   protected final Queue<LrsRpcCall> loadReportCalls = new ArrayDeque<>();
-  protected final Queue<LrsRpcCall> loadReportCallsV2 = new ArrayDeque<>();
   protected final AtomicBoolean adsEnded = new AtomicBoolean(true);
   protected final AtomicBoolean lrsEnded = new AtomicBoolean(true);
   private final MessageFactory mf = createMessageFactory();
@@ -301,8 +294,8 @@ public abstract class GrpcXdsClientImplTestBase {
   private boolean originalEnableLeastRequest;
   private Server xdsServer;
   private final String serverName = InProcessServerBuilder.generateName();
-  private BindableService adsService = createAdsService();
-  private BindableService lrsService = createLrsService();
+  private final BindableService adsService = createAdsService();
+  private final BindableService lrsService = createLrsService();
 
   @Before
   public void setUp() throws IOException {
@@ -316,9 +309,7 @@ public abstract class GrpcXdsClientImplTestBase {
     xdsServer = cleanupRule.register(InProcessServerBuilder
         .forName(serverName)
         .addService(adsService)
-        .addService(createAdsServiceV2())
         .addService(lrsService)
-        .addService(createLrsServiceV2())
         .directExecutor()
         .build()
         .start());
@@ -392,8 +383,6 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(lrsEnded.get()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
-
-  protected abstract boolean useProtocolV3();
 
   /** Whether ignore_resource_deletion server feature is enabled for the given test. */
   protected abstract boolean ignoreResourceDeletion();
@@ -556,15 +545,11 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   private void verifyGoldenHcm(HttpConnectionManager hcm) {
-    if (useProtocolV3()) {
-      // The last configured filter has to be a terminal filter.
-      assertThat(hcm.httpFilterConfigs()).isNotNull();
-      assertThat(hcm.httpFilterConfigs()).hasSize(1);
-      assertThat(hcm.httpFilterConfigs().get(0).name).isEqualTo("terminal");
-      assertThat(hcm.httpFilterConfigs().get(0).filterConfig).isEqualTo(RouterFilter.ROUTER_CONFIG);
-    } else {
-      assertThat(hcm.httpFilterConfigs()).isNull();
-    }
+    // The last configured filter has to be a terminal filter.
+    assertThat(hcm.httpFilterConfigs()).isNotNull();
+    assertThat(hcm.httpFilterConfigs()).hasSize(1);
+    assertThat(hcm.httpFilterConfigs().get(0).name).isEqualTo("terminal");
+    assertThat(hcm.httpFilterConfigs().get(0).filterConfig).isEqualTo(RouterFilter.ROUTER_CONFIG);
   }
 
   /**
@@ -639,9 +624,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withUnknownAuthority() {
-    String ldsResourceName = useProtocolV3()
-        ? "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1"
-        : "xdstp://unknown.example.com/envoy.api.v2.Listener/listener1";
+    String ldsResourceName =
+        "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),ldsResourceName,
         ldsResourceWatcher);
     verify(ldsResourceWatcher).onError(errorCaptor.capture());
@@ -973,9 +957,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName() {
-    String ldsResourceName = useProtocolV3()
-        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
-        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
+    String ldsResourceName =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1";
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
@@ -993,9 +976,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
-    String ldsResourceName = useProtocolV3()
-        ? "xdstp:///envoy.config.listener.v3.Listener/listener1"
-        : "xdstp:///envoy.api.v2.Listener/listener1";
+    String ldsResourceName = "xdstp:///envoy.config.listener.v3.Listener/listener1";
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
     assertThat(channelForEmptyAuthority).isNotNull();
@@ -1013,16 +994,14 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_witUnorderedContextParams() {
-    String ldsResourceName = useProtocolV3()
-        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1"
-        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?bar=2&foo=1";
+    String ldsResourceName =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1";
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
 
-    String ldsResourceNameWithUnorderedContextParams = useProtocolV3()
-        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?foo=1&bar=2"
-        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?foo=1&bar=2";
+    String ldsResourceNameWithUnorderedContextParams =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?foo=1&bar=2";
     Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(
         ldsResourceNameWithUnorderedContextParams,
         mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
@@ -1033,9 +1012,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withWrongType() {
-    String ldsResourceName = useProtocolV3()
-        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
-        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
+    String ldsResourceName =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1";
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
@@ -1054,9 +1032,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void rdsResourceUpdated_withXdstpResourceName_withWrongType() {
-    String rdsResourceName = useProtocolV3()
-        ? "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1"
-        : "xdstp://authority.xds.com/envoy.api.v2.RouteConfiguration/route1";
+    String rdsResourceName =
+        "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1";
     DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
         rdsResourceName, rdsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
@@ -1074,9 +1051,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void rdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
-    String rdsResourceName = useProtocolV3()
-        ? "xdstp://unknown.example.com/envoy.config.route.v3.RouteConfiguration/route1"
-        : "xdstp://unknown.example.com/envoy.api.v2.RouteConfiguration/route1";
+    String rdsResourceName =
+        "xdstp://unknown.example.com/envoy.config.route.v3.RouteConfiguration/route1";
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),rdsResourceName,
         rdsResourceWatcher);
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
@@ -1092,9 +1068,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
-    String cdsResourceName = useProtocolV3()
-        ? "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1"
-        : "xdstp://authority.xds.com/envoy.api.v2.Cluster/cluster1";
+    String cdsResourceName = "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1";
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), cdsResourceName,
         cdsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
@@ -1113,9 +1087,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void cdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
-    String cdsResourceName = useProtocolV3()
-        ? "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1"
-        : "xdstp://unknown.example.com/envoy.api.v2.Cluster/cluster1";
+    String cdsResourceName = "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1";
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(),cdsResourceName,
         cdsResourceWatcher);
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
@@ -1131,9 +1103,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void edsResourceUpdated_withXdstpResourceName_withWrongType() {
-    String edsResourceName = useProtocolV3()
-        ? "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
-        : "xdstp://authority.xds.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
+    String edsResourceName =
+        "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1";
     DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), edsResourceName,
         edsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
@@ -1155,9 +1126,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void edsResourceUpdated_withXdstpResourceName_unknownAuthority() {
-    String edsResourceName = useProtocolV3()
-        ? "xdstp://unknown.example.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
-        : "xdstp://unknown.example.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
+    String edsResourceName =
+        "xdstp://unknown.example.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1";
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),
         edsResourceName, edsResourceWatcher);
     verify(edsResourceWatcher).onError(errorCaptor.capture());
@@ -1173,7 +1143,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void ldsResourceUpdate_withFaultInjection() {
-    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
     Any listener = Any.pack(
@@ -1646,7 +1615,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void rdsResourcesDeletedByLdsTcpListener() {
-    Assume.assumeTrue(useProtocolV3());
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
         ldsResourceWatcher);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
@@ -2144,7 +2112,6 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   @SuppressWarnings("deprecation")
   public void cdsResponseWithUpstreamTlsContext() {
-    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
 
@@ -2182,7 +2149,6 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   @SuppressWarnings("deprecation")
   public void cdsResponseWithNewUpstreamTlsContext() {
-    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
 
@@ -2218,7 +2184,6 @@ public abstract class GrpcXdsClientImplTestBase {
    */
   @Test
   public void cdsResponseErrorHandling_badUpstreamTlsContext() {
-    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
 
@@ -2245,7 +2210,6 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   @SuppressWarnings("deprecation")
   public void cdsResponseWithOutlierDetection() {
-    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
 
@@ -2315,7 +2279,6 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   @SuppressWarnings("deprecation")
   public void cdsResponseWithInvalidOutlierDetectionNacks() {
-    Assume.assumeTrue(useProtocolV3());
 
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
@@ -2422,7 +2385,6 @@ public abstract class GrpcXdsClientImplTestBase {
    */
   @Test
   public void cdsResponseErrorHandling_badTransportSocketName() {
-    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
 
@@ -3543,7 +3505,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void serverSideListenerFound() {
-    Assume.assumeTrue(useProtocolV3());
     GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
@@ -3579,7 +3540,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void serverSideListenerNotFound() {
-    Assume.assumeTrue(useProtocolV3());
     GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
@@ -3606,7 +3566,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void serverSideListenerResponseErrorHandling_badDownstreamTlsContext() {
-    Assume.assumeTrue(useProtocolV3());
     GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
             startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
                 ldsResourceWatcher);
@@ -3633,7 +3592,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void serverSideListenerResponseErrorHandling_badTransportSocketName() {
-    Assume.assumeTrue(useProtocolV3());
     GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
         startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
             ldsResourceWatcher);
@@ -3969,84 +3927,5 @@ public abstract class GrpcXdsClientImplTestBase {
         @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters);
 
     protected abstract Message buildTerminalFilter();
-  }
-
-  @Test
-  public void dropXdsV2Lds() {
-    startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
-    assertThat(resourceDiscoveryCallsV2).isEmpty();
-    assertThat(loadReportCallsV2).isEmpty();
-  }
-
-  @Test
-  public void dropXdsV2Cds() {
-    startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
-    assertThat(resourceDiscoveryCallsV2).isEmpty();
-    assertThat(loadReportCallsV2).isEmpty();
-  }
-
-  @Test
-  public void dropXdsV2Rds() {
-    startResourceWatcher(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, rdsResourceWatcher);
-    assertThat(resourceDiscoveryCallsV2).isEmpty();
-    assertThat(loadReportCallsV2).isEmpty();
-  }
-
-  @Test
-  public void dropXdsV2Eds() {
-    startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
-    assertThat(resourceDiscoveryCallsV2).isEmpty();
-    assertThat(loadReportCallsV2).isEmpty();
-  }
-
-  protected BindableService createAdsServiceV2() {
-    return new AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase() {
-      @Override
-      public StreamObserver<DiscoveryRequest> streamAggregatedResources(
-          final StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseObserver) {
-        assertThat(adsEnded.get()).isTrue();  // ensure previous call was ended
-        adsEnded.set(false);
-        @SuppressWarnings("unchecked")
-        StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryRequest> requestObserver =
-            mock(StreamObserver.class);
-        DiscoveryRpcCall call = new DiscoveryRpcCall() {};
-        resourceDiscoveryCallsV2.offer(call);
-        Context.current().addListener(
-            new Context.CancellationListener() {
-              @Override
-              public void cancelled(Context context) {
-                adsEnded.set(true);
-              }
-            }, MoreExecutors.directExecutor());
-        return requestObserver;
-      }
-    };
-  }
-
-  protected BindableService createLrsServiceV2() {
-    return new LoadReportingServiceGrpc.LoadReportingServiceImplBase() {
-      @Override
-      public
-          StreamObserver<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest>
-          streamLoadStats(
-              StreamObserver<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse>
-                  responseObserver) {
-        assertThat(lrsEnded.get()).isTrue();
-        lrsEnded.set(false);
-        @SuppressWarnings("unchecked")
-        StreamObserver<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest> requestObserver =
-            mock(StreamObserver.class);
-        LrsRpcCall call = new LrsRpcCall() {};
-        Context.current().addListener(
-            new Context.CancellationListener() {
-              @Override
-              public void cancelled(Context context) {
-                lrsEnded.set(true);
-              }
-            }, MoreExecutors.directExecutor());
-        loadReportCallsV2.offer(call);
-        return requestObserver;
-      }
-    };
   }
 }
