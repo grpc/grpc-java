@@ -853,6 +853,25 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  public void wrappedLdsResource_preferWrappedName() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+
+    Any innerResource = Any.pack(mf.buildListenerWithApiListener("random_name" /* name */,
+            mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+
+    // Client sends an ACK LDS request.
+    call.sendResponse(LDS, mf.buildWrappedResourceWithName(innerResource, LDS_RESOURCE), VERSION_1,
+            "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, innerResource, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+  }
+
+  @Test
   public void ldsResourceFound_containsRdsName() {
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
@@ -3835,6 +3854,8 @@ public abstract class GrpcXdsClientImplTestBase {
     protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
 
     protected abstract Any buildWrappedResource(Any originalResource);
+
+    protected abstract Any buildWrappedResourceWithName(Any originalResource, String name);
 
     protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
       return buildListenerWithApiListener(

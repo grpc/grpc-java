@@ -290,6 +290,14 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
           .build());
     }
 
+    @Override
+    protected  Any buildWrappedResourceWithName(Any originalResource, String name) {
+      return Any.pack(Resource.newBuilder()
+      .setResource(originalResource)
+      .setName(name)
+      .build());
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     protected Message buildListenerWithApiListener(

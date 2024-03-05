@@ -148,15 +148,24 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       Any resource = resources.get(i);
 
       Message unpackedMessage;
+      String name = "";
       try {
-        resource = maybeUnwrapResources(resource);
+        if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
+          Resource wrappedResource = unpackCompatibleType(resource, Resource.class,
+              TYPE_URL_RESOURCE, null);
+          resource = wrappedResource.getResource();
+          name = wrappedResource.getName();
+        } 
         unpackedMessage = unpackCompatibleType(resource, unpackedClassName(), typeUrl(), null);
       } catch (InvalidProtocolBufferException e) {
         errors.add(String.format("%s response Resource index %d - can't decode %s: %s",
                 typeName(), i, unpackedClassName().getSimpleName(), e.getMessage()));
         continue;
       }
-      String name = extractResourceName(unpackedMessage);
+      // Fallback to inner resource name if the outer resource didn't have a name.
+      if (name.isEmpty()) {
+        name = extractResourceName(unpackedMessage);
+      }
       if (name == null || !isResourceNameValid(name, resource.getTypeUrl())) {
         errors.add(
             "Unsupported resource name: " + name + " for type: " + typeName());
@@ -207,16 +216,6 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       any = any.toBuilder().setTypeUrl(typeUrl).build();
     }
     return any.unpack(clazz);
-  }
-
-  private Any maybeUnwrapResources(Any resource)
-      throws InvalidProtocolBufferException {
-    if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
-      return unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE,
-          null).getResource();
-    } else {
-      return resource;
-    }
   }
 
   static final class ParsedResource<T extends ResourceUpdate> {
