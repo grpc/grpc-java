@@ -853,7 +853,7 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
-  public void wrappedLdsResource_fallbackToWrappedName() {
+  public void wrappedLdsResource_preferWrappedName() {
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
 

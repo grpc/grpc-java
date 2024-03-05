@@ -148,13 +148,13 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       Any resource = resources.get(i);
 
       Message unpackedMessage;
-      String wrappedResourceName = null;
+      String name = "";
       try {
         if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE)) {
           Resource wrappedResource = unpackCompatibleType(resource, Resource.class,
               TYPE_URL_RESOURCE, null);
           resource = wrappedResource.getResource();
-          wrappedResourceName = wrappedResource.getName();
+          name = wrappedResource.getName();
         } 
         unpackedMessage = unpackCompatibleType(resource, unpackedClassName(), typeUrl(), null);
       } catch (InvalidProtocolBufferException e) {
@@ -162,9 +162,8 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
                 typeName(), i, unpackedClassName().getSimpleName(), e.getMessage()));
         continue;
       }
-      String name = wrappedResourceName;
       // Fallback to inner resource name if the outer resource didn't have a name.
-      if (wrappedResourceName == null || wrappedResourceName.isEmpty()) {
+      if (name.isEmpty()) {
         name = extractResourceName(unpackedMessage);
       }
       if (name == null || !isResourceNameValid(name, resource.getTypeUrl())) {
