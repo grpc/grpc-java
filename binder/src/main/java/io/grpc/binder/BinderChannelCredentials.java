@@ -16,8 +16,6 @@
 
 package io.grpc.binder;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import android.content.ComponentName;
 import androidx.annotation.RequiresApi;
 import io.grpc.ChannelCredentials;
