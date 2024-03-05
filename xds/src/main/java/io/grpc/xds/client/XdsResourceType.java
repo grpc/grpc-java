@@ -65,8 +65,18 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
   protected static final String TYPE_URL_TYPED_STRUCT =
       "type.googleapis.com/xds.type.v3.TypedStruct";
 
+  /**
+   * Extract the resource name from an older resource type that included the name within the
+   * resource contents itself. The newer approach has resources wrapped with {@code
+   * envoy.service.discovery.v3.Resource} which then provides the name. This method is only called
+   * for the old approach.
+   *
+   * @return the resource's name, or {@code null} if name is not stored within the resource contents
+   */
   @Nullable
-  protected abstract String extractResourceName(Message unpackedResource);
+  protected String extractResourceName(Message unpackedResource) {
+    return null;
+  }
 
   protected abstract Class<? extends com.google.protobuf.Message> unpackedClassName();
 
