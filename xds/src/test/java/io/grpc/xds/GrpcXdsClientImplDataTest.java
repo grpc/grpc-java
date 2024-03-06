@@ -173,15 +173,15 @@ public class GrpcXdsClientImplDataTest {
 
   @Before
   public void setUp() {
-    originalEnableRouteLookup = XdsResourceType.enableRouteLookup;
-    originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
+    originalEnableRouteLookup = XdsRouteConfigureResource.enableRouteLookup;
+    originalEnableLeastRequest = XdsClusterResource.enableLeastRequest;
     assertThat(originalEnableLeastRequest).isFalse();
   }
 
   @After
   public void tearDown() {
-    XdsResourceType.enableRouteLookup = originalEnableRouteLookup;
-    XdsResourceType.enableLeastRequest = originalEnableLeastRequest;
+    XdsRouteConfigureResource.enableRouteLookup = originalEnableRouteLookup;
+    XdsClusterResource.enableLeastRequest = originalEnableLeastRequest;
   }
 
   @Test
@@ -860,7 +860,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseRouteAction_clusterSpecifier_routeLookupDisabled() {
-    XdsResourceType.enableRouteLookup = false;
+    XdsRouteConfigureResource.enableRouteLookup = false;
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setClusterSpecifierPlugin(CLUSTER_SPECIFIER_PLUGIN.name())
@@ -1465,7 +1465,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpConnectionManager_clusterSpecifierPlugin() throws Exception {
-    XdsResourceType.enableRouteLookup = true;
+    XdsRouteConfigureResource.enableRouteLookup = true;
     RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
         .addGrpcKeybuilders(
             GrpcKeyBuilder.newBuilder()
@@ -1521,7 +1521,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpConnectionManager_duplicatePluginName() throws Exception {
-    XdsResourceType.enableRouteLookup = true;
+    XdsRouteConfigureResource.enableRouteLookup = true;
     RouteLookupConfig routeLookupConfig1 = RouteLookupConfig.newBuilder()
         .addGrpcKeybuilders(
             GrpcKeyBuilder.newBuilder()
@@ -1594,7 +1594,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpConnectionManager_pluginNameNotFound() throws Exception {
-    XdsResourceType.enableRouteLookup = true;
+    XdsRouteConfigureResource.enableRouteLookup = true;
     RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
         .addGrpcKeybuilders(
             GrpcKeyBuilder.newBuilder()
@@ -1647,7 +1647,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpConnectionManager_optionalPlugin() throws ResourceInvalidException {
-    XdsResourceType.enableRouteLookup = true;
+    XdsRouteConfigureResource.enableRouteLookup = true;
 
     // RLS Plugin, and a route to it.
     RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
@@ -1729,7 +1729,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpConnectionManager_validateRdsConfigSource() throws Exception {
-    XdsResourceType.enableRouteLookup = true;
+    XdsRouteConfigureResource.enableRouteLookup = true;
 
     HttpConnectionManager hcm1 =
         HttpConnectionManager.newBuilder()
@@ -1967,7 +1967,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseCluster_leastRequestLbPolicy_defaultLbConfig() throws ResourceInvalidException {
-    XdsResourceType.enableLeastRequest = true;
+    XdsClusterResource.enableLeastRequest = true;
     Cluster cluster = Cluster.newBuilder()
         .setName("cluster-foo.googleapis.com")
         .setType(DiscoveryType.EDS)

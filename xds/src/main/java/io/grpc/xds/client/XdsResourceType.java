@@ -21,7 +21,6 @@ import static io.grpc.xds.client.XdsClient.canonifyResourceName;
 import static io.grpc.xds.client.XdsClient.isResourceNameValid;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Strings;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -44,13 +43,6 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
   protected static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   @VisibleForTesting
   public static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
-  @VisibleForTesting
-  public static boolean enableRouteLookup = getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
-  @VisibleForTesting
-  public static boolean enableLeastRequest =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
-          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
-          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
 
   protected static final String TYPE_URL_CLUSTER_CONFIG =
       "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
@@ -255,15 +247,6 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       this.unpackedResources = unpackedResources;
       this.invalidResources = invalidResources;
       this.errors = errors;
-    }
-  }
-
-  private static boolean getFlag(String envVarName, boolean enableByDefault) {
-    String envVar = System.getenv(envVarName);
-    if (enableByDefault) {
-      return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);
-    } else {
-      return !Strings.isNullOrEmpty(envVar) && Boolean.parseBoolean(envVar);
     }
   }
 
