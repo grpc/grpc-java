@@ -54,8 +54,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -63,10 +61,6 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
-
-  private static final boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
-      System.getenv("GRPC_LOG_XDS_NODE_ID"));
-  private static final Logger classLogger = Logger.getLogger(XdsClientImpl.class.getName());
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -127,9 +121,6 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
-    if (LOG_XDS_NODE_ID) {
-      classLogger.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
-    }
   }
 
   @Override
