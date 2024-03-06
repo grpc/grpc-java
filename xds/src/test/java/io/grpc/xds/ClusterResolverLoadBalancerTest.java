@@ -413,8 +413,8 @@ public class ClusterResolverLoadBalancerTest {
         outlierDetection.failurePercentageEjection().requestVolume());
 
     // The wrapped configuration should not have been tampered with.
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) outlierDetectionConfig.childPolicy.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(outlierDetectionConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig =
