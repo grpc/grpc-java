@@ -34,6 +34,8 @@ import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -44,6 +46,9 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
+  private static final boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
+      System.getenv("GRPC_LOG_XDS_NODE_ID"));
+  private static final Logger log = Logger.getLogger(XdsClientImpl.class.getName());
 
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
@@ -123,6 +128,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     public XdsClient getObject() {
       synchronized (lock) {
         if (refCount == 0) {
+          if (LOG_XDS_NODE_ID) {
+            log.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
+          }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           xdsClient = new XdsClientImpl(
               DEFAULT_XDS_TRANSPORT_FACTORY,
