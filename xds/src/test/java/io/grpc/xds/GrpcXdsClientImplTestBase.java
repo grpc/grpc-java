@@ -304,8 +304,8 @@ public abstract class GrpcXdsClientImplTestBase {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);
 
     // Start the server and the client.
-    originalEnableLeastRequest = XdsResourceType.enableLeastRequest;
-    XdsResourceType.enableLeastRequest = true;
+    originalEnableLeastRequest = XdsClusterResource.enableLeastRequest;
+    XdsClusterResource.enableLeastRequest = true;
     xdsServer = cleanupRule.register(InProcessServerBuilder
         .forName(serverName)
         .addService(adsService)
@@ -376,7 +376,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @After
   public void tearDown() {
-    XdsResourceType.enableLeastRequest = originalEnableLeastRequest;
+    XdsClusterResource.enableLeastRequest = originalEnableLeastRequest;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
