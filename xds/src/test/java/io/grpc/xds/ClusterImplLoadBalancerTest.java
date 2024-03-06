@@ -52,6 +52,7 @@ import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -119,8 +120,8 @@ public class ClusterImplLoadBalancerTest {
   private final FakeClock fakeClock = new FakeClock();
   private final Locality locality =
       Locality.create("test-region", "test-zone", "test-subzone");
-  private final PolicySelection roundRobin =
-      new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
+  private final Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+      new FakeLoadBalancerProvider("round_robin"), null);
   private final List<FakeLoadBalancer> downstreamBalancers = new ArrayList<>();
   private final FakeTlsContextManager tlsContextManager = new FakeTlsContextManager();
   private final LoadStatsManager2 loadStatsManager =
