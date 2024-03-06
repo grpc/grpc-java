@@ -84,6 +84,7 @@ protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.7"
 robolectric = "org.robolectric:robolectric:4.11.1"
+robolectric-android = "org.robolectric:android-all:14-robolectric-10818077"
 signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.0.14"

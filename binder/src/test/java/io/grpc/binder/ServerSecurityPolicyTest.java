@@ -62,6 +62,7 @@ public final class ServerSecurityPolicyTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // We must test even our deprecated public APIs.
   public void testDefaultInternalOnly_legacyApi() {
     policy = new ServerSecurityPolicy();
     assertThat(policy.checkAuthorizationForService(MY_UID, SERVICE1).getCode())
@@ -80,6 +81,7 @@ public final class ServerSecurityPolicyTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // We must test even our deprecated public APIs.
   public void testInternalOnly_AnotherUid_legacyApi() {
     policy = new ServerSecurityPolicy();
     assertThat(policy.checkAuthorizationForService(OTHER_UID, SERVICE1).getCode())
@@ -98,6 +100,7 @@ public final class ServerSecurityPolicyTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")  // We must test even our deprecated public APIs.
   public void testBuilderDefault_legacyApi() {
     policy = ServerSecurityPolicy.newBuilder().build();
     assertThat(policy.checkAuthorizationForService(MY_UID, SERVICE1).getCode())
@@ -125,6 +128,7 @@ public final class ServerSecurityPolicyTest {
 
 
   @Test
+  @SuppressWarnings("deprecation")  // We must test even our deprecated public APIs.
   public void testPerService_legacyApi() {
     policy =
         ServerSecurityPolicy.newBuilder()
@@ -251,6 +255,7 @@ public final class ServerSecurityPolicyTest {
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
   }
   @Test
+  @SuppressWarnings("deprecation")  // We must test even our deprecated public APIs.
   public void testPerServiceNoDefault_legacyApi() {
     policy =
         ServerSecurityPolicy.newBuilder()

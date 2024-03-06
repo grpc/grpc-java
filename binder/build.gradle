@@ -56,6 +56,10 @@ dependencies {
     testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core'))
 
+    // For non-SDK (@hide) `android.annotation`s strangely retained by many
+    // robolectric shadows.
+    testCompileOnly libraries.robolectric.android
+
     androidTestAnnotationProcessor libraries.auto.value
     androidTestImplementation project(':grpc-testing')
     androidTestImplementation project(':grpc-protobuf-lite')
@@ -78,7 +82,6 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
             "-Xlint:-cast"
     ]
-    options.compilerArgs -= ["-Werror"] // https://github.com/grpc/grpc-java/issues/10297
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
 }
 
