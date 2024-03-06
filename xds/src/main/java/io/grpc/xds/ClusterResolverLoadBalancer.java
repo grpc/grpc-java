@@ -778,7 +778,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     OutlierDetectionLoadBalancerConfig.Builder configBuilder
         = new OutlierDetectionLoadBalancerConfig.Builder();
 
-    configBuilder.setChildPolicy(childPolicy);
+    configBuilder.setChildConfig(GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+        childPolicy.getProvider(), childPolicy.getConfig()));
 
     if (outlierDetection.intervalNanos() != null) {
       configBuilder.setIntervalNanos(outlierDetection.intervalNanos());
