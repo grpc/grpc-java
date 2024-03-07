@@ -99,8 +99,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         return addressValidityStatus;
       }
 
-      // We don't care about reuse because we don't want to activate them
-      addMissingChildrenAndIdReuse(newChildren);
+      addMissingChildren(newChildren);
       updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
 
       // Now do the ringhash specific logic with weights and building the ring

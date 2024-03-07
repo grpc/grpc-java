@@ -358,9 +358,6 @@ public class MultiChildLoadBalancerTest {
       ConnectivityState overallState = null;
       final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
       for (ChildLbState childLbState : getChildLbStates()) {
-        if (childLbState.isDeactivated()) {
-          continue;
-        }
         childPickers.put(childLbState.getKey(), childLbState.getCurrentPicker());
         overallState = aggregateState(overallState, childLbState.getCurrentState());
       }
