@@ -177,15 +177,11 @@ public class RingHashLoadBalancerTest {
 
     RingHashChildLbState childLbState =
         (RingHashChildLbState) loadBalancer.getChildLbStates().iterator().next();
-    assertThat(childLbState.isDeactivated()).isTrue();
+    assertThat(subchannels.get(Collections.singletonList(childLbState.getEag()))).isNull();
 
     // Picking subchannel triggers connection.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     pickerCaptor.getValue().pickSubchannel(args);
-    assertThat(childLbState.isDeactivated()).isFalse();
-    String expectedLbType = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
-        ? "PickFirstLeafLoadBalancer" : "PickFirstLoadBalancer";
-    assertThat(childLbState.getLb().delegateType()).isEqualTo(expectedLbType);
     Subchannel subchannel = subchannels.get(Collections.singletonList(childLbState.getEag()));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
     inOrder.verify(subchannel).requestConnection();
@@ -423,7 +419,8 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Create subchannel for the first address
-    ((RingHashChildLbState)loadBalancer.getChildLbStateEag(servers.get(0))).activate();
+    ((RingHashChildLbState) loadBalancer.getChildLbStateEag(servers.get(0))).getCurrentPicker()
+        .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
     verifyConnection(1);
 
     reset(helper);
@@ -944,7 +941,8 @@ public class RingHashLoadBalancerTest {
 
     // Activate them all to create the child LB and subchannel
     for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
-      ((RingHashChildLbState)childLbState).activate();
+      childLbState.getCurrentPicker()
+          .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
       assertThat(childLbState.getResolvedAddresses().getAttributes().get(IS_PETIOLE_POLICY))
           .isTrue();
     }
