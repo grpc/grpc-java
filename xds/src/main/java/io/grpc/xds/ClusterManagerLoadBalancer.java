@@ -57,6 +57,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   protected final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final XdsLogger logger;
+  private ResolvedAddresses lastResolvedAddresses;
 
   ClusterManagerLoadBalancer(Helper helper) {
     super(helper);
@@ -101,23 +102,32 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
    */
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    try {
-      resolvingAddresses = true;
-
-      // process resolvedAddresses to update children
-      AcceptResolvedAddrRetVal acceptRetVal =
-          acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
+    if (lastResolvedAddresses != null) {
+      // Handle deactivated children
+      ClusterManagerConfig config = (ClusterManagerConfig)
+          resolvedAddresses.getLoadBalancingPolicyConfig();
+      ClusterManagerConfig lastConfig = (ClusterManagerConfig)
+          lastResolvedAddresses.getLoadBalancingPolicyConfig();
+      Map<String, PolicySelection> adjChildPolicies = new HashMap<>(config.childPolicies);
+      for (Entry<String, PolicySelection> entry : lastConfig.childPolicies.entrySet()) {
+        ClusterManagerLbState state = (ClusterManagerLbState) getChildLbState(entry.getKey());
+        if (adjChildPolicies.containsKey(entry.getKey())) {
+          if (state.deletionTimer != null) {
+            state.reactivateChild();
+          }
+        } else if (state != null) {
+          adjChildPolicies.put(entry.getKey(), entry.getValue());
+          if (state.deletionTimer == null) {
+            state.deactivateChild();
+          }
+        }
       }
-
-      // Update the picker
-      updateOverallBalancingState();
-
-      return acceptRetVal.status;
-    } finally {
-      resolvingAddresses = false;
+      config = new ClusterManagerConfig(adjChildPolicies);
+      resolvedAddresses =
+          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build();
     }
+    lastResolvedAddresses = resolvedAddresses;
+    return super.acceptResolvedAddresses(resolvedAddresses);
   }
 
   /**
@@ -130,7 +140,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     ConnectivityState overallState = null;
     final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
     for (ChildLbState childLbState : getChildLbStates()) {
-      if (childLbState.isDeactivated()) {
+      if (((ClusterManagerLbState) childLbState).deletionTimer != null) {
         continue;
       }
       childPickers.put(childLbState.getKey(), childLbState.getCurrentPicker());
@@ -171,7 +181,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     boolean gotoTransientFailure = true;
     for (ChildLbState state : getChildLbStates()) {
-      if (!state.isDeactivated()) {
+      if (((ClusterManagerLbState) state).deletionTimer == null) {
         gotoTransientFailure = false;
         handleNameResolutionError(state, error);
       }
@@ -203,34 +213,36 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
 
     @Override
     protected void shutdown() {
-      if (deletionTimer != null && deletionTimer.isPending()) {
+      if (deletionTimer != null) {
         deletionTimer.cancel();
+        deletionTimer = null;
       }
       super.shutdown();
     }
 
-    @Override
-    protected void reactivate(Factory policyFactory) {
-      if (deletionTimer != null && deletionTimer.isPending()) {
-        deletionTimer.cancel();
-        logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
-      }
-
-      super.reactivate(policyFactory);
+    void reactivateChild() {
+      assert deletionTimer != null;
+      deletionTimer.cancel();
+      deletionTimer = null;
+      logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
     }
 
-    @Override
-    protected void deactivate() {
-      if (isDeactivated()) {
-        return;
-      }
+    void deactivateChild() {
+      assert deletionTimer == null;
 
       class DeletionTask implements Runnable {
 
         @Override
         public void run() {
-          shutdown();
-          removeChild(getKey());
+          ClusterManagerConfig config = (ClusterManagerConfig)
+              lastResolvedAddresses.getLoadBalancingPolicyConfig();
+          Map<String, PolicySelection> childPolicies = new HashMap<>(config.childPolicies);
+          PolicySelection removed = childPolicies.remove(getKey());
+          assert removed != null;
+          config = new ClusterManagerConfig(childPolicies);
+          lastResolvedAddresses =
+              lastResolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build();
+          acceptResolvedAddresses(lastResolvedAddresses);
         }
       }
 
@@ -240,7 +252,6 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
               DELAYED_CHILD_DELETION_TIME_MINUTES,
               TimeUnit.MINUTES,
               timeService);
-      setDeactivated();
       logger.log(XdsLogLevel.DEBUG, "Child balancer {0} deactivated", getKey());
     }
 
@@ -258,7 +269,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
         // when the child instance exits deactivated state.
         setCurrentState(newState);
         setCurrentPicker(newPicker);
-        if (!isDeactivated() && !resolvingAddresses) {
+        if (deletionTimer == null && !resolvingAddresses) {
           updateOverallBalancingState();
         }
       }
