@@ -286,10 +286,11 @@ public class ClusterResolverLoadBalancerTest {
     PriorityChildConfig priorityChildConfig =
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
     assertThat(priorityChildConfig.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), "ring_hash_experimental");
     RingHashConfig ringHashConfig = (RingHashConfig)
@@ -326,10 +327,11 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[child1]");
     PriorityChildConfig priorityChildConfig =
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig = (WrrLocalityConfig)
@@ -373,10 +375,11 @@ public class ClusterResolverLoadBalancerTest {
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
 
     // The child config for priority should be outlier detection.
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo("outlier_detection_experimental");
-    OutlierDetectionLoadBalancerConfig outlierDetectionConfig =
-        (OutlierDetectionLoadBalancerConfig) priorityChildConfig.policySelection.getConfig();
+    OutlierDetectionLoadBalancerConfig outlierDetectionConfig = (OutlierDetectionLoadBalancerConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
 
     // The outlier detection config should faithfully represent what came down from xDS.
     assertThat(outlierDetectionConfig.intervalNanos).isEqualTo(outlierDetection.intervalNanos());
@@ -480,10 +483,11 @@ public class ClusterResolverLoadBalancerTest {
 
     PriorityChildConfig priorityChildConfig1 = priorityLbConfig.childConfigs.get(priority1);
     assertThat(priorityChildConfig1.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig1.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig1.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig1 =
-        (ClusterImplConfig) priorityChildConfig1.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig1 = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig1.childConfig);
     assertClusterImplConfig(clusterImplConfig1, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig1 = (WrrLocalityConfig)
@@ -494,10 +498,11 @@ public class ClusterResolverLoadBalancerTest {
 
     PriorityChildConfig priorityChildConfig2 = priorityLbConfig.childConfigs.get(priority2);
     assertThat(priorityChildConfig2.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig2.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig2.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig2 =
-        (ClusterImplConfig) priorityChildConfig2.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig2 = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig2.childConfig);
     assertClusterImplConfig(clusterImplConfig2, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig2 = (WrrLocalityConfig)
@@ -508,10 +513,11 @@ public class ClusterResolverLoadBalancerTest {
 
     PriorityChildConfig priorityChildConfig3 = priorityLbConfig.childConfigs.get(priority3);
     assertThat(priorityChildConfig3.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig3.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig3.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig3 =
-        (ClusterImplConfig) priorityChildConfig3.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig3 = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig3.childConfig);
     assertClusterImplConfig(clusterImplConfig3, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig3 = (WrrLocalityConfig)
@@ -779,10 +785,11 @@ public class ClusterResolverLoadBalancerTest {
     String priority = Iterables.getOnlyElement(priorityLbConfig.priorities);
     PriorityChildConfig priorityChildConfig = priorityLbConfig.childConfigs.get(priority);
     assertThat(priorityChildConfig.ignoreReresolution).isFalse();
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_INFO, 300L, null,
         Collections.<DropOverload>emptyList(), "pick_first");
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);

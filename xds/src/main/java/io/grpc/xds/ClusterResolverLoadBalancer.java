@@ -37,7 +37,6 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
@@ -726,8 +725,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             dropOverloads, endpointLbConfig, tlsContext, filterMetadata);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
-    PolicySelection clusterImplPolicy =
-        new PolicySelection(clusterImplLbProvider, clusterImplConfig);
+    Object clusterImplPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+        clusterImplLbProvider, clusterImplConfig);
     return new PriorityChildConfig(clusterImplPolicy, false /* ignoreReresolution*/);
   }
 
@@ -751,15 +750,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               dropOverloads, endpointLbConfig, tlsContext, filterMetadata);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
-      PolicySelection priorityChildPolicy =
-          new PolicySelection(clusterImplLbProvider, clusterImplConfig);
+      Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          clusterImplLbProvider, clusterImplConfig);
 
       // If outlier detection has been configured we wrap the child policy in the outlier detection
       // load balancer.
       if (outlierDetection != null) {
         LoadBalancerProvider outlierDetectionProvider = lbRegistry.getProvider(
             "outlier_detection_experimental");
-        priorityChildPolicy = new PolicySelection(outlierDetectionProvider,
+        priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            outlierDetectionProvider,
             buildOutlierDetectionLbConfig(outlierDetection, priorityChildPolicy));
       }
 
@@ -776,12 +776,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * understands.
    */
   private static OutlierDetectionLoadBalancerConfig buildOutlierDetectionLbConfig(
-      OutlierDetection outlierDetection, PolicySelection childPolicy) {
+      OutlierDetection outlierDetection, Object childConfig) {
     OutlierDetectionLoadBalancerConfig.Builder configBuilder
         = new OutlierDetectionLoadBalancerConfig.Builder();
 
-    configBuilder.setChildConfig(GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-        childPolicy.getProvider(), childPolicy.getConfig()));
+    configBuilder.setChildConfig(childConfig);
 
     if (outlierDetection.intervalNanos() != null) {
       configBuilder.setIntervalNanos(outlierDetection.intervalNanos());
