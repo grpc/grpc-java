@@ -234,36 +234,21 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return new AcceptResolvedAddrRetVal(unavailableStatus, null);
     }
 
-    Collection<ChildLbState> reusedChildren = addMissingChildrenAndIdReuse(newChildren);
-
-    // Raactivate deactivated children
-    for (ChildLbState reusedChild : reusedChildren) {
-      reusedChild.reactivate(reusedChild.getPolicyFactory());
-    }
+    addMissingChildren(newChildren);
 
     updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
 
     return new AcceptResolvedAddrRetVal(Status.OK, getRemovedChildren(newChildren.keySet()));
   }
 
-  protected final Collection<ChildLbState> addMissingChildrenAndIdReuse(
-      Map<Object, ChildLbState> newChildren) {
-    Collection<ChildLbState> reusedChildren = new ArrayList<>();
-
+  protected final void addMissingChildren(Map<Object, ChildLbState> newChildren) {
     // Do adds and identify reused children
     for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
       final Object key = entry.getKey();
       if (!childLbStates.containsKey(key)) {
         childLbStates.put(key, entry.getValue());
-      } else {
-        // Reuse the existing one
-        ChildLbState existingChildLbState = childLbStates.get(key);
-        if (existingChildLbState.isDeactivated()) {
-          reusedChildren.add(existingChildLbState);
-        }
       }
     }
-    return reusedChildren;
   }
 
   protected final void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
@@ -274,9 +259,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       ResolvedAddresses childAddresses =
           getChildAddresses(entry.getKey(), resolvedAddresses, childConfig);
       childLbState.setResolvedAddresses(childAddresses); // update child
-      if (!childLbState.deactivated) {
-        childLbState.lb.handleResolvedAddresses(childAddresses); // update child LB
-      }
+      childLbState.lb.handleResolvedAddresses(childAddresses); // update child LB
     }
   }
 
@@ -288,8 +271,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     // Do removals
     for (Object key : ImmutableList.copyOf(childLbStates.keySet())) {
       if (!newChildKeys.contains(key)) {
-        ChildLbState childLbState = childLbStates.get(key);
-        childLbState.deactivate();
+        ChildLbState childLbState = childLbStates.remove(key);
         removedChildren.add(childLbState);
       }
     }
@@ -326,10 +308,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return helper;
   }
 
-  protected final void removeChild(Object key) {
-    childLbStates.remove(key);
-  }
-
   @VisibleForTesting
   public final ImmutableMap<Object, ChildLbState> getImmutableChildMap() {
     return ImmutableMap.copyOf(childLbStates);
@@ -357,12 +335,12 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Filters out non-ready and deactivated child load balancers (subchannels).
+   * Filters out non-ready child load balancers (subchannels).
    */
   protected final List<ChildLbState> getReadyChildren() {
     List<ChildLbState> activeChildren = new ArrayList<>();
     for (ChildLbState child : getChildLbStates()) {
-      if (!child.isDeactivated() && child.getCurrentState() == READY) {
+      if (child.getCurrentState() == READY) {
         activeChildren.add(child);
       }
     }
@@ -372,9 +350,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   /**
    * This represents the state of load balancer children.  Each endpoint (represented by an
    * EquivalentAddressGroup or EDS string) will have a separate ChildLbState which in turn will
-   * define a GracefulSwitchLoadBalancer.  When the GracefulSwitchLoadBalancer is activated, a
-   * single PickFirstLoadBalancer will be created which will then create a subchannel and start
-   * trying to connect to it.
+   * have a single child LoadBalancer created from the provided factory.
    *
    * <p>A ChildLbStateHelper is the glue between ChildLbState and the helpers associated with the
    * petiole policy above and the PickFirstLoadBalancer's helper below.
@@ -387,63 +363,21 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     private ResolvedAddresses resolvedAddresses;
     private final Object config;
 
-    private final GracefulSwitchLoadBalancer lb;
-    private final LoadBalancer.Factory policyFactory;
+    private final LoadBalancer lb;
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker;
-    private boolean deactivated;
 
     public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig,
-        SubchannelPicker initialPicker) {
-      this(key, policyFactory, childConfig, initialPicker, null, false);
-    }
-
-    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig,
-          SubchannelPicker initialPicker, ResolvedAddresses resolvedAddrs, boolean deactivated) {
+          SubchannelPicker initialPicker) {
       this.key = key;
-      this.policyFactory = policyFactory;
-      this.deactivated = deactivated;
       this.currentPicker = initialPicker;
       this.config = childConfig;
-      this.lb = new GracefulSwitchLoadBalancer(createChildHelper());
-      this.currentState = deactivated ? IDLE : CONNECTING;
-      this.resolvedAddresses = resolvedAddrs;
-      if (!deactivated) {
-        lb.switchTo(policyFactory);
-      }
+      this.lb = policyFactory.newLoadBalancer(createChildHelper());
+      this.currentState = CONNECTING;
     }
 
     protected ChildLbStateHelper createChildHelper() {
       return new ChildLbStateHelper();
-    }
-
-    /**
-     * The default implementation. This not only marks the lb policy as not active, it also removes
-     * this child from the map of children maintained by the petiole policy.
-     *
-     * <p>Note that this does not explicitly shutdown this child.  That will generally be done by
-     * acceptResolvedAddresses on the LB, but can also be handled by an override such as is done
-     * in <a href=" https://github.com/grpc/grpc-java/blob/master/xds/src/main/java/io/grpc/xds/ClusterManagerLoadBalancer.java">ClusterManagerLoadBalancer</a>.
-     *
-     * <p>If you plan to reactivate, you will probably want to override this to not call
-     * childLbStates.remove() and handle that cleanup another way.
-     */
-    protected void deactivate() {
-      if (deactivated) {
-        return;
-      }
-
-      childLbStates.remove(key); // This means it can't be reactivated again
-      deactivated = true;
-      logger.log(Level.FINE, "Child balancer {0} deactivated", key);
-    }
-
-    /**
-     * This base implementation does nothing but reset the flag.  If you really want to both
-     * deactivate and reactivate you should override them both.
-     */
-    protected void reactivate(LoadBalancer.Factory policyFactory) {
-      deactivated = false;
     }
 
     /**
@@ -460,8 +394,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return "Address = " + key
           + ", state = " + currentState
           + ", picker type: " + currentPicker.getClass()
-          + ", lb: " + lb.delegate().getClass()
-          + (deactivated ? ", deactivated" : "");
+          + ", lb: " + lb;
     }
 
     public final Object getKey() {
@@ -469,17 +402,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
 
     @VisibleForTesting
-    public final GracefulSwitchLoadBalancer getLb() {
+    public final LoadBalancer getLb() {
       return lb;
     }
 
     @VisibleForTesting
     public final SubchannelPicker getCurrentPicker() {
       return currentPicker;
-    }
-
-    protected final LoadBalancer.Factory getPolicyFactory() {
-      return policyFactory;
     }
 
     protected final Subchannel getSubchannels(PickSubchannelArgs args) {
@@ -506,18 +435,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         return null;
       }
       return resolvedAddresses.getAddresses().get(0);
-    }
-
-    public final boolean isDeactivated() {
-      return deactivated;
-    }
-
-    protected final void setDeactivated() {
-      deactivated = true;
-    }
-
-    protected final void markReactivated() {
-      deactivated = false;
     }
 
     protected final void setResolvedAddresses(ResolvedAddresses newAddresses) {
@@ -552,17 +469,15 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
-        // If we are already in the process of resolving addresses, the overall balancing state
-        // will be updated at the end of it, and we don't need to trigger that update here.
         if (!childLbStates.containsKey(key)) {
           return;
         }
 
-        // Subchannel picker and state are saved, but will only be propagated to the channel
-        // when the child instance exits deactivated state.
         currentState = newState;
         currentPicker = newPicker;
-        if (!deactivated && !resolvingAddresses) {
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
+        if (!resolvingAddresses) {
           if (newState == IDLE) {
             lb.requestConnection();
           }
