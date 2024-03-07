@@ -27,7 +27,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
@@ -73,18 +72,17 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
   static final class ClusterResolverConfig {
     // Ordered list of clusters to be resolved.
     final List<DiscoveryMechanism> discoveryMechanisms;
-    // Endpoint-level load balancing policy with config
-    // (round_robin, least_request_experimental or ring_hash_experimental).
-    final PolicySelection lbPolicy;
+    // GracefulSwitch configuration
+    final Object lbConfig;
 
-    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, PolicySelection lbPolicy) {
+    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, Object lbConfig) {
       this.discoveryMechanisms = checkNotNull(discoveryMechanisms, "discoveryMechanisms");
-      this.lbPolicy = checkNotNull(lbPolicy, "lbPolicy");
+      this.lbConfig = checkNotNull(lbConfig, "lbConfig");
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(discoveryMechanisms, lbPolicy);
+      return Objects.hash(discoveryMechanisms, lbConfig);
     }
 
     @Override
@@ -97,14 +95,14 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       }
       ClusterResolverConfig that = (ClusterResolverConfig) o;
       return discoveryMechanisms.equals(that.discoveryMechanisms)
-          && lbPolicy.equals(that.lbPolicy);
+          && lbConfig.equals(that.lbConfig);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("discoveryMechanisms", discoveryMechanisms)
-          .add("lbPolicy", lbPolicy)
+          .add("lbConfig", lbConfig)
           .toString();
     }
 
