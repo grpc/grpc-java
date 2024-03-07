@@ -49,7 +49,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.GracefulSwitchLoadBalancer;
@@ -178,8 +177,9 @@ public class ClusterImplLoadBalancerTest {
     Object weightedTargetConfig = new Object();
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -204,8 +204,9 @@ public class ClusterImplLoadBalancerTest {
     ClusterImplConfig configWithWeightedTarget = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
         LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWeightedTarget);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -218,8 +219,9 @@ public class ClusterImplLoadBalancerTest {
     ClusterImplConfig configWithWrrLocality = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
         LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(wrrLocalityProvider, wrrLocalityConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            wrrLocalityProvider, wrrLocalityConfig),
+        null, Collections.emptyMap());
     deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWrrLocality);
     childBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
@@ -243,8 +245,9 @@ public class ClusterImplLoadBalancerTest {
     Object weightedTargetConfig = new Object();
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -263,8 +266,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -290,8 +294,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -375,8 +380,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.singletonList(DropOverload.create("throttle", 500_000)),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 999_999, 1_000_000);
@@ -405,8 +411,9 @@ public class ClusterImplLoadBalancerTest {
     //  Config update updates drop policies.
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, null,
         Collections.singletonList(DropOverload.create("lb", 1_000_000)),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
@@ -453,8 +460,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
@@ -496,8 +504,9 @@ public class ClusterImplLoadBalancerTest {
     maxConcurrentRequests = 101L;
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
 
     result = currentPicker.pickSubchannel(pickSubchannelArgs);
@@ -543,8 +552,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
@@ -590,8 +600,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     // One locality with two endpoints.
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality);
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr2", locality);
@@ -628,8 +639,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        upstreamTlsContext, Collections.emptyMap());
     // One locality with two endpoints.
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality);
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr2", locality);
@@ -652,8 +664,9 @@ public class ClusterImplLoadBalancerTest {
     // Removes UpstreamTlsContext from the config.
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
     assertThat(Iterables.getOnlyElement(downstreamBalancers)).isSameInstanceAs(leafBalancer);
     subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
@@ -667,8 +680,9 @@ public class ClusterImplLoadBalancerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe1", true);
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext,
-        Collections.emptyMap());
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        upstreamTlsContext, Collections.emptyMap());
     deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
     assertThat(Iterables.getOnlyElement(downstreamBalancers)).isSameInstanceAs(leafBalancer);
     subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
