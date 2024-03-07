@@ -210,13 +210,13 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     }
 
     @Override
-    protected void reactivate(LoadBalancerProvider policyProvider) {
+    protected void reactivate(Factory policyFactory) {
       if (deletionTimer != null && deletionTimer.isPending()) {
         deletionTimer.cancel();
         logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
       }
 
-      super.reactivate(policyProvider);
+      super.reactivate(policyFactory);
     }
 
     @Override
