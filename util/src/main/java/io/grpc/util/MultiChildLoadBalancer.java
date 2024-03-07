@@ -238,7 +238,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     // Raactivate deactivated children
     for (ChildLbState reusedChild : reusedChildren) {
-      reusedChild.reactivate(reusedChild.getPolicyProvider());
+      reusedChild.reactivate(reusedChild.getPolicyFactory());
     }
 
     updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
@@ -388,20 +388,20 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     private final Object config;
 
     private final GracefulSwitchLoadBalancer lb;
-    private final LoadBalancerProvider policyProvider;
+    private final LoadBalancer.Factory policyFactory;
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker;
     private boolean deactivated;
 
-    public ChildLbState(Object key, LoadBalancerProvider policyProvider, Object childConfig,
+    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig,
         SubchannelPicker initialPicker) {
-      this(key, policyProvider, childConfig, initialPicker, null, false);
+      this(key, policyFactory, childConfig, initialPicker, null, false);
     }
 
-    public ChildLbState(Object key, LoadBalancerProvider policyProvider, Object childConfig,
+    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig,
           SubchannelPicker initialPicker, ResolvedAddresses resolvedAddrs, boolean deactivated) {
       this.key = key;
-      this.policyProvider = policyProvider;
+      this.policyFactory = policyFactory;
       this.deactivated = deactivated;
       this.currentPicker = initialPicker;
       this.config = childConfig;
@@ -409,7 +409,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       this.currentState = deactivated ? IDLE : CONNECTING;
       this.resolvedAddresses = resolvedAddrs;
       if (!deactivated) {
-        lb.switchTo(policyProvider);
+        lb.switchTo(policyFactory);
       }
     }
 
@@ -442,7 +442,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
      * This base implementation does nothing but reset the flag.  If you really want to both
      * deactivate and reactivate you should override them both.
      */
-    protected void reactivate(LoadBalancerProvider policyProvider) {
+    protected void reactivate(LoadBalancer.Factory policyFactory) {
       deactivated = false;
     }
 
@@ -478,8 +478,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return currentPicker;
     }
 
-    protected final LoadBalancerProvider getPolicyProvider() {
-      return policyProvider;
+    protected final LoadBalancer.Factory getPolicyFactory() {
+      return policyFactory;
     }
 
     protected final Subchannel getSubchannels(PickSubchannelArgs args) {
