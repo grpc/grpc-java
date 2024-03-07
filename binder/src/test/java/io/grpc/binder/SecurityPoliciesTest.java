@@ -490,6 +490,7 @@ public final class SecurityPoliciesTest {
       return this;
     }
 
+    @SuppressWarnings("deprecation")  // 'signatures': We don't yet support signing cert rotation.
     public PackageInfo build() {
       checkState(this.packageName != null, "packageName is a mandatory field");
 

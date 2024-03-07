@@ -79,9 +79,12 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-            "-Xlint:-cast"
+            "-Xlint:-cast",
+            // For junit-1.15-api & org.robolectric/shadows-framework/4.11.1
+            "-Xlint:-classfile",
+            // Unclaimed annotations. TODO(jdcormie): Fix?
+            "-Xlint:-processing",
     ]
-    options.compilerArgs -= ["-Werror"] // https://github.com/grpc/grpc-java/issues/10297
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
 }
 

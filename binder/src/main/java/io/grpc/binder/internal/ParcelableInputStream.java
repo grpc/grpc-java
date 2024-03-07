@@ -79,6 +79,8 @@ final class ParcelableInputStream<P extends Parcelable> extends InputStream {
   @SuppressWarnings("unchecked")
   static <P extends Parcelable> ParcelableInputStream<P> readFromParcel(
       Parcel parcel, ClassLoader classLoader) {
+    // readParcelable(Classloader, Class<P>) requires SDK 33 and this class isn't typesafe anyway.
+    @SuppressWarnings("deprecation")
     P value = (P) parcel.readParcelable(classLoader);
     return new ParcelableInputStream<>(null, value, true);
   }
