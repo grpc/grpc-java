@@ -56,10 +56,6 @@ dependencies {
     testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core'))
 
-    // For non-SDK (@hide) `android.annotation`s strangely retained by many
-    // robolectric shadows.
-    testCompileOnly libraries.robolectric.android
-
     androidTestAnnotationProcessor libraries.auto.value
     androidTestImplementation project(':grpc-testing')
     androidTestImplementation project(':grpc-protobuf-lite')
@@ -80,7 +76,11 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-            "-Xlint:-cast"
+            "-Xlint:-cast",
+            // For junit-1.15-api & org.robolectric/shadows-framework/4.11.1
+            "-Xlint:-classfile",
+            // Unclaimed annotations. TODO(jdcormie): Fix?
+            "-Xlint:-processing",
     ]
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
 }
