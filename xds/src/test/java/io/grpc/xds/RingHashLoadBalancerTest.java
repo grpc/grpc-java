@@ -142,7 +142,7 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    verify(subchannel).requestConnection();
+    verify(subchannel, times(2)).requestConnection();
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
@@ -168,16 +168,14 @@ public class RingHashLoadBalancerTest {
 
     RingHashChildLbState childLbState =
         (RingHashChildLbState) loadBalancer.getChildLbStates().iterator().next();
-    assertThat(childLbState.isDeactivated()).isTrue();
+    assertThat(subchannels.get(Collections.singletonList(childLbState.getEag()))).isNull();
 
     // Picking subchannel triggers connection.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     pickerCaptor.getValue().pickSubchannel(args);
-    assertThat(childLbState.isDeactivated()).isFalse();
-    assertThat(childLbState.getLb().delegateType()).isEqualTo("PickFirstLoadBalancer");
     Subchannel subchannel = subchannels.get(Collections.singletonList(childLbState.getEag()));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
-    inOrder.verify(subchannel).requestConnection();
+    inOrder.verify(subchannel, times(2)).requestConnection();
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
@@ -400,7 +398,8 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Create subchannel for the first address
-    ((RingHashChildLbState)loadBalancer.getChildLbStateEag(servers.get(0))).activate();
+    ((RingHashChildLbState) loadBalancer.getChildLbStateEag(servers.get(0))).getCurrentPicker()
+        .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
     verifyConnection(1);
 
     reset(helper);
@@ -422,7 +421,8 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();  // buffer request
-    verify(getSubChannel(servers.get(1))).requestConnection();  // kicked off connection to server2
+    // kicked off connection to server2
+    verify(getSubChannel(servers.get(1)), times(2)).requestConnection();
     assertThat(subchannels.size()).isEqualTo(2);  // no excessive connection
 
     reset(helper);
@@ -929,7 +929,8 @@ public class RingHashLoadBalancerTest {
 
     // Activate them all to create the child LB and subchannel
     for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
-      ((RingHashChildLbState)childLbState).activate();
+      childLbState.getCurrentPicker()
+          .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
       assertThat(childLbState.getResolvedAddresses().getAttributes().get(IS_PETIOLE_POLICY))
           .isTrue();
     }
