@@ -166,7 +166,6 @@ final class CachingRlsLbClient {
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
     rlsChannel = rlsChannelBuilder.build();
-    helper.updateBalancingState(ConnectivityState.CONNECTING, rlsPicker);
     rlsStub = RouteLookupServiceGrpc.newStub(rlsChannel);
     childLbResolvedAddressFactory =
         checkNotNull(builder.resolvedAddressFactory, "resolvedAddressFactory");
@@ -285,7 +284,11 @@ final class CachingRlsLbClient {
       ListenableFuture<RouteLookupResponse> asyncCall = asyncRlsCall(request);
       if (!asyncCall.isDone()) {
         pendingEntry = new PendingCacheEntry(request, asyncCall);
+        // Add the entry to the map before adding the Listener, because the listener removes the
+        // entry from the map
         pendingCallCache.put(request, pendingEntry);
+        // Beware that the listener can run immediately on the current thread
+        asyncCall.addListener(pendingEntry::handleDoneFuture, synchronizationContext);
         return CachedRouteLookupResponse.pendingResponse(pendingEntry);
       } else {
         // async call returned finished future is most likely throttled
@@ -462,17 +465,9 @@ final class CachingRlsLbClient {
       this.request = checkNotNull(request, "request");
       this.pendingCall = pendingCall;
       this.backoffPolicy = backoffPolicy == null ? backoffProvider.get() : backoffPolicy;
-      pendingCall.addListener(
-          new Runnable() {
-            @Override
-            public void run() {
-              handleDoneFuture();
-            }
-          },
-          synchronizationContext);
     }
 
-    private void handleDoneFuture() {
+    void handleDoneFuture() {
       synchronized (lock) {
         pendingCallCache.remove(request);
         if (pendingCall.isCancelled()) {
@@ -589,7 +584,9 @@ final class CachingRlsLbClient {
         }
         final ListenableFuture<RouteLookupResponse> asyncCall = asyncRlsCall(request);
         if (!asyncCall.isDone()) {
-          pendingCallCache.put(request, new PendingCacheEntry(request, asyncCall));
+          PendingCacheEntry pendingEntry = new PendingCacheEntry(request, asyncCall);
+          pendingCallCache.put(request, pendingEntry);
+          asyncCall.addListener(pendingEntry::handleDoneFuture, synchronizationContext);
         } else {
           // async call returned finished future is most likely throttled
           try {
@@ -727,9 +724,10 @@ final class CachingRlsLbClient {
         }
         ListenableFuture<RouteLookupResponse> call = asyncRlsCall(request);
         if (!call.isDone()) {
+          linkedHashLruCache.invalidate(request);
           PendingCacheEntry pendingEntry = new PendingCacheEntry(request, call, backoffPolicy);
           pendingCallCache.put(request, pendingEntry);
-          linkedHashLruCache.invalidate(request);
+          call.addListener(pendingEntry::handleDoneFuture, synchronizationContext);
         } else {
           try {
             RouteLookupResponse response = call.get();
@@ -837,7 +835,9 @@ final class CachingRlsLbClient {
     }
 
     CachingRlsLbClient build() {
-      return new CachingRlsLbClient(this);
+      CachingRlsLbClient client = new CachingRlsLbClient(this);
+      helper.updateBalancingState(ConnectivityState.CONNECTING, client.rlsPicker);
+      return client;
     }
   }
 
