@@ -749,10 +749,10 @@ final class CachingRlsLbClient {
         if (!call.isDone()) {
           logger.log(ChannelLogLevel.DEBUG,
               "Transition to pending RLS call not done, adding a pending cache entry");
+          linkedHashLruCache.invalidate(request);
           PendingCacheEntry pendingEntry = new PendingCacheEntry(request, call, backoffPolicy);
           pendingCallCache.put(request, pendingEntry);
           call.addListener(pendingEntry::handleDoneFuture, synchronizationContext);
-          linkedHashLruCache.invalidate(request);
         } else {
           try {
             logger.log(ChannelLogLevel.DEBUG,
