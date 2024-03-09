@@ -49,6 +49,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
+import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfig;
 import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -633,8 +634,15 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(parsed.getConfig()).isNotNull();
     PolicySelection policySelection = (PolicySelection) parsed.getConfig();
     assertThat(policySelection.provider).isInstanceOf(PickFirstLoadBalancerProvider.class);
-    assertThat(policySelection.config).isInstanceOf(PickFirstLoadBalancerConfig.class);
-    assertThat(((PickFirstLoadBalancerConfig) policySelection.config).shuffleAddressList).isTrue();
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      assertThat(policySelection.config).isInstanceOf(PickFirstLeafLoadBalancerConfig.class);
+      assertThat(((PickFirstLeafLoadBalancerConfig) policySelection.config).shuffleAddressList)
+          .isTrue();
+    } else {
+      assertThat(policySelection.config).isInstanceOf(PickFirstLoadBalancerConfig.class);
+      assertThat(((PickFirstLoadBalancerConfig) policySelection.config).shuffleAddressList)
+          .isTrue();
+    }
     verifyNoInteractions(channelLogger);
   }
 

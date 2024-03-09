@@ -131,8 +131,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       // If the previous ready subchannel exists in new address list,
       // keep this connection and don't create new subchannels
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
+      Attributes prevEagAttrs = addressIndex.getCurrentEagAttributes();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
+        if (!addressIndex.getCurrentEagAttributes().equals(prevEagAttrs)) {
+          log.log(Level.FINE, "EAG attributes changed, need to update subchannel");
+          SubchannelData subchannelData = subchannels.get(previousAddress);
+          subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
+        }
         return Status.OK;
       } else {
         addressIndex.reset(); // Previous ready subchannel not in the new list of addresses
@@ -354,7 +360,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     currentAddress = addressIndex.getCurrentAddress();
     subchannel = subchannels.containsKey(currentAddress)
         ? subchannels.get(currentAddress).getSubchannel()
-        : createNewSubchannel(currentAddress);
+        : createNewSubchannel(currentAddress, addressIndex.getCurrentEagAttributes());
 
     ConnectivityState subchannelState = subchannels.get(currentAddress).getState();
     switch (subchannelState) {
@@ -418,12 +424,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  private Subchannel createNewSubchannel(SocketAddress addr) {
+  private Subchannel createNewSubchannel(SocketAddress addr, Attributes attrs) {
     HealthListener hcListener = new HealthListener();
     final Subchannel subchannel = helper.createSubchannel(
         CreateSubchannelArgs.newBuilder()
         .setAddresses(Lists.newArrayList(
-            new EquivalentAddressGroup(addr)))
+            new EquivalentAddressGroup(addr, attrs)))
         .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
             .build());
     if (subchannel == null) {
@@ -433,8 +439,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     SubchannelData subchannelData = new SubchannelData(subchannel, IDLE, hcListener);
     hcListener.subchannelData = subchannelData;
     subchannels.put(addr, subchannelData);
-    Attributes attrs = subchannel.getAttributes();
-    if (attrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
+    Attributes scAttrs = subchannel.getAttributes();
+    if (scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
       hcListener.healthStateInfo = ConnectivityStateInfo.forNonError(READY);
     }
     subchannel.start(stateInfo -> processSubchannelState(subchannel, stateInfo));
@@ -582,6 +588,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         throw new IllegalStateException("Index is off the end of the address group list");
       }
       return addressGroups.get(groupIndex).getAttributes();
+    }
+
+    public List<EquivalentAddressGroup> getCurrentEagAsList() {
+      return Collections.singletonList(
+          new EquivalentAddressGroup(getCurrentAddress(), getCurrentEagAttributes()));
     }
 
     /**

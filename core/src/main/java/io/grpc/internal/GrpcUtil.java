@@ -954,6 +954,9 @@ public final class GrpcUtil {
     if (envVar == null) {
       envVar = System.getProperty(envVarName);
     }
+    if (envVar != null) {
+      envVar = envVar.trim();
+    }
     if (enableByDefault) {
       return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);
     } else {

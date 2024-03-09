@@ -16,11 +16,13 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfig;
 import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.util.Map;
 
@@ -61,16 +63,28 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   @Override
-  public ConfigOrError parseLoadBalancingPolicyConfig(
-      Map<String, ?> rawLoadBalancingPolicyConfig) {
+  public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLBPolicyConfig) {
     try {
-      return ConfigOrError.fromConfig(
-          new PickFirstLoadBalancerConfig(JsonUtil.getBoolean(rawLoadBalancingPolicyConfig,
-              SHUFFLE_ADDRESS_LIST_KEY)));
+      Object config = getLbPolicyConfig(rawLBPolicyConfig);
+      return ConfigOrError.fromConfig(config);
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
           Status.UNAVAILABLE.withCause(e).withDescription(
               "Failed parsing configuration for " + getPolicyName()));
     }
+  }
+
+  private static Object getLbPolicyConfig(Map<String, ?> rawLBPolicyConfig) {
+    Boolean shuffleAddressList = JsonUtil.getBoolean(rawLBPolicyConfig, SHUFFLE_ADDRESS_LIST_KEY);
+    if (enableNewPickFirst) {
+      return new PickFirstLeafLoadBalancerConfig(shuffleAddressList);
+    } else {
+      return new PickFirstLoadBalancerConfig(shuffleAddressList);
+    }
+  }
+
+  @VisibleForTesting
+  public static boolean isEnabledNewPickFirst() {
+    return enableNewPickFirst;
   }
 }
