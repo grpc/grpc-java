@@ -85,8 +85,8 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
         // first, remove at most 1 expired entry
         boolean removed = cleanupExpiredEntries(1, ticker.read());
         // handles size based eviction if necessary no expired entry
-        boolean shouldRemove =
-            !removed && shouldInvalidateEldestEntry(eldest.getKey(), eldest.getValue().value);
+        boolean shouldRemove = !removed
+            && shouldInvalidateEldestEntry(eldest.getKey(), eldest.getValue().value, ticker.read());
         if (shouldRemove) {
           // remove entry by us to make sure lruIterator and cache is in sync
           LinkedHashLruCache.this.invalidate(eldest.getKey(), EvictionType.SIZE);
@@ -102,7 +102,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
    * that LruCache is access level and the eldest is determined by access pattern.
    */
   @SuppressWarnings("unused")
-  protected boolean shouldInvalidateEldestEntry(K eldestKey, V eldestValue) {
+  protected boolean shouldInvalidateEldestEntry(K eldestKey, V eldestValue, long now) {
     return true;
   }
 
@@ -236,10 +236,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     }
   }
 
-  protected long now() {
-    return ticker.read();
-  }
-
   /**
    * Cleans up cache if needed to fit into max size bytes by
    * removing expired entries and removing oldest entries by LRU order.
@@ -253,13 +249,14 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
         return false;
       }
       // cleanup expired entries
-      cleanupExpiredEntries(now());
+      long now = ticker.read();
+      cleanupExpiredEntries(now);
 
       // cleanup eldest entry until new size limit
       Iterator<Map.Entry<K, SizedValue>> lruIter = delegate.entrySet().iterator();
       while (lruIter.hasNext() && estimatedMaxSizeBytes < this.estimatedSizeBytes.get()) {
         Map.Entry<K, SizedValue> entry = lruIter.next();
-        if (!shouldInvalidateEldestEntry(entry.getKey(), entry.getValue().value)) {
+        if (!shouldInvalidateEldestEntry(entry.getKey(), entry.getValue().value, now)) {
           break; // Violates some constraint like minimum age so stop our cleanup
         }
         lruIter.remove();
