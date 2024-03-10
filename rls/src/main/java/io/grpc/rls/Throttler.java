@@ -42,27 +42,4 @@ interface Throttler {
    * @param throttled specifies whether the request was throttled by the backend.
    */
   void registerBackendResponse(boolean throttled);
-
-  /**
-   * A ThrottledException indicates the call is throttled. This exception is meant to be used by
-   * caller of {@link Throttler}, the implementation of Throttler should <strong>not</strong> throw
-   * this exception when {@link #shouldThrottle()} is called.
-   */
-  final class ThrottledException extends RuntimeException {
-
-    static final long serialVersionUID = 1L;
-
-    public ThrottledException() {
-      super();
-    }
-
-    public ThrottledException(String s) {
-      super(s);
-    }
-
-    @Override
-    public synchronized Throwable fillInStackTrace() {
-      return this;
-    }
-  }
 }

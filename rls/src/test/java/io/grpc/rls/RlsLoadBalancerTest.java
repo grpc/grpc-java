@@ -176,7 +176,12 @@ public class RlsLoadBalancerTest {
     Metadata headers = new Metadata();
     PickSubchannelArgsImpl fakeSearchMethodArgs =
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
+    assertThat(res.getStatus().isOk()).isTrue();
+    assertThat(res.getSubchannel()).isNull();
+    // Cache is warm, but still unconnected
+    res = picker.pickSubchannel(fakeSearchMethodArgs);
     FakeSubchannel subchannel = (FakeSubchannel) res.getSubchannel();
     assertThat(subchannel).isNotNull();
 
@@ -204,7 +209,13 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     Metadata headers = new Metadata();
+    // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    assertThat(res.getStatus().isOk()).isTrue();
+    assertThat(res.getSubchannel()).isNull();
+    // Cache is warm, but still unconnected
+    res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper)
@@ -330,7 +341,13 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     Metadata headers = new Metadata();
+    // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    assertThat(res.getStatus().isOk()).isTrue();
+    assertThat(res.getSubchannel()).isNull();
+    // Cache is warm, but still unconnected
+    res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper)
