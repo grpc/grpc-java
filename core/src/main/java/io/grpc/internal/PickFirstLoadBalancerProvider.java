@@ -63,9 +63,9 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   @Override
-  public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLBPolicyConfig) {
+  public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLbPolicyConfig) {
     try {
-      Object config = getLbPolicyConfig(rawLBPolicyConfig);
+      Object config = getLbPolicyConfig(rawLbPolicyConfig);
       return ConfigOrError.fromConfig(config);
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
@@ -74,8 +74,8 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
     }
   }
 
-  private static Object getLbPolicyConfig(Map<String, ?> rawLBPolicyConfig) {
-    Boolean shuffleAddressList = JsonUtil.getBoolean(rawLBPolicyConfig, SHUFFLE_ADDRESS_LIST_KEY);
+  private static Object getLbPolicyConfig(Map<String, ?> rawLbPolicyConfig) {
+    Boolean shuffleAddressList = JsonUtil.getBoolean(rawLbPolicyConfig, SHUFFLE_ADDRESS_LIST_KEY);
     if (enableNewPickFirst) {
       return new PickFirstLeafLoadBalancerConfig(shuffleAddressList);
     } else {
