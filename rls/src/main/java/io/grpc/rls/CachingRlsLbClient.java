@@ -111,6 +111,7 @@ final class CachingRlsLbClient {
   private final RouteLookupServiceStub rlsStub;
   private final RlsPicker rlsPicker;
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
+  @GuardedBy("lock")
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
   private final ChannelLogger logger;
 
