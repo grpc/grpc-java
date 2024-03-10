@@ -528,7 +528,7 @@ final class CachingRlsLbClient {
   }
 
   /** Common cache entry data for {@link RlsAsyncLruCache}. */
-  abstract class CacheEntry {
+  abstract static class CacheEntry {
 
     protected final RouteLookupRequest request;
 
@@ -538,16 +538,12 @@ final class CachingRlsLbClient {
 
     abstract int getSizeBytes();
 
-    final boolean isExpired() {
-      return isExpired(ticker.read());
-    }
-
     abstract boolean isExpired(long now);
 
     abstract void cleanup();
 
-    protected long getMinEvictionTime() {
-      return 0L;
+    protected boolean isOldEnoughToBeEvicted(long now) {
+      return true;
     }
   }
 
@@ -649,8 +645,8 @@ final class CachingRlsLbClient {
     }
 
     @Override
-    protected long getMinEvictionTime() {
-      return minEvictionTime;
+    protected boolean isOldEnoughToBeEvicted(long now) {
+      return minEvictionTime - now <= 0;
     }
 
     @Override
@@ -678,7 +674,7 @@ final class CachingRlsLbClient {
    * Implementation of {@link CacheEntry} contains error. This entry will transition to pending
    * status when the backoff time is expired.
    */
-  private final class BackoffCacheEntry extends CacheEntry {
+  private static final class BackoffCacheEntry extends CacheEntry {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
@@ -841,7 +837,7 @@ final class CachingRlsLbClient {
 
     @Override
     protected boolean isExpired(RouteLookupRequest key, CacheEntry value, long nowNanos) {
-      return value.isExpired();
+      return value.isExpired(nowNanos);
     }
 
     @Override
@@ -851,8 +847,8 @@ final class CachingRlsLbClient {
 
     @Override
     protected boolean shouldInvalidateEldestEntry(
-        RouteLookupRequest eldestKey, CacheEntry eldestValue) {
-      if (eldestValue.getMinEvictionTime() > now()) {
+        RouteLookupRequest eldestKey, CacheEntry eldestValue, long now) {
+      if (!eldestValue.isOldEnoughToBeEvicted(now)) {
         return false;
       }
 
