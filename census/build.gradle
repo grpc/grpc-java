@@ -18,6 +18,7 @@ dependencies {
     // force dependent jars to depend on latest grpc-context
     runtimeOnly project(":grpc-context")
     implementation libraries.guava,
+            project(":grpc-context"), // Override opencensus dependency with our newer version
             libraries.opencensus.api,
             libraries.opencensus.contrib.grpc.metrics
 

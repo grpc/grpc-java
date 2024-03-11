@@ -16,6 +16,7 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api'),
+            project(":grpc-context"), // Override google-auth dependency with our newer version
             libraries.google.auth.credentials
     implementation libraries.guava
     testImplementation project(':grpc-testing'),
