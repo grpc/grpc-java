@@ -17,6 +17,7 @@
 package io.grpc.util;
 
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.Maps;
@@ -31,11 +32,14 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 /**
  * A real class that can be used as a delegate of a mock Helper to provide more real representation
@@ -128,6 +132,22 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   public String toString() {
     return "Test Helper";
   }
+
+  public static void refreshInvokedAndUpdateBS(InOrder inOrder, ConnectivityState state,
+                                                Helper helper,
+                                               ArgumentCaptor<SubchannelPicker> pickerCaptor) {
+    // Old PF and new PF reverse calling order of updateBlaancingState and refreshNameResolution
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
+
+    inOrder.verify(helper).refreshNameResolution();
+
+    if (!PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
+  }
+
 
   protected class TestSubchannel extends ForwardingSubchannel {
     CreateSubchannelArgs args;

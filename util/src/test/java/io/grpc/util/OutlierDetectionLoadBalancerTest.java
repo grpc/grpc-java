@@ -53,6 +53,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.util.OutlierDetectionLoadBalancer.EndpointTracker;
@@ -409,6 +410,9 @@ public class OutlierDetectionLoadBalancerTest {
     SubchannelPicker picker = pickerCaptor.getAllValues().get(2);
     PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
     Subchannel s = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
+    if (s instanceof HealthProducerHelper.HealthProducerSubchannel) {
+      s = ((HealthProducerHelper.HealthProducerSubchannel) s).delegate();
+    }
     assertThat(s).isEqualTo(readySubchannel);
   }
 
@@ -564,7 +568,9 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), 12);
+    // The PickFirstLeafLB has an extra level of indirection because of health
+    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 16 : 12;
+    generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), expectedStateChanges);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
@@ -597,8 +603,9 @@ public class OutlierDetectionLoadBalancerTest {
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
 
-    // Now we produce more load, but the subchannel start working and is no longer an outlier.
-    generateLoad(ImmutableMap.of(), 12);
+    // Now we produce more load, but the subchannel has started working and is no longer an outlier.
+    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 16 : 12;
+    generateLoad(ImmutableMap.of(), expectedStateChanges);
 
     // Move forward in time to a point where the detection timer has fired.
     fakeClock.forwardTime(config.maxEjectionTimeNanos + 1, TimeUnit.NANOSECONDS);

@@ -31,6 +31,7 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -58,6 +59,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.LeastRequestLoadBalancer.EmptyPicker;
@@ -266,28 +268,25 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
 
-    deliverSubchannelState(subchannel,
-        ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
     assertThat(childLbState.getCurrentState()).isEqualTo(READY);
 
     Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
-    deliverSubchannelState(subchannel,
-        ConnectivityStateInfo.forTransientFailure(error));
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
-    inOrder.verify(helper).refreshNameResolution();
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    refreshInvokedAndUpdateBS(inOrder, CONNECTING);
     assertThat(pickerCaptor.getValue()).isInstanceOf(EmptyPicker.class);
 
-    deliverSubchannelState(subchannel,
-        ConnectivityStateInfo.forNonError(IDLE));
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(helper).refreshNameResolution();
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
 
-    verify(subchannel, times(2)).requestConnection();
+    int expectedCount = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verify(subchannel, times(expectedCount)).requestConnection();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verifyNoMoreInteractions(helper);
   }
@@ -358,14 +357,15 @@ public class LeastRequestLoadBalancerTest {
       Subchannel sc = getSubchannel(childLbState);
       Status error = Status.UNKNOWN.withDescription("connection broken");
       deliverSubchannelState(sc, ConnectivityStateInfo.forTransientFailure(error));
-      inOrder.verify(helper).refreshNameResolution();
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(CONNECTING));
       assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     }
-    inOrder.verify(helper)
-        .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+
+    verify(helper, atLeast(loadBalancer.getChildLbStates().size())).refreshNameResolution();
+    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertThat(getStatusString(pickerCaptor.getValue()))
         .contains("Status{code=UNKNOWN, description=connection broken");
+    inOrder.verify(helper, atLeast(0)).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
 
     ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
@@ -658,6 +658,19 @@ public class LeastRequestLoadBalancerTest {
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     testHelperInstance.deliverSubchannelState(subchannel, newState);
+  }
+
+  // Old PF and new PF reverse calling order of updateBlaancingState and refreshNameResolution
+  private void refreshInvokedAndUpdateBS(InOrder inOrder, ConnectivityState state) {
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
+
+    inOrder.verify(helper).refreshNameResolution();
+
+    if (!PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
   }
 
   private static class FakeSocketAddress extends SocketAddress {
