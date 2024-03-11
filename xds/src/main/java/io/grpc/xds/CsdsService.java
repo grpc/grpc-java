@@ -28,7 +28,8 @@ import io.envoyproxy.envoy.service.status.v3.ClientConfig.GenericXdsConfig;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusRequest;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
-import io.grpc.ExperimentalApi;
+import io.grpc.BindableService;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ObjectPool;
@@ -55,11 +56,10 @@ import java.util.logging.Logger;
  *
  * @since 1.37.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8016")
-public final class CsdsService extends
-    ClientStatusDiscoveryServiceGrpc.ClientStatusDiscoveryServiceImplBase {
+public final class CsdsService implements BindableService {
   private static final Logger logger = Logger.getLogger(CsdsService.class.getName());
   private final XdsClientPoolFactory xdsClientPoolFactory;
+  private final CsdsServiceInternal delegate = new CsdsServiceInternal();
 
   @VisibleForTesting
   CsdsService(XdsClientPoolFactory xdsClientPoolFactory) {
@@ -76,34 +76,43 @@ public final class CsdsService extends
   }
 
   @Override
-  public void fetchClientStatus(
-      ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
-    if (handleRequest(request, responseObserver)) {
-      responseObserver.onCompleted();
-    }
-    // TODO(sergiitk): Add a case covering mutating handleRequest return false to true - to verify
-    //   that responseObserver.onCompleted() isn't erroneously called on error.
+  public ServerServiceDefinition bindService() {
+    return delegate.bindService();
   }
 
-  @Override
-  public StreamObserver<ClientStatusRequest> streamClientStatus(
-      final StreamObserver<ClientStatusResponse> responseObserver) {
-    return new StreamObserver<ClientStatusRequest>() {
-      @Override
-      public void onNext(ClientStatusRequest request) {
-        handleRequest(request, responseObserver);
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        onCompleted();
-      }
-
-      @Override
-      public void onCompleted() {
+  /** Hide protobuf from being exposed via the API. */
+  private final class CsdsServiceInternal
+      extends ClientStatusDiscoveryServiceGrpc.ClientStatusDiscoveryServiceImplBase {
+    @Override
+    public void fetchClientStatus(
+        ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
+      if (handleRequest(request, responseObserver)) {
         responseObserver.onCompleted();
       }
-    };
+      // TODO(sergiitk): Add a case covering mutating handleRequest return false to true - to verify
+      //   that responseObserver.onCompleted() isn't erroneously called on error.
+    }
+
+    @Override
+    public StreamObserver<ClientStatusRequest> streamClientStatus(
+        final StreamObserver<ClientStatusResponse> responseObserver) {
+      return new StreamObserver<ClientStatusRequest>() {
+        @Override
+        public void onNext(ClientStatusRequest request) {
+          handleRequest(request, responseObserver);
+        }
+
+        @Override
+        public void onError(Throwable t) {
+          onCompleted();
+        }
+
+        @Override
+        public void onCompleted() {
+          responseObserver.onCompleted();
+        }
+      };
+    }
   }
 
   private boolean handleRequest(
