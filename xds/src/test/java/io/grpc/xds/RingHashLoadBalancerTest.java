@@ -182,9 +182,9 @@ public class RingHashLoadBalancerTest {
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     pickerCaptor.getValue().pickSubchannel(args);
     assertThat(childLbState.isDeactivated()).isFalse();
-    String expectedLBType = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
+    String expectedLbType = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
         ? "PickFirstLeafLoadBalancer" : "PickFirstLoadBalancer";
-    assertThat(childLbState.getLb().delegateType()).isEqualTo(expectedLBType);
+    assertThat(childLbState.getLb().delegateType()).isEqualTo(expectedLbType);
     Subchannel subchannel = subchannels.get(Collections.singletonList(childLbState.getEag()));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
     inOrder.verify(subchannel).requestConnection();
