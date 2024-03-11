@@ -301,7 +301,7 @@ public class CachingRlsLbClientTest {
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
     // initially backed off entry is backed off again
     verify(evictionListener)
-        .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.REPLACED));
+        .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.EXPLICIT));
 
     resp = getInSyncContext(routeLookupRequest);
 
