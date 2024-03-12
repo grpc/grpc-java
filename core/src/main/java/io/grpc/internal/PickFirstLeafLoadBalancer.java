@@ -131,14 +131,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       // If the previous ready subchannel exists in new address list,
       // keep this connection and don't create new subchannels
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
-      Attributes prevEagAttrs = addressIndex.getCurrentEagAttributes();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
-        if (!addressIndex.getCurrentEagAttributes().equals(prevEagAttrs)) {
-          log.log(Level.FINE, "EAG attributes changed, need to update subchannel");
-          SubchannelData subchannelData = subchannels.get(previousAddress);
-          subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
-        }
+        SubchannelData subchannelData = subchannels.get(previousAddress);
+        subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
         return Status.OK;
       } else {
         addressIndex.reset(); // Previous ready subchannel not in the new list of addresses
