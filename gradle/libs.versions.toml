@@ -24,7 +24,7 @@ checkstyle = "com.puppycrawl.tools:checkstyle:10.12.5"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 # Update notes / 2023-07-19 sergiitk:
-#     Upgrade is blocked by https://github.com/grpc/grpc-java/issues/10396.
+#     Cronet (API and Embedded) upgrade is blocked by https://github.com/grpc/grpc-java/issues/10396.
 cronet-api = "org.chromium.net:cronet-api:108.5359.79"
 cronet-embedded = "org.chromium.net:cronet-embedded:108.5359.79"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.23.0"
