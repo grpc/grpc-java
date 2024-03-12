@@ -53,6 +53,7 @@ import io.grpc.xds.client.EnvoyProtoDataTest;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
+import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsResourceType;
 import java.util.Collection;
 import java.util.HashMap;
@@ -471,7 +472,7 @@ public class CsdsServiceTest {
 
     @Override
     @Nullable
-    public ObjectPool<XdsClient> get() {
+    public ObjectPool<XdsClient> get(String target) {
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -483,6 +484,16 @@ public class CsdsServiceTest {
           return null;
         }
       };
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
+      return null;
+    }
+
+    @Override
+    public List<String> getTargets() {
+      return null;
     }
 
     @Override
