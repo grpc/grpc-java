@@ -278,6 +278,7 @@ public abstract class AbstractServerStream extends AbstractStream
      */
     public final void transportReportStatus(final Status status) {
       Preconditions.checkArgument(!status.isOk(), "status must not be OK");
+      onStreamDeallocated();
       if (deframerClosed) {
         deframerClosedTask = null;
         closeListener(status);
@@ -300,6 +301,7 @@ public abstract class AbstractServerStream extends AbstractStream
      * #transportReportStatus}.
      */
     public void complete() {
+      onStreamDeallocated();
       if (deframerClosed) {
         deframerClosedTask = null;
         closeListener(Status.OK);
@@ -335,7 +337,6 @@ public abstract class AbstractServerStream extends AbstractStream
           getTransportTracer().reportStreamClosed(closedStatus.isOk());
         }
         listenerClosed = true;
-        onStreamDeallocated();
         listener().closed(newStatus);
       }
     }

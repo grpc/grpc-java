@@ -96,12 +96,17 @@ class NettyServerStream extends AbstractServerStream {
     @Override
     public void writeHeaders(Metadata headers, boolean flush) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeHeaders")) {
-        writeQueue.enqueue(
-            SendResponseHeadersCommand.createHeaders(
-                transportState(),
-                Utils.convertServerHeaders(headers)),
-            flush);
+        writeHeadersInternal(headers, flush);
       }
+    }
+
+    private void writeHeadersInternal(Metadata headers, boolean flush) {
+      Http2Headers http2headers = Utils.convertServerHeaders(headers);
+      SendResponseHeadersCommand headersCommand =
+          SendResponseHeadersCommand.createHeaders(transportState(), http2headers);
+      // TODO(sergiitk): special handling for goaway?
+      writeQueue.enqueue(headersCommand, flush)
+          .addListener((ChannelFutureListener) this::handleWriteFutureFailures);
     }
 
     private void writeFrameInternal(WritableBuffer frame, boolean flush, final int numMessages) {
@@ -120,6 +125,12 @@ class NettyServerStream extends AbstractServerStream {
               if (future.isSuccess()) {
                 transportTracer.reportMessageSent(numMessages);
               }
+              // Normally we don't need to do anything here because the cause of a failed future
+              // while writing DATA frames would be an IO error and the stream is already closed.
+              // However, we still need to handle this case to cover for any issues in Netty
+              // that may lead to the "Stream does not exist" protocol error.
+              // See io.netty.handler.codec.http2.StreamBufferingEncoder#writeData.
+              handleWriteFutureFailures(future);
             }
           });
     }
@@ -131,13 +142,18 @@ class NettyServerStream extends AbstractServerStream {
       }
     }
 
+    public void writeTrailersInternal(Metadata trailers, boolean headersSent, Status status) {
+      Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
+      SendResponseHeadersCommand trailersCommand =
+          SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status);
+      writeQueue.enqueue(trailersCommand, true)
+          .addListener((ChannelFutureListener) this::handleWriteFutureFailures);
+    }
+
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeTrailers")) {
-        Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
-        writeQueue.enqueue(
-            SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status),
-            true);
+        writeTrailersInternal(trailers, headersSent, status);
       }
     }
 
@@ -146,6 +162,19 @@ class NettyServerStream extends AbstractServerStream {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.cancel")) {
         writeQueue.enqueue(new CancelServerStreamCommand(transportState(), status), true);
       }
+    }
+
+    private void handleWriteFutureFailures(ChannelFuture future) {
+      // isReady() check protects from spamming stream resets by scheduling multiple
+      // CancelServerStreamCommand commands. Initial transportReportStatus()
+      // calls onStreamDeallocated() which makes the transport not ready.
+      if (!isReady() || future.isSuccess()) {
+        return;
+      }
+      // Future failed, release blocking.
+      // TODO(sergiitk): check if something similar to
+      //    io.grpc.netty.NettyClientTransport#statusFromFailedFuture is needed.
+      transportState().http2ProcessingFailed(Utils.statusFromThrowable(future.cause()));
     }
   }
 
@@ -202,6 +231,14 @@ class NettyServerStream extends AbstractServerStream {
     public void deframeFailed(Throwable cause) {
       log.log(Level.WARNING, "Exception processing message", cause);
       Status status = Status.fromThrowable(cause);
+      transportReportStatus(status);
+      handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
+    }
+
+    /**
+     * Called to process a failure in HTTP/2 processing.
+     */
+    protected void http2ProcessingFailed(Status status) {
       transportReportStatus(status);
       handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
     }

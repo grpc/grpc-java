@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -62,6 +63,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
 import java.io.BufferedInputStream;
@@ -407,6 +409,36 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).closed(captor.capture(), same(PROCESSED), any(Metadata.class));
     assertEquals(Status.Code.INTERNAL, captor.getValue().getCode());
+  }
+
+
+  @Test
+  public void writeMessagePromiseFailed() {
+    // Force stream creation.
+    int streamId = Integer.MAX_VALUE;
+    ByteArrayInputStream msg = new ByteArrayInputStream(smallMessage());
+
+    Http2Exception connectionError = Http2Exception.connectionError(
+        io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR,
+        "Stream does not exist %d",
+        streamId);
+    ChannelPromise failedPromise = new DefaultChannelPromise(channel).setFailure(connectionError);
+
+    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(failedPromise);
+
+    stream().transportState().setId(streamId);
+    stream.writeMessage(msg);
+    stream.flush();
+
+    ArgumentCaptor<CancelClientStreamCommand> commandCaptor =
+        ArgumentCaptor.forClass(CancelClientStreamCommand.class);
+
+    verify(writeQueue, atLeastOnce()).enqueue(commandCaptor.capture(), eq(true));
+
+    CancelClientStreamCommand cancelCommand = commandCaptor.getValue();
+    assertThat(cancelCommand).isInstanceOf(CancelClientStreamCommand.class);
+    assertThat(cancelCommand.reason().getCode()).isEqualTo(Status.INTERNAL.getCode());
+    assertThat(cancelCommand.reason().getCause()).isEqualTo(connectionError);
   }
 
   @Test

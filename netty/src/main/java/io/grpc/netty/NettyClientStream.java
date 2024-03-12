@@ -183,17 +183,32 @@ class NettyClientStream extends AbstractClientStream {
         // Add the bytes to outbound flow control.
         onSendingBytes(numBytes);
         writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush)
-            .addListener(new ChannelFutureListener() {
-              @Override
-              public void operationComplete(ChannelFuture future) throws Exception {
-                // If the future succeeds when http2stream is null, the stream has been cancelled
-                // before it began and Netty is purging pending writes from the flow-controller.
-                if (future.isSuccess() && transportState().http2Stream() != null) {
-                  // Remove the bytes from outbound flow control, optionally notifying
-                  // the client that they can send more bytes.
-                  transportState().onSentBytes(numBytes);
-                  NettyClientStream.this.getTransportTracer().reportMessageSent(numMessages);
-                }
+            .addListener((ChannelFutureListener) future -> {
+              // If the future succeeds when http2stream is null, the stream has been cancelled
+              // before it began and Netty is purging pending writes from the flow-controller.
+              if (future.isSuccess() && transportState().http2Stream() == null) {
+                return;
+              }
+
+              if (future.isSuccess()) {
+                // Remove the bytes from outbound flow control, optionally notifying
+                // the client that they can send more bytes.
+                transportState().onSentBytes(numBytes);
+                NettyClientStream.this.getTransportTracer().reportMessageSent(numMessages);
+                // } else {
+              } else if (isReady()) {
+                // Future failed, release blocking.
+                // Normally we don't need to do anything here because the cause of a failed future
+                // while writing DATA frames would be an IO error and the stream is already closed.
+                // However, we still need to handle this case to cover for any issues in Netty
+                // that may lead to the "Stream does not exist" protocol error.
+                // See io.netty.handler.codec.http2.StreamBufferingEncoder#writeData.
+                // Note: isReady() check protects from spamming stream resets by scheduling multiple
+                // CancelClientStreamCommand commands. Initial transportReportStatus() with
+                // stopDelivery=true calls onStreamDeallocated(), which sets a flag to make
+                // the transport state not ready.
+                transportState().http2ProcessingFailed(
+                    transportState().statusFromFailedFuture(future), true, new Metadata());
               }
             });
       } else {
