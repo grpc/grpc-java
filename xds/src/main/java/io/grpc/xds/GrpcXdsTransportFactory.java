@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
+import io.grpc.ConnectivityState;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
@@ -82,6 +83,12 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     @Override
     public void shutdown() {
       channel.shutdown();
+    }
+
+    @Override
+    public boolean isConnected() {
+      ConnectivityState state = channel.getState(false);
+      return state == ConnectivityState.READY;
     }
 
     private class XdsStreamingCall<ReqT, RespT> implements

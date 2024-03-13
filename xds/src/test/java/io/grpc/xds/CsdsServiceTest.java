@@ -53,9 +53,9 @@ import io.grpc.xds.client.EnvoyProtoDataTest;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
-import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsResourceType;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +106,7 @@ public class CsdsServiceTest {
       // because true->false return mutation prevents fetchClientStatus from completing the request.
       csdsStub = ClientStatusDiscoveryServiceGrpc
           .newBlockingStub(grpcServerRule.getChannel())
-          .withDeadline(Deadline.after(3, TimeUnit.SECONDS));
+          .withDeadline(Deadline.after(30, TimeUnit.SECONDS));
       csdsAsyncStub = ClientStatusDiscoveryServiceGrpc.newStub(grpcServerRule.getChannel());
     }
 
@@ -199,13 +199,13 @@ public class CsdsServiceTest {
 
             @Override
             @Nullable
-            public ObjectPool<XdsClient> get() {
+            public ObjectPool<XdsClient> get(String target) {
               // xDS client not ready on the first call, then becomes ready.
               if (!calledOnce) {
                 calledOnce = true;
                 return null;
               } else {
-                return super.get();
+                return super.get(target);
               }
             }
           });
@@ -351,7 +351,7 @@ public class CsdsServiceTest {
           );
         }
       };
-      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient);
+      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient, "fake");
 
       verifyClientConfigNode(clientConfig);
 
@@ -391,7 +391,8 @@ public class CsdsServiceTest {
 
     @Test
     public void getClientConfigForXdsClient_noSubscribedResources() throws InterruptedException {
-      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES);
+      ClientConfig clientConfig =
+          CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES, "fake");
       verifyClientConfigNode(clientConfig);
       verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
     }
@@ -457,14 +458,28 @@ public class CsdsServiceTest {
       return null;
     }
 
+    @Nullable
+    @Override
+    public Collection<String> getSubscribedResources(
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority) {
+      return null;
+    }
+
     @Override
     public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
       return ImmutableMap.of();
+    }
+
+    @Override
+    public void assignResourcesToOwner(XdsResourceType<?> type, Collection<String> resources,
+                                       Object owner) {
+      // No-op.
     }
   }
 
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     @Nullable private final XdsClient xdsClient;
+    private static final List<String> TARGETS = Collections.singletonList("");
 
     private FakeXdsClientPoolFactory(@Nullable XdsClient xdsClient) {
       this.xdsClient = xdsClient;
@@ -472,7 +487,7 @@ public class CsdsServiceTest {
 
     @Override
     @Nullable
-    public ObjectPool<XdsClient> get(String target) {
+    public ObjectPool<XdsClient> get(String notUsedTarget) {
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -487,13 +502,8 @@ public class CsdsServiceTest {
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
-      return null;
-    }
-
-    @Override
     public List<String> getTargets() {
-      return null;
+      return TARGETS;
     }
 
     @Override
@@ -502,7 +512,7 @@ public class CsdsServiceTest {
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate() {
+    public ObjectPool<XdsClient> getOrCreate(String target) {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

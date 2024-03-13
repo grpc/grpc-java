@@ -36,6 +36,11 @@ public interface XdsTransportFactory {
          MethodDescriptor.Marshaller<RespT> respMarshaller);
 
     void shutdown();
+
+    /**
+     * Returns true if this transport is currently connected to the xDS server.
+     */
+    boolean isConnected();
   }
 
   /**

@@ -79,6 +79,10 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
   // the resources that need an update.
   protected abstract boolean isFullStateOfTheWorld();
 
+  public boolean isSharedName() {
+    return false;
+  }
+
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10847")
   public static class Args {
     final ServerInfo serverInfo;
