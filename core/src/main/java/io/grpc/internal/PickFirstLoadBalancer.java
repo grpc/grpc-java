@@ -234,5 +234,13 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       this.shuffleAddressList = shuffleAddressList;
       this.randomSeed = randomSeed;
     }
+
+    public boolean isShuffleAddressList() {
+      return shuffleAddressList != null && shuffleAddressList;
+    }
+
+    public Long getRandomSeed() {
+      return randomSeed;
+    }
   }
 }

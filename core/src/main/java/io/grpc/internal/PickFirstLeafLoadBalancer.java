@@ -110,15 +110,20 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     // We can optionally be configured to shuffle the address list. This can help better distribute
     // the load.
-    if (resolvedAddresses.getLoadBalancingPolicyConfig()
-        instanceof PickFirstLeafLoadBalancerConfig) {
-      PickFirstLeafLoadBalancerConfig config
-          = (PickFirstLeafLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      if (config.shuffleAddressList != null && config.shuffleAddressList) {
+    Object lBPolicyConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    PickFirstLeafLoadBalancerConfig config = null;
+    if (lBPolicyConfig instanceof PickFirstLeafLoadBalancerConfig) {
+      config = (PickFirstLeafLoadBalancerConfig) lBPolicyConfig;
+    } else if (lBPolicyConfig instanceof PickFirstLoadBalancer.PickFirstLoadBalancerConfig) {
+      PickFirstLoadBalancer.PickFirstLoadBalancerConfig srcConfig =
+          (PickFirstLoadBalancer.PickFirstLoadBalancerConfig) lBPolicyConfig;
+      config = new PickFirstLeafLoadBalancerConfig(srcConfig.isShuffleAddressList(),
+          srcConfig.getRandomSeed());
+    }
+    if (config != null && config.shuffleAddressList != null && config.shuffleAddressList) {
         servers = new ArrayList<>(servers);
         Collections.shuffle(servers,
             config.randomSeed != null ? new Random(config.randomSeed) : new Random());
-      }
     }
 
     // Make sure we're storing our own list rather than what was passed in
