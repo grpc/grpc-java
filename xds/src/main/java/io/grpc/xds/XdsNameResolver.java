@@ -139,9 +139,9 @@ final class XdsNameResolver extends NameResolver {
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
-    this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser, syncContext, scheduler,
-        SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
-        FilterRegistry.getDefaultRegistry(), bootstrapOverride);
+    this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
+        syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
+        ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting

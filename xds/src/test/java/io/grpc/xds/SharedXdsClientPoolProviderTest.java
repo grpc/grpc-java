@@ -51,6 +51,7 @@ public class SharedXdsClientPoolProviderTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
   private final Node node = Node.newBuilder().setId("SharedXdsClientPoolProviderTest").build();
+  private static final String DUMMY_TARGET = "dummy";
 
   @Mock
   private GrpcBootstrapperImpl bootstrapper;
@@ -63,8 +64,8 @@ public class SharedXdsClientPoolProviderTest {
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
     thrown.expect(XdsInitializationException.class);
     thrown.expectMessage("No xDS server provided");
-    provider.getOrCreate();
-    assertThat(provider.get()).isNull();
+    provider.getOrCreate(DUMMY_TARGET);
+    assertThat(provider.get(DUMMY_TARGET)).isNull();
   }
 
   @Test
@@ -75,12 +76,12 @@ public class SharedXdsClientPoolProviderTest {
     when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
 
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
-    assertThat(provider.get()).isNull();
-    ObjectPool<XdsClient> xdsClientPool = provider.getOrCreate();
+    assertThat(provider.get(DUMMY_TARGET)).isNull();
+    ObjectPool<XdsClient> xdsClientPool = provider.getOrCreate(DUMMY_TARGET);
     verify(bootstrapper).bootstrap();
-    assertThat(provider.getOrCreate()).isSameInstanceAs(xdsClientPool);
-    assertThat(provider.get()).isNotNull();
-    assertThat(provider.get()).isSameInstanceAs(xdsClientPool);
+    assertThat(provider.getOrCreate(DUMMY_TARGET)).isSameInstanceAs(xdsClientPool);
+    assertThat(provider.get(DUMMY_TARGET)).isNotNull();
+    assertThat(provider.get(DUMMY_TARGET)).isSameInstanceAs(xdsClientPool);
     verifyNoMoreInteractions(bootstrapper);
   }
 

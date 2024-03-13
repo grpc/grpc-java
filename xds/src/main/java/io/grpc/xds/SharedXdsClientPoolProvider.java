@@ -21,7 +21,6 @@ import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.sun.javafx.UnmodifiableArrayList;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -33,7 +32,6 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -57,7 +55,6 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
   private final AtomicReference<Map<String, ?>> bootstrapOverride = new AtomicReference<>();
-//  private volatile ObjectPool<XdsClient> xdsClientPool;
   private Map<String, ObjectPool<XdsClient>> targetToXdsClientMap = new ConcurrentHashMap<>();
 
   SharedXdsClientPoolProvider() {

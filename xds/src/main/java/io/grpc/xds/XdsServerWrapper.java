@@ -77,6 +77,7 @@ import javax.annotation.Nullable;
 
 final class XdsServerWrapper extends Server {
   private static final Logger logger = Logger.getLogger(XdsServerWrapper.class.getName());
+  public static final String SELF_TARGET = "SELF";
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -171,7 +172,7 @@ final class XdsServerWrapper extends Server {
 
   private void internalStart() {
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate();
+      xdsClientPool = xdsClientPoolFactory.getOrCreate(SELF_TARGET);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
