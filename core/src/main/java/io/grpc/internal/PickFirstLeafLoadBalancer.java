@@ -121,9 +121,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           srcConfig.getRandomSeed());
     }
     if (config != null && config.shuffleAddressList != null && config.shuffleAddressList) {
-        servers = new ArrayList<>(servers);
-        Collections.shuffle(servers,
-            config.randomSeed != null ? new Random(config.randomSeed) : new Random());
+      servers = new ArrayList<>(servers);
+      Collections.shuffle(servers,
+          config.randomSeed != null ? new Random(config.randomSeed) : new Random());
     }
 
     // Make sure we're storing our own list rather than what was passed in
