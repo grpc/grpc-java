@@ -22,7 +22,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Message;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.xds.Endpoints.DropOverload;
@@ -190,20 +193,26 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       if (!endpoint.hasEndpoint() || !endpoint.getEndpoint().hasAddress()) {
         return StructOrError.fromError("LbEndpoint with no endpoint/address");
       }
-      io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress =
-          endpoint.getEndpoint().getAddress().getSocketAddress();
-      InetSocketAddress addr =
-          new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
-      boolean isHealthy =
-          endpoint.getHealthStatus() == io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY
-              || endpoint.getHealthStatus()
-              == io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN;
+      List<java.net.SocketAddress> addresses = new ArrayList<>();
+      addresses.add(getInetSocketAddress(endpoint.getEndpoint().getAddress()));
+      for (Endpoint.AdditionalAddress additionalAddress
+          : endpoint.getEndpoint().getAdditionalAddressesList()) {
+        addresses.add(getInetSocketAddress(additionalAddress.getAddress()));
+      }
+      boolean isHealthy = (endpoint.getHealthStatus() == HealthStatus.HEALTHY)
+              || (endpoint.getHealthStatus() == HealthStatus.UNKNOWN);
       endpoints.add(Endpoints.LbEndpoint.create(
-          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
+          new EquivalentAddressGroup(addresses),
           endpoint.getLoadBalancingWeight().getValue(), isHealthy));
     }
     return StructOrError.fromStruct(Endpoints.LocalityLbEndpoints.create(
         endpoints, proto.getLoadBalancingWeight().getValue(), proto.getPriority()));
+  }
+
+  private static InetSocketAddress getInetSocketAddress(Address address) {
+    io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress = address.getSocketAddress();
+
+    return new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
   }
 
   static final class EdsUpdate implements ResourceUpdate {
