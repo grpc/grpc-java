@@ -160,7 +160,7 @@ def com_google_protobuf_javalite():
 def io_grpc_grpc_proto():
     http_archive(
         name = "io_grpc_grpc_proto",
-        sha256 = "464e97a24d7d784d9c94c25fa537ba24127af5aae3edd381007b5b98705a0518",
-        strip_prefix = "grpc-proto-08911e9d585cbda3a55eb1dcc4b99c89aebccff8",
-        urls = ["https://github.com/grpc/grpc-proto/archive/08911e9d585cbda3a55eb1dcc4b99c89aebccff8.zip"],
+        sha256 = "729ac127a003836d539ed9da72a21e094aac4c4609e0481d6fc9e28a844e11af",
+        strip_prefix = "grpc-proto-4f245d272a28a680606c0739753506880cf33b5f",
+        urls = ["https://github.com/grpc/grpc-proto/archive/4f245d272a28a680606c0739753506880cf33b5f.zip"],
     )
