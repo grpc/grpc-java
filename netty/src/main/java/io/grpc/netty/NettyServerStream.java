@@ -104,9 +104,8 @@ class NettyServerStream extends AbstractServerStream {
       Http2Headers http2headers = Utils.convertServerHeaders(headers);
       SendResponseHeadersCommand headersCommand =
           SendResponseHeadersCommand.createHeaders(transportState(), http2headers);
-      // TODO(sergiitk): special handling for goaway?
       writeQueue.enqueue(headersCommand, flush)
-          .addListener((ChannelFutureListener) this::handleWriteFutureFailures);
+          .addListener((ChannelFuture future) -> handleWriteFutureFailures(future));
     }
 
     private void writeFrameInternal(WritableBuffer frame, boolean flush, final int numMessages) {
@@ -147,7 +146,7 @@ class NettyServerStream extends AbstractServerStream {
       SendResponseHeadersCommand trailersCommand =
           SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status);
       writeQueue.enqueue(trailersCommand, true)
-          .addListener((ChannelFutureListener) this::handleWriteFutureFailures);
+          .addListener((ChannelFuture future) -> handleWriteFutureFailures(future));
     }
 
     @Override

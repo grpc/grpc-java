@@ -195,7 +195,6 @@ class NettyClientStream extends AbstractClientStream {
                 // the client that they can send more bytes.
                 transportState().onSentBytes(numBytes);
                 NettyClientStream.this.getTransportTracer().reportMessageSent(numMessages);
-                // } else {
               } else if (isReady()) {
                 // Future failed, release blocking.
                 // Normally we don't need to do anything here because the cause of a failed future
