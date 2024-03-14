@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
+import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
 import static org.junit.Assert.fail;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
@@ -144,7 +145,6 @@ import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -981,38 +981,50 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseLocalityLbEndpoints_withDualStackEndpoints() {
+    String originalDualStackProp =
+        System.setProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, "true");
     String v4Address = "172.14.14.5";
     String v6Address = "2001:db8::1";
     int port = 8888;
 
-    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
-        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
-            .setLocality(Locality.newBuilder()
-                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
-            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
-            .setPriority(1)
-            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
-                .setEndpoint(Endpoint.newBuilder()
-                    .setAddress(Address.newBuilder()
-                        .setSocketAddress(
-                            SocketAddress.newBuilder()
-                                .setAddress(v4Address).setPortValue(port)))
-                    .addAdditionalAddresses(Endpoint.AdditionalAddress.newBuilder()
-                    .setAddress(Address.newBuilder()
-                        .setSocketAddress(
-                            SocketAddress.newBuilder()
-                                .setAddress(v6Address).setPortValue(port)))))
-                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY)
-                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
-            .build();
-    StructOrError<LocalityLbEndpoints> struct = XdsEndpointResource.parseLocalityLbEndpoints(proto);
-    assertThat(struct.getErrorDetail()).isNull();
-    List<java.net.SocketAddress> socketAddressList = Arrays.asList(
-        new InetSocketAddress(v4Address, port), new InetSocketAddress(v6Address, port));
-    EquivalentAddressGroup expectedEag = new EquivalentAddressGroup(socketAddressList);
-    assertThat(struct.getStruct()).isEqualTo(
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(expectedEag, 20, true)), 100, 1));
+    try {
+      io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+          io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+              .setLocality(Locality.newBuilder()
+                  .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+              .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+              .setPriority(1)
+              .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                  .setEndpoint(Endpoint.newBuilder()
+                      .setAddress(Address.newBuilder()
+                          .setSocketAddress(
+                              SocketAddress.newBuilder()
+                                  .setAddress(v4Address).setPortValue(port)))
+                      .addAdditionalAddresses(Endpoint.AdditionalAddress.newBuilder()
+                          .setAddress(Address.newBuilder()
+                              .setSocketAddress(
+                                  SocketAddress.newBuilder()
+                                      .setAddress(v6Address).setPortValue(port)))))
+                  .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY)
+                  .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))
+              .build();
+
+      StructOrError<LocalityLbEndpoints> struct =
+          XdsEndpointResource.parseLocalityLbEndpoints(proto);
+      assertThat(struct.getErrorDetail()).isNull();
+      List<java.net.SocketAddress> socketAddressList = Arrays.asList(
+          new InetSocketAddress(v4Address, port), new InetSocketAddress(v6Address, port));
+      EquivalentAddressGroup expectedEag = new EquivalentAddressGroup(socketAddressList);
+      assertThat(struct.getStruct()).isEqualTo(
+          LocalityLbEndpoints.create(
+              Collections.singletonList(LbEndpoint.create(expectedEag, 20, true)), 100, 1));
+    } finally {
+      if (originalDualStackProp != null) {
+        System.setProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, originalDualStackProp);
+      } else {
+        System.clearProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS);
+      }
+    }
   }
 
   @Test

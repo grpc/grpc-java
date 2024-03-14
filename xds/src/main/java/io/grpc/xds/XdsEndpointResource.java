@@ -27,6 +27,7 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
@@ -48,6 +49,8 @@ import javax.annotation.Nullable;
 class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
+  static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
+      "grpc.experimental.xdsDualstackEndpoints";
 
   private static final XdsEndpointResource instance = new XdsEndpointResource();
 
@@ -95,6 +98,10 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
     return processClusterLoadAssignment((ClusterLoadAssignment) unpackedMessage);
+  }
+
+  private static boolean isEnabledXdsDualStack() {
+    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
   }
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
@@ -194,9 +201,11 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       }
       List<java.net.SocketAddress> addresses = new ArrayList<>();
       addresses.add(getInetSocketAddress(endpoint.getEndpoint().getAddress()));
-      for (Endpoint.AdditionalAddress additionalAddress
-          : endpoint.getEndpoint().getAdditionalAddressesList()) {
-        addresses.add(getInetSocketAddress(additionalAddress.getAddress()));
+      if (isEnabledXdsDualStack()) {
+        for (Endpoint.AdditionalAddress additionalAddress
+            : endpoint.getEndpoint().getAdditionalAddressesList()) {
+          addresses.add(getInetSocketAddress(additionalAddress.getAddress()));
+        }
       }
       boolean isHealthy = (endpoint.getHealthStatus() == HealthStatus.HEALTHY)
               || (endpoint.getHealthStatus() == HealthStatus.UNKNOWN);
