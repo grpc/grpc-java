@@ -465,9 +465,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       log.log(Level.FINE, "Received health status {0} for subchannel {1}",
           new Object[]{newState, subchannelData.subchannel});
       healthStateInfo = newState;
-      SubchannelData curSubChanData = subchannels.get(addressIndex.getCurrentAddress());
-      if (curSubChanData != null && curSubChanData.healthListener == this) {
-        updateHealthCheckedState(subchannelData);
+      try {
+        SubchannelData curSubChanData = subchannels.get(addressIndex.getCurrentAddress());
+        if (curSubChanData != null && curSubChanData.healthListener == this) {
+          updateHealthCheckedState(subchannelData);
+        }
+      } catch (IllegalStateException e) {
+        log.fine("Health listener received state change after subchannel was removed");
       }
     }
   }
