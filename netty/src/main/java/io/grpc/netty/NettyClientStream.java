@@ -183,7 +183,7 @@ class NettyClientStream extends AbstractClientStream {
         // Add the bytes to outbound flow control.
         onSendingBytes(numBytes);
         writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush)
-            .addListener((ChannelFutureListener) future -> {
+            .addListener((ChannelFuture future) -> {
               // If the future succeeds when http2stream is null, the stream has been cancelled
               // before it began and Netty is purging pending writes from the flow-controller.
               if (future.isSuccess() && transportState().http2Stream() == null) {
