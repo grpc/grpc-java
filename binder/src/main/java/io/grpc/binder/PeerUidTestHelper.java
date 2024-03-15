@@ -3,7 +3,6 @@ package io.grpc.binder;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.Metadata;
-import io.grpc.Metadata.AsciiMarshaller;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -13,7 +12,7 @@ public class PeerUidTestHelper {
 
     /** The UID of the calling package is set with the value of this key. */
     public static final Metadata.Key<Integer> UID_KEY =
-            Metadata.Key.of("binder-remote-uid-for-unit-testing", PeerUidTestMarshaller.MARSHALLER);
+            Metadata.Key.of("binder-remote-uid-for-unit-testing", PeerUidTestMarshaller.INSTANCE);
 
     /**
      * Creates an interceptor that associates the {@link PeerUids#REMOTE_PEER} key in the request
@@ -40,18 +39,18 @@ public class PeerUidTestHelper {
 
     private PeerUidTestHelper() {}
 
-    private static class PeerUidTestMarshaller {
-        private static final Metadata.AsciiMarshaller<Integer> MARSHALLER =
-                new AsciiMarshaller<Integer>() {
-                    @Override
-                    public String toAsciiString(Integer value) {
-                        return value.toString();
-                    }
+    private static class PeerUidTestMarshaller implements Metadata.AsciiMarshaller<Integer> {
+        public static final PeerUidTestMarshaller INSTANCE = new PeerUidTestMarshaller();
 
-                    @Override
-                    public Integer parseAsciiString(String serialized) {
-                        return Integer.parseInt(serialized);
-                    }
-                };
+        @Override
+        public String toAsciiString(Integer value) {
+            return value.toString();
+        }
+
+        @Override
+        public Integer parseAsciiString(String serialized) {
+            return Integer.parseInt(serialized);
+        }
     }
+    ;
 }
