@@ -95,6 +95,15 @@ def grpc_java_repositories():
                 "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
             ],
         )
+    if not native.existing_rule("com_github_cncf_xds"):
+        http_archive(
+            name = "com_github_cncf_xds",
+            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
+            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
+            urls = [
+                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
+            ],
+        )
     if not native.existing_rule("com_github_grpc_grpc"):
         http_archive(
             name = "com_github_grpc_grpc",
