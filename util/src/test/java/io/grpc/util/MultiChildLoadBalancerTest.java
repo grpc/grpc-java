@@ -32,7 +32,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.Lists;
 import io.grpc.Attributes;
@@ -128,7 +127,7 @@ public class MultiChildLoadBalancerTest {
         (TestLb.TestSubchannelPicker) pickerCaptor.getValue();
     assertThat(subchannelPicker.getReadySubchannels()).containsExactly(readySubchannel);
 
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test
@@ -192,7 +191,7 @@ public class MultiChildLoadBalancerTest {
     verify(mockHelper, times(3)).createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class));
     inOrder.verify(mockHelper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
 
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test

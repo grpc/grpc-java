@@ -159,7 +159,7 @@ public class LeastRequestLoadBalancerTest {
     assertEquals(READY, stateCaptor.getAllValues().get(1));
     assertThat(getList(pickerCaptor.getValue())).containsExactly(readySubchannel);
 
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -226,7 +226,7 @@ public class LeastRequestLoadBalancerTest {
 
     assertThat(getList(pickerCaptor.getValue())).containsExactly(oldSubchannel, newSubchannel);
 
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   private Subchannel getSubchannel(EquivalentAddressGroup removedEag) {
@@ -288,7 +288,7 @@ public class LeastRequestLoadBalancerTest {
     int expectedCount = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
     verify(subchannel, times(expectedCount)).requestConnection();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -319,7 +319,7 @@ public class LeastRequestLoadBalancerTest {
     // At this point it should use a ReadyPicker with newConfig
     pickerCaptor.getValue().pickSubchannel(mockArgs);
     verify(mockRandom, times(oldConfig.choiceCount + newConfig.choiceCount)).nextInt(1);
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -375,7 +375,7 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   private String getStatusString(SubchannelPicker picker) {
@@ -426,7 +426,7 @@ public class LeastRequestLoadBalancerTest {
       inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     }
 
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -548,7 +548,7 @@ public class LeastRequestLoadBalancerTest {
     LoadBalancer.PickResult pickResult2 = pickerCaptor.getValue().pickSubchannel(mockArgs);
     verify(mockRandom, times(choiceCount * 2)).nextInt(1);
     assertEquals(readySubchannel, pickResult2.getSubchannel());
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
