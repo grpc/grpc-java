@@ -11,22 +11,9 @@ import io.grpc.ServerInterceptor;
 /** Class which helps set up {@link PeerUids} to be used in tests. */
 public class PeerUidTestHelper {
 
-    private static final Metadata.AsciiMarshaller<Integer> MARSHALLER =
-            new AsciiMarshaller<Integer>() {
-                @Override
-                public String toAsciiString(Integer value) {
-                    return value.toString();
-                }
-
-                @Override
-                public Integer parseAsciiString(String serialized) {
-                    return Integer.parseInt(serialized);
-                }
-            };
-
     /** The UID of the calling package is set with the value of this key. */
     public static final Metadata.Key<Integer> UID_KEY =
-            Metadata.Key.of("binder-remote-uid-for-unit-testing", MARSHALLER);
+            Metadata.Key.of("binder-remote-uid-for-unit-testing", PeerUidTestMarshaller.MARSHALLER);
 
     /**
      * Creates an interceptor that associates the {@link PeerUids#REMOTE_PEER} key in the request
@@ -52,4 +39,19 @@ public class PeerUidTestHelper {
     }
 
     private PeerUidTestHelper() {}
+
+    private static class PeerUidTestMarshaller {
+        private static final Metadata.AsciiMarshaller<Integer> MARSHALLER =
+                new AsciiMarshaller<Integer>() {
+                    @Override
+                    public String toAsciiString(Integer value) {
+                        return value.toString();
+                    }
+
+                    @Override
+                    public Integer parseAsciiString(String serialized) {
+                        return Integer.parseInt(serialized);
+                    }
+                };
+    }
 }
