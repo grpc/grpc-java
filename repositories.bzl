@@ -88,10 +88,10 @@ def grpc_java_repositories():
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
-            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
-            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
+            strip_prefix = "xds-91a88dc4e9596479fc0ab63fbd4ef20676a73507",
+            sha256 = "cd1dfbc267d01176886942659fb7da87ad1c6c2b215b41ad3d48dff6c277d53b",
             urls = [
-                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
+                "https://github.com/cncf/xds/archive/91a88dc4e9596479fc0ab63fbd4ef20676a73507.tar.gz",
             ],
         )
     if not native.existing_rule("com_github_grpc_grpc"):
@@ -130,10 +130,10 @@ def grpc_java_repositories():
     if not native.existing_rule("envoy_api"):
         http_archive(
             name = "envoy_api",
-            sha256 = "b426904abf51ba21dd8947a05694bb3c861d6f5e436e4673e74d7d7bfb6d3188",
-            strip_prefix = "data-plane-api-268824e4eee3d7770a347a5dc5aaddc0b1b14e24",
+            sha256 = "721303f6d092abb23dc96ef14f14ca9e49883640e1129232f2eb85e4adb05a10",
+            strip_prefix = "data-plane-api-b9ff28d649adc8d613f2bf68bb85fec7875f73e4",
             urls = [
-                "https://github.com/envoyproxy/data-plane-api/archive/268824e4eee3d7770a347a5dc5aaddc0b1b14e24.tar.gz",
+                "https://github.com/envoyproxy/data-plane-api/archive/b9ff28d649adc8d613f2bf68bb85fec7875f73e4.tar.gz",
             ],
         )
 
