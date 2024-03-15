@@ -85,12 +85,13 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 
 def grpc_java_repositories():
     """Imports dependencies for grpc-java."""
-    if not native.existing_rule("com_github_cncf_xds"):
+    if not native.existing_rule("com_github_cncf_udpa"):
         http_archive(
-            name = "com_github_cncf_xds",
-            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
+            name = "com_github_cncf_udpa",
             sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
+            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
             urls = [
+                "https://storage.googleapis.com/grpc-bazel-mirror/github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
                 "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
             ],
         )
@@ -130,10 +131,11 @@ def grpc_java_repositories():
     if not native.existing_rule("envoy_api"):
         http_archive(
             name = "envoy_api",
-            sha256 = "721303f6d092abb23dc96ef14f14ca9e49883640e1129232f2eb85e4adb05a10",
-            strip_prefix = "data-plane-api-b9ff28d649adc8d613f2bf68bb85fec7875f73e4",
+            sha256 = "fff067a5d6d776fc88549b5dd4773a6f8f0187b26a859de8b29bd4226a28ee63",
+            strip_prefix = "data-plane-api-9d6ffa70677c4dbf23f6ed569676206c4e2edff4",
             urls = [
-                "https://github.com/envoyproxy/data-plane-api/archive/b9ff28d649adc8d613f2bf68bb85fec7875f73e4.tar.gz",
+                "https://storage.googleapis.com/grpc-bazel-mirror/github.com/envoyproxy/data-plane-api/archive/9d6ffa70677c4dbf23f6ed569676206c4e2edff4.tar.gz",
+                "https://github.com/envoyproxy/data-plane-api/archive/9d6ffa70677c4dbf23f6ed569676206c4e2edff4.tar.gz",
             ],
         )
 
