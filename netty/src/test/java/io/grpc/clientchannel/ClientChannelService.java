@@ -15,6 +15,8 @@ import java.util.function.Consumer;
 
 public abstract class ClientChannelService implements BindableService {
 
+    public static final Metadata.Key<String> CONTENT_TYPE_KEY = Metadata.Key.of("content-type", Metadata.ASCII_STRING_MARSHALLER);
+
     static String TUNNEL_SERVICE = "io.grpc.Tunnel";
 
     static MethodDescriptor<ByteBuf, ByteBuf> NEW_TUNNEL_METHOD = MethodDescriptor
@@ -61,6 +63,8 @@ public abstract class ClientChannelService implements BindableService {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+
+            headers.put(CONTENT_TYPE_KEY, "application/grpc+raw");
 
             serverCall.start(
                     new ClientCall.Listener<ByteBuf>() {
