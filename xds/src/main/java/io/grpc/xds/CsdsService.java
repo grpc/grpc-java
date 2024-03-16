@@ -39,7 +39,7 @@ import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.client.XdsResourceType;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -126,13 +126,14 @@ public final class CsdsService implements BindableService {
           Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"));
     } else {
       List<String> targets = xdsClientPoolFactory.getTargets();
-      if (targets.isEmpty()) {
-        targets = Collections.singletonList("");
-      }
+      List<ClientConfig> clientConfigs = new ArrayList<>(targets.size());
+
       for (int i = 0; i < targets.size() && error == null; i++) {
-        String target = targets.get(i);
         try {
-          responseObserver.onNext(getConfigDumpForRequest(target));
+          ClientConfig clientConfig = getConfigForRequest(targets.get(i));
+          if (clientConfig != null) {
+            clientConfigs.add(clientConfig);
+          }
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
@@ -143,6 +144,14 @@ public final class CsdsService implements BindableService {
               .asException();
         }
       }
+
+      try {
+        responseObserver.onNext(getStatusResponse(clientConfigs));
+      } catch (RuntimeException e) {
+        logger.log(Level.WARNING, "Unexpected error while processing CSDS config dump", e);
+        error = Status.INTERNAL.withDescription("Unexpected internal error").withCause(e)
+            .asException();
+      }
     }
 
     if (error == null) {
@@ -152,24 +161,28 @@ public final class CsdsService implements BindableService {
     return false;
   }
 
-  private ClientStatusResponse getConfigDumpForRequest(String target)
-      throws InterruptedException {
+  private ClientConfig getConfigForRequest(String target) throws InterruptedException {
     ObjectPool<XdsClient> xdsClientPool = xdsClientPoolFactory.get(target);
     if (xdsClientPool == null) {
-      return ClientStatusResponse.getDefaultInstance();
+      return null;
     }
 
     XdsClient xdsClient = null;
     try {
       xdsClient = xdsClientPool.getObject();
-      return ClientStatusResponse.newBuilder()
-          .addConfig(getClientConfigForXdsClient(xdsClient, target))
-          .build();
+      return getClientConfigForXdsClient(xdsClient, target);
     } finally {
       if (xdsClient != null) {
         xdsClientPool.returnObject(xdsClient);
       }
     }
+  }
+
+  private ClientStatusResponse getStatusResponse(List<ClientConfig> clientConfigs) {
+    if (clientConfigs.isEmpty()) {
+      return ClientStatusResponse.getDefaultInstance();
+    }
+    return ClientStatusResponse.newBuilder().addAllConfig(clientConfigs).build();
   }
 
   @VisibleForTesting
