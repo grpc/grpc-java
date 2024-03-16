@@ -21,23 +21,19 @@ public class TunnelClient {
     public static void main(String[] args) throws Exception {
         io.grpc.ManagedChannel networkChannel = ManagedChannelBuilder.forAddress("localhost", 50051).usePlaintext().build();
 
-        networkChannel.getState(true);
+        Metadata headers = new Metadata();
+        headers.put(PREFIX_HEADER, "Value: ");
 
-        networkChannel.notifyWhenStateChanged(ConnectivityState.READY, () -> {
-            Metadata headers = new Metadata();
-            headers.put(PREFIX_HEADER, "Value: ");
+        ClientChannelService.registerServer(
+                networkChannel,
+                headers,
+                b -> {
+                    MutableHandlerRegistry registry = new MutableHandlerRegistry();
+                    registry.addService(new VMDriverService());
 
-            ClientChannelService.registerServer(
-                    networkChannel,
-                    headers,
-                    b -> {
-                        MutableHandlerRegistry registry = new MutableHandlerRegistry();
-                        registry.addService(new VMDriverService());
-
-                        b.fallbackHandlerRegistry(registry);
-                    }
-            );
-        });
+                    b.fallbackHandlerRegistry(registry);
+                }
+        );
 
         Thread.currentThread().join();
     }
@@ -51,7 +47,11 @@ public class TunnelClient {
                     () -> {
                         int i = counter.getAndDecrement();
                         if (i > 0) {
-                            responseObserver.onNext(SimpleResponse.newBuilder().setResponseMessage("Hello " + request.getRequestMessage() + " " + i).build());
+                            responseObserver.onNext(
+                                    SimpleResponse.newBuilder()
+                                            .setResponseMessage("Hello " + request.getRequestMessage() + " " + i)
+                                            .build()
+                            );
                         } else {
                             responseObserver.onCompleted();
                             throw new RuntimeException("Completed");
