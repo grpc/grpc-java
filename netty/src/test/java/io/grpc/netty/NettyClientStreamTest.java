@@ -17,12 +17,15 @@
 package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.STATUS_OK;
+import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
+import static io.netty.handler.codec.http2.Http2Exception.connectionError;
 import static io.netty.util.CharsetUtil.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -39,6 +42,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -205,6 +209,42 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         eq(new SendGrpcFrameCommand(
             stream.transportState(), messageFrame(MESSAGE).slice(5, 11), false)),
         eq(true));
+  }
+
+  @Test
+  public void writeFrameFutureFailedShouldCancelRpc() {
+    Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
+    when(writeQueue.enqueue(any(SendGrpcFrameCommand.class), eq(true))).thenReturn(
+        new DefaultChannelPromise(channel).setFailure(h2Error));
+
+    // Force stream creation.
+    stream().transportState().setId(STREAM_ID);
+    // TODO(sergiitk): multiple messages?
+    stream.writeMessage(new ByteArrayInputStream(smallMessage()));
+    stream.flush();
+
+    // Spot-check single-frame message after stream creation.
+    verify(writeQueue, times(1)).enqueue(any(CreateStreamCommand.class), eq(false));
+    verify(writeQueue, times(1)).enqueue(any(SendGrpcFrameCommand.class), eq(true));
+    verify(writeQueue, times(1)).enqueue(any(CancelClientStreamCommand.class), eq(true));
+    verifyNoMoreInteractions(writeQueue);
+
+    ArgumentCaptor<QueuedCommand> commandCaptor = ArgumentCaptor.forClass(QueuedCommand.class);
+    verify(writeQueue, atLeastOnce()).enqueue(commandCaptor.capture(), eq(true));
+
+    // Check the last call to be CancelClientStreamCommand.
+    QueuedCommand command = commandCaptor.getValue();
+    assertWithMessage("Expected last command on the stream to be CancelClientStreamCommand")
+        .that(command)
+        .isInstanceOf(CancelClientStreamCommand.class);
+    CancelClientStreamCommand cancelCommand = (CancelClientStreamCommand) command;
+    // Check connection error info is propagated via Status.
+    Status cancelReason = cancelCommand.reason();
+    assertThat(cancelReason.getCode()).isEqualTo(Status.INTERNAL.getCode());
+    assertThat(cancelReason.getCause()).isEqualTo(h2Error);
+    // Verify listener closed.
+    // should we expect REFUSED/MISCARRIED instead?
+    verify(listener).closed(same(cancelReason), eq(PROCESSED), any(Metadata.class));
   }
 
   @Test
@@ -409,36 +449,6 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(listener).closed(captor.capture(), same(PROCESSED), any(Metadata.class));
     assertEquals(Status.Code.INTERNAL, captor.getValue().getCode());
-  }
-
-
-  @Test
-  public void writeMessagePromiseFailed() {
-    // Force stream creation.
-    int streamId = Integer.MAX_VALUE;
-    ByteArrayInputStream msg = new ByteArrayInputStream(smallMessage());
-
-    Http2Exception connectionError = Http2Exception.connectionError(
-        io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR,
-        "Stream does not exist %d",
-        streamId);
-    ChannelPromise failedPromise = new DefaultChannelPromise(channel).setFailure(connectionError);
-
-    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(failedPromise);
-
-    stream().transportState().setId(streamId);
-    stream.writeMessage(msg);
-    stream.flush();
-
-    ArgumentCaptor<CancelClientStreamCommand> commandCaptor =
-        ArgumentCaptor.forClass(CancelClientStreamCommand.class);
-
-    verify(writeQueue, atLeastOnce()).enqueue(commandCaptor.capture(), eq(true));
-
-    CancelClientStreamCommand cancelCommand = commandCaptor.getValue();
-    assertThat(cancelCommand).isInstanceOf(CancelClientStreamCommand.class);
-    assertThat(cancelCommand.reason().getCode()).isEqualTo(Status.INTERNAL.getCode());
-    assertThat(cancelCommand.reason().getCause()).isEqualTo(connectionError);
   }
 
   @Test

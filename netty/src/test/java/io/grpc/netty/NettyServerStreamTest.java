@@ -17,8 +17,11 @@
 package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
+import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
+import static io.netty.handler.codec.http2.Http2Exception.connectionError;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,6 +30,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -41,9 +45,12 @@ import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import io.grpc.internal.TransportTracer;
+import io.grpc.netty.WriteQueue.QueuedCommand;
 import io.netty.buffer.EmptyByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.channel.DefaultChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -122,6 +129,62 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     verify(writeQueue).enqueue(
         eq(new SendGrpcFrameCommand(stream.transportState(), messageFrame(MESSAGE), false)),
         eq(true));
+  }
+
+  @Test
+  public void writeFrameFutureFailedShouldCancelRpc() {
+    Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
+    when(writeQueue.enqueue(any(SendGrpcFrameCommand.class), eq(true))).thenReturn(
+        new DefaultChannelPromise(channel).setFailure(h2Error));
+
+    // Single-frame message.
+    stream.writeMessage(new ByteArrayInputStream(smallMessage()));
+    stream.flush();
+    verifyWriteFutureFailure(h2Error, SendGrpcFrameCommand.class);
+  }
+
+  @Test
+  public void writeHeadersFutureFailedShouldCancelRpc() {
+    Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
+    when(writeQueue.enqueue(any(SendResponseHeadersCommand.class), eq(true))).thenReturn(
+        new DefaultChannelPromise(channel).setFailure(h2Error));
+
+    stream().writeHeaders(new Metadata(), true);
+    stream.flush();
+    verifyWriteFutureFailure(h2Error, SendResponseHeadersCommand.class);
+  }
+
+  @Test
+  public void writeTrailersFutureFailedShouldCancelRpc() {
+    Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
+    when(writeQueue.enqueue(any(SendResponseHeadersCommand.class), eq(true))).thenReturn(
+        new DefaultChannelPromise(channel).setFailure(h2Error));
+
+    stream().close(Status.OK, trailers);
+    verifyWriteFutureFailure(h2Error, SendResponseHeadersCommand.class);
+  }
+
+  private void verifyWriteFutureFailure(
+      Http2Exception h2Error, Class<? extends QueuedCommand> failedCommand) {
+    verify(writeQueue, times(1)).enqueue(any(failedCommand), eq(true));
+    verify(writeQueue, times(1)).enqueue(any(CancelServerStreamCommand.class), eq(true));
+    verifyNoMoreInteractions(writeQueue);
+
+    ArgumentCaptor<QueuedCommand> commandCaptor = ArgumentCaptor.forClass(QueuedCommand.class);
+    verify(writeQueue, atLeastOnce()).enqueue(commandCaptor.capture(), eq(true));
+
+    // Check the last call to be CancelClientStreamCommand.
+    QueuedCommand command = commandCaptor.getValue();
+    assertWithMessage("Expected last command on the stream to be CancelServerStreamCommand")
+        .that(command)
+        .isInstanceOf(CancelServerStreamCommand.class);
+    CancelServerStreamCommand cancelCommand = (CancelServerStreamCommand) command;
+    // Check connection error info is propagated via Status.
+    Status cancelReason = cancelCommand.reason();
+    assertThat(cancelReason.getCode()).isEqualTo(Status.INTERNAL.getCode());
+    assertThat(cancelReason.getCause()).isEqualTo(h2Error);
+    // Listener closed.
+    verify(serverListener).closed(same(cancelReason));
   }
 
   @Test
