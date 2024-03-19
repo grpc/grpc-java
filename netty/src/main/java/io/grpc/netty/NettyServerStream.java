@@ -96,65 +96,37 @@ class NettyServerStream extends AbstractServerStream {
     @Override
     public void writeHeaders(Metadata headers, boolean flush) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeHeaders")) {
-        writeHeadersInternal(headers, flush);
+        Http2Headers http2headers = Utils.convertServerHeaders(headers);
+        SendResponseHeadersCommand headersCommand =
+            SendResponseHeadersCommand.createHeaders(transportState(), http2headers);
+        writeQueue.enqueue(headersCommand, true)
+            .addListener((ChannelFutureListener) transportState()::handleWriteFutureFailures);
       }
-    }
-
-    private void writeHeadersInternal(Metadata headers, boolean flush) {
-      Http2Headers http2headers = Utils.convertServerHeaders(headers);
-      SendResponseHeadersCommand headersCommand =
-          SendResponseHeadersCommand.createHeaders(transportState(), http2headers);
-      writeQueue.enqueue(headersCommand, flush)
-          .addListener((ChannelFuture future) -> handleWriteFutureFailures(future));
-    }
-
-    private void writeFrameInternal(WritableBuffer frame, boolean flush, final int numMessages) {
-      Preconditions.checkArgument(numMessages >= 0);
-      ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf().touch();
-      final int numBytes = bytebuf.readableBytes();
-      // Add the bytes to outbound flow control.
-      onSendingBytes(numBytes);
-      writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, false), flush)
-          .addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-              // Remove the bytes from outbound flow control, optionally notifying
-              // the client that they can send more bytes.
-              transportState().onSentBytes(numBytes);
-              if (future.isSuccess()) {
-                transportTracer.reportMessageSent(numMessages);
-              }
-              // Normally we don't need to do anything here because the cause of a failed future
-              // while writing DATA frames would be an IO error and the stream is already closed.
-              // However, we still need to handle this case to cover for any issues in Netty
-              // that may lead to the "Stream does not exist" protocol error.
-              // See io.netty.handler.codec.http2.StreamBufferingEncoder#writeData.
-              handleWriteFutureFailures(future);
-            }
-          });
     }
 
     @Override
     public void writeFrame(WritableBuffer frame, boolean flush, final int numMessages) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeFrame")) {
-        writeFrameInternal(frame, flush, numMessages);
+        Preconditions.checkArgument(numMessages >= 0);
+        ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf().touch();
+        final int numBytes = bytebuf.readableBytes();
+        // Add the bytes to outbound flow control.
+        onSendingBytes(numBytes);
+        ChannelFutureListener failureListener =
+            future -> transportState().onWriteFrameData(future, numMessages, numBytes);
+        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, false), flush)
+            .addListener(failureListener);
       }
-    }
-
-    public void writeTrailersInternal(Metadata trailers, boolean headersSent, Status status) {
-      Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
-      SendResponseHeadersCommand trailersCommand =
-          SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status);
-      writeQueue.enqueue(trailersCommand, true)
-          .addListener((ChannelFuture future) -> handleWriteFutureFailures(future));
-      // .addListener((ChannelFuture future) -> transportState().handleWriteFutureFailures(future));
-      // .addListener((ChannelFutureListener) transportState()::handleWriteFutureFailures);
     }
 
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.writeTrailers")) {
-        writeTrailersInternal(trailers, headersSent, status);
+        Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
+        SendResponseHeadersCommand trailersCommand =
+            SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status);
+        writeQueue.enqueue(trailersCommand, true)
+            .addListener((ChannelFutureListener) transportState()::handleWriteFutureFailures);
       }
     }
 
@@ -163,20 +135,6 @@ class NettyServerStream extends AbstractServerStream {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.cancel")) {
         writeQueue.enqueue(new CancelServerStreamCommand(transportState(), status), true);
       }
-    }
-
-    // TODO(sergiitk): move to the TransportState.
-    private void handleWriteFutureFailures(ChannelFuture future) {
-      // isReady() check protects from spamming stream resets by scheduling multiple
-      // CancelServerStreamCommand commands. Initial transportReportStatus()
-      // calls onStreamDeallocated() which makes the transport not ready.
-      if (!isReady() || future.isSuccess()) {
-        return;
-      }
-      // Future failed, release blocking.
-      // TODO(sergiitk): check if something similar to
-      //    io.grpc.netty.NettyClientTransport#statusFromFailedFuture is needed.
-      transportState().http2ProcessingFailed(Utils.statusFromThrowable(future.cause()));
     }
   }
 
@@ -235,6 +193,34 @@ class NettyServerStream extends AbstractServerStream {
       Status status = Status.fromThrowable(cause);
       transportReportStatus(status);
       handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
+    }
+
+    protected void onWriteFrameData(ChannelFuture future, int numMessages, int numBytes) {
+      // Remove the bytes from outbound flow control, optionally notifying
+      // the client that they can send more bytes.
+      // TODO(sergiitk): should on sent bytes be only on success?
+      onSentBytes(numBytes);
+      if (future.isSuccess()) {
+        getTransportTracer().reportMessageSent(numMessages);
+      } else {
+        handleWriteFutureFailures(future);
+      }
+
+    }
+
+    private void handleWriteFutureFailures(ChannelFuture future) {
+      // isStreamDeallocated() check protects from spamming stream resets by scheduling multiple
+      // CancelServerStreamCommand commands.
+      if (future.isSuccess() || isStreamDeallocated()) {
+        return;
+      }
+      // Future failed, fail RPC.
+      // Normally we don't need to do anything here because the cause of a failed future
+      // while writing DATA frames would be an IO error and the stream is already closed.
+      // However, we still need handle any unexpected failures raised in Netty.
+      // TODO(sergiitk): check if something similar to
+      //    io.grpc.netty.NettyClientTransport#statusFromFailedFuture is needed.
+      http2ProcessingFailed(Utils.statusFromThrowable(future.cause()));
     }
 
     /**
