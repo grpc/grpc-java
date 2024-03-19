@@ -147,6 +147,8 @@ class NettyServerStream extends AbstractServerStream {
           SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status);
       writeQueue.enqueue(trailersCommand, true)
           .addListener((ChannelFuture future) -> handleWriteFutureFailures(future));
+      // .addListener((ChannelFuture future) -> transportState().handleWriteFutureFailures(future));
+      // .addListener((ChannelFutureListener) transportState()::handleWriteFutureFailures);
     }
 
     @Override
@@ -163,6 +165,7 @@ class NettyServerStream extends AbstractServerStream {
       }
     }
 
+    // TODO(sergiitk): move to the TransportState.
     private void handleWriteFutureFailures(ChannelFuture future) {
       // isReady() check protects from spamming stream resets by scheduling multiple
       // CancelServerStreamCommand commands. Initial transportReportStatus()
