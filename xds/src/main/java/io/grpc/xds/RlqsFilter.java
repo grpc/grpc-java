@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.XdsResourceType.ResourceInvalidException;
+import static io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
