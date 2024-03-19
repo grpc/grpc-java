@@ -16,7 +16,7 @@
 
 package io.grpc.xds.internal.datatype;
 
-import static io.grpc.xds.XdsResourceType.ResourceInvalidException;
+import static io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 
 import com.google.auto.value.AutoValue;
 import com.google.protobuf.Duration;
