@@ -127,8 +127,8 @@ public class AbstractServerStreamTest {
       @Override
       public void halfClosed() {
         if (streamListenerMessageQueue.isEmpty()) {
-          throw new StatusRuntimeException(Status.INTERNAL.withDescription(
-              "Half close without request"));
+          throw new StatusRuntimeException.Builder().setStatus(Status.INTERNAL.withDescription(
+              "Half close without request")).build();
         }
       }
 

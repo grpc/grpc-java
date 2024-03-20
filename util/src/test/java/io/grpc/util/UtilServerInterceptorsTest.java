@@ -78,7 +78,8 @@ public class UtilServerInterceptorsTest {
     FakeServerCall<Void, Void> call =
         new FakeServerCall<>(expectedStatus, expectedMetadata);
     final StatusRuntimeException exception =
-        new StatusRuntimeException(expectedStatus, expectedMetadata);
+        new StatusRuntimeException.Builder().setStatus(expectedStatus).setTrailers(expectedMetadata)
+            .build();
     listener = new VoidCallListener() {
       @Override
       public void onMessage(Void message) {
@@ -128,7 +129,8 @@ public class UtilServerInterceptorsTest {
     FakeServerCall<Void, Void> call =
         new FakeServerCall<>(expectedStatus, expectedMetadata);
     final StatusRuntimeException exception =
-        new StatusRuntimeException(expectedStatus, expectedMetadata);
+        new StatusRuntimeException.Builder().setStatus(expectedStatus).setTrailers(expectedMetadata)
+            .build();
 
     listener = new VoidCallListener() {
       @Override

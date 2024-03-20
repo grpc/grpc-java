@@ -168,7 +168,8 @@ public class DelayedClientCallTest {
         callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
-    delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
+    delayedClientCall.cancel("cancel",
+        new StatusException.Builder().setStatus(Status.CANCELLED).build());
     Runnable r = delayedClientCall.setCall(mockRealCall);
     assertThat(r).isNull();
     verify(mockRealCall, never()).start(any(Listener.class), any(Metadata.class));
@@ -187,7 +188,8 @@ public class DelayedClientCallTest {
     Runnable r = delayedClientCall.setCall(mockRealCall);
     assertThat(r).isNotNull();
     r.run();
-    delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
+    delayedClientCall.cancel("cancel",
+        new StatusException.Builder().setStatus(Status.CANCELLED).build());
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));

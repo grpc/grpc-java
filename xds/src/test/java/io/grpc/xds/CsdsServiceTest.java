@@ -255,7 +255,8 @@ public class CsdsServiceTest {
           csdsAsyncStub.streamClientStatus(responseObserver);
 
       requestObserver.onNext(REQUEST);
-      requestObserver.onError(new StatusRuntimeException(Status.DATA_LOSS));
+      requestObserver.onError(new StatusRuntimeException.Builder().setStatus(Status.DATA_LOSS)
+          .build());
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
       assertThat(responses).hasSize(1);

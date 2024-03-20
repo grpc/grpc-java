@@ -655,7 +655,7 @@ public class StressTestClient {
         responseObserver.onNext(gauge);
         responseObserver.onCompleted();
       } else {
-        responseObserver.onError(new StatusException(Status.NOT_FOUND));
+        responseObserver.onError(new StatusException.Builder().setStatus(Status.NOT_FOUND).build());
       }
     }
   }

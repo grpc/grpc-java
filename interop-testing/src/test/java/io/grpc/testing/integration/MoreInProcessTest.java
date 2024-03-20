@@ -143,7 +143,7 @@ public class MoreInProcessTest {
       public StreamObserver<StreamingInputCallRequest> streamingInputCall(
           StreamObserver<StreamingInputCallResponse> responseObserver) {
         // send error directly
-        responseObserver.onError(new StatusRuntimeException(fakeError));
+        responseObserver.onError(new StatusRuntimeException.Builder().setStatus(fakeError).build());
         responseObserver.onCompleted();
         return new StreamObserver<StreamingInputCallRequest>() {
           @Override

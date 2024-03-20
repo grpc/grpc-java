@@ -139,8 +139,9 @@ public final class CsdsService implements BindableService {
   private ClientStatusResponse getConfigDumpForRequest(ClientStatusRequest request)
       throws StatusException, InterruptedException {
     if (request.getNodeMatchersCount() > 0) {
-      throw new StatusException(
-          Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"));
+      throw new StatusException.Builder()
+          .setStatus(Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"))
+          .build();
     }
 
     ObjectPool<XdsClient> xdsClientPool = xdsClientPoolFactory.get();

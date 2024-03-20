@@ -220,8 +220,10 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
             try {
               lock.acquire();
             } catch (InterruptedException ex) {
-              responseObserver.onError(new StatusRuntimeException(
-                  Status.ABORTED.withDescription("server service interrupted").withCause(ex)));
+              responseObserver.onError(
+                  new StatusRuntimeException.Builder()
+                      .setStatus(Status.ABORTED.withDescription("server service interrupted")
+                          .withCause(ex)).build());
               return;
             }
             oobTestLocked = true;

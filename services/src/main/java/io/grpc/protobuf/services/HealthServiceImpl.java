@@ -69,8 +69,8 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
       StreamObserver<HealthCheckResponse> responseObserver) {
     ServingStatus status = statusMap.get(request.getService());
     if (status == null) {
-      responseObserver.onError(new StatusException(
-          Status.NOT_FOUND.withDescription("unknown service " + request.getService())));
+      responseObserver.onError(new StatusException.Builder().setStatus(
+          Status.NOT_FOUND.withDescription("unknown service " + request.getService())).build());
     } else {
       HealthCheckResponse response = HealthCheckResponse.newBuilder().setStatus(status).build();
       responseObserver.onNext(response);
