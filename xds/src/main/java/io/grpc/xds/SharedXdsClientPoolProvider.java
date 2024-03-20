@@ -98,7 +98,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           if (bootstrapInfo.servers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
-          ref = new RefCountedXdsClientObjectPool(bootstrapInfo);
+          ref = new RefCountedXdsClientObjectPool(bootstrapInfo, target);
           targetToXdsClientMap.put(target, ref);
         }
       }
@@ -120,6 +120,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
     private final BootstrapInfo bootstrapInfo;
+    private final String target; // The target associated with the xDS client.
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -129,8 +130,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private int refCount;
 
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo) {
+    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
+      this.target = target;
     }
 
     @Override
@@ -175,6 +177,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
       synchronized (lock) {
         return xdsClient;
       }
+    }
+
+    public String getTarget() {
+      return target;
     }
   }
 }

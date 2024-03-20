@@ -140,6 +140,10 @@ final class ControlPlaneClient {
     return logId.toString();
   }
 
+  public ServerInfo getServerInfo() {
+    return serverInfo;
+  }
+
   /**
    * Updates the resource subscription for the given resource type.
    */
@@ -243,13 +247,16 @@ final class ControlPlaneClient {
       Set<XdsResourceType<?>> subscribedResourceTypes =
           new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
       for (XdsResourceType<?> type : subscribedResourceTypes) {
-        Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
-        if (resources != null) {
+        Collection<String> resources = type.updateInPlaceOnFallback()
+            ? resourceStore.getAllResources(type)
+            : resourceStore.getSubscribedResources(serverInfo, type);
+        if (resources != null && !resources.isEmpty()) {
           adsStream.sendDiscoveryRequest(type, resources);
         }
       }
       xdsResponseHandler.handleStreamRestarted(serverInfo);
     }
+
   }
 
   @VisibleForTesting

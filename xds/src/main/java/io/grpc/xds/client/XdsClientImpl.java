@@ -26,6 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -41,9 +42,9 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient.ResourceStore;
-import io.grpc.xds.client.XdsClient.XdsResponseHandler;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -60,7 +61,7 @@ import javax.annotation.Nullable;
  * XdsClient implementation.
  */
 @Internal
-public final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
+public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -124,48 +125,6 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   }
 
   @Override
-  public void handleResourceResponse(
-      XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
-      List<Any> resources, String nonce, ProcessingTracker processingTracker) {
-    checkNotNull(xdsResourceType, "xdsResourceType");
-    syncContext.throwIfNotInThisSynchronizationContext();
-    Set<String> toParseResourceNames =
-        xdsResourceType.shouldRetrieveResourceKeysForArgs()
-            ? getResourceKeys(xdsResourceType)
-            : null;
-    XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
-        bootstrapInfo, securityConfig, toParseResourceNames);
-    handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
-  }
-
-  @Override
-  public void handleStreamClosed(Status error) {
-    syncContext.throwIfNotInThisSynchronizationContext();
-    cleanUpResourceTimers();
-    for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
-        resourceSubscribers.values()) {
-      for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-        if (!subscriber.hasResult()) {
-          subscriber.onError(error, null);
-        }
-      }
-    }
-  }
-
-  @Override
-  public void handleStreamRestarted(ServerInfo serverInfo) {
-    syncContext.throwIfNotInThisSynchronizationContext();
-    for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
-        resourceSubscribers.values()) {
-      for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-        if (subscriber.serverInfo.equals(serverInfo)) {
-          subscriber.restartTimer();
-        }
-      }
-    }
-  }
-
-  @Override
   public void shutdown() {
     syncContext.execute(
         new Runnable() {
@@ -181,7 +140,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
             for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
               lrsClient.stopLoadReporting();
             }
-            cleanUpResourceTimers();
+            cleanUpResourceTimers(null);
           }
         });
   }
@@ -203,13 +162,23 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     Map<String, ResourceSubscriber<? extends ResourceUpdate>> resources =
         resourceSubscribers.getOrDefault(type, Collections.emptyMap());
     ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    ControlPlaneClient controlPlaneClient = serverCpClientMap.get(serverInfo);
     for (String key : resources.keySet()) {
-      if (resources.get(key).serverInfo.equals(serverInfo)) {
+      ResourceSubscriber<? extends ResourceUpdate> resource = resources.get(key);
+      if (resource.controlPlaneClient.equals(controlPlaneClient)) {
         builder.add(key);
       }
     }
     Collection<String> retVal = builder.build();
     return retVal.isEmpty() ? null : retVal;
+  }
+
+  @Override
+  public Collection<String> getAllResources(XdsResourceType<?> type) {
+    if (!resourceSubscribers.containsKey(type)) {
+      return null;
+    }
+    return ImmutableList.copyOf(resourceSubscribers.get(type).keySet());
   }
 
   // As XdsClient APIs becomes resource agnostic, subscribed resource types are dynamic.
@@ -246,9 +215,9 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
 
   @Override
   public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
-      String resourceName,
-      ResourceWatcher<T> watcher,
-      Executor watcherExecutor) {
+                                                          String resourceName,
+                                                          ResourceWatcher<T> watcher,
+                                                          Executor watcherExecutor) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
@@ -274,14 +243,14 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
 
   @Override
   public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-      String resourceName,
-      ResourceWatcher<T> watcher) {
+                                                                String resourceName,
+                                                                ResourceWatcher<T> watcher) {
     syncContext.execute(new Runnable() {
       @Override
       @SuppressWarnings("unchecked")
       public void run() {
         ResourceSubscriber<T> subscriber =
-            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
+            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);
         subscriber.removeWatcher(watcher);
         if (!subscriber.isWatched()) {
           subscriber.cancelResourceWatch();
@@ -354,13 +323,16 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
           return;
         }
 
+        // TODO add Jitter so that server isn't swamped when it comes up if this is a restart
+        ControlPlaneClient cpc = serverCpClientMap.get(serverInfo);
         for (Map<String, ResourceSubscriber<?>> subscriberMap : resourceSubscribers.values()) {
           for (ResourceSubscriber<?> subscriber : subscriberMap.values()) {
-            if (subscriber.serverInfo.equals(serverInfo) && subscriber.respTimer == null) {
+            if (subscriber.controlPlaneClient.equals(cpc) && subscriber.respTimer == null) {
               subscriber.restartTimer();
             }
           }
         }
+
       }
     });
   }
@@ -373,15 +345,36 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     return resourceSubscribers.get(xdsResourceType).keySet();
   }
 
-  private void cleanUpResourceTimers() {
+  private void cleanUpResourceTimers(ControlPlaneClient cpcForThisStream) {
     for (Map<String, ResourceSubscriber<?>> subscriberMap : resourceSubscribers.values()) {
       for (ResourceSubscriber<?> subscriber : subscriberMap.values()) {
-        subscriber.stopTimer();
+        if (cpcForThisStream == null || subscriber.controlPlaneClient.equals(cpcForThisStream)) {
+          subscriber.stopTimer();
+        }
       }
     }
   }
 
-  public ControlPlaneClient getOrCreateControlPlaneClient(ServerInfo serverInfo) {
+  public ServerInfo getOrCreateControlPlaneClient(ImmutableList<ServerInfo> serverInfos) {
+    for (ServerInfo serverInfo : serverInfos) {
+      if (serverCpClientMap.containsKey(serverInfo)) {
+        ControlPlaneClient controlPlaneClient = serverCpClientMap.get(serverInfo);
+        if (controlPlaneClient.isInBackoff()) {
+          continue;
+        }
+        return serverInfo;
+      } else {
+        ControlPlaneClient cpc = getOrCreateControlPlaneClient(serverInfo);
+        logger.log(XdsLogLevel.DEBUG, "Created control plane client {0}", cpc);
+        return serverInfo;
+      }
+    }
+
+    // Everything existed and is in backoff so return the last one
+    return serverInfos.get(serverInfos.size() - 1);
+  }
+
+  private ControlPlaneClient getOrCreateControlPlaneClient(ServerInfo serverInfo) {
     syncContext.throwIfNotInThisSynchronizationContext();
     if (serverCpClientMap.containsKey(serverInfo)) {
       return serverCpClientMap.get(serverInfo);
@@ -392,7 +385,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
         xdsTransport,
         serverInfo,
         bootstrapInfo.node(),
-        this,
+        new ResponseHandler(serverInfo),
         this,
         timeService,
         syncContext,
@@ -419,7 +412,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   }
 
   @Nullable
-  private ServerInfo getServerInfo(String resource) {
+  private ImmutableList<ServerInfo> getServerInfos(String resource) {
     if (resource.startsWith(XDSTP_SCHEME)) {
       URI uri = URI.create(resource);
       String authority = uri.getAuthority();
@@ -430,9 +423,9 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       if (authorityInfo == null || authorityInfo.xdsServers().isEmpty()) {
         return null;
       }
-      return authorityInfo.xdsServers().get(0);
+      return authorityInfo.xdsServers();
     } else {
-      return bootstrapInfo.servers().get(0); // use first server
+      return bootstrapInfo.servers();
     }
   }
 
@@ -440,24 +433,26 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   private <T extends ResourceUpdate> void handleResourceUpdate(
       XdsResourceType.Args args, List<Any> resources, XdsResourceType<T> xdsResourceType,
       ProcessingTracker processingTracker) {
+    ControlPlaneClient controlPlaneClient = serverCpClientMap.get(args.serverInfo);
+
     ValidatedResourceUpdate<T> result = xdsResourceType.parse(args, resources);
     logger.log(XdsLogger.XdsLogLevel.INFO,
         "Received {0} Response version {1} nonce {2}. Parsed resources: {3}",
-         xdsResourceType.typeName(), args.versionInfo, args.nonce, result.unpackedResources);
+        xdsResourceType.typeName(), args.versionInfo, args.nonce, result.unpackedResources);
     Map<String, ParsedResource<T>> parsedResources = result.parsedResources;
     Set<String> invalidResources = result.invalidResources;
     List<String> errors = result.errors;
     String errorDetail = null;
     if (errors.isEmpty()) {
       checkArgument(invalidResources.isEmpty(), "found invalid resources but missing errors");
-      serverCpClientMap.get(args.serverInfo).ackResponse(xdsResourceType, args.versionInfo,
+      controlPlaneClient.ackResponse(xdsResourceType, args.versionInfo,
           args.nonce);
     } else {
       errorDetail = Joiner.on('\n').join(errors);
       logger.log(XdsLogLevel.WARNING,
           "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
           xdsResourceType.typeName(), args.versionInfo, args.nonce, errorDetail);
-      serverCpClientMap.get(args.serverInfo).nackResponse(xdsResourceType, args.nonce, errorDetail);
+      controlPlaneClient.nackResponse(xdsResourceType, args.nonce, errorDetail);
     }
 
     long updateTime = timeProvider.currentTimeNanos();
@@ -496,18 +491,66 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       // For State of the World services, notify watchers when their watched resource is missing
       // from the ADS update. Note that we can only do this if the resource update is coming from
       // the same xDS server that the ResourceSubscriber is subscribed to.
-      if (subscriber.serverInfo.equals(args.serverInfo)) {
+      if (subscriber.controlPlaneClient.equals(controlPlaneClient)) {
         subscriber.onAbsent(processingTracker);
       }
     }
+  }
+
+  private void doFallback(ServerInfo serverInfo, ImmutableList<ServerInfo> serverInfos) {
+    List<ServerInfo> fallbackServers = new ArrayList<>();
+    if (serverInfos == null) {
+      return;
+    }
+    // Build a list of servers with lower priority than the current server.
+    boolean found = false;
+    for (ServerInfo cur : serverInfos) {
+      if (cur.equals(serverInfo)) {
+        found = true;
+      } else if (found) {
+        fallbackServers.add(cur);
+      }
+    }
+
+    ServerInfo fallbackTarget = !fallbackServers.isEmpty()
+        ? getOrCreateControlPlaneClient(ImmutableList.copyOf(fallbackServers))
+        : null;
+    if (fallbackTarget != null && !serverCpClientMap.get(fallbackTarget).isInBackoff()) {
+      logger.log(XdsLogLevel.INFO, "Falling back to XDS server {0}",
+          fallbackTarget.target());
+
+      ControlPlaneClient fallbackCpc = serverCpClientMap.get(fallbackTarget);
+      updateRootResources(fallbackCpc);
+    } else {
+      logger.log(XdsLogLevel.WARNING, "No working fallback XDS Servers found from {0}",
+          serverInfo.target());
+    }
+  }
+
+  private void updateRootResources(ControlPlaneClient activeCpc) {
+    resourceSubscribers.keySet().stream()
+        .filter(XdsResourceType::updateInPlaceOnFallback)
+        .forEach(resourceType -> {
+          // Update all values that were pointing at another XDS server to point at the active one.
+          resourceSubscribers.get(resourceType).values().stream()
+              .filter(subscriber -> subscriber.controlPlaneClient != activeCpc)
+              .forEach(
+                  subscriber -> {
+                    subscriber.controlPlaneClient = activeCpc;
+                    subscriber.data = null;
+                    subscriber.absent = false;
+                  });
+          // Reload the type from the active XDS server.
+          activeCpc.adjustResourceSubscription(resourceType);
+        });
   }
 
   /**
    * Tracks a single subscribed resource.
    */
   private final class ResourceSubscriber<T extends ResourceUpdate> {
-    @Nullable private final ServerInfo serverInfo;
-    @Nullable private final ControlPlaneClient controlPlaneClient;
+    @Nullable private final ImmutableList<ServerInfo> serverInfos;
+    @Nullable private ControlPlaneClient controlPlaneClient;
     private final XdsResourceType<T> type;
     private final String resource;
     private final Map<ResourceWatcher<T>, Executor> watchers = new HashMap<>();
@@ -524,8 +567,8 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
       this.resource = resource;
-      this.serverInfo = getServerInfo(resource);
-      if (serverInfo == null) {
+      this.serverInfos = getServerInfos(resource);
+      if (serverInfos == null) {
         this.errorDescription = "Wrong configuration: xds server does not exist for resource "
             + resource;
         this.controlPlaneClient = null;
@@ -537,7 +580,8 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
 
       ControlPlaneClient controlPlaneClient = null;
       try {
-        controlPlaneClient = getOrCreateControlPlaneClient(serverInfo);
+        ServerInfo serverInfo = getOrCreateControlPlaneClient(serverInfos);
+        controlPlaneClient = serverCpClientMap.get(serverInfo);
         if (controlPlaneClient.isInBackoff()) {
           return;
         }
@@ -625,7 +669,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
         logLevel = XdsLogLevel.FORCE_INFO;
       }
       logger.log(logLevel, message, type, resource,
-          serverInfo != null ? serverInfo.target() : "unknown");
+          serverInfos != null ? controlPlaneClient.getServerInfo().target() : "unknown");
     }
 
     boolean isWatched() {
@@ -650,7 +694,8 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       if (resourceDeletionIgnored) {
         logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
                 + "of resource for which we previously ignored a deletion: type {1} name {2}",
-            serverInfo != null ? serverInfo.target() : "unknown", type, resource);
+            (serverInfos != null) ? controlPlaneClient.getServerInfo().target() : "unknown",
+            type, resource);
         resourceDeletionIgnored = false;
       }
       if (!Objects.equals(oldData, data)) {
@@ -675,12 +720,12 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       // Ignore deletion of State of the World resources when this feature is on,
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled =
-          serverInfo != null && serverInfo.ignoreResourceDeletion();
+          serverInfos != null && controlPlaneClient.getServerInfo().ignoreResourceDeletion();
       if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,
               "xds server {0}: ignoring deletion for resource type {1} name {2}}",
-              serverInfo.target(), type, resource);
+              controlPlaneClient.getServerInfo().target(), type, resource);
           resourceDeletionIgnored = true;
         }
         return;
@@ -744,6 +789,88 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
 
     private void notifyWatcher(ResourceWatcher<T> watcher, T update) {
       watcher.onChanged(update);
+    }
+  }
+
+  private class ResponseHandler implements XdsResponseHandler {
+    final ServerInfo serverInfo;
+
+    ResponseHandler(ServerInfo serverInfo) {
+      this.serverInfo = serverInfo;
+    }
+
+    @Override
+    public void handleResourceResponse(
+        XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
+        List<Any> resources, String nonce, ProcessingTracker processingTracker) {
+      checkNotNull(xdsResourceType, "xdsResourceType");
+      syncContext.throwIfNotInThisSynchronizationContext();
+      Set<String> toParseResourceNames =
+          xdsResourceType.shouldRetrieveResourceKeysForArgs()
+              ? getResourceKeys(xdsResourceType)
+              : null;
+      XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
+          bootstrapInfo, securityConfig, toParseResourceNames);
+      handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
+    }
+
+    @Override
+    public void handleStreamClosed(Status error) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      ControlPlaneClient cpcForThisStream = serverCpClientMap.get(serverInfo);
+      cleanUpResourceTimers(cpcForThisStream);
+
+      boolean hadError = false;
+      ImmutableList<ServerInfo> serverInfos = null;
+      for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
+          resourceSubscribers.values()) {
+        for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
+          if (!subscriber.hasResult() && subscriber.controlPlaneClient.equals(cpcForThisStream)) {
+            hadError = true;
+            subscriber.onError(error, null);
+            serverInfos = subscriber.serverInfos;
+          }
+        }
+      }
+
+      if (hadError) {
+        logger.log(XdsLogLevel.WARNING, "ADS stream closed with error: {0}", error);
+        // Need to fallback to a lower priority control plane client.
+        doFallback(serverInfo, serverInfos);
+      }
+    }
+
+    @Override
+    public void handleStreamRestarted(ServerInfo serverInfo) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      ControlPlaneClient controlPlaneClient = serverCpClientMap.get(serverInfo);
+
+      // Restart the timers for all the watched resources that are associated with this stream
+      for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
+          resourceSubscribers.values()) {
+        for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
+          if (subscriber.controlPlaneClient.equals(controlPlaneClient)) {
+            subscriber.restartTimer();
+          }
+        }
+      }
+
+      //      updateRootResources(getOrCreateControlPlaneClient(serverInfo)); // TODO remove?
+
+      // Shutdown any lower priority control plane clients.
+      boolean found = false;
+      for (ServerInfo server : bootstrapInfo.servers()) {
+        if (server.equals(serverInfo)) {
+          found = true;
+          continue;
+        } else if (!found) {
+          continue;
+        }
+        ControlPlaneClient client = serverCpClientMap.remove(server);
+        if (client != null) {
+          client.shutdown(); // TODO someday add an exponential backoff to mitigate flapping
+        }
+      }
     }
   }
 
