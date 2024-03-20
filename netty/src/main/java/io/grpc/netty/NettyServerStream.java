@@ -52,7 +52,6 @@ class NettyServerStream extends AbstractServerStream {
   private final WriteQueue writeQueue;
   private final Attributes attributes;
   private final String authority;
-  private final TransportTracer transportTracer;
   private final int streamId;
 
   public NettyServerStream(
@@ -60,14 +59,12 @@ class NettyServerStream extends AbstractServerStream {
       TransportState state,
       Attributes transportAttrs,
       String authority,
-      StatsTraceContext statsTraceCtx,
-      TransportTracer transportTracer) {
+      StatsTraceContext statsTraceCtx) {
     super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
     this.attributes = checkNotNull(transportAttrs);
     this.authority = authority;
-    this.transportTracer = checkNotNull(transportTracer, "transportTracer");
     // Read the id early to avoid reading transportState later.
     this.streamId = transportState().id();
   }
@@ -112,19 +109,10 @@ class NettyServerStream extends AbstractServerStream {
         final int numBytes = bytebuf.readableBytes();
         // Add the bytes to outbound flow control.
         onSendingBytes(numBytes);
+        ChannelFutureListener failureListener =
+            future -> transportState().onWriteFrameData(future, numMessages, numBytes);
         writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, false), flush)
-            .addListener((ChannelFutureListener) future -> {
-              // Remove the bytes from outbound flow control, optionally notifying
-              // the client that they can send more bytes.
-              // TODO(sergiitk): should onSentBytes be called only on success?
-              transportState().onSentBytes(numBytes);
-              if (future.isSuccess()) {
-                // TODO(sergiitk): when all moved to transport state, transportTracer becomes unused
-                transportTracer.reportMessageSent(numMessages);
-              } else {
-                transportState().handleWriteFutureFailures(future);
-              }
-            });
+            .addListener(failureListener);
       }
     }
 
@@ -202,6 +190,18 @@ class NettyServerStream extends AbstractServerStream {
       Status status = Status.fromThrowable(cause);
       transportReportStatus(status);
       handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
+    }
+
+    private void onWriteFrameData(ChannelFuture future, int numMessages, int numBytes) {
+      // Remove the bytes from outbound flow control, optionally notifying
+      // the client that they can send more bytes.
+      // TODO(sergiitk): should onSentBytes be called only on success?
+      onSentBytes(numBytes);
+      if (future.isSuccess()) {
+        getTransportTracer().reportMessageSent(numMessages);
+      } else {
+        handleWriteFutureFailures(future);
+      }
     }
 
     private void handleWriteFutureFailures(ChannelFuture future) {

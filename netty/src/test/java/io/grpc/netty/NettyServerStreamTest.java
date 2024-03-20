@@ -353,7 +353,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
         handler, channel.eventLoop(), http2Stream, DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx,
         transportTracer, "method");
     NettyServerStream stream = new NettyServerStream(channel, state, Attributes.EMPTY,
-        "test-authority", statsTraceCtx, transportTracer);
+        "test-authority", statsTraceCtx);
     stream.transportState().setListener(serverListener);
     state.onStreamAllocated();
     verify(serverListener, atLeastOnce()).onReady();
