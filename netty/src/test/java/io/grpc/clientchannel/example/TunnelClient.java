@@ -1,6 +1,5 @@
 package io.grpc.clientchannel.example;
 
-import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.clientchannel.ClientChannelService;
@@ -16,10 +15,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class TunnelClient {
 
-    public static Metadata.Key<String> PREFIX_HEADER = Metadata.Key.of("zone", Metadata.ASCII_STRING_MARSHALLER);
+    public static Metadata.Key<String> PREFIX_HEADER = Metadata.Key.of("prefix", Metadata.ASCII_STRING_MARSHALLER);
 
     public static void main(String[] args) throws Exception {
-        io.grpc.ManagedChannel networkChannel = ManagedChannelBuilder.forAddress("localhost", 50051).usePlaintext().build();
+        io.grpc.ManagedChannel networkChannel = ManagedChannelBuilder
+                .forAddress("localhost", 50051)
+                .usePlaintext()
+                .build();
 
         Metadata headers = new Metadata();
         headers.put(PREFIX_HEADER, "Value: ");
@@ -29,7 +31,7 @@ public class TunnelClient {
                 headers,
                 b -> {
                     MutableHandlerRegistry registry = new MutableHandlerRegistry();
-                    registry.addService(new VMDriverService());
+                    registry.addService(new SimpleService());
 
                     b.fallbackHandlerRegistry(registry);
                 }
@@ -38,7 +40,7 @@ public class TunnelClient {
         Thread.currentThread().join();
     }
 
-    private static class VMDriverService extends SimpleServiceGrpc.SimpleServiceImplBase {
+    static class SimpleService extends SimpleServiceGrpc.SimpleServiceImplBase {
 
         @Override
         public void serverStreamingRpc(SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
