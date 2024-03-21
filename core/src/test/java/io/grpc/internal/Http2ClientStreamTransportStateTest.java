@@ -348,9 +348,21 @@ public class Http2ClientStreamTransportStateTest {
     assertEquals(Code.UNKNOWN, statusCaptor.getValue().getCode());
   }
 
+  @Test
+  public void transportStateWithOnReadyThreshold() {
+    BaseTransportState state = new BaseTransportState(transportTracer,
+        CallOptions.DEFAULT.withOnReadyThreshold(Integer.MAX_VALUE));
+    assertEquals(Integer.MAX_VALUE, state.onReadyThreshold);
+  }
+
   private static class BaseTransportState extends Http2ClientStreamTransportState {
+    private int onReadyThreshold;
+
+    public BaseTransportState(TransportTracer transportTracer, CallOptions options) {
+      super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer, options);
+    }
     public BaseTransportState(TransportTracer transportTracer) {
-      super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
+      this(transportTracer, CallOptions.DEFAULT);
     }
 
     @Override
@@ -367,6 +379,12 @@ public class Http2ClientStreamTransportStateTest {
     @Override
     public void runOnTransportThread(Runnable r) {
       r.run();
+    }
+
+    @Override
+    void setOnReadyThreshold(int numBytes) {
+      onReadyThreshold = numBytes;
+      super.setOnReadyThreshold(numBytes);
     }
   }
 }
