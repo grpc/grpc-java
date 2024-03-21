@@ -411,7 +411,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     try {
       synchronizationContext = helper.getSynchronizationContext();
     } catch (NullPointerException e) {
-      // If we have a test helper or old helper without a context, we can't schedule a task
+      // All helpers should have a sync context, but if one doesn't (ex. user had a custom test)
+      // we don't want to break previously working functionality.
       return;
     }
 
