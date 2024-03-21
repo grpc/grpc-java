@@ -48,6 +48,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfig;
 import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
@@ -58,6 +59,7 @@ import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -691,6 +693,16 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   private class TestHelper extends ForwardingLoadBalancerHelper {
+    final SynchronizationContext syncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            throw new AssertionError(e);
+          }
+        });
+
+    final FakeClock fakeClock = new FakeClock();
+
     @Override
     protected Helper delegate() {
       return null;
@@ -704,6 +716,16 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     @Override
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
       // noop
+    }
+
+    @Override
+    public SynchronizationContext getSynchronizationContext() {
+      return syncContext;
+    }
+
+    @Override
+    public ScheduledExecutorService getScheduledExecutorService() {
+      return fakeClock.getScheduledExecutorService();
     }
   }
 

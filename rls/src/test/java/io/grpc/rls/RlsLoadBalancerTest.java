@@ -217,6 +217,8 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper, atLeast(0))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
+    inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(subchannels).hasSize(1);
@@ -325,6 +327,8 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper, atLeast(0))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
+    inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
 

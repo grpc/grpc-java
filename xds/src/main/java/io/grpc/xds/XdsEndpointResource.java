@@ -101,7 +101,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   private static boolean isEnabledXdsDualStack() {
-    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
+    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, true);
   }
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)

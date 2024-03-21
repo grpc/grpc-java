@@ -34,6 +34,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -72,7 +73,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
   private final boolean enableHappyEyeballs =
-      GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
+      GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, true);
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -406,7 +407,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    scheduleConnectionTask = helper.getSynchronizationContext().schedule(
+    SynchronizationContext synchronizationContext = null;
+    try {
+      synchronizationContext = helper.getSynchronizationContext();
+    } catch (NullPointerException e) {
+      // All helpers should have a sync context, but if one doesn't (ex. user had a custom test)
+      // we don't want to break previously working functionality.
+      return;
+    }
+
+    scheduleConnectionTask = synchronizationContext.schedule(
         new StartNextConnection(),
         CONNECTION_DELAY_INTERVAL_MS,
         TimeUnit.MILLISECONDS,
