@@ -124,7 +124,8 @@ class CronetClientStream extends AbstractClientStream {
     this.delayRequestHeader = (method.getType() == MethodDescriptor.MethodType.UNARY);
     this.annotation = callOptions.getOption(CRONET_ANNOTATION_KEY);
     this.annotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
-    this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer);
+    this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer,
+            callOptions);
 
     // Tests expect the "plain" deframer behavior, not MigratingDeframer
     // https://github.com/grpc/grpc-java/issues/7140
@@ -270,8 +271,8 @@ class CronetClientStream extends AbstractClientStream {
 
     public TransportState(
         int maxMessageSize, StatsTraceContext statsTraceCtx, Object lock,
-        TransportTracer transportTracer) {
-      super(maxMessageSize, statsTraceCtx, transportTracer);
+        TransportTracer transportTracer, CallOptions options) {
+      super(maxMessageSize, statsTraceCtx, transportTracer, options);
       this.lock = Preconditions.checkNotNull(lock, "lock");
     }
 
