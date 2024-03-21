@@ -315,6 +315,7 @@ According to a review of the AOSP source code, there are in fact several cases:
 1. The target package is not installed
 2. The target package is installed but does not declare the target Service in its manifest.
 3. The target package requests dangerous permissions but targets sdk &lt;= M and therefore requires a permissions review, but the caller is not running in the foreground and so it would be inappropriate to launch the review UI.
+4. The target package is not visible to the client due to [Android 11 package visibility rules](https://developer.android.com/training/package-visibility).
 
 Status code mapping: **UNIMPLEMENTED**
 
