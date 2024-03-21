@@ -926,7 +926,7 @@ public class ClientCallImplTest {
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("CallOptions deadline exceeded after [0-9]+\\.[0-9]+s. "
+        .matches("deadline exceeded after [0-9]+\\.[0-9]+s. "
             + "Name resolution delay 0.000000000 seconds. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
@@ -954,9 +954,7 @@ public class ClientCallImplTest {
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
-    assertThat(statusCaptor.getValue().getDescription())
-        .matches("Context deadline exceeded after [0-9]+\\.[0-9]+s. "
-            + "Name resolution delay 0.000000000 seconds. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");
   }
 
   @Test
