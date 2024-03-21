@@ -361,6 +361,7 @@ public class Http2ClientStreamTransportStateTest {
     public BaseTransportState(TransportTracer transportTracer, CallOptions options) {
       super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer, options);
     }
+
     public BaseTransportState(TransportTracer transportTracer) {
       this(transportTracer, CallOptions.DEFAULT);
     }
