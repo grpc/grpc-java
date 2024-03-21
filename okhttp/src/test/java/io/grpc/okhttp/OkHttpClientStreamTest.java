@@ -44,7 +44,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Rule;
@@ -259,33 +258,6 @@ public class OkHttpClientStreamTest {
     assertThat(headersCaptor.getValue()).contains(
         new Header(Header.TARGET_PATH, "/" + getMethod.getFullMethodName() + "?"
             + BaseEncoding.base64().encode(msg)));
-  }
-
-  @Test
-  public void overrideOnReadyThreshold() {
-    AtomicInteger mutableReadyThreshold = new AtomicInteger(0);
-    new OkHttpClientStream(
-        methodDescriptor,
-        new Metadata(),
-        frameWriter,
-        transport,
-        flowController,
-        lock,
-        MAX_MESSAGE_SIZE,
-        INITIAL_WINDOW_SIZE,
-        "localhost",
-        "userAgent",
-        StatsTraceContext.NOOP,
-        transportTracer,
-        CallOptions.DEFAULT.withOnReadyThreshold(Integer.MAX_VALUE),
-        false) {
-      @Override
-      protected void setOnReadyThreshold(int numBytes) {
-        mutableReadyThreshold.set(numBytes);
-        super.setOnReadyThreshold(numBytes);
-      }
-    };
-    assertEquals(Integer.MAX_VALUE, mutableReadyThreshold.get());
   }
 
   // TODO(carl-mastrangelo): extract this out into a testing/ directory and remove other definitions

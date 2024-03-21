@@ -617,7 +617,7 @@ public class AbstractClientStreamTest {
     }
 
     public BaseTransportState(StatsTraceContext statsTraceCtx, TransportTracer transportTracer) {
-      super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer);
+      super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer, CallOptions.DEFAULT);
     }
 
     @Override

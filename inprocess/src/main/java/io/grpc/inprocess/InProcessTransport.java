@@ -31,7 +31,6 @@ import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
-import io.grpc.ExperimentalApi;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;

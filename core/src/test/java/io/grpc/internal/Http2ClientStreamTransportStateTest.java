@@ -27,6 +27,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -349,7 +350,7 @@ public class Http2ClientStreamTransportStateTest {
 
   private static class BaseTransportState extends Http2ClientStreamTransportState {
     public BaseTransportState(TransportTracer transportTracer) {
-      super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer);
+      super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
     }
 
     @Override
