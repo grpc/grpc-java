@@ -149,7 +149,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.throttle = throttle;
   }
 
-  @SuppressWarnings("GuardedBy")
+  @SuppressWarnings("GuardedBy")  // TODO(b/145386688) this.lock==ScheduledCancellor.lock so ok
   @Nullable // null if already committed
   @CheckReturnValue
   private Runnable commit(final Substream winningSubstream) {
@@ -425,7 +425,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     drain(substream);
   }
 
-  @SuppressWarnings("GuardedBy")
+  @SuppressWarnings("GuardedBy")  // TODO(b/145386688) this.lock==ScheduledCancellor.lock so ok
   private void pushbackHedging(@Nullable Integer delayMillis) {
     if (delayMillis == null) {
       return;
@@ -444,8 +444,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return;
       }
 
-      // TODO(b/145386688): This access should be guarded by 'this.scheduledHedging.lock'; instead
-      // found: 'this.lock'
       futureToBeCancelled = scheduledHedging.markCancelled();
       scheduledHedging = future = new FutureCanceller(lock);
     }
@@ -479,16 +477,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
       callExecutor.execute(
           new Runnable() {
-            @SuppressWarnings("GuardedBy")
+            @SuppressWarnings("GuardedBy")  //TODO(b/145386688) lock==ScheduledCancellor.lock so ok
             @Override
             public void run() {
               boolean cancelled = false;
               FutureCanceller future = null;
 
               synchronized (lock) {
-                // TODO(b/145386688): This access should be guarded by
-                // 'HedgingRunnable.this.scheduledHedgingRef.lock'; instead found:
-                // 'RetriableStream.this.lock'
                 if (scheduledHedgingRef.isCancelled()) {
                   cancelled = true;
                 } else {
@@ -820,13 +815,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         && !state.hedgingFrozen;
   }
 
-  @SuppressWarnings("GuardedBy")
+  @SuppressWarnings("GuardedBy")  // TODO(b/145386688) this.lock==ScheduledCancellor.lock so ok
   private void freezeHedging() {
     Future<?> futureToBeCancelled = null;
     synchronized (lock) {
       if (scheduledHedging != null) {
-        // TODO(b/145386688): This access should be guarded by 'this.scheduledHedging.lock'; instead
-        // found: 'this.lock'
         futureToBeCancelled = scheduledHedging.markCancelled();
         scheduledHedging = null;
       }
