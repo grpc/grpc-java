@@ -185,6 +185,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   @Override
+  public void setOnReadyThreshold(int numBytes) {
+    stream.setOnReadyThreshold(numBytes);
+  }
+
+  @Override
   public void setCompression(String compressorName) {
     // Added here to give a better error message.
     checkState(!sendHeadersCalled, "sendHeaders has been called");

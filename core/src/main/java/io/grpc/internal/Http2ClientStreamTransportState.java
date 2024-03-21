@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
+import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
@@ -67,8 +68,9 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
   protected Http2ClientStreamTransportState(
       int maxMessageSize,
       StatsTraceContext statsTraceCtx,
-      TransportTracer transportTracer) {
-    super(maxMessageSize, statsTraceCtx, transportTracer);
+      TransportTracer transportTracer,
+      CallOptions options) {
+    super(maxMessageSize, statsTraceCtx, transportTracer, options);
   }
 
   /**

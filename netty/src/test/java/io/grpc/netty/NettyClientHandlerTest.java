@@ -1000,7 +1000,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
           maxMessageSize,
           StatsTraceContext.NOOP,
           transportTracer,
-          "methodName");
+          "methodName",
+          CallOptions.DEFAULT);
     }
 
     @Override

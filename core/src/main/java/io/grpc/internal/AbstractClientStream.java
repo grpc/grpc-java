@@ -243,9 +243,13 @@ public abstract class AbstractClientStream extends AbstractStream
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
-        TransportTracer transportTracer) {
+        TransportTracer transportTracer,
+        CallOptions options) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
+      if (options.getOnReadyThreshold() != null) {
+        this.setOnReadyThreshold(options.getOnReadyThreshold());
+      }
     }
 
     private void setFullStreamDecompression(boolean fullStreamDecompression) {
