@@ -39,7 +39,6 @@ import io.grpc.okhttp.OkHttpServerBuilder;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.testing.TlsTesting;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import org.junit.Test;
