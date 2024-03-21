@@ -1,5 +1,8 @@
 #!/bin/bash
-set -veux -o pipefail
+set -veu -o pipefail
+# Prepend command trace with the date.
+PS4='+ $(date "+[%H:%M:%S %Z]")\011 '
+set -x
 
 if [[ -f /VERSION ]]; then
   cat /VERSION

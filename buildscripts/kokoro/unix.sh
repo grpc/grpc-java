@@ -15,7 +15,10 @@
 #  ARCH=s390_64 ./buildscripts/kokoro/unix.sh
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
-set -exu -o pipefail
+set -eu -o pipefail
+# Prepend command trace with the date.
+PS4='+ $(date "+[%H:%M:%S %Z]")\011 '
+set -x
 
 # It would be nicer to use 'readlink -f' here but osx does not support it.
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
@@ -61,10 +64,12 @@ export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
 ./gradlew grpc-compiler:clean $GRADLE_FLAGS
+echo "gradlew done"
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
   ./gradlew assemble generateTestProto publishToMavenLocal $GRADLE_FLAGS
+  echo "gradlew done"
 
   if [[ -z "${SKIP_CLEAN_CHECK:-}" && ! -z $(git status --porcelain) ]]; then
     git status
@@ -73,8 +78,10 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   fi
   # Run tests
   ./gradlew build :grpc-all:jacocoTestReport $GRADLE_FLAGS
+  echo "gradlew done"
   pushd examples
   ./gradlew build $GRADLE_FLAGS
+  echo "gradlew done"
   # --batch-mode reduces log spam
   mvn verify --batch-mode
   popd
@@ -82,6 +89,7 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   do
      pushd "$f"
      ../gradlew build $GRADLE_FLAGS
+     echo "gradlew done"
      if [ -f "pom.xml" ]; then
        # --batch-mode reduces log spam
        mvn verify --batch-mode
@@ -101,11 +109,14 @@ if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   fi
   ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
+    echo "gradlew done"
 else
   ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
+    echo "gradlew done"
   pushd examples/example-hostname
   ../gradlew jibBuildTar $GRADLE_FLAGS
+  echo "gradlew done"
   popd
 
   readonly OTHER_ARTIFACT_DIR="${OTHER_ARTIFACT_DIR:-$GRPC_JAVA_DIR/artifacts}"
