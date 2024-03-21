@@ -192,10 +192,21 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           }
           if (retryFuture != null) {
             retryFuture.cancel(false);
-            if (!wasCancelled) {
-              inFlightSubStreams.decrementAndGet();
+            if (!wasCancelled && inFlightSubStreams.decrementAndGet() == Integer.MIN_VALUE) {
+              assert savedCloseMasterListenerReason != null;
+              listenerSerializeExecutor.execute(
+                  new Runnable() {
+                    @Override
+                    public void run() {
+                      isClosed = true;
+                      masterListener.closed(savedCloseMasterListenerReason.status,
+                          savedCloseMasterListenerReason.progress,
+                          savedCloseMasterListenerReason.metadata);
+                    }
+                  });
             }
           }
+
           if (hedgingFuture != null) {
             hedgingFuture.cancel(false);
           }
