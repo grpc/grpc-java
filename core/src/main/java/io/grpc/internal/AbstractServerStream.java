@@ -187,7 +187,6 @@ public abstract class AbstractServerStream extends AbstractStream
    *                 positive integer.
    */
   @Override
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
   public void setOnReadyThreshold(int numBytes) {
     super.setOnReadyThreshold(numBytes);
   }

@@ -107,6 +107,5 @@ public interface ServerStream extends Stream {
    * @param numBytes The number of bytes that must be queued. Must be a
    *                 positive integer.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
   void setOnReadyThreshold(int numBytes);
 }

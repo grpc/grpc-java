@@ -186,7 +186,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   @Override
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
   public void setOnReadyThreshold(int numBytes) {
     stream.setOnReadyThreshold(numBytes);
   }
