@@ -34,7 +34,6 @@ import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
-import io.grpc.ExperimentalApi;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;

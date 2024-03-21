@@ -19,7 +19,6 @@ package io.grpc.internal;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Decompressor;
-import io.grpc.ExperimentalApi;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;

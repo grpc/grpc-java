@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import io.grpc.Attributes;
 import io.grpc.Decompressor;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import javax.annotation.Nullable;
