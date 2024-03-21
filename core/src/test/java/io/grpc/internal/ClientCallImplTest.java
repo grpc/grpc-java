@@ -960,6 +960,21 @@ public class ClientCallImplTest {
   }
 
   @Test
+  public void cancelWithoutStart() {
+    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector);
+    // Nothing happens as a result, but it shouldn't throw
+    call.cancel("canceled", null);
+  }
+
+  @Test
   public void streamCancelAbortsDeadlineTimer() {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
 

@@ -480,7 +480,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         stream.cancel(status);
       }
     } finally {
-      cancellationHandler.tearDown();
+      // start() might not have been called
+      if (cancellationHandler != null) {
+        cancellationHandler.tearDown();
+      }
     }
   }
 
