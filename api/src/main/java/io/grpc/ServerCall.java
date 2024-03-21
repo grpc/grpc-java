@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import javax.annotation.Nullable;
 
 /**
@@ -211,15 +213,15 @@ public abstract class ServerCall<ReqT, RespT> {
 
   /**
    * A hint to the call that specifies how many bytes must be queued before
-   * {@link #isReady()} will return true. A call may ignore this property if
-   * unsupported. This must be set before any messages are sent.
+   * {@link #isReady()} will return false. A call may ignore this property if
+   * unsupported. This may only be set before any messages are sent.
    *
    * @param numBytes The number of bytes that must be queued. Must be a
    *                 positive integer.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
   public void setOnReadyThreshold(int numBytes) {
-    // noop
+    checkArgument(numBytes > 0, "numBytes must be positive: %s", numBytes);
   }
 
   /**

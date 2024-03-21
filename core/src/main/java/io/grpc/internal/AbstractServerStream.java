@@ -180,8 +180,8 @@ public abstract class AbstractServerStream extends AbstractStream
 
   /**
    * A hint to the stream that specifies how many bytes must be queued before
-   * {@link StreamListener#onReady()} will be called. A stream may ignore this property if
-   * unsupported. This must be set before any messages are sent.
+   * {@link #isReady()} will return false. A stream may ignore this property
+   * if unsupported. This may only be set before any messages are sent.
    *
    * @param numBytes The number of bytes that must be queued. Must be a
    *                 positive integer.

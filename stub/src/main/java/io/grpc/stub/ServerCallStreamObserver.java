@@ -67,8 +67,9 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
 
   /**
    * A hint to the call that specifies how many bytes must be queued before
-   * {@link #isReady()} will return true. A call may ignore this property if
-   * unsupported. This must be set before any messages are sent.
+   * {@link #isReady()} will return false. A call may ignore this property if
+   * unsupported. This may only be set during stream initialization before
+   * any messages are set.
    *
    * @param numBytes The number of bytes that must be queued. Must be a
    *                 positive integer.

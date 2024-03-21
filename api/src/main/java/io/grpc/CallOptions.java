@@ -208,15 +208,15 @@ public final class CallOptions {
   }
 
   /**
-   * Specifies how many bytes must be queued before the call will leave the
-   * <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">
-   * 'wait for ready'</a> state.
+   * Specifies how many bytes must be queued before the call is
+   * considered not ready to send more messages.
    *
    * @param numBytes The number of bytes that must be queued. Must be a
    *                 positive integer.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
   public CallOptions withOnReadyThreshold(int numBytes) {
+    checkArgument(numBytes > 0, "numBytes must be positive: %s", numBytes);
     Builder builder = toBuilder(this);
     builder.onReadyThreshold = numBytes;
     return builder.build();
