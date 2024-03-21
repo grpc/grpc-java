@@ -42,7 +42,7 @@ public class ManualFlowControlServer {
         serverCallStreamObserver.disableAutoRequest();
 
         // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
-        // when the consuming side has enough buffer space to receive more messages.
+        // when there is available buffer space to store more responses.
         //
         // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming StreamObserver's
         // onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent additional messages
@@ -61,7 +61,7 @@ public class ManualFlowControlServer {
               wasReady = true;
               logger.info("READY");
               // Signal the request sender to send one message. This happens when isReady() turns true, signaling that
-              // the receive buffer has enough free space to receive more messages. Calling request() serves to prime
+              // the send buffer has enough free space to send more responses. Calling request() serves to prime
               // the message pump.
               serverCallStreamObserver.request(1);
             }
@@ -95,8 +95,8 @@ public class ManualFlowControlServer {
                 // cycling through the loop of onNext() -> request(1)...onNext() -> request(1)... until the client runs
                 // out of messages and ends the loop (via onCompleted()).
                 //
-                // If request() was called here with the argument of more than 1, the server might runs out of receive
-                // buffer space, and isReady() will turn false. When the receive buffer has sufficiently drained,
+                // If request() was called here with the argument of more than 1, the server might run out of response
+                // buffer space, and isReady() will turn false. When the response buffer has sufficiently drained,
                 // isReady() will turn true, and the serverCallStreamObserver's onReadyHandler will be called to restart
                 // the message pump.
                 serverCallStreamObserver.request(1);

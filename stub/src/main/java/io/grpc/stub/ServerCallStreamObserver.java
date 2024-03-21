@@ -98,7 +98,7 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
 
 
   /**
-   * If {@code true}, indicates that the observer is capable of sending additional messages
+   * If {@code true}, indicates that the observer is capable of sending additional responses
    * without requiring excessive buffering internally. This value is just a suggestion and the
    * application is free to ignore it, however doing so may result in excessive buffering within the
    * observer.
