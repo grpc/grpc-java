@@ -10,7 +10,7 @@ import io.grpc.ServerInterceptor;
 /**
  * Class which helps set up {@link PeerUids} to be used in tests.
  */
-public class PeerUidTestHelper {
+public final class PeerUidTestHelper {
 
   /**
    * The UID of the calling package is set with the value of this key.
@@ -31,12 +31,12 @@ public class PeerUidTestHelper {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-        Context context = Context.current();
         if (headers.containsKey(UID_KEY)) {
-          context = context.withValue(PeerUids.REMOTE_PEER, new PeerUid(headers.get(UID_KEY)));
+          Context context =
+              Context.current().withValue(PeerUids.REMOTE_PEER, new PeerUid(headers.get(UID_KEY)));
+          return Contexts.interceptCall(context, call, headers, next);
         }
-
-        return Contexts.interceptCall(context, call, headers, next);
+        return next.startCall(call, headers);
       }
     };
   }
