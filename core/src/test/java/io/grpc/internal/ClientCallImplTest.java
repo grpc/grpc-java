@@ -926,7 +926,7 @@ public class ClientCallImplTest {
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+\\.[0-9]+s. "
+        .matches("CallOptions deadline exceeded after [0-9]+\\.[0-9]+s. "
             + "Name resolution delay 0.000000000 seconds. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
@@ -954,7 +954,24 @@ public class ClientCallImplTest {
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
-    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");
+    assertThat(statusCaptor.getValue().getDescription())
+        .matches("Context deadline exceeded after [0-9]+\\.[0-9]+s. "
+            + "Name resolution delay 0.000000000 seconds. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
+  }
+
+  @Test
+  public void cancelWithoutStart() {
+    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector);
+    // Nothing happens as a result, but it shouldn't throw
+    call.cancel("canceled", null);
   }
 
   @Test
