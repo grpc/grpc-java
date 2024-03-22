@@ -214,8 +214,6 @@ class NettyServerStream extends AbstractServerStream {
       // Normally we don't need to do anything here because the cause of a failed future
       // while writing DATA frames would be an IO error and the stream is already closed.
       // However, we still need handle any unexpected failures raised in Netty.
-      // TODO(sergiitk): check if something similar to
-      //    io.grpc.netty.NettyClientTransport#statusFromFailedFuture is needed.
       http2ProcessingFailed(Utils.statusFromThrowable(future.cause()));
     }
 

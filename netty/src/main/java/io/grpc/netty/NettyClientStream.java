@@ -296,7 +296,7 @@ class NettyClientStream extends AbstractClientStream {
       handler.getWriteQueue().enqueue(new CancelClientStreamCommand(this, status), true);
     }
 
-    protected void onWriteFrameData(ChannelFuture future, int numMessages, int numBytes) {
+    private void onWriteFrameData(ChannelFuture future, int numMessages, int numBytes) {
       // If the future succeeds when http2stream is null, the stream has been cancelled
       // before it began and Netty is purging pending writes from the flow-controller.
       if (future.isSuccess() && http2Stream() == null) {
