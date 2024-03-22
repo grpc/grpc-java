@@ -19,8 +19,8 @@ package io.grpc.util;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -50,6 +50,7 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
@@ -1203,9 +1204,21 @@ public class OutlierDetectionLoadBalancerTest {
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
     if (hasHealthConsumer) {
-      verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
-          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
-      ));
+      ArgumentCaptor<ConnectivityStateInfo> csiCaptor = ArgumentCaptor.forClass(
+          ConnectivityStateInfo.class);
+      verify(healthListeners.get(servers.get(0)), times(2)).onSubchannelState(csiCaptor.capture());
+      List<ConnectivityStateInfo> connectivityStateInfos = csiCaptor.getAllValues();
+
+      // The subchannel went through two state transitions...
+      assertThat(connectivityStateInfos).hasSize(2);
+      // ...it first went to the READY state...
+      assertThat(connectivityStateInfos.get(0).getState()).isEqualTo(READY);
+
+      // ...and then to TRANSIENT_FAILURE as outlier detection ejected it.
+      assertThat(connectivityStateInfos.get(1).getState()).isEqualTo(TRANSIENT_FAILURE);
+      assertThat(connectivityStateInfos.get(1).getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(connectivityStateInfos.get(1).getStatus().getDescription()).isEqualTo(
+          "The subchannel has been ejected by outlier detection");
     }
   }
 
@@ -1264,9 +1277,21 @@ public class OutlierDetectionLoadBalancerTest {
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
     if (hasHealthConsumer) {
-      verify(healthListeners.get(servers.get(0))).onSubchannelState(eq(
-          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)
-      ));
+      ArgumentCaptor<ConnectivityStateInfo> csiCaptor = ArgumentCaptor.forClass(
+          ConnectivityStateInfo.class);
+      verify(healthListeners.get(servers.get(0)), times(2)).onSubchannelState(csiCaptor.capture());
+      List<ConnectivityStateInfo> connectivityStateInfos = csiCaptor.getAllValues();
+
+      // The subchannel went through two state transitions...
+      assertThat(connectivityStateInfos).hasSize(2);
+      // ...it first went to the READY state...
+      assertThat(connectivityStateInfos.get(0).getState()).isEqualTo(READY);
+
+      // ...and then to TRANSIENT_FAILURE as outlier detection ejected it.
+      assertThat(connectivityStateInfos.get(1).getState()).isEqualTo(TRANSIENT_FAILURE);
+      assertThat(connectivityStateInfos.get(1).getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(connectivityStateInfos.get(1).getStatus().getDescription()).isEqualTo(
+          "The subchannel has been ejected by outlier detection");
     }
   }
 
