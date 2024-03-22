@@ -56,7 +56,6 @@ dependencies {
     testImplementation project(':grpc-testing')
     testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core'))
-    testImplementation project(':grpc-binder')
 
     androidTestAnnotationProcessor libraries.auto.value
     androidTestImplementation project(':grpc-testing')
