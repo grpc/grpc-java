@@ -210,6 +210,7 @@ class NettyServerStream extends AbstractServerStream {
       if (future.isSuccess() || isStreamDeallocated()) {
         return;
       }
+
       // Future failed, fail RPC.
       // Normally we don't need to do anything here because the cause of a failed future
       // while writing DATA frames would be an IO error and the stream is already closed.

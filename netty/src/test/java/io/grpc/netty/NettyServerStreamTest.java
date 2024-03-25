@@ -24,13 +24,14 @@ import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
 import static io.netty.handler.codec.http2.Http2Exception.connectionError;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -45,7 +46,6 @@ import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import io.grpc.internal.TransportTracer;
-import io.grpc.netty.WriteQueue.QueuedCommand;
 import io.netty.buffer.EmptyByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.DefaultChannelPromise;
@@ -55,14 +55,18 @@ import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
+import java.util.stream.Collectors;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -134,24 +138,58 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
   @Test
   public void writeFrameFutureFailedShouldCancelRpc() {
     Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
-    when(writeQueue.enqueue(any(SendGrpcFrameCommand.class), eq(true))).thenReturn(
+    when(writeQueue.enqueue(any(SendGrpcFrameCommand.class), anyBoolean())).thenReturn(
         new DefaultChannelPromise(channel).setFailure(h2Error));
 
-    // Single-frame message.
+    // Write multiple messages to ensure multiple SendGrpcFrameCommand are enqueued. We set up all
+    // of them to fail, which allows us to assert that only a single cancel is sent, and the stream
+    // isn't spammed with multiple RST_STREAM.
     stream.writeMessage(new ByteArrayInputStream(smallMessage()));
+    stream.writeMessage(new ByteArrayInputStream(largeMessage()));
     stream.flush();
-    verifyWriteFutureFailure(h2Error, SendGrpcFrameCommand.class);
+
+    verifyWriteFutureFailure(h2Error);
+    // Verify CancelServerStreamCommand enqueued once, right after first SendGrpcFrameCommand.
+    InOrder inOrder = Mockito.inOrder(writeQueue);
+    inOrder.verify(writeQueue).enqueue(any(SendGrpcFrameCommand.class), eq(false));
+    // Verify that failed SendGrpcFrameCommand results in immediate CancelServerStreamCommand.
+    inOrder.verify(writeQueue).enqueue(any(CancelServerStreamCommand.class), eq(true));
+    // Verify that any other failures do not produce another CancelServerStreamCommand in the queue.
+    inOrder.verify(writeQueue, atLeast(1)).enqueue(any(SendGrpcFrameCommand.class), eq(false));
+    inOrder.verify(writeQueue).enqueue(any(SendGrpcFrameCommand.class), eq(true));
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test
   public void writeHeadersFutureFailedShouldCancelRpc() {
     Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
-    when(writeQueue.enqueue(any(SendResponseHeadersCommand.class), eq(true))).thenReturn(
+    Class<SendResponseHeadersCommand> headersCommandClass = SendResponseHeadersCommand.class;
+    when(writeQueue.enqueue(any(headersCommandClass), anyBoolean())).thenReturn(
         new DefaultChannelPromise(channel).setFailure(h2Error));
 
-    stream().writeHeaders(new Metadata(), true);
+    // Prepare different headers to make it easier to distinguish in the error message.
+    Metadata headers1 = new Metadata();
+    headers1.put(Metadata.Key.of("writeHeaders", Metadata.ASCII_STRING_MARSHALLER), "1");
+    Metadata headers2 = new Metadata();
+    headers2.put(Metadata.Key.of("writeHeaders", Metadata.ASCII_STRING_MARSHALLER), "2");
+    Metadata headers3 = new Metadata();
+    headers3.put(Metadata.Key.of("writeHeaders", Metadata.ASCII_STRING_MARSHALLER), "3");
+
+    // Note that the second (flush) argument of NettyServerStream.Sink#writeHeaders(Metadata,
+    // boolean) is ignored, and SendResponseHeadersCommand is always enqueued with flush=true.
+    stream().writeHeaders(headers1, true);
+    stream().writeHeaders(headers2, true);
+    stream().writeHeaders(headers3, true);
     stream.flush();
-    verifyWriteFutureFailure(h2Error, SendResponseHeadersCommand.class);
+
+    verifyWriteFutureFailure(h2Error);
+    // Verify CancelServerStreamCommand enqueued once, right after first SendResponseHeadersCommand.
+    InOrder inOrder = Mockito.inOrder(writeQueue);
+    inOrder.verify(writeQueue).enqueue(any(headersCommandClass), anyBoolean());
+    inOrder.verify(writeQueue).enqueue(any(CancelServerStreamCommand.class), eq(true));
+    inOrder.verify(writeQueue, atLeast(1)).enqueue(any(headersCommandClass), anyBoolean());
+    inOrder.verifyNoMoreInteractions();
+
   }
 
   @Test
@@ -161,30 +199,35 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
         new DefaultChannelPromise(channel).setFailure(h2Error));
 
     stream().close(Status.OK, trailers);
-    verifyWriteFutureFailure(h2Error, SendResponseHeadersCommand.class);
+
+    verifyWriteFutureFailure(h2Error);
+    verify(writeQueue).enqueue(any(CancelServerStreamCommand.class), eq(true));
   }
 
-  private void verifyWriteFutureFailure(
-      Http2Exception h2Error, Class<? extends QueuedCommand> failedCommand) {
-    verify(writeQueue, times(1)).enqueue(any(failedCommand), eq(true));
-    verify(writeQueue, times(1)).enqueue(any(CancelServerStreamCommand.class), eq(true));
-    verifyNoMoreInteractions(writeQueue);
-
-    ArgumentCaptor<QueuedCommand> commandCaptor = ArgumentCaptor.forClass(QueuedCommand.class);
-    verify(writeQueue, atLeastOnce()).enqueue(commandCaptor.capture(), eq(true));
-
-    // Check the last call to be CancelClientStreamCommand.
-    QueuedCommand command = commandCaptor.getValue();
-    assertWithMessage("Expected last command on the stream to be CancelServerStreamCommand")
-        .that(command)
-        .isInstanceOf(CancelServerStreamCommand.class);
-    CancelServerStreamCommand cancelCommand = (CancelServerStreamCommand) command;
-    // Check connection error info is propagated via Status.
-    Status cancelReason = cancelCommand.reason();
+  private void verifyWriteFutureFailure(Http2Exception h2Error) {
+    // Check the error that caused the future write failure propagated via Status.
+    Status cancelReason = findCancelServerStreamCommand().reason();
     assertThat(cancelReason.getCode()).isEqualTo(Status.INTERNAL.getCode());
     assertThat(cancelReason.getCause()).isEqualTo(h2Error);
-    // Listener closed.
+    // Verify the listener has closed.
     verify(serverListener).closed(same(cancelReason));
+  }
+
+  private CancelServerStreamCommand findCancelServerStreamCommand() {
+    // Ensure there's no CancelServerStreamCommand enqueued with flush=false.
+    verify(writeQueue, never()).enqueue(any(CancelServerStreamCommand.class), eq(false));
+
+    List<CancelServerStreamCommand> commands = Mockito.mockingDetails(writeQueue).getInvocations()
+        .stream()
+        // Get enqueue() innovations only.
+        .filter(invocation -> invocation.getMethod().getName().equals("enqueue"))
+        // Find the cancel commands.
+        .filter(invocation -> invocation.getArgument(0) instanceof CancelServerStreamCommand)
+        .map(invocation -> invocation.getArgument(0, CancelServerStreamCommand.class))
+        .collect(Collectors.toList());
+
+    assertWithMessage("Expected exactly one CancelClientStreamCommand").that(commands).hasSize(1);
+    return commands.get(0);
   }
 
   @Test
