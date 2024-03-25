@@ -46,7 +46,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.collect.Streams;
 import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
@@ -83,7 +82,6 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.invocation.Invocation;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -215,44 +213,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Test
   public void writeFrameFutureFailedShouldCancelRpc() {
     Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
-    ChannelPromise failedFuture = new DefaultChannelPromise(channel).setFailure(h2Error);
-
-    // For a single-frame message SendGrpcFrameCommand command is sent once with endStream=true.
-    when(writeQueue.enqueue(any(SendGrpcFrameCommand.class), eq(true))).thenReturn(failedFuture);
-
-    // Write a single-frame message.
-    stream().transportState().setId(STREAM_ID);
-    stream.writeMessage(new ByteArrayInputStream(smallMessage()));
-    stream.flush();
-
-    // Correctness check: verify we're really testing a single-frame writeMessage flow.
-    InOrder inOrder = Mockito.inOrder(writeQueue);
-    inOrder.verify(writeQueue).enqueue(any(CreateStreamCommand.class), eq(false));
-    inOrder.verify(writeQueue).enqueue(any(SendGrpcFrameCommand.class), eq(true));
-    inOrder.verify(writeQueue).enqueue(any(CancelClientStreamCommand.class), eq(true));
-    inOrder.verifyNoMoreInteractions();
-
-    // Get CancelClientStreamCommand, we know it's the last one.
-    Invocation invocation =
-        Streams.findLast(Mockito.mockingDetails(writeQueue).getInvocations().stream()).get();
-    CancelClientStreamCommand cancelCommand = invocation.getArgument(0);
-
-    Status cancelReason = cancelCommand.reason();
-    assertThat(cancelReason.getCode()).isEqualTo(Status.INTERNAL.getCode());
-    assertThat(cancelReason.getCause()).isEqualTo(h2Error);
-    // Verify listener closed.
-    // TODO(sergiitk): should we expect REFUSED/MISCARRIED instead?
-    verify(listener).closed(same(cancelReason), eq(PROCESSED), any(Metadata.class));
-  }
-
-  @Test
-  public void writeMultiFrameFutureFailedShouldCancelRpc() {
-    Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
     // Fail all SendGrpcFrameCommands command sent to the queue.
     when(writeQueue.enqueue(any(SendGrpcFrameCommand.class), anyBoolean())).thenReturn(
         new DefaultChannelPromise(channel).setFailure(h2Error));
 
-    // Place multiple messages: to ensure multiple frames written to the queue.
+    // Write multiple messages to ensure multiple SendGrpcFrameCommand are enqueued. We set up all
+    // of them to fail, which allows us to assert that only a single cancel is sent, and the stream
+    // isn't spammed with multiple RST_STREAM.
     stream().transportState().setId(STREAM_ID);
     stream.writeMessage(new ByteArrayInputStream(smallMessage()));
     stream.writeMessage(new ByteArrayInputStream(largeMessage()));
