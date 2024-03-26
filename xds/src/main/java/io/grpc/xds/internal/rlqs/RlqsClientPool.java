@@ -58,6 +58,8 @@ public final class RlqsClientPool {
 
   /** Creates an instance. */
   public static RlqsClientPool newInstance(ScheduledExecutorService scheduler) {
+    // TODO(sergiitk): scheduler - consider using GrpcUtil.TIMER_SERVICE.
+    // TODO(sergiitk): note that the scheduler has a finite lifetime.
     return new RlqsClientPool(scheduler, 0);
   }
 
