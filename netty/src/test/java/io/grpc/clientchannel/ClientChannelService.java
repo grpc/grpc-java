@@ -56,39 +56,36 @@ public abstract class ClientChannelService implements BindableService {
                 })
                 .build();
 
-        networkChannel.getState(true);
-        networkChannel.notifyWhenStateChanged(ConnectivityState.READY, () -> {
-            try {
-                server.start();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+        try {
+            server.start();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
-            headers.put(CONTENT_TYPE_KEY, "application/grpc+raw");
+        headers.put(CONTENT_TYPE_KEY, "application/grpc+raw");
 
-            serverCall.start(
-                    new ClientCall.Listener<ByteBuf>() {
+        serverCall.start(
+                new ClientCall.Listener<ByteBuf>() {
 
-                        @Override
-                        public void onReady() {
-                            serverCall.request(Integer.MAX_VALUE);
+                    @Override
+                    public void onReady() {
+                        serverCall.request(Integer.MAX_VALUE);
+                    }
+
+                    @Override
+                    public void onMessage(ByteBuf bytes) {
+                        if (bytes.readableBytes() > 0) {
+                            channel.pipeline().fireChannelRead(bytes);
                         }
+                    }
 
-                        @Override
-                        public void onMessage(ByteBuf bytes) {
-                            if (bytes.readableBytes() > 0) {
-                                channel.pipeline().fireChannelRead(bytes);
-                            }
-                        }
-
-                        @Override
-                        public void onClose(Status status, Metadata trailers) {
-                            server.shutdown();
-                        }
-                    },
-                    headers
-            );
-        });
+                    @Override
+                    public void onClose(Status status, Metadata trailers) {
+                        server.shutdown();
+                    }
+                },
+                headers
+        );
     }
 
     abstract protected void onChannel(ManagedChannel channel, Metadata headers);
