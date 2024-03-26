@@ -516,9 +516,11 @@ final class XdsServerWrapper extends Server {
               FilterConfig filterConfig = namedFilterConfig.filterConfig;
               Filter filter = filterRegistry.get(filterConfig.typeUrl());
               if (filter instanceof ServerInterceptorBuilder) {
-                ServerInterceptor interceptor =
-                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
-                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+                ServerInterceptorBuilder interceptorBuilder = (ServerInterceptorBuilder) filter;
+                ServerInterceptor interceptor = interceptorBuilder.buildServerInterceptor(
+                    filterConfig,
+                    selectedOverrideConfigs.get(namedFilterConfig.name),
+                    timeService);
                 if (interceptor != null) {
                   filterInterceptors.add(interceptor);
                 }
