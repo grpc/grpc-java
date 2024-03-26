@@ -20,9 +20,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaBucketSettings;
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaFilterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride;
 import io.grpc.Metadata;
@@ -32,6 +34,10 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.internal.datatype.GrpcService;
+import io.grpc.xds.internal.matchers.Matcher;
+import io.grpc.xds.internal.matchers.MatcherList;
+import io.grpc.xds.internal.matchers.OnMatch;
+import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
 import io.grpc.xds.internal.rlqs.RlqsClientPool;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -108,6 +114,9 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       if (!rlqsFilterOverride.domain().isEmpty()) {
         overrideBuilder.domain(rlqsFilterOverride.domain());
       }
+      if (rlqsFilterOverride.bucketMatchers() != null) {
+        overrideBuilder.bucketMatchers(rlqsFilterOverride.bucketMatchers());
+      }
       // Override bucket matchers if not null.
       rlqsFilterConfig = overrideBuilder.build();
     }
@@ -182,7 +191,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
   @VisibleForTesting
   static RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
-      throws ResourceInvalidException {
+      throws ResourceInvalidException, InvalidProtocolBufferException {
     RlqsFilterConfig.Builder builder = RlqsFilterConfig.builder();
     if (rlqsFilterProto.getDomain().isEmpty()) {
       throw new ResourceInvalidException("RateLimitQuotaFilterConfig domain is required");
@@ -190,9 +199,29 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     builder.domain(rlqsFilterProto.getDomain())
         .rlqsService(GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer()));
 
-    // TODO(sergiitk): [IMPL] bucket_matchers.
+    // TODO(sergiitk): [IMPL] actually parse, move to RlqsBucketSettings.fromProto()
+    RateLimitQuotaBucketSettings fallbackBucketSettingsProto = unpackAny(
+        rlqsFilterProto.getBucketMatchers().getOnNoMatch().getAction().getTypedConfig(),
+        RateLimitQuotaBucketSettings.class);
+    RlqsBucketSettings fallbackBucket = RlqsBucketSettings.create(
+        ImmutableMap.of("bucket_id", headers -> "hello"),
+        fallbackBucketSettingsProto.getReportingInterval());
 
-    return builder.build();
+    // TODO(sergiitk): [IMPL] actually parse, move to Matcher.fromProto()
+    Matcher<RlqsBucketSettings> bucketMatchers = new Matcher<RlqsBucketSettings>() {
+      @Nullable
+      @Override
+      public MatcherList<RlqsBucketSettings> matcherList() {
+        return null;
+      }
+
+      @Override
+      public OnMatch<RlqsBucketSettings> onNoMatch() {
+        return OnMatch.ofAction(fallbackBucket);
+      }
+    };
+
+    return builder.bucketMatchers(bucketMatchers).build();
   }
 
   @VisibleForTesting
@@ -213,4 +242,3 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     return ((Any) message).unpack(clazz);
   }
 }
-
