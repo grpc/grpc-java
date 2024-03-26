@@ -395,7 +395,7 @@ public final class ServerCalls {
       call.close(Status.OK, new Metadata());
       completed = true;
     }
-
+    
     @Override
     public boolean isReady() {
       return call.isReady();
@@ -420,6 +420,14 @@ public final class ServerCalls {
           + "during the initial call to the application, before the service returns its "
           + "StreamObserver");
       this.onCancelHandler = onCancelHandler;
+    }
+
+    @Override
+    public void setOnReadyThreshold(int numBytes) {
+      checkState(!frozen, "Cannot alter setOnReadyThreshold after initialization. May only be "
+          + "called during the initial call to the application, before the service returns its "
+          + "StreamObserver");
+      call.setOnReadyThreshold(numBytes);
     }
 
     @Override

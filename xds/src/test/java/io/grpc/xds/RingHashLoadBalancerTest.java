@@ -59,6 +59,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
@@ -161,7 +162,7 @@ public class RingHashLoadBalancerTest {
     verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -1055,6 +1056,9 @@ public class RingHashLoadBalancerTest {
   }
 
   private class TestHelper extends AbstractTestHelper {
+    public TestHelper() {
+      super(new FakeClock(), syncContext);
+    }
 
     @Override
     public Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap() {
@@ -1064,11 +1068,6 @@ public class RingHashLoadBalancerTest {
     @Override
     public String getAuthority() {
       return AUTHORITY;
-    }
-
-    @Override
-    public SynchronizationContext getSynchronizationContext() {
-      return syncContext;
     }
 
     private Subchannel getMockSubchannel(Subchannel realSubchannel) {

@@ -153,7 +153,7 @@ public class RoundRobinLoadBalancerTest {
     assertEquals(READY, stateCaptor.getAllValues().get(1));
     assertThat(getList(pickerCaptor.getValue())).containsExactly(readySubchannel);
 
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test
@@ -234,7 +234,7 @@ public class RoundRobinLoadBalancerTest {
     picker = pickerCaptor.getValue();
     assertThat(getList(picker)).containsExactly(oldSubchannel, newSubchannel);
 
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test
@@ -269,7 +269,7 @@ public class RoundRobinLoadBalancerTest {
 
     verify(subchannel, atLeastOnce()).requestConnection();
     verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test
@@ -355,7 +355,7 @@ public class RoundRobinLoadBalancerTest {
       inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     }
 
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test
@@ -432,7 +432,7 @@ public class RoundRobinLoadBalancerTest {
 
     LoadBalancer.PickResult pickResult2 = pickerCaptor.getValue().pickSubchannel(mockArgs);
     assertEquals(readySubchannel, pickResult2.getSubchannel());
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test

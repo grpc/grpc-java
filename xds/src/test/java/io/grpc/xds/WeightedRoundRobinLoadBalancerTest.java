@@ -22,6 +22,8 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -50,6 +52,7 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.TestUtils;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
@@ -71,7 +74,6 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
@@ -94,8 +96,8 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
-  private final TestHelper testHelperInstance = new TestHelper();
-  private Helper helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  private final TestHelper testHelperInstance;
+  private final Helper helper;
 
   @Mock
   private LoadBalancer.PickSubchannelArgs mockArgs;
@@ -134,6 +136,11 @@ public class WeightedRoundRobinLoadBalancerTest {
           }
       });
 
+  public WeightedRoundRobinLoadBalancerTest() {
+    testHelperInstance = new TestHelper();
+    helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  }
+
   @Before
   public void setup() {
     for (int i = 0; i < 3; i++) {
@@ -161,6 +168,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         new FakeRandom(0));
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    reset(helper);
   }
 
   @Test
@@ -184,9 +192,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
                 .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
                 any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -219,7 +227,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
 
     assertThat(getAddressesFromPick(weightedPicker)).isEqualTo(weightedChild1.getEag());
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
@@ -229,13 +238,13 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     syncContext.execute(() -> wrr.shutdown());
     for (Subchannel subchannel: subchannels.values()) {
       verify(subchannel).shutdown();
     }
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(0);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(0);
     verifyNoMoreInteractions(mockArgs);
   }
 
@@ -252,7 +261,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -273,7 +282,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(getAddresses(pickResult))
         .isEqualTo(weightedChild1.getEag());
@@ -306,9 +316,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -489,19 +499,20 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(null)
             .setAttributes(affinity).build()).isOk()).isFalse();
-    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper, never()).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(fakeClock.getPendingTasks()).isEmpty();
 
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().getClass().getName())
         .isEqualTo("io.grpc.util.RoundRobinLoadBalancer$EmptyPicker");
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedCount = isEnabledHappyEyeballs() ? servers.size() + 1 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo( expectedCount);
   }
 
   @Test
@@ -509,9 +520,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
-            any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -532,7 +542,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedCount = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(expectedCount);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
@@ -557,14 +568,18 @@ public class WeightedRoundRobinLoadBalancerTest {
             .isLessThan(0.002);
   }
 
+  private boolean isEnabledHappyEyeballs() {
+    return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS", true);
+  }
+
   @Test
   public void updateWeightTimer() {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
         any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -592,17 +607,18 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     assertThat(getAddressesFromPick(weightedPicker))
         .isEqualTo(weightedChild1.getEag());
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
         .build();
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
     weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -610,7 +626,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
-    assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
+    expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(expectedTasks);
     assertThat(getAddressesFromPick(weightedPicker))
         .isEqualTo(weightedChild2.getEag());
     assertThat(getAddressesFromPick(weightedPicker))
@@ -622,9 +639,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -645,7 +662,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
@@ -676,9 +694,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
         any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -691,7 +709,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     Map<EquivalentAddressGroup, Integer> qpsByChannel = ImmutableMap.of(weightedChild1.getEag(), 2,
@@ -743,9 +762,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class)); // 3 from setup plus 3 from the execute
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -791,9 +810,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -834,7 +853,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         }
       }
     }).start();
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     barrier.await();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddresses(weightedPicker.pickSubchannel(mockArgs));
@@ -1101,6 +1121,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     inOrder.verify(subchannel2).shutdown();
   }
 
+  private int getNumFilteredPendingTasks() {
+    return AbstractTestHelper.getNumFilteredPendingTasks(fakeClock);
+  }
 
   private static final class VerifyingScheduler {
     private final StaticStrideScheduler delegate;
@@ -1148,6 +1171,9 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   private class TestHelper extends AbstractTestHelper {
+    public TestHelper() {
+      super(fakeClock, syncContext);
+    }
 
     @Override
     public Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap() {
@@ -1163,17 +1189,5 @@ public class WeightedRoundRobinLoadBalancerTest {
     public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
       return subchannelStateListeners;
     }
-
-    @Override
-    public SynchronizationContext getSynchronizationContext() {
-      return syncContext;
-    }
-
-    @Override
-    public ScheduledExecutorService getScheduledExecutorService() {
-      return fakeClock.getScheduledExecutorService();
-    }
-
-
   }
 }

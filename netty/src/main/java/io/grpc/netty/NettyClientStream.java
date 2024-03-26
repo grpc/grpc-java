@@ -227,8 +227,9 @@ class NettyClientStream extends AbstractClientStream {
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer,
-        String methodName) {
-      super(maxMessageSize, statsTraceCtx, transportTracer);
+        String methodName,
+        CallOptions options) {
+      super(maxMessageSize, statsTraceCtx, transportTracer, options);
       this.methodName = checkNotNull(methodName, "methodName");
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = checkNotNull(eventLoop, "eventLoop");

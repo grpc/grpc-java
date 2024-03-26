@@ -59,6 +59,12 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
   }
 
   @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public void setOnReadyThreshold(int numBytes) {
+    delegate().setOnReadyThreshold(numBytes);
+  }
+
+  @Override
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
   public void setCompression(String compressor) {
     delegate().setCompression(compressor);

@@ -99,7 +99,8 @@ class OkHttpClientStream extends AbstractClientStream {
             outboundFlow,
             transport,
             initialWindowSize,
-            method.getFullMethodName());
+            method.getFullMethodName(),
+            callOptions);
   }
 
   @Override
@@ -222,8 +223,9 @@ class OkHttpClientStream extends AbstractClientStream {
         OutboundFlowController outboundFlow,
         OkHttpClientTransport transport,
         int initialWindowSize,
-        String methodName) {
-      super(maxMessageSize, statsTraceCtx, OkHttpClientStream.this.getTransportTracer());
+        String methodName,
+        CallOptions options) {
+      super(maxMessageSize, statsTraceCtx, OkHttpClientStream.this.getTransportTracer(), options);
       this.lock = checkNotNull(lock, "lock");
       this.frameWriter = frameWriter;
       this.outboundFlow = outboundFlow;
