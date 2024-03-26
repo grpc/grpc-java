@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 
@@ -33,6 +32,9 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.internal.datatype.GrpcService;
+import io.grpc.xds.internal.rlqs.RlqsClientPool;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /** RBAC Http filter implementation. */
@@ -45,6 +47,12 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       + "envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaFilterConfig";
   static final String TYPE_URL_OVERRIDE_CONFIG = "type.googleapis.com/"
       + "envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride";
+
+  private final AtomicReference<RlqsClientPool> rlqsClientPoolRef = new AtomicReference<>();
+
+  // RlqsFilter() {
+  //   rlqsClientPool = new RlqsClientPool()
+  // }
 
   @Override
   public String[] typeUrls() {
@@ -77,9 +85,18 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     }
   }
 
+  @Nullable
   @Override
   public ServerInterceptor buildServerInterceptor(
       FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    throw new UnsupportedOperationException("ScheduledExecutorService scheduler required");
+  }
+
+  @Override
+  public ServerInterceptor buildServerInterceptor(
+      FilterConfig config,
+      @Nullable FilterConfig overrideConfig,
+      ScheduledExecutorService scheduler) {
     // called when we get an xds update - when the LRS or RLS changes.
     // TODO(sergiitk): this needs to be confirmed.
     RlqsFilterConfig rlqsFilterConfig = (RlqsFilterConfig) checkNotNull(config, "config");
@@ -87,7 +104,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     // Per-route and per-host configuration overrides.
     if (overrideConfig != null) {
       RlqsFilterConfig rlqsFilterOverride = (RlqsFilterConfig) overrideConfig;
-      // All fields are inherited from the main config, unless overriden.
+      // All fields are inherited from the main config, unless overridden.
       RlqsFilterConfig.Builder overrideBuilder = rlqsFilterConfig.toBuilder();
       if (!rlqsFilterOverride.domain().isEmpty()) {
         overrideBuilder.domain(rlqsFilterOverride.domain());
@@ -96,12 +113,30 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       rlqsFilterConfig = overrideBuilder.build();
     }
 
+    rlqsClientPoolRef.compareAndSet(null, RlqsClientPool.newInstance(scheduler));
     return generateRlqsInterceptor(rlqsFilterConfig);
   }
 
+  @Override
+  public void shutdown() {
+    // TODO(sergiitk): besides shutting down everything, should there be a per-route destructor?
+    RlqsClientPool oldClientPool = rlqsClientPoolRef.getAndUpdate(unused -> null);
+    if (oldClientPool != null) {
+      oldClientPool.shutdown();
+    }
+  }
+
+  @Nullable
   private ServerInterceptor generateRlqsInterceptor(RlqsFilterConfig config) {
     checkNotNull(config, "config");
     checkNotNull(config.rlqsService(), "config.rlqsService");
+    RlqsClientPool rlqsClientPool = rlqsClientPoolRef.get();
+    if (rlqsClientPool == null) {
+      // Being shut down, return no interceptor.
+      return null;
+    }
+    rlqsClientPool.addClient(config.rlqsService());
+
     // final GrpcAuthorizationEngine authEngine = new GrpcAuthorizationEngine(config);
     return new ServerInterceptor() {
       @Override
