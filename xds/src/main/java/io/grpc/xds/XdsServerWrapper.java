@@ -459,7 +459,7 @@ final class XdsServerWrapper extends Server {
 
     private void updateSelector() {
       Map<FilterChain, AtomicReference<ServerRoutingConfig>> filterChainRouting = new HashMap<>();
-      // TODO(sergiitk): is this a good place to reset interceptors?
+      // TODO(sergiitk): [QUESTION] is this a good place to reset interceptors?
       // for (FilterChain filterChain : savedRdsRoutingConfigRef.keySet()) {
       //   if (!resourceName.equals(filterChain.httpConnectionManager().rdsName())) {
       //     continue;

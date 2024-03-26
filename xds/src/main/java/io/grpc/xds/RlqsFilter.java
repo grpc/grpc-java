@@ -97,8 +97,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       FilterConfig config,
       @Nullable FilterConfig overrideConfig,
       ScheduledExecutorService scheduler) {
-    // called when we get an xds update - when the LRS or RLS changes.
-    // TODO(sergiitk): this needs to be confirmed.
+    // Called when we get an xds update - when the LRS or RLS changes.
     RlqsFilterConfig rlqsFilterConfig = (RlqsFilterConfig) checkNotNull(config, "config");
 
     // Per-route and per-host configuration overrides.
@@ -119,7 +118,8 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
   @Override
   public void shutdown() {
-    // TODO(sergiitk): besides shutting down everything, should there be a per-route destructor?
+    // TODO(sergiitk): [DESIGN] besides shutting down everything, should there
+    //    be per-route interceptor destructors?
     RlqsClientPool oldClientPool = rlqsClientPoolRef.getAndUpdate(unused -> null);
     if (oldClientPool != null) {
       oldClientPool.shutdown();
@@ -135,6 +135,8 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       // Being shut down, return no interceptor.
       return null;
     }
+    // TODO(sergiitk): [DESIGN] Rlqs client should take the channel as an argument?
+    // TODO(sergiitk): [DESIGN] the key should be hashed (domain + buckets) merged config?
     rlqsClientPool.addClient(config.rlqsService());
 
     // final GrpcAuthorizationEngine authEngine = new GrpcAuthorizationEngine(config);
@@ -152,7 +154,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         //   - and interface to notify service interceptor on shutdown
         //   - destroy channel when ref count 0
         // potentially many RLQS Clients sharing a channel to grpc RLQS service -
-        //   TODO(sergiitk): look up how cache is looked up
+        //   TODO(sergiitk): [QUESTION] look up how cache is looked up
         // now we create filters every RPC. will be change in RBAC.
         //    we need to avoid recreating filter when config doesn't change
         //    m: trigger close() after we create new instances
@@ -188,7 +190,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     builder.domain(rlqsFilterProto.getDomain())
         .rlqsService(GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer()));
 
-    // TODO(sergiitk): bucket_matchers.
+    // TODO(sergiitk): [IMPL] bucket_matchers.
 
     return builder.build();
   }
@@ -197,7 +199,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   static RlqsFilterConfig parseRlqsFilterOverride(RateLimitQuotaOverride rlqsFilterProtoOverride)
       throws ResourceInvalidException {
     RlqsFilterConfig.Builder builder = RlqsFilterConfig.builder();
-    // TODO(sergiitk): bucket_matchers.
+    // TODO(sergiitk): [IMPL] bucket_matchers.
 
     return builder.domain(rlqsFilterProtoOverride.getDomain()).build();
   }

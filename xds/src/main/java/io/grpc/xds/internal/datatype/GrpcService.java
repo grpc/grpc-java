@@ -26,12 +26,12 @@ import javax.annotation.Nullable;
 public abstract class GrpcService {
   public abstract String targetUri();
 
-  // TODO(sergiitk): do we need this?
+  // TODO(sergiitk): [QUESTION] do we need this?
   // abstract String statPrefix();
 
-  // TODO(sergiitk): channelCredentials
-  // TODO(sergiitk): callCredentials
-  // TODO(sergiitk): channelArgs
+  // TODO(sergiitk): [IMPL] channelCredentials
+  // TODO(sergiitk): [IMPL] callCredentials
+  // TODO(sergiitk): [IMPL] channelArgs
 
   /** Optional timeout duration for the gRPC request to the service. */
   @Nullable
@@ -54,10 +54,10 @@ public abstract class GrpcService {
         grpcServiceProto.getGoogleGrpc();
     builder.targetUri(googleGrpcProto.getTargetUri());
 
-    // TODO(sergiitk): channelCredentials
-    // TODO(sergiitk): callCredentials
-    // TODO(sergiitk): channelArgs
-    // TODO(sergiitk): statPrefix - (maybe)
+    // TODO(sergiitk): [IMPL] channelCredentials
+    // TODO(sergiitk): [IMPL] callCredentials
+    // TODO(sergiitk): [IMPL] channelArgs
+    // TODO(sergiitk): [IMPL] statPrefix - (maybe)
 
     return builder.build();
   }
