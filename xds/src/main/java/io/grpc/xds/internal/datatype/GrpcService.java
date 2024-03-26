@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
 
 @AutoValue
 public abstract class GrpcService {
-  abstract String targetUri();
+  public abstract String targetUri();
 
   // TODO(sergiitk): do we need this?
   // abstract String statPrefix();
@@ -35,7 +35,7 @@ public abstract class GrpcService {
 
   /** Optional timeout duration for the gRPC request to the service. */
   @Nullable
-  abstract Duration timeout();
+  public abstract Duration timeout();
 
   public static GrpcService fromEnvoyProto(
       io.envoyproxy.envoy.config.core.v3.GrpcService grpcServiceProto)
