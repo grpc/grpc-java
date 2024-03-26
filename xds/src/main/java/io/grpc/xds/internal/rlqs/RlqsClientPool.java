@@ -32,10 +32,9 @@ import java.util.logging.Logger;
 public final class RlqsClientPool {
   private static final Logger logger = Logger.getLogger(RlqsClientPool.class.getName());
 
-  // TODO(sergiitk): make a param?
   private static final int DEFAULT_CLEANUP_INTERVAL_SECONDS = 10;
 
-  // TODO(sergiitk): always in sync context?
+  // TODO(sergiitk): [QUESTION] always in sync context?
   private boolean shutdown;
   private final SynchronizationContext syncContext = new SynchronizationContext((thread, error) -> {
     String message = "Uncaught exception in RlqsClientPool SynchronizationContext. Panic!";
@@ -58,8 +57,8 @@ public final class RlqsClientPool {
 
   /** Creates an instance. */
   public static RlqsClientPool newInstance(ScheduledExecutorService scheduler) {
-    // TODO(sergiitk): scheduler - consider using GrpcUtil.TIMER_SERVICE.
-    // TODO(sergiitk): note that the scheduler has a finite lifetime.
+    // TODO(sergiitk): [IMPL] scheduler - consider using GrpcUtil.TIMER_SERVICE.
+    // TODO(sergiitk): [IMPL] note that the scheduler has a finite lifetime.
     return new RlqsClientPool(scheduler, 0);
   }
 

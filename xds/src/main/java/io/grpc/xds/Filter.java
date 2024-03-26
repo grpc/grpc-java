@@ -52,8 +52,8 @@ interface Filter {
 
   default void shutdown() {
     // Implement as needed.
-    // TODO(sergiitk): important to cover and discuss in the design.
-    // TODO(sergiitk): should it be in ServerInterceptorBuilder?
+    // TODO(sergiitk): [DESIGN] important to cover and discuss in the design.
+    // TODO(sergiitk): [QUESTION] should it be in ServerInterceptorBuilder?
   }
 
   /** Represents an opaque data structure holding configuration for a filter. */

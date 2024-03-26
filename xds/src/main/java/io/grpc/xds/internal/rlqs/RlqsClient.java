@@ -31,6 +31,6 @@ final class RlqsClient {
 
   public void shutdown() {
     logger.log(Level.FINER, "Shutting down RlqsClient to {0}", targetUri);
-    // TODO(sergiitk): impl
+    // TODO(sergiitk): [IMPL] RlqsClient shutdown
   }
 }
