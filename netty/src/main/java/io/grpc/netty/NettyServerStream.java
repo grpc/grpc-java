@@ -195,9 +195,8 @@ class NettyServerStream extends AbstractServerStream {
     private void onWriteFrameData(ChannelFuture future, int numMessages, int numBytes) {
       // Remove the bytes from outbound flow control, optionally notifying
       // the client that they can send more bytes.
-      // TODO(sergiitk): should onSentBytes be called only on success?
-      onSentBytes(numBytes);
       if (future.isSuccess()) {
+        onSentBytes(numBytes);
         getTransportTracer().reportMessageSent(numMessages);
       } else {
         handleWriteFutureFailures(future);

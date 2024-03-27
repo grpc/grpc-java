@@ -251,7 +251,6 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     assertThat(cancelReason.getCode()).isEqualTo(Status.INTERNAL.getCode());
     assertThat(cancelReason.getCause()).isEqualTo(h2Error);
     // Verify listener closed.
-    // TODO(sergiitk): should we expect REFUSED/MISCARRIED instead?
     verify(listener).closed(same(cancelReason), eq(PROCESSED), any(Metadata.class));
   }
 
