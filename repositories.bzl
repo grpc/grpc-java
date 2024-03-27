@@ -83,7 +83,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-util": "@io_grpc_grpc_java//util",
 }
 
-def grpc_java_repositories():
+def grpc_java_repositories(bzlmod = False):
     """Imports dependencies for grpc-java."""
     if not native.existing_rule("com_github_cncf_udpa"):
         http_archive(
@@ -104,7 +104,7 @@ def grpc_java_repositories():
                 "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
             ],
         )
-    if not native.existing_rule("com_github_grpc_grpc"):
+    if not bzlmod and not native.existing_rule("com_github_grpc_grpc"):
         http_archive(
             name = "com_github_grpc_grpc",
             strip_prefix = "grpc-1.46.0",
@@ -113,11 +113,11 @@ def grpc_java_repositories():
                 "https://github.com/grpc/grpc/archive/v1.46.0.tar.gz",
             ],
         )
-    if not native.existing_rule("com_google_protobuf"):
+    if not bzlmod and not native.existing_rule("com_google_protobuf"):
         com_google_protobuf()
-    if not native.existing_rule("com_google_protobuf_javalite"):
+    if not bzlmod and not native.existing_rule("com_google_protobuf_javalite"):
         com_google_protobuf_javalite()
-    if not native.existing_rule("com_google_googleapis"):
+    if not bzlmod and not native.existing_rule("com_google_googleapis"):
         http_archive(
             name = "com_google_googleapis",
             sha256 = "49930468563dd48283e8301e8d4e71436bf6d27ac27c235224cc1a098710835d",
@@ -126,7 +126,7 @@ def grpc_java_repositories():
                 "https://github.com/googleapis/googleapis/archive/ca1372c6d7bcb199638ebfdb40d2b2660bab7b88.tar.gz",
             ],
         )
-    if not native.existing_rule("io_bazel_rules_go"):
+    if not bzlmod and not native.existing_rule("io_bazel_rules_go"):
         http_archive(
             name = "io_bazel_rules_go",
             sha256 = "ab21448cef298740765f33a7f5acee0607203e4ea321219f2a4c85a6e0fb0a27",
@@ -175,3 +175,8 @@ def io_grpc_grpc_proto():
         strip_prefix = "grpc-proto-4f245d272a28a680606c0739753506880cf33b5f",
         urls = ["https://github.com/grpc/grpc-proto/archive/4f245d272a28a680606c0739753506880cf33b5f.zip"],
     )
+
+def _grpc_java_repositories_extension(_):
+    grpc_java_repositories(bzlmod = True)
+
+grpc_java_repositories_extension = module_extension(implementation = _grpc_java_repositories_extension)
