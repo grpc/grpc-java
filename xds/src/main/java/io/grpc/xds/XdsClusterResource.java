@@ -257,7 +257,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         edsServiceName = edsClusterConfig.getServiceName();
       }
       // edsServiceName is required if the CDS resource has an xdstp name.
-      if ((edsServiceName == null) && clusterName.toLowerCase().startsWith("xdstp:")) {
+      if ((edsServiceName == null) && clusterName.toLowerCase(Locale.ROOT).startsWith("xdstp:")) {
         return StructOrError.fromError(
             "EDS service_name must be set when Cluster resource has an xdstp name");
       }
