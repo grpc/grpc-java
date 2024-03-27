@@ -77,7 +77,7 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    *                 positive integer.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
-  public abstract void setOnReadyThreshold(int numBytes) {
+  public void setOnReadyThreshold(int numBytes) {
     checkArgument(numBytes > 0, "numBytes must be positive: %s", numBytes);
   }
 
@@ -144,7 +144,7 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    * @param onReadyHandler to call when peer is ready to receive more messages.
    */
   @Override
-  public void setOnReadyHandler(Runnable onReadyHandler);
+  public abstract void setOnReadyHandler(Runnable onReadyHandler);
 
   /**
    * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'
