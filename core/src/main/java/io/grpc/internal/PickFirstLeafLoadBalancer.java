@@ -56,7 +56,6 @@ import javax.annotation.Nullable;
  * io.grpc.NameResolver}. The channel's default behavior is used, which is walking down the address
  * list and sticking to the first that works.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10383")
 final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
