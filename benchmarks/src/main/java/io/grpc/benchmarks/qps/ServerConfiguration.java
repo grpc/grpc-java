@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Configuration options for benchmark servers.
@@ -69,7 +70,7 @@ class ServerConfiguration implements Configuration {
     protected ServerConfiguration build0(ServerConfiguration config) {
       if (config.tls && !config.transport.tlsSupported) {
         throw new IllegalArgumentException(
-            "TLS unsupported with the " + config.transport.name().toLowerCase() + " transport");
+            "TLS unsupported with the " + config.transport + " transport");
       }
 
       // Verify that the address type is correct for the transport type.
@@ -109,6 +110,11 @@ class ServerConfiguration implements Configuration {
       this.socketAddressValidator = socketAddressValidator;
     }
 
+    @Override
+    public String toString() {
+      return name().toLowerCase(Locale.ROOT);
+    }
+
     /**
      * Validates the given address for this transport.
      *
@@ -128,7 +134,7 @@ class ServerConfiguration implements Configuration {
         if (!first) {
           builder.append("\n");
         }
-        builder.append(transport.name().toLowerCase());
+        builder.append(transport);
         builder.append(": ");
         builder.append(transport.description);
         first = false;
@@ -158,10 +164,10 @@ class ServerConfiguration implements Configuration {
         config.tls = parseBoolean(value);
       }
     },
-    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.name().toLowerCase()) {
+    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.toString()) {
       @Override
       protected void setServerValue(ServerConfiguration config, String value) {
-        config.transport = Transport.valueOf(value.toUpperCase());
+        config.transport = Transport.valueOf(value.toUpperCase(Locale.ROOT));
       }
     },
     DIRECTEXECUTOR("", "Don't use a threadpool for RPC calls, instead execute calls directly "
@@ -197,7 +203,7 @@ class ServerConfiguration implements Configuration {
 
     @Override
     public String getName() {
-      return name().toLowerCase();
+      return name().toLowerCase(Locale.ROOT);
     }
 
     @Override

@@ -16,6 +16,8 @@
 
 package io.grpc.benchmarks;
 
+import java.util.Locale;
+
 /**
  * All of the supported transports.
  */
@@ -64,11 +66,16 @@ public enum Transport {
       if (!first) {
         builder.append("\n");
       }
-      builder.append(transport.name().toLowerCase());
+      builder.append(transport);
       builder.append(": ");
       builder.append(transport.description);
       first = false;
     }
     return builder.toString();
+  }
+
+  @Override
+  public String toString() {
+    return name().toLowerCase(Locale.ROOT);
   }
 }
