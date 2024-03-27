@@ -16,6 +16,8 @@
 
 package io.grpc.stub;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import io.grpc.ExperimentalApi;
 
 /**
@@ -140,7 +142,9 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    * @param onReadyHandler to call when peer is ready to receive more messages.
    */
   @Override
-  public abstract void setOnReadyHandler(Runnable onReadyHandler);
+  public void setOnReadyHandler(Runnable onReadyHandler) {
+    checkArgument(numBytes > 0, "numBytes must be positive: %s", numBytes);
+  }
 
   /**
    * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'
