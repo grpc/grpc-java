@@ -5,6 +5,7 @@ module(
     repo_name = "io_grpc_grpc_java",
 )
 
+bazel_dep(name = "googleapis", version = "0.0.0-20240326-1c8d509c5", repo_name = "com_google_googleapis")
 bazel_dep(name = "grpc", version = "1.56.3.bcr.1", repo_name = "com_github_grpc_grpc")
 bazel_dep(name = "protobuf", version = "23.1", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_cc", version = "0.0.9")
@@ -27,8 +28,6 @@ use_repo(
     "com_github_cncf_udpa",
     "opencensus_proto",
 )
-
-bazel_dep(name = "googleapis", repo_name = "com_google_googleapis")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
