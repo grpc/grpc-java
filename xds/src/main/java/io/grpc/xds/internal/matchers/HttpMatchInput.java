@@ -14,24 +14,15 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.rlqs;
+
+package io.grpc.xds.internal.matchers;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.base.Function;
-import com.google.common.collect.ImmutableMap;
-import com.google.protobuf.Duration;
-import io.grpc.xds.internal.matchers.HttpMatchInput;
+import io.grpc.Metadata;
 
 @AutoValue
-public abstract class RlqsBucketSettings {
-
-  public abstract ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder();
-
-  public abstract Duration reportingInterval();
-
-  public static RlqsBucketSettings create(
-      ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder,
-      Duration reportingInterval) {
-    return new AutoValue_RlqsBucketSettings(bucketIdBuilder, reportingInterval);
-  }
+public abstract class HttpMatchInput {
+  public abstract Metadata headers();
+  // TODO(sergiitk): [IMPL] consider
+  // public abstract ServerCall<?, ?> serverCall();
 }
