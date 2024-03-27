@@ -31,7 +31,6 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
