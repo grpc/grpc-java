@@ -23,14 +23,14 @@ java_library(
     deps = [
         "//api",
         "//context",
-        "@com_google_android_annotations//jar",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_code_gson_gson//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-        "@io_perfmark_perfmark_api//jar",
-        "@org_codehaus_mojo_animal_sniffer_annotations//jar",
+        "@grpc_java_maven//:com_google_android_annotations",
+        "@grpc_java_maven//:com_google_code_findbugs_jsr305",
+        "@grpc_java_maven//:com_google_code_gson_gson",
+        "@grpc_java_maven//:com_google_errorprone_error_prone_annotations",
+        "@grpc_java_maven//:com_google_guava_guava",
+        "@grpc_java_maven//:com_google_j2objc_j2objc_annotations",
+        "@grpc_java_maven//:io_perfmark_perfmark_api",
+        "@grpc_java_maven//:org_codehaus_mojo_animal_sniffer_annotations",
     ],
 )
 

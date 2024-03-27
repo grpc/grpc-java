@@ -5,11 +5,11 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-            "//api",
-            "//context",
-            "@com_google_code_findbugs_jsr305//jar",
-            "@com_google_guava_guava//jar",
-            "@io_opencensus_opencensus_api//jar",
-            "@io_opencensus_opencensus_contrib_grpc_metrics//jar",
+        "//api",
+        "//context",
+        "@grpc_java_maven//:com_google_code_findbugs_jsr305",
+        "@grpc_java_maven//:com_google_guava_guava",
+        "@grpc_java_maven//:io_opencensus_opencensus_api",
+        "@grpc_java_maven//:io_opencensus_opencensus_contrib_grpc_metrics",
     ],
 )
