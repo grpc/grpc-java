@@ -175,10 +175,9 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     Metadata headers3 = new Metadata();
     headers3.put(Metadata.Key.of("writeHeaders", Metadata.ASCII_STRING_MARSHALLER), "3");
 
-    // Note that the second (flush) argument of NettyServerStream.Sink#writeHeaders(Metadata,
-    // boolean) is ignored, and SendResponseHeadersCommand is always enqueued with flush=true.
-    stream().writeHeaders(headers1, true);
-    stream().writeHeaders(headers2, true);
+    // Note writeHeaders flush argument shouldn't matter for this test.
+    stream().writeHeaders(headers1, false);
+    stream().writeHeaders(headers2, false);
     stream().writeHeaders(headers3, true);
     stream.flush();
 
@@ -189,7 +188,6 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     inOrder.verify(writeQueue).enqueue(any(CancelServerStreamCommand.class), eq(true));
     inOrder.verify(writeQueue, atLeast(1)).enqueue(any(headersCommandClass), anyBoolean());
     inOrder.verifyNoMoreInteractions();
-
   }
 
   @Test

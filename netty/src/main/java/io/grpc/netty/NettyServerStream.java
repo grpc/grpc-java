@@ -96,7 +96,7 @@ class NettyServerStream extends AbstractServerStream {
         Http2Headers http2headers = Utils.convertServerHeaders(headers);
         SendResponseHeadersCommand headersCommand =
             SendResponseHeadersCommand.createHeaders(transportState(), http2headers);
-        writeQueue.enqueue(headersCommand, true)
+        writeQueue.enqueue(headersCommand, flush)
             .addListener((ChannelFutureListener) transportState()::handleWriteFutureFailures);
       }
     }
