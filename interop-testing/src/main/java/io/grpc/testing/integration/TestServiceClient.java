@@ -697,7 +697,7 @@ public class TestServiceClient {
   private static String validTestCasesHelpText() {
     StringBuilder builder = new StringBuilder();
     for (TestCases testCase : TestCases.values()) {
-      String strTestcase = testCase.name().toLowerCase();
+      String strTestcase = testCase.toString();
       builder.append("\n      ")
           .append(strTestcase)
           .append(": ")
