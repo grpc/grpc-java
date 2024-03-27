@@ -36,8 +36,8 @@ maven.install(
     artifacts = [
         "com.google.android:annotations:4.1.1.4",
         "com.google.api.grpc:proto-google-common-protos:2.29.0",
-        "com.google.auth:google-auth-library-credentials:1.22.0",
-        "com.google.auth:google-auth-library-oauth2-http:1.22.0",
+        "com.google.auth:google-auth-library-credentials:1.4.0",
+        "com.google.auth:google-auth-library-oauth2-http:1.4.0",
         "com.google.auto.value:auto-value-annotations:1.10.4",
         "com.google.auto.value:auto-value:1.10.4",
         "com.google.code.findbugs:jsr305:3.0.2",
