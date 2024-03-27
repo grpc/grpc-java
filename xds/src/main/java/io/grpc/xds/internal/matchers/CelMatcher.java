@@ -16,15 +16,35 @@
 
 package io.grpc.xds.internal.matchers;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.collect.ImmutableMap;
+import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.runtime.CelEvaluationException;
+import dev.cel.runtime.CelRuntime;
+import dev.cel.runtime.CelRuntimeFactory;
 import java.util.function.Predicate;
 
 /** Unified Matcher API: xds.type.matcher.v3.CelMatcher. */
 public class CelMatcher implements Predicate<HttpMatchInput> {
+  private static final CelRuntime CEL_RUNTIME =
+      CelRuntimeFactory.standardCelRuntimeBuilder().build();
+
+  private final CelRuntime.Program program;
   private final String description;
 
-  public CelMatcher(String description) {
-    // TODO(sergiitk): cache parsed CEL expressions
+  private CelMatcher(CelAbstractSyntaxTree ast, String description) throws CelEvaluationException {
+    this.program = CEL_RUNTIME.createProgram(checkNotNull(ast));
     this.description = description != null ? description : "";
+  }
+
+  public static CelMatcher create(CelAbstractSyntaxTree ast) throws CelEvaluationException {
+    return new CelMatcher(ast, null);
+  }
+
+  public static CelMatcher create(CelAbstractSyntaxTree ast, String description)
+      throws CelEvaluationException {
+    return new CelMatcher(ast, description);
   }
 
   public String description() {
@@ -33,10 +53,15 @@ public class CelMatcher implements Predicate<HttpMatchInput> {
 
   @Override
   public boolean test(HttpMatchInput httpMatchInput) {
-    if (httpMatchInput.headers().keys().isEmpty()) {
+    // if (httpMatchInput.headers().keys().isEmpty()) {
+    //   return false;
+    // }
+    // TODO(sergiitk): [IMPL] convert headers to cel args
+    try {
+      return (boolean) program.eval(ImmutableMap.of("my_var", "Hello World"));
+    } catch (CelEvaluationException e) {
+      // TODO(sergiitk): [IMPL] log cel error?
       return false;
     }
-    // TODO(sergiitk): [IMPL] convert headers to cel args
-    return true;
   }
 }
