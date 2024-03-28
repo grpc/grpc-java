@@ -229,7 +229,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       SSLSocket sslSocket = (SSLSocket) socket;
       SSLParameters sslParams = sslSocket.getSSLParameters();
       if (sslParams != null) {
-        sslParams.setEndpointIdentificationAlgorithm(null);
+        sslParams.setEndpointIdentificationAlgorithm("");
         sslSocket.setSSLParameters(sslParams);
       }
     }
@@ -242,7 +242,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       throws CertificateException {
     SSLParameters sslParams = sslEngine.getSSLParameters();
     if (sslParams != null) {
-      sslParams.setEndpointIdentificationAlgorithm(null);
+      sslParams.setEndpointIdentificationAlgorithm("");
       sslEngine.setSSLParameters(sslParams);
     }
     delegate.checkServerTrusted(chain, authType, sslEngine);
