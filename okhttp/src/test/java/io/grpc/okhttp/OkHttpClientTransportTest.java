@@ -2080,6 +2080,23 @@ public class OkHttpClientTransportTest {
     assertEquals(MISCARRIED, listener3.rpcProgress);
   }
 
+  @Test
+  public void finishedStreamRemovedFromInUseState() throws Exception {
+    initTransport();
+    setMaxConcurrentStreams(1);
+    final MockStreamListener listener = new MockStreamListener();
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(listener);
+    OkHttpClientStream pendingStream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    pendingStream.start(listener);
+    waitForStreamPending(1);
+    clientTransport.finishStream(stream.transportState().id(), Status.OK, PROCESSED,
+        false, null, null);
+    assertFalse(clientTransport.inUseState().anyObjectInUse(stream));
+  }
+
   private int activeStreamCount() {
     return clientTransport.getActiveStreams().length;
   }
