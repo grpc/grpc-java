@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_jvm_external//:defs.bzl", "artifact")
 load("//:java_grpc_library.bzl", "java_rpc_toolchain")
 
 # This should not generally be referenced. Users should use java_grpc_library
@@ -22,8 +23,8 @@ java_library(
         "//protobuf",
         "//stub",
         "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
         "@com_google_protobuf//:protobuf_java",
     ],
 )
@@ -35,8 +36,8 @@ java_library(
         "//protobuf-lite",
         "//stub",
         "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
