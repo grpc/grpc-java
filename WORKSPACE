@@ -40,7 +40,3 @@ maven_install(
     ],
     strict_visibility = True,
 )
-
-load("@maven//:defs.bzl", "pinned_maven_install")
-
-pinned_maven_install()
