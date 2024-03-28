@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -102,7 +103,7 @@ public class ClientConfiguration implements Configuration {
       if (config.tls) {
         if (!config.transport.tlsSupported) {
           throw new IllegalArgumentException(
-              "Transport " + config.transport.name().toLowerCase() + " does not support TLS.");
+              "Transport " + config.transport + " does not support TLS.");
         }
       }
 
@@ -166,10 +167,10 @@ public class ClientConfiguration implements Configuration {
         config.testca = parseBoolean(value);
       }
     },
-    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.name().toLowerCase()) {
+    TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.toString()) {
       @Override
       protected void setClientValue(ClientConfiguration config, String value) {
-        config.transport = Transport.valueOf(value.toUpperCase());
+        config.transport = Transport.valueOf(value.toUpperCase(Locale.ROOT));
       }
     },
     DURATION("SECONDS", "Duration of the benchmark.", "" + DEFAULT.duration) {
@@ -236,7 +237,7 @@ public class ClientConfiguration implements Configuration {
 
     @Override
     public String getName() {
-      return name().toLowerCase();
+      return name().toLowerCase(Locale.ROOT);
     }
 
     @Override
