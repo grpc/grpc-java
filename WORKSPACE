@@ -38,11 +38,7 @@ maven_install(
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
-    generate_compat_repositories = True,
-    maven_install_json = "@//:maven_install.json",
     strict_visibility = True,
-    fetch_sources = True,
-    fail_if_repin_required = True,
 )
 
 load("@maven//:defs.bzl", "pinned_maven_install")
