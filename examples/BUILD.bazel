@@ -248,3 +248,20 @@ java_grpc_library(
     deps = ["@io_grpc_grpc_proto//:health_java_proto"],
 )
 
+java_binary(
+    name = "retrying-hello-world-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.retrying.RetryingHelloWorldClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "retrying-hello-world-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.retrying.RetryingHelloWorldServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
