@@ -33,9 +33,9 @@ java_library(
         "//protobuf",
         "//stub",
         "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
+        "@grpc_java_maven//:com_google_code_findbugs_jsr305",
+        "@grpc_java_maven//:com_google_guava_guava",
     ],
 )
 
@@ -47,8 +47,8 @@ java_library(
         "//protobuf-lite",
         "//stub",
         "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
+        "@grpc_java_maven//:com_google_code_findbugs_jsr305",
+        "@grpc_java_maven//:com_google_guava_guava",
     ],
 )
 
@@ -56,7 +56,7 @@ java_plugin(
     name = "auto_value",
     generates_api = 1,
     processor_class = "com.google.auto.value.processor.AutoValueProcessor",
-    deps = ["@com_google_auto_value_auto_value//jar"],
+    deps = ["@grpc_java_maven//:com_google_auto_value_auto_value"],
 )
 
 java_library(
@@ -65,7 +65,7 @@ java_library(
     neverlink = 1,
     visibility = ["//:__subpackages__"],
     exports = [
-        "@com_google_auto_value_auto_value_annotations//jar",
-        "@org_apache_tomcat_annotations_api//jar",  # @Generated for Java 9+
+        "@grpc_java_maven//:com_google_auto_value_auto_value_annotations",
+        "@grpc_java_maven//:org_apache_tomcat_annotations_api",  # @Generated for Java 9+
     ],
 )

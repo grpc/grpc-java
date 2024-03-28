@@ -22,9 +22,9 @@ java_library(
         "//protobuf",
         "//stub",
         "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
+        "@grpc_java_maven//:com_google_code_findbugs_jsr305",
+        "@grpc_java_maven//:com_google_guava_guava",
     ],
 )
 
@@ -35,8 +35,8 @@ java_library(
         "//protobuf-lite",
         "//stub",
         "//stub:javax_annotation",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
+        "@grpc_java_maven//:com_google_code_findbugs_jsr305",
+        "@grpc_java_maven//:com_google_guava_guava",
     ],
 )
 
