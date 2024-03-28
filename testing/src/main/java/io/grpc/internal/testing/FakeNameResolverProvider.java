@@ -23,6 +23,8 @@ import io.grpc.NameResolverProvider;
 import io.grpc.Status;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 
 /** A name resolver to always resolve the given URI into the given address. */
 public final class FakeNameResolverProvider extends NameResolverProvider {
@@ -56,6 +58,11 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
   @Override
   public String getDefaultScheme() {
     return targetUri.getScheme();
+  }
+
+  @Override
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+    return Collections.singleton(address.getClass());
   }
 
   /** A single name resolver. */

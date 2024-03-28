@@ -3,9 +3,7 @@
 # Build protoc
 set -evux -o pipefail
 
-PROTOBUF_VERSION=21.1
-# https://github.com/protocolbuffers/protobuf/issues/10172
-PROTOBUF_VERSION_ISSUE_10172=3.$PROTOBUF_VERSION
+PROTOBUF_VERSION=21.7
 
 # ARCH is x86_64 bit unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
@@ -30,7 +28,6 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
 else
   if [[ ! -d "$DOWNLOAD_DIR"/protobuf-"${PROTOBUF_VERSION}" ]]; then
     curl -Ls https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-all-${PROTOBUF_VERSION}.tar.gz | tar xz -C $DOWNLOAD_DIR
-    mv "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION_ISSUE_10172}" "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}"
   fi
   pushd $DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}
   # install here so we don't need sudo
@@ -41,6 +38,10 @@ else
     ./configure --disable-shared --host=aarch64-linux-gnu --prefix="$INSTALL_DIR"
   elif [[ "$ARCH" == ppc* ]]; then
     ./configure --disable-shared --host=powerpc64le-linux-gnu --prefix="$INSTALL_DIR"
+  elif [[ "$ARCH" == s390* ]]; then
+    ./configure --disable-shared --host=s390x-linux-gnu --prefix="$INSTALL_DIR"
+  elif [[ "$ARCH" == loongarch* ]]; then
+    ./configure --disable-shared --host=loongarch64-unknown-linux-gnu --prefix="$INSTALL_DIR"
   fi
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
   make clean

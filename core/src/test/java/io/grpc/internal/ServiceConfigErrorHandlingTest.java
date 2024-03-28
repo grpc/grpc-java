@@ -48,6 +48,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -98,7 +99,7 @@ public class ServiceConfigErrorHandlingTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString().contains(
-              ManagedChannelImpl.DelayedNameResolverRefresh.class.getName());
+              RetryingNameResolver.DelayedNameResolverRefresh.class.getName());
         }
       };
 
@@ -158,6 +159,8 @@ public class ServiceConfigErrorHandlingTest {
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
 
+    when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
+        InetSocketAddress.class));
     channel =
         new ManagedChannelImpl(
             channelBuilder,
@@ -186,13 +189,13 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     assertEquals(numExpectedTasks, timer.numPendingTasks());
-    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
   }
 
   @Before
   public void setUp() throws Exception {
-    mockLoadBalancer.setAcceptAddresses(true);
+    mockLoadBalancer.setAddressAcceptanceStatus(Status.OK);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     when(mockTransportFactory.getScheduledExecutorService())
@@ -280,7 +283,7 @@ public class ServiceConfigErrorHandlingTest {
     nameResolverFactory.servers.clear();
 
     // 2nd resolution
-    mockLoadBalancer.setAcceptAddresses(false);
+    mockLoadBalancer.setAddressAcceptanceStatus(Status.UNAVAILABLE);
     nameResolverFactory.allResolved();
 
     // 2nd service config without addresses
@@ -581,8 +584,6 @@ public class ServiceConfigErrorHandlingTest {
 
       final ServiceConfigParser serviceConfigParser;
       Listener2 listener;
-      boolean shutdown;
-      int refreshCalled;
 
       FakeNameResolver(ServiceConfigParser serviceConfigParser) {
         this.serviceConfigParser = serviceConfigParser;
@@ -600,7 +601,6 @@ public class ServiceConfigErrorHandlingTest {
       }
 
       @Override public void refresh() {
-        refreshCalled++;
         resolved();
       }
 
@@ -617,7 +617,6 @@ public class ServiceConfigErrorHandlingTest {
       }
 
       @Override public void shutdown() {
-        shutdown = true;
       }
 
       @Override
@@ -647,12 +646,13 @@ public class ServiceConfigErrorHandlingTest {
   }
 
   private FakeClock.ScheduledTask getNameResolverRefresh() {
-    return Iterables.getOnlyElement(timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
+    return Iterables.getOnlyElement(
+       timer.getPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER), null);
   }
 
   private static class FakeLoadBalancer extends LoadBalancer {
 
-    private boolean acceptAddresses = true;
+    private Status addressAcceptanceStatus = Status.OK;
 
     @Nullable
     private Helper helper;
@@ -662,12 +662,12 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      return acceptAddresses;
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return addressAcceptanceStatus;
     }
 
-    public void setAcceptAddresses(boolean acceptAddresses) {
-      this.acceptAddresses = acceptAddresses;
+    public void setAddressAcceptanceStatus(Status addressAcceptanceStatus) {
+      this.addressAcceptanceStatus = addressAcceptanceStatus;
     }
 
     @Override

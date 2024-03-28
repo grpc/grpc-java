@@ -78,7 +78,7 @@ import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
-import io.grpc.internal.testing.SingleMessageProducer;
+import io.grpc.internal.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
 import io.perfmark.PerfMark;
@@ -112,7 +112,8 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link ServerImpl}. */
 @RunWith(JUnit4.class)
@@ -141,6 +142,7 @@ public class ServerImplTest {
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @BeforeClass
   public static void beforeStartUp() {
@@ -201,7 +203,6 @@ public class ServerImplTest {
   /** Set up for test. */
   @Before
   public void startUp() throws IOException {
-    MockitoAnnotations.initMocks(this);
     builder = new ServerImplBuilder(
         new ClientTransportServersBuilder() {
           @Override
@@ -680,7 +681,7 @@ public class ServerImplTest {
     Metadata responseHeaders = new Metadata();
     responseHeaders.put(metadataKey, "response value");
     call.sendHeaders(responseHeaders);
-    verify(stream).writeHeaders(responseHeaders);
+    verify(stream).writeHeaders(responseHeaders, true);
     verify(stream).setCompressor(isA(Compressor.class));
 
     call.sendMessage(firstResponse);

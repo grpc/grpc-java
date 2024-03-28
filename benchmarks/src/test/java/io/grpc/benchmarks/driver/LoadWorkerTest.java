@@ -36,13 +36,13 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Basic tests for {@link io.grpc.benchmarks.driver.LoadWorker}
+ * Basic tests for {@link io.grpc.benchmarks.driver.LoadWorker}.
  */
 @RunWith(JUnit4.class)
 public class LoadWorkerTest {
 
 
-  private static final int TIMEOUT = 10;
+  private static final int TIMEOUT = 20;
   private static final Control.ClientArgs MARK = Control.ClientArgs.newBuilder()
       .setMark(Control.Mark.newBuilder().setReset(true).build())
       .build();

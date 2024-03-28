@@ -61,6 +61,8 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    * delegates to {@link Factory#getDefaultScheme()} before {@link NameResolver.Factory} is
    * deprecated in https://github.com/grpc/grpc-java/issues/7133.
    *
+   * <p>The scheme should be lower-case.
+   *
    * @since 1.40.0
    * */
   protected String getScheme() {
@@ -73,7 +75,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    *
    * @return the {@link SocketAddress} types this provider's name-resolver is capable of producing.
    */
-  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
 }

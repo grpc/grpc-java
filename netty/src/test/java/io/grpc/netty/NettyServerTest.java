@@ -73,15 +73,19 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class NettyServerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private final InternalChannelz channelz = new InternalChannelz();
   private final NioEventLoopGroup eventLoop = new NioEventLoopGroup(1);
   private final ChannelFactory<NioServerSocketChannel> channelFactory =
@@ -96,7 +100,6 @@ public class NettyServerTest {
 
   @Before
   public void setup() throws Exception {
-    MockitoAnnotations.initMocks(this);
     when(mockEventLoopGroup.next()).thenReturn(mockEventLoop);
     when(mockEventLoop
         .submit(ArgumentMatchers.<Callable<Map<ChannelFuture, SocketAddress>>>any()))
@@ -150,6 +153,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> serverShutdownCalled = SettableFuture.create();
@@ -200,6 +204,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
@@ -273,6 +278,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
@@ -334,6 +340,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
 
@@ -408,6 +415,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         eagAttributes,
         channelz);
     ns.start(new ServerListener() {
@@ -455,6 +463,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
@@ -597,6 +606,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
+        0, 0, // ignore
         Attributes.EMPTY,
         channelz);
   }

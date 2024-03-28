@@ -19,8 +19,9 @@ package io.grpc.examples.routeguide;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import io.grpc.Channel;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.routeguide.RouteGuideGrpc.RouteGuideBlockingStub;
@@ -259,7 +260,8 @@ public class RouteGuideClient {
       return;
     }
 
-    ManagedChannel channel = ManagedChannelBuilder.forTarget(target).usePlaintext().build();
+    ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
+        .build();
     try {
       RouteGuideClient client = new RouteGuideClient(channel);
       // Looking for a valid feature

@@ -147,6 +147,7 @@ public abstract class AbstractConfigurationBuilder<T extends Configuration>
   }
 
   @Override
+  @SuppressWarnings("InlineMeInliner") // String.repeat() requires Java 11
   public final void printUsage() {
     System.out.println("Usage: [ARGS...]");
     int column1Width = 0;
@@ -210,6 +211,7 @@ public abstract class AbstractConfigurationBuilder<T extends Configuration>
     return "--" + name + type;
   }
 
+  @SuppressWarnings("InlineMeInliner") // String.repeat() requires Java 11
   private static String wordWrap(String text, int startPos, int maxPos) {
     StringBuilder builder = new StringBuilder();
     int pos = startPos;

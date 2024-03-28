@@ -221,6 +221,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @Nullable
   final HttpConnectProxiedSocketAddress proxiedAddr;
 
+  @VisibleForTesting
+  int proxySocketTimeout = 30000;
+
   // The following fields should only be used for test.
   Runnable connectingCallback;
   SettableFuture<Void> connectedFuture;
@@ -290,6 +293,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   /**
    * Create a transport connected to a fake peer for test.
    */
+  @SuppressWarnings("AddressSelection") // An IP address always returns one address
   @VisibleForTesting
   OkHttpClientTransport(
       OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
@@ -626,8 +630,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,
       String proxyUsername, String proxyPassword) throws StatusException {
+    Socket sock = null;
     try {
-      Socket sock;
       // The proxy address may not be resolved
       if (proxyAddress.getAddress() != null) {
         sock = socketFactory.createSocket(proxyAddress.getAddress(), proxyAddress.getPort());
@@ -636,6 +640,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             socketFactory.createSocket(proxyAddress.getHostName(), proxyAddress.getPort());
       }
       sock.setTcpNoDelay(true);
+      // A socket timeout is needed because lost network connectivity while reading from the proxy,
+      // can cause reading from the socket to hang.
+      sock.setSoTimeout(proxySocketTimeout);
 
       Source source = Okio.source(sock);
       BufferedSink sink = Okio.buffer(Okio.sink(sock));
@@ -682,8 +689,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             statusLine.code, statusLine.message, body.readUtf8());
         throw Status.UNAVAILABLE.withDescription(message).asException();
       }
+      // As the socket will be used for RPCs from here on, we want the socket timeout back to zero.
+      sock.setSoTimeout(0);
       return sock;
     } catch (IOException e) {
+      if (sock != null) {
+        GrpcUtil.closeQuietly(sock);
+      }
       throw Status.UNAVAILABLE.withDescription("Failed trying to connect with proxy").withCause(e)
           .asException();
     }
@@ -903,7 +915,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   /**
-   * Called when a stream is closed, we do things like:
+   * Called when a stream is closed. We do things like:
    * <ul>
    * <li>Removing the stream from the map.
    * <li>Optionally reporting the status.
@@ -1086,6 +1098,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     @Override
+    @SuppressWarnings("Finally")
     public void run() {
       String threadName = Thread.currentThread().getName();
       Thread.currentThread().setName("OkHttpClientTransport");
@@ -1118,6 +1131,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           frameReader.close();
         } catch (IOException ex) {
           log.log(Level.INFO, "Exception closing frame reader", ex);
+        } catch (RuntimeException e) {
+          // This same check is done in okhttp proper:
+          // https://github.com/square/okhttp/blob/3cc0f4917cbda03cb31617f8ead1e0aeb19de2fb/okhttp/src/main/kotlin/okhttp3/internal/-UtilJvm.kt#L270
+
+          // Conscrypt in Android 10 and 11 may throw closing an SSLSocket. This is safe to ignore.
+          // https://issuetracker.google.com/issues/177450597
+          if (!"bio == null".equals(e.getMessage())) {
+            throw e;
+          }
         }
         listener.transportTerminated();
         Thread.currentThread().setName(threadName);
@@ -1129,7 +1151,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
      */
     @SuppressWarnings("GuardedBy")
     @Override
-    public void data(boolean inFinished, int streamId, BufferedSource in, int length)
+    public void data(boolean inFinished, int streamId, BufferedSource in, int length,
+                     int paddedLength)
         throws IOException {
       logger.logData(OkHttpFrameLogger.Direction.INBOUND,
           streamId, in.getBuffer(), length, inFinished);
@@ -1155,12 +1178,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         synchronized (lock) {
           // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock';
           // instead found: 'OkHttpClientTransport.this.lock'
-          stream.transportState().transportDataReceived(buf, inFinished);
+          stream.transportState().transportDataReceived(buf, inFinished, paddedLength - length);
         }
       }
 
       // connection window update
-      connectionUnacknowledgedBytesRead += length;
+      connectionUnacknowledgedBytesRead += paddedLength;
       if (connectionUnacknowledgedBytesRead >= initialWindowSize * DEFAULT_WINDOW_UPDATE_RATIO) {
         synchronized (lock) {
           frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
@@ -1271,6 +1294,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           outboundWindowSizeIncreased = outboundFlow.initialOutboundWindowSize(initialWindowSize);
         }
         if (firstSettings) {
+          attributes = listener.filterTransport(attributes);
           listener.transportReady();
           firstSettings = false;
         }

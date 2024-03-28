@@ -34,20 +34,22 @@ import io.grpc.Metadata;
 import io.grpc.services.MetricReport;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaReportingTracerFactory;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link OrcaPerRequestUtil} class.
  */
 @RunWith(JUnit4.class)
 public class OrcaPerRequestUtilTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder().build();
@@ -56,11 +58,6 @@ public class OrcaPerRequestUtilTest {
   private OrcaPerRequestReportListener orcaListener1;
   @Mock
   private OrcaPerRequestReportListener orcaListener2;
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   /**
    * Tests a single load balance policy's listener receive per-request ORCA reports upon call
@@ -83,7 +80,8 @@ public class OrcaPerRequestUtilTest {
         OrcaPerRequestUtil.getInstance()
             .newOrcaClientStreamTracerFactory(fakeDelegateFactory, orcaListener1);
     ClientStreamTracer tracer = factory.newClientStreamTracer(STREAM_INFO, new Metadata());
-    ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor =
+        ArgumentCaptor.forClass(ClientStreamTracer.StreamInfo.class);
     verify(fakeDelegateFactory)
         .newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
     ClientStreamTracer.StreamInfo capturedInfo = streamInfoCaptor.getValue();
@@ -99,8 +97,7 @@ public class OrcaPerRequestUtilTest {
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.getDefaultInstance());
     tracer.inboundTrailers(trailer);
-    ArgumentCaptor<MetricReport> reportCaptor =
-        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<MetricReport> reportCaptor = ArgumentCaptor.forClass(MetricReport.class);
     verify(orcaListener1).onLoadReport(reportCaptor.capture());
     assertThat(reportEqual(reportCaptor.getValue(),
         OrcaPerRequestUtil.fromOrcaLoadReport(OrcaLoadReport.getDefaultInstance()))).isTrue();
@@ -122,9 +119,13 @@ public class OrcaPerRequestUtilTest {
   static boolean reportEqual(MetricReport a,
                              MetricReport b) {
     return a.getCpuUtilization() == b.getCpuUtilization()
+        && a.getApplicationUtilization() == b.getApplicationUtilization()
         && a.getMemoryUtilization() == b.getMemoryUtilization()
+        && a.getQps() == b.getQps()
+        && a.getEps() == b.getEps()
         && Objects.equal(a.getRequestCostMetrics(), b.getRequestCostMetrics())
-        && Objects.equal(a.getUtilizationMetrics(), b.getUtilizationMetrics());
+        && Objects.equal(a.getUtilizationMetrics(), b.getUtilizationMetrics())
+        && Objects.equal(a.getNamedMetrics(), b.getNamedMetrics());
   }
 
   /**
@@ -144,7 +145,8 @@ public class OrcaPerRequestUtilTest {
     // Child factory will augment the StreamInfo and pass it to the parent factory.
     ClientStreamTracer childTracer =
         childFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
-    ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor =
+        ArgumentCaptor.forClass(ClientStreamTracer.StreamInfo.class);
     verify(parentFactory).newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
     ClientStreamTracer.StreamInfo parentStreamInfo = streamInfoCaptor.getValue();
     assertThat(parentStreamInfo).isNotEqualTo(STREAM_INFO);
@@ -162,10 +164,8 @@ public class OrcaPerRequestUtilTest {
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
         OrcaLoadReport.getDefaultInstance());
     childTracer.inboundTrailers(trailer);
-    ArgumentCaptor<MetricReport> parentReportCap =
-        ArgumentCaptor.forClass(null);
-    ArgumentCaptor<MetricReport> childReportCap =
-        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<MetricReport> parentReportCap = ArgumentCaptor.forClass(MetricReport.class);
+    ArgumentCaptor<MetricReport> childReportCap = ArgumentCaptor.forClass(MetricReport.class);
     verify(orcaListener1).onLoadReport(parentReportCap.capture());
     verify(orcaListener2).onLoadReport(childReportCap.capture());
     assertThat(reportEqual(parentReportCap.getValue(),

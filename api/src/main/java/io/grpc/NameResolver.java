@@ -73,7 +73,12 @@ public abstract class NameResolver {
   public abstract String getServiceAuthority();
 
   /**
-   * Starts the resolution.
+   * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
+   * Channel that the name resolver is serving to crash. Errors should be propagated
+   * through {@link Listener#onError}.
+   * 
+   * <p>An instance may not be started more than once, by any overload of this method, even after
+   * an intervening call to {@link #shutdown}.
    *
    * @param listener used to receive updates on the target
    * @since 1.0.0
@@ -97,7 +102,12 @@ public abstract class NameResolver {
   }
 
   /**
-   * Starts the resolution.
+   * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
+   * Channel that the name resolver is serving to crash. Errors should be propagated
+   * through {@link Listener2#onError}.
+   * 
+   * <p>An instance may not be started more than once, by any overload of this method, even after
+   * an intervening call to {@link #shutdown}.
    *
    * @param listener used to receive updates on the target
    * @since 1.21.0
@@ -201,6 +211,8 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Listener2 implements Listener {
     /**
+     * Handles updates on resolved addresses and attributes.
+     *
      * @deprecated This will be removed in 1.22.0
      */
     @Override
@@ -360,7 +372,6 @@ public abstract class NameResolver {
      * @since 1.25.0
      */
     @Nullable
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
     public Executor getOffloadExecutor() {
       return executor;
     }
@@ -504,7 +515,6 @@ public abstract class NameResolver {
        *
        * @since 1.25.0
        */
-      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
       public Builder setOffloadExecutor(Executor executor) {
         this.executor = executor;
         return this;

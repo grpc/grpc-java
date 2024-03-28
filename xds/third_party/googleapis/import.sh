@@ -13,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Update VERSION then in this directory run ./import.sh
+# Update VERSION then execute this script
 
 set -e
-BRANCH=master
-VERSION=ca1372c6d7bcb199638ebfdb40d2b2660bab7b88
-GIT_REPO="https://github.com/googleapis/googleapis.git"
-GIT_BASE_DIR=googleapis
-SOURCE_PROTO_BASE_DIR=googleapis
+VERSION=114a745b2841a044e98cdbb19358ed29fcf4a5f1
+DOWNLOAD_URL="https://github.com/googleapis/googleapis/archive/${VERSION}.tar.gz"
+DOWNLOAD_BASE_DIR="googleapis-${VERSION}"
+SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}"
 TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
@@ -30,18 +29,12 @@ google/api/expr/v1alpha1/syntax.proto
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/googleapis
 
-# clone the googleapis github repo in a tmp directory
+# put the repo in a tmp directory
 tmpdir="$(mktemp -d)"
 trap "rm -rf ${tmpdir}" EXIT
+curl -Ls "${DOWNLOAD_URL}" | tar xz -C "${tmpdir}"
 
-pushd "${tmpdir}"
-git clone -b $BRANCH $GIT_REPO
-trap "rm -rf $GIT_BASE_DIR" EXIT
-cd "$GIT_BASE_DIR"
-git checkout $VERSION
-popd
-
-cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
+cp -p "${tmpdir}/${DOWNLOAD_BASE_DIR}/LICENSE" LICENSE
 
 rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"

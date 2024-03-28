@@ -37,6 +37,7 @@ import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFactory;
@@ -60,6 +61,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.UnresolvedAddressException;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -135,13 +137,18 @@ class Utils {
   public static ByteBufAllocator getByteBufAllocator(boolean forceHeapBuffer) {
     if (Boolean.parseBoolean(
             System.getProperty("io.grpc.netty.useCustomAllocator", "true"))) {
+
+      String allocType = System.getProperty("io.netty.allocator.type", "pooled");
+      if (allocType.toLowerCase(Locale.ROOT).equals("unpooled")) {
+        logger.log(Level.FINE, "Using unpooled allocator");
+        return UnpooledByteBufAllocator.DEFAULT;
+      }
+
       boolean defaultPreferDirect = PooledByteBufAllocator.defaultPreferDirect();
       logger.log(
           Level.FINE,
-          String.format(
-              "Using custom allocator: forceHeapBuffer=%s, defaultPreferDirect=%s",
-              forceHeapBuffer,
-              defaultPreferDirect));
+          "Using custom allocator: forceHeapBuffer={0}, defaultPreferDirect={1}",
+          new Object[] { forceHeapBuffer, defaultPreferDirect });
       if (forceHeapBuffer || !defaultPreferDirect) {
         return ByteBufAllocatorPreferHeapHolder.allocator;
       } else {
@@ -265,9 +272,16 @@ class Utils {
       return s;
     }
     if (t instanceof ClosedChannelException) {
-      // ClosedChannelException is used any time the Netty channel is closed. Proper error
-      // processing requires remembering the error that occurred before this one and using it
-      // instead.
+      if (t.getCause() != null) {
+        // If the remote closes the connection while the event loop is processing, then a write or
+        // flush can be the first operation to notice the closure. Those exceptions are a
+        // ClosedChannelException, with a cause that provides more information, which is exactly
+        // what we'd hope for.
+        return Status.UNAVAILABLE.withDescription("channel closed").withCause(t);
+      }
+      // ClosedChannelException is used for all operations after the Netty channel is closed. But it
+      // doesn't have the original closure information. Proper error processing requires remembering
+      // the error that occurred before this one and using it instead.
       //
       // Netty uses an exception that has no stack trace, while we would never hope to show this to
       // users, if it happens having the extra information may provide a small hint of where to

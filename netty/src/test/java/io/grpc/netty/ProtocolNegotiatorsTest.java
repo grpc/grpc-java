@@ -67,6 +67,8 @@ import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
+import io.grpc.testing.TlsTesting;
+import io.grpc.util.CertificateUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
@@ -106,16 +108,13 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
-import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.File;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.KeyStore;
-import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -189,10 +188,9 @@ public class ProtocolNegotiatorsTest {
 
   @Before
   public void setUp() throws Exception {
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
-    sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream key = TlsTesting.loadCert("server1.key");
+    sslContext = GrpcSslContexts.forServer(serverCert, key).build();
     engine = SSLContext.getDefault().createSSLEngine();
     engine.setUseClientMode(true);
   }
@@ -478,19 +476,26 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void from_tls_managers() throws Exception {
-    SelfSignedCertificate cert = new SelfSignedCertificate(TestUtils.TEST_SERVER_HOST);
     KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
     keyStore.load(null);
-    keyStore.setKeyEntry("mykey", cert.key(), new char[0], new Certificate[] {cert.cert()});
+    try (InputStream server1Chain = TlsTesting.loadCert("server1.pem");
+         InputStream server1Key = TlsTesting.loadCert("server1.key")) {
+      X509Certificate[] chain = CertificateUtils.getX509Certificates(server1Chain);
+      keyStore.setKeyEntry("key", CertificateUtils.getPrivateKey(server1Key), new char[0], chain);
+    }
     KeyManagerFactory keyManagerFactory =
         KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
     keyManagerFactory.init(keyStore, new char[0]);
 
     KeyStore certStore = KeyStore.getInstance(KeyStore.getDefaultType());
     certStore.load(null);
-    certStore.setCertificateEntry("mycert", cert.cert());
     TrustManagerFactory trustManagerFactory =
         TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
+      for (X509Certificate cert : CertificateUtils.getX509Certificates(ca)) {
+        certStore.setCertificateEntry(cert.getSubjectX500Principal().getName("RFC2253"), cert);
+      }
+    }
     trustManagerFactory.init(certStore);
 
     ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
@@ -504,8 +509,7 @@ public class ProtocolNegotiatorsTest {
         .build();
     InternalChannelz.Tls tls = expectSuccessfulHandshake(channelCreds, serverCreds);
     assertThat(((X509Certificate) tls.remoteCert).getSubjectX500Principal().getName())
-        .isEqualTo("CN=" + TestUtils.TEST_SERVER_HOST);
-    cert.delete();
+        .isEqualTo("CN=*.test.google.com,O=Example\\, Co.,L=Chicago,ST=Illinois,C=US");
   }
 
   @Test
@@ -789,8 +793,8 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream key = TlsTesting.loadCert("server1.key");
     List<String> alpnList = Arrays.asList("managed_mtls", "h2");
     ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
         ApplicationProtocolConfig.Protocol.ALPN,
@@ -799,7 +803,6 @@ public class ProtocolNegotiatorsTest {
         alpnList);
 
     sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
     ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
@@ -826,8 +829,8 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File key = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream key = TlsTesting.loadCert("server1.key");
     List<String> alpnList = Arrays.asList("managed_mtls", "h2");
     ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
         ApplicationProtocolConfig.Protocol.ALPN,
@@ -836,7 +839,6 @@ public class ProtocolNegotiatorsTest {
         alpnList);
 
     sslContext = GrpcSslContexts.forServer(serverCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
     ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext, null);
     pipeline.addLast(handler);
@@ -898,8 +900,8 @@ public class ProtocolNegotiatorsTest {
     };
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
-    File clientCert = TestUtils.loadCert("client.pem");
-    File key = TestUtils.loadCert("client.key");
+    InputStream clientCert = TlsTesting.loadCert("client.pem");
+    InputStream key = TlsTesting.loadCert("client.key");
     List<String> alpnList = Arrays.asList("managed_mtls", "h2");
     ApplicationProtocolConfig apn = new ApplicationProtocolConfig(
         ApplicationProtocolConfig.Protocol.ALPN,
@@ -909,7 +911,6 @@ public class ProtocolNegotiatorsTest {
 
     sslContext = GrpcSslContexts.forClient()
         .keyManager(clientCert, key)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
@@ -1217,11 +1218,15 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void clientTlsHandler_firesNegotiation() throws Exception {
-    SelfSignedCertificate cert = new SelfSignedCertificate("authority");
-    SslContext clientSslContext =
-        GrpcSslContexts.configure(SslContextBuilder.forClient().trustManager(cert.cert())).build();
-    SslContext serverSslContext =
-        GrpcSslContexts.configure(SslContextBuilder.forServer(cert.key(), cert.cert())).build();
+    SslContext clientSslContext;
+    try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
+      clientSslContext = GrpcSslContexts.forClient().trustManager(ca).build();
+    }
+    SslContext serverSslContext;
+    try (InputStream server1Key = TlsTesting.loadCert("server1.key");
+        InputStream server1Chain = TlsTesting.loadCert("server1.pem")) {
+      serverSslContext = GrpcSslContexts.forServer(server1Chain, server1Key).build();
+    }
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
     ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext, null);
     WriteBufferingAndExceptionHandler clientWbaeh =
@@ -1407,7 +1412,7 @@ public class ProtocolNegotiatorsTest {
 
     @Override
     public String getAuthority() {
-      return "authority";
+      return "foo.test.google.fr";
     }
   }
 

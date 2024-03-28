@@ -29,6 +29,13 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
+/**
+ *  Best effort detecting channels that has not been properly cleaned up.
+ *  Use {@link WeakReference} to avoid keeping the channel alive and retaining too much memory.
+ *  Check lost references only on new channel creation and log message to indicate
+ *  the previous channel (id and target) that has not been shutdown. This is done to avoid Object
+ *  finalizers.
+ */
 final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
   private static final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue =
       new ReferenceQueue<>();
@@ -73,6 +80,8 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
 
     private static final boolean ENABLE_ALLOCATION_TRACKING =
         Boolean.parseBoolean(System.getProperty(ALLOCATION_SITE_PROPERTY_NAME, "true"));
+
+    @SuppressWarnings("StaticAssignmentOfThrowable")
     private static final RuntimeException missingCallSite = missingCallSite();
 
     private final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue;
@@ -148,10 +157,9 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
           Level level = Level.SEVERE;
           if (logger.isLoggable(level)) {
             String fmt =
-                "*~*~*~ Channel {0} was not shutdown properly!!! ~*~*~*"
+                "*~*~*~ Previous channel {0} was garbage collected without being shut down! ~*~*~*"
                     + System.getProperty("line.separator")
-                    + "    Make sure to call shutdown()/shutdownNow() and wait "
-                    + "until awaitTermination() returns true.";
+                    + "    Make sure to call shutdown()/shutdownNow()";
             LogRecord lr = new LogRecord(level, fmt);
             lr.setLoggerName(logger.getName());
             lr.setParameters(new Object[] {ref.channelStr});

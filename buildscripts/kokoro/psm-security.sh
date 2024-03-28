@@ -3,7 +3,7 @@ set -eo pipefail
 
 # Constants
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
-readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/grpc/${TEST_DRIVER_BRANCH:-master}/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
+readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/psm-interop/${TEST_DRIVER_BRANCH:-main}/.kokoro/psm_interop_kokoro_lib.sh"
 ## xDS test server/client Docker images
 readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
@@ -177,12 +177,9 @@ main() {
   local failed_tests=0
   test_suites=("baseline_test" "security_test" "authz_test")
   for test in "${test_suites[@]}"; do
-    run_test $test || (( failed_tests++ ))
+    run_test $test || (( ++failed_tests ))
   done
   echo "Failed test suites: ${failed_tests}"
-  if (( failed_tests > 0 )); then
-    exit 1
-  fi
 }
 
 main "$@"

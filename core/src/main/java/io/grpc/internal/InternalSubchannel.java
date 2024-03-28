@@ -35,6 +35,7 @@ import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientTransportFilter;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -76,6 +77,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
+
+  private final List<ClientTransportFilter> transportFilters;
 
   /**
    * All field must be mutated in the syncContext.
@@ -159,7 +162,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
       InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
-      InternalLogId logId, ChannelLogger channelLogger) {
+      InternalLogId logId, ChannelLogger channelLogger,
+      List<ClientTransportFilter> transportFilters) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
@@ -180,6 +184,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.channelTracer = Preconditions.checkNotNull(channelTracer, "channelTracer");
     this.logId = Preconditions.checkNotNull(logId, "logId");
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
+    this.transportFilters = transportFilters;
   }
 
   ChannelLogger getChannelLogger() {
@@ -256,7 +261,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     channelz.addClientSocket(transport);
     pendingTransport = transport;
     transports.add(transport);
-    Runnable runnable = transport.start(new TransportListener(transport, address));
+    Runnable runnable = transport.start(new TransportListener(transport));
     if (runnable != null) {
       syncContext.executeLater(runnable);
     }
@@ -533,12 +538,19 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   /** Listener for real transports. */
   private class TransportListener implements ManagedClientTransport.Listener {
     final ConnectionClientTransport transport;
-    final SocketAddress address;
     boolean shutdownInitiated = false;
 
-    TransportListener(ConnectionClientTransport transport, SocketAddress address) {
+    TransportListener(ConnectionClientTransport transport) {
       this.transport = transport;
-      this.address = address;
+    }
+
+    @Override
+    public Attributes filterTransport(Attributes attributes) {
+      for (ClientTransportFilter filter : transportFilters) {
+        attributes = Preconditions.checkNotNull(filter.transportReady(attributes),
+            "Filter %s returned null", filter);
+      }
+      return attributes;
     }
 
     @Override
@@ -609,6 +621,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelLogger.log(ChannelLogLevel.INFO, "{0} Terminated", transport.getLogId());
       channelz.removeClientSocket(transport);
       handleTransportInUseState(transport, false);
+      for (ClientTransportFilter filter : transportFilters) {
+        filter.transportTerminated(transport.getAttributes());
+      }
       syncContext.execute(new Runnable() {
         @Override
         public void run() {

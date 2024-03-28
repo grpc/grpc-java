@@ -3,6 +3,7 @@
 _JavaRpcToolchainInfo = provider(
     fields = [
         "java_toolchain",
+        "java_plugins",
         "plugin",
         "plugin_arg",
         "protoc",
@@ -14,9 +15,10 @@ def _java_rpc_toolchain_impl(ctx):
     return [
         _JavaRpcToolchainInfo(
             java_toolchain = ctx.attr._java_toolchain,
-            plugin = ctx.executable.plugin,
+            java_plugins = ctx.attr.java_plugins,
+            plugin = ctx.attr.plugin,
             plugin_arg = ctx.attr.plugin_arg,
-            protoc = ctx.executable._protoc,
+            protoc = ctx.attr._protoc,
             runtime = ctx.attr.runtime,
         ),
         platform_common.ToolchainInfo(),  # Magic for b/78647825
@@ -30,14 +32,18 @@ java_rpc_toolchain = rule(
             providers = [JavaInfo],
         ),
         "plugin": attr.label(
-            cfg = "host",
+            cfg = "exec",
             executable = True,
         ),
         "plugin_arg": attr.string(),
         "_protoc": attr.label(
-            cfg = "host",
+            cfg = "exec",
             default = Label("@com_google_protobuf//:protoc"),
             executable = True,
+        ),
+        "java_plugins": attr.label_list(
+            default = [],
+            providers = [JavaPluginInfo],
         ),
         "_java_toolchain": attr.label(
             default = Label("@bazel_tools//tools/jdk:current_java_toolchain"),
@@ -83,17 +89,18 @@ def _java_rpc_library_impl(ctx):
     srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
 
     args = ctx.actions.args()
-    args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
+    args.add(toolchain.plugin.files_to_run.executable, format = "--plugin=protoc-gen-rpc-plugin=%s")
     args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
-    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.host_configuration.host_path_separator)
+    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.configuration.host_path_separator)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
     ctx.actions.run(
-        inputs = depset([toolchain.plugin] + srcs, transitive = [descriptor_set_in]),
+        inputs = depset(srcs, transitive = [descriptor_set_in, toolchain.plugin.files]),
         outputs = [srcjar],
-        executable = toolchain.protoc,
+        executable = toolchain.protoc.files_to_run,
         arguments = [args],
         use_default_shell_env = True,
+        toolchain = None,
     )
 
     deps_java_info = java_common.merge([dep[JavaInfo] for dep in ctx.attr.deps])
@@ -104,6 +111,7 @@ def _java_rpc_library_impl(ctx):
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,
+        plugins = [plugin[JavaPluginInfo] for plugin in toolchain.java_plugins],
         deps = [
             java_common.make_non_strict(deps_java_info),
         ] + [dep[JavaInfo] for dep in toolchain.runtime],
@@ -127,6 +135,7 @@ _java_grpc_library = rule(
             default = Label("//compiler:java_grpc_library_toolchain"),
         ),
     },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
     outputs = {
         "jar": "lib%{name}.jar",
@@ -153,6 +162,7 @@ _java_lite_grpc_library = rule(
             default = Label("//compiler:java_lite_grpc_library_toolchain"),
         ),
     },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
     fragments = ["java"],
     outputs = {
         "jar": "lib%{name}.jar",

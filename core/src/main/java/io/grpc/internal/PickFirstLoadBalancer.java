@@ -28,8 +28,12 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 /**
  * A {@link LoadBalancer} that provides no load-balancing over the addresses from the {@link
@@ -39,19 +43,33 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private Subchannel subchannel;
+  private ConnectivityState currentState = IDLE;
 
   PickFirstLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     if (servers.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-              + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
+      Status unavailableStatus = Status.UNAVAILABLE.withDescription(
+              "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
+                      + ", attrs=" + resolvedAddresses.getAttributes());
+      handleNameResolutionError(unavailableStatus);
+      return unavailableStatus;
+    }
+
+    // We can optionally be configured to shuffle the address list. This can help better distribute
+    // the load.
+    if (resolvedAddresses.getLoadBalancingPolicyConfig() instanceof PickFirstLoadBalancerConfig) {
+      PickFirstLoadBalancerConfig config
+          = (PickFirstLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      if (config.shuffleAddressList != null && config.shuffleAddressList) {
+        servers = new ArrayList<EquivalentAddressGroup>(servers);
+        Collections.shuffle(servers,
+            config.randomSeed != null ? new Random(config.randomSeed) : new Random());
+      }
     }
 
     if (subchannel == null) {
@@ -69,13 +87,13 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-      helper.updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
+      updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
     }
 
-    return true;
+    return Status.OK;
   }
 
   @Override
@@ -84,22 +102,37 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       subchannel.shutdown();
       subchannel = null;
     }
+
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
-    helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    ConnectivityState currentState = stateInfo.getState();
-    if (currentState == SHUTDOWN) {
+    ConnectivityState newState = stateInfo.getState();
+    if (newState == SHUTDOWN) {
       return;
     }
-    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
+    if (newState == TRANSIENT_FAILURE || newState == IDLE) {
       helper.refreshNameResolution();
     }
 
+    // If we are transitioning from a TRANSIENT_FAILURE to CONNECTING or IDLE we ignore this state
+    // transition and still keep the LB in TRANSIENT_FAILURE state. This is referred to as "sticky
+    // transient failure". Only a subchannel state change to READY will get the LB out of
+    // TRANSIENT_FAILURE. If the state is IDLE we additionally request a new connection so that we
+    // keep retrying for a connection.
+    if (currentState == TRANSIENT_FAILURE) {
+      if (newState == CONNECTING) {
+        return;
+      } else if (newState == IDLE) {
+        requestConnection();
+        return;
+      }
+    }
+
     SubchannelPicker picker;
-    switch (currentState) {
+    switch (newState) {
       case IDLE:
         picker = new RequestConnectionPicker(subchannel);
         break;
@@ -115,9 +148,15 @@ final class PickFirstLoadBalancer extends LoadBalancer {
         picker = new Picker(PickResult.withError(stateInfo.getStatus()));
         break;
       default:
-        throw new IllegalArgumentException("Unsupported state:" + currentState);
+        throw new IllegalArgumentException("Unsupported state:" + newState);
     }
-    helper.updateBalancingState(currentState, picker);
+
+    updateBalancingState(newState, picker);
+  }
+
+  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+    currentState = state;
+    helper.updateBalancingState(state, picker);
   }
 
   @Override
@@ -176,6 +215,24 @@ final class PickFirstLoadBalancer extends LoadBalancer {
           });
       }
       return PickResult.withNoResult();
+    }
+  }
+
+  public static final class PickFirstLoadBalancerConfig {
+
+    @Nullable
+    public final Boolean shuffleAddressList;
+
+    // For testing purposes only, not meant to be parsed from a real config.
+    @Nullable final Long randomSeed;
+
+    public PickFirstLoadBalancerConfig(@Nullable Boolean shuffleAddressList) {
+      this(shuffleAddressList, null);
+    }
+
+    PickFirstLoadBalancerConfig(@Nullable Boolean shuffleAddressList, @Nullable Long randomSeed) {
+      this.shuffleAddressList = shuffleAddressList;
+      this.randomSeed = randomSeed;
     }
   }
 }

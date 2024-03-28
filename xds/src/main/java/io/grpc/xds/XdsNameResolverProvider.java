@@ -22,7 +22,6 @@ import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
-import io.grpc.internal.ObjectPool;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -105,17 +104,8 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
-  }
-
-  interface XdsClientPoolFactory {
-    void setBootstrapOverride(Map<String, ?> bootstrap);
-
-    @Nullable
-    ObjectPool<XdsClient> get();
-
-    ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException;
   }
 
   /**

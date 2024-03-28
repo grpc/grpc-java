@@ -46,6 +46,7 @@ import java.nio.charset.Charset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -53,12 +54,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 @RunWith(JUnit4.class)
 public class OkHttpClientStreamTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final int MAX_MESSAGE_SIZE = 100;
   private static final int INITIAL_WINDOW_SIZE = 65535;
 
@@ -77,7 +81,6 @@ public class OkHttpClientStreamTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     methodDescriptor = MethodDescriptor.<Void, Void>newBuilder()
         .setType(MethodDescriptor.MethodType.UNARY)
         .setFullMethodName("testService/test")

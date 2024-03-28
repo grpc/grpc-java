@@ -2,13 +2,12 @@ load("@rules_jvm_external//:defs.bzl", "artifact")
 load("//:java_grpc_library.bzl", "java_grpc_library")
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Purposefully does not export any
-# symbols, as it should only be used as a dep for pre-compiled binaries on
-# Maven Central.
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
 java_library(
     name = "xds_maven",
     visibility = ["//visibility:public"],
-    runtime_deps = [
+    exports = [
         ":orca",
         ":xds",
     ],
@@ -33,15 +32,16 @@ java_library(
         ":envoy_service_load_stats_v2_java_grpc",
         ":envoy_service_load_stats_v3_java_grpc",
         ":envoy_service_status_v3_java_grpc",
+        ":orca",
         ":xds_protos_java",
         "//:auto_value_annotations",
         "//alts",
         "//api",
         "//context",
         "//core:internal",
-        "//core:util",
         "//netty",
         "//stub",
+        "//util",
         "@com_google_googleapis//google/rpc:rpc_java_proto",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
@@ -86,7 +86,9 @@ java_proto_library(
         "@envoy_api//envoy/extensions/filters/http/rbac/v3:pkg",
         "@envoy_api//envoy/extensions/filters/http/router/v3:pkg",
         "@envoy_api//envoy/extensions/filters/network/http_connection_manager/v3:pkg",
+        "@envoy_api//envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/least_request/v3:pkg",
+        "@envoy_api//envoy/extensions/load_balancing_policies/pick_first/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/ring_hash/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/round_robin/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/wrr_locality/v3:pkg",
@@ -143,11 +145,11 @@ java_library(
         "//api",
         "//context",
         "//core:internal",
-        "//core:util",
         "//protobuf",
         "//services:metrics",
         "//services:metrics_internal",
         "//stub",
+        "//util",
         "@com_google_protobuf//:protobuf_java_util",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),

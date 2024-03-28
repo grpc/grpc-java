@@ -4,9 +4,9 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "rules_jvm_external",
-    strip_prefix = "rules_jvm_external-4.4.2",
-    sha256 = "735602f50813eb2ea93ca3f5e43b1959bd80b213b836a07a62a29d757670b77b",
-    url = "https://github.com/bazelbuild/rules_jvm_external/archive/refs/tags/4.4.2.zip",
+    sha256 = "d31e369b854322ca5098ea12c69d7175ded971435e55c18dd9dd5f29cc5249ac",
+    strip_prefix = "rules_jvm_external-5.3",
+    url = "https://github.com/bazelbuild/rules_jvm_external/releases/download/5.3/rules_jvm_external-5.3.tar.gz",
 )
 
 load("@rules_jvm_external//:defs.bzl", "maven_install")
@@ -38,6 +38,7 @@ maven_install(
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
+    generate_compat_repositories = True,
     maven_install_json = "@//:maven_install.json",
     strict_visibility = True,
     fetch_sources = True,
@@ -47,3 +48,7 @@ maven_install(
 load("@maven//:defs.bzl", "pinned_maven_install")
 
 pinned_maven_install()
+
+load("@maven//:compat.bzl", "compat_repositories")
+
+compat_repositories()

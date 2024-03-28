@@ -18,8 +18,8 @@ package io.grpc.xds.internal.security;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
 import io.grpc.xds.internal.security.certprovider.CertProviderServerSslContextProviderFactory;
 

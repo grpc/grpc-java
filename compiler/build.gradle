@@ -58,10 +58,14 @@ model {
                 cppCompiler.executable = 'aarch64-linux-gnu-g++'
                 linker.executable = 'aarch64-linux-gnu-g++'
             }
-            target("s390_64")
+            target("s390_64") {
+                cppCompiler.executable = 's390x-linux-gnu-g++'
+                linker.executable = 's390x-linux-gnu-g++'
+            }
             target("loongarch_64")
         }
         clang(Clang) {
+            target("aarch_64") {}
         }
     }
 
@@ -133,8 +137,10 @@ model {
     }
 }
 
-configurations {
-    testLiteImplementation
+sourceSets {
+    testLite {
+        proto { setSrcDirs(['src/test/proto']) }
+    }
 }
 
 dependencies {
@@ -144,12 +150,6 @@ dependencies {
     testLiteImplementation project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             libraries.javax.annotation
-}
-
-sourceSets {
-    testLite {
-        proto { setSrcDirs(['src/test/proto']) }
-    }
 }
 
 tasks.named("compileTestJava").configure {
@@ -164,6 +164,10 @@ tasks.named("compileTestLiteJava").configure {
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
+tasks.named("checkstyleTestLite").configure {
+    enabled = false
+}
+
 protobuf {
     protoc {
         if (project.hasProperty('protoc')) {
@@ -176,31 +180,25 @@ protobuf {
         grpc { path = javaPluginPath }
     }
     generateProtoTasks {
-        all().each { task ->
-            task.configure {
-                dependsOn 'java_pluginExecutable'
-                inputs.file javaPluginPath
-            }
+        all().configureEach {
+            dependsOn 'java_pluginExecutable'
+            inputs.file javaPluginPath
         }
-        ofSourceSet('test').each { task ->
-            task.configure {
-                plugins { grpc {} }
-            }
+        ofSourceSet('test').configureEach {
+            plugins { grpc {} }
         }
-        ofSourceSet('testLite').each { task ->
-            task.configure {
-                builtins {
-                    java { option 'lite' }
-                }
-                plugins {
-                    grpc { option 'lite' }
-                }
+        ofSourceSet('testLite').configureEach {
+            builtins {
+                java { option 'lite' }
+            }
+            plugins {
+                grpc { option 'lite' }
             }
         }
     }
 }
 
-println "*** Building codegen requires Protobuf version ${libs.versions.protobuf.get()}"
+println "*** Building codegen requires Protobuf"
 println "*** Please refer to https://github.com/grpc/grpc-java/blob/master/COMPILING.md#how-to-build-code-generation-plugin"
 
 tasks.register("buildArtifacts", Copy) {
@@ -213,7 +211,9 @@ tasks.register("buildArtifacts", Copy) {
     into artifactStagingPath
 }
 
-archivesBaseName = "$protocPluginBaseName"
+base {
+    archivesName = "$protocPluginBaseName"
+}
 
 def checkArtifacts = tasks.register("checkArtifacts") {
     dependsOn buildArtifacts
@@ -283,30 +283,38 @@ publishing {
     }
 }
 
-def configureTestTask(Task task, String dep, String extraPackage, String serviceName) {
-    test.dependsOn task
+def configureTestTask(Task task, String dep, String serviceName) {
+    def genDir = files(tasks.named("generateTest${dep}Proto")).singleFile
+    def genFile = "${genDir}/grpc/io/grpc/testing/compiler/${serviceName}Grpc.java"
     task.dependsOn "generateTest${dep}Proto"
+    task.inputs.file genFile
     if (osdetector.os != 'windows') {
         task.executable "diff"
         task.args "-u"
     } else {
         task.executable "fc"
     }
-    // File isn't found on Windows if last slash is forward-slash
-    def slash = System.getProperty("file.separator")
-    task.args "$buildDir/generated/source/proto/test${dep}/grpc/io/grpc/testing/compiler${extraPackage}${slash}${serviceName}Grpc.java",
-            "$projectDir/src/test${dep}/golden/${serviceName}.java.txt"
+    task.args layout.projectDirectory.file("src/test${dep}/golden/${serviceName}.java.txt")
+    task.args genFile
+    // Register an output to allow up-to-date checking
+    task.outputs.file(layout.buildDirectory.file(task.name))
 }
 
-tasks.register("testGolden", Exec) {
-    configureTestTask(it, '', '', 'TestService')
+def testGolden = tasks.register("testGolden", Exec) {
+    configureTestTask(it, '', 'TestService')
 }
-tasks.register("testLiteGolden", Exec) {
-    configureTestTask(it, 'Lite', '', 'TestService')
+def testLiteGolden = tasks.register("testLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', 'TestService')
 }
-tasks.register("testDeprecatedGolden", Exec) {
-    configureTestTask(it, '', '', 'TestDeprecatedService')
+def testDeprecatedGolden = tasks.register("testDeprecatedGolden", Exec) {
+    configureTestTask(it, '', 'TestDeprecatedService')
 }
-tasks.register("testDeprecatedLiteGolden", Exec) {
-    configureTestTask(it, 'Lite', '', 'TestDeprecatedService')
+def testDeprecatedLiteGolden = tasks.register("testDeprecatedLiteGolden", Exec) {
+    configureTestTask(it, 'Lite', 'TestDeprecatedService')
+}
+tasks.named("test").configure {
+    dependsOn testGolden
+    dependsOn testLiteGolden
+    dependsOn testDeprecatedGolden
+    dependsOn testDeprecatedLiteGolden
 }

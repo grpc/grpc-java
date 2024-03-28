@@ -1,4 +1,4 @@
-import java.util.jar.JarFile
+import io.grpc.gradle.CheckPackageLeakageTask;
 
 plugins {
     id "java"
@@ -10,8 +10,6 @@ plugins {
 }
 
 description = "gRPC: XDS plugin"
-
-evaluationDependsOn(project(':grpc-core').path)
 
 sourceSets {
     thirdparty {
@@ -25,6 +23,9 @@ sourceSets {
             srcDir 'third_party/googleapis/src/main/proto'
             srcDir 'third_party/istio/src/main/proto'
         }
+    }
+    main {
+        output.classesDirs.from(sourceSets.thirdparty.output.classesDirs)
     }
     test {
         java {
@@ -44,9 +45,10 @@ dependencies {
     thirdpartyImplementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.opencensus.proto
-    implementation sourceSets.thirdparty.output
+    compileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),
+            project(':grpc-util'),
             project(':grpc-services'),
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
@@ -57,7 +59,10 @@ dependencies {
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-rls')
-    testImplementation project(':grpc-core').sourceSets.test.output
+    testImplementation project(':grpc-inprocess')
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-util'))
 
     annotationProcessor libraries.auto.value
     // At runtime use the epoll included in grpc-netty-shaded
@@ -70,9 +75,7 @@ dependencies {
             classifier = "linux-x86_64"
         }
     }
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.guava.testlib
 
     shadow configurations.implementation.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
@@ -132,11 +135,22 @@ tasks.named("compileJava").configure {
             it.options.errorprone.excludedPaths,
             ".*/build/generated/sources/annotationProcessor/java/.*",
             "|")
+    // remove after upgrade error-prone
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/tmp/compileJava/compileTransaction/annotation-output/io/grpc/xds/.*",
+            "|")
 }
 
 tasks.named("jar").configure {
     archiveClassifier = 'original'
-    from sourceSets.thirdparty.output
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.xds')
+    }
+}
+
+tasks.named("sourcesJar").configure {
+    from sourceSets.thirdparty.allSource
 }
 
 tasks.named("javadoc").configure {
@@ -146,12 +160,14 @@ tasks.named("javadoc").configure {
     exclude 'com/google/security/**'
     exclude 'io/envoyproxy/**'
     // Need to clean up the class structure to reduce how much is exposed
+    exclude 'io/grpc/xds/client/**'
     exclude 'io/grpc/xds/*LoadBalancer*'
     exclude 'io/grpc/xds/Bootstrapper.java'
     exclude 'io/grpc/xds/Envoy*'
     exclude 'io/grpc/xds/FilterChainMatchingProtocolNegotiators.java'
     exclude 'io/grpc/xds/TlsContextManager.java'
     exclude 'io/grpc/xds/XdsAttributes.java'
+    exclude 'io/grpc/xds/XdsCredentialsProvider.java'
     exclude 'io/grpc/xds/XdsInitializationException.java'
     exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
@@ -180,29 +196,9 @@ tasks.named("shadowJar").configure {
     exclude "**/*.proto"
 }
 
-def checkPackageLeakage = tasks.register("checkPackageLeakage") {
-    inputs.files(shadowJar).withNormalizer(CompileClasspathNormalizer)
-    outputs.file("${buildDir}/tmp/${name}") // Fake output for UP-TO-DATE checking
-    doLast {
-        def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
-        shadowJar.outputs.getFiles().each { jar ->
-            def package_leak_detected = false
-            JarFile jf = new JarFile(jar)
-            jf.entries().each { entry ->
-                if (entry.name.endsWith(".class") && !entry.name.startsWith(
-                        jarEntryPrefixName)) {
-                    package_leak_detected = true
-                    println "WARNING: package leaked, may need relocation: " +
-                            entry.name
-                }
-            }
-            jf.close()
-            if (package_leak_detected) {
-                throw new TaskExecutionException(shadowJar,
-                        new IllegalStateException("Resource leakage detected!"))
-            }
-        }
-    }
+def checkPackageLeakage = tasks.register("checkPackageLeakage", CheckPackageLeakageTask) {
+    files.from tasks.named('shadowJar')
+    prefix = prefixName
 }
 
 tasks.named("test").configure {
@@ -235,15 +231,10 @@ publishing {
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')
                 project.configurations.pomDeps.allDependencies.each { dep ->
-                    if (dep.group == null && dep.name == 'unspecified') {
-                        // Ignore the thirdparty self-dependency
-                        return;
-                    }
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', dep.group)
                     dependencyNode.appendNode('artifactId', dep.name)
-                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
-                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('version', dep.version)
                     dependencyNode.appendNode('scope', 'compile')
                 }
                 asNode().dependencies[0].replaceNode(dependenciesNode)

@@ -24,6 +24,7 @@ import static io.grpc.xds.FaultFilter.HEADER_DELAY_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_PERCENTAGE_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -56,6 +57,8 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.NoopClientCall;
+import io.grpc.NoopClientCall.NoopClientCallListener;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -63,17 +66,11 @@ import io.grpc.internal.AutoConfiguredLoadBalancerFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.NoopClientCall;
-import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ScParser;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.Bootstrapper.AuthorityInfo;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
@@ -87,15 +84,21 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
-import io.grpc.xds.internal.Matchers.HeaderMatcher;
+import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsInitializationException;
+import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -145,7 +148,7 @@ public class XdsNameResolverTest {
   private final TestChannel channel = new TestChannel();
   private BootstrapInfo bootstrapInfo = BootstrapInfo.builder()
       .servers(ImmutableList.of(ServerInfo.create(
-          "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+          "td.googleapis.com", InsecureChannelCredentials.create())))
       .node(Node.newBuilder().build())
       .build();
   private String expectedLdsResourceName = AUTHORITY;
@@ -231,7 +234,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithoutXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate("%s/id=1")
         .build();
@@ -249,7 +252,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true)))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
@@ -261,6 +264,31 @@ public class XdsNameResolverTest {
     resolver = new XdsNameResolver(
         null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    resolver.start(mockListener);
+    verify(mockListener, never()).onError(any(Status.class));
+  }
+
+  @Test
+  public void resolving_noTargetAuthority_xdstpWithMultipleSlashes() {
+    bootstrapInfo = BootstrapInfo.builder()
+        .servers(ImmutableList.of(ServerInfo.create(
+            "td.googleapis.com", InsecureChannelCredentials.create())))
+        .node(Node.newBuilder().build())
+        .clientDefaultListenerResourceNameTemplate(
+            "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
+        .build();
+    String serviceAuthority = "path/to/service";
+    expectedLdsResourceName =
+        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+            + "path/to/service?id=1";
+    resolver = new XdsNameResolver(
+        null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+
+
+    // The Service Authority must be URL encoded, but unlike the LDS resource name.
+    assertThat(resolver.getServiceAuthority()).isEqualTo("path%2Fto%2Fservice");
+
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
@@ -307,6 +335,18 @@ public class XdsNameResolverTest {
         RouteAction.forCluster(
             cluster2, Collections.emptyList(), TimeUnit.SECONDS.toNanos(20L), null),
         ImmutableMap.of());
+    bootstrapInfo = BootstrapInfo.builder()
+        .servers(ImmutableList.of(ServerInfo.create(
+            "td.googleapis.com", InsecureChannelCredentials.create())))
+        .clientDefaultListenerResourceNameTemplate("test-%s")
+        .node(Node.newBuilder().build())
+        .build();
+    resolver = new XdsNameResolver(null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    // use different ldsResourceName and service authority. The virtualhost lookup should use
+    // service authority.
+    expectedLdsResourceName = "test-" + expectedLdsResourceName;
 
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -994,6 +1034,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_simpleCallSucceeds_routeToWeightedCluster() {
     when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
+    when(mockRandom.nextLong(anyLong())).thenReturn(90L, 10L);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -1449,57 +1490,6 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void findVirtualHostForHostName_exactMatchFirst() {
-    String hostname = "a.googleapis.com";
-    List<Route> routes = Collections.emptyList();
-    VirtualHost vHost1 = VirtualHost.create("virtualhost01.googleapis.com",
-        Arrays.asList("a.googleapis.com", "b.googleapis.com"), routes,
-        ImmutableMap.of());
-    VirtualHost vHost2 = VirtualHost.create("virtualhost02.googleapis.com",
-        Collections.singletonList("*.googleapis.com"), routes,
-        ImmutableMap.of());
-    VirtualHost vHost3 = VirtualHost.create("virtualhost03.googleapis.com",
-        Collections.singletonList("*"), routes,
-        ImmutableMap.of());
-    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
-    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
-        .isEqualTo(vHost1);
-  }
-
-  @Test
-  public void findVirtualHostForHostName_preferSuffixDomainOverPrefixDomain() {
-    String hostname = "a.googleapis.com";
-    List<Route> routes = Collections.emptyList();
-    VirtualHost vHost1 = VirtualHost.create("virtualhost01.googleapis.com",
-        Arrays.asList("*.googleapis.com", "b.googleapis.com"), routes,
-        ImmutableMap.of());
-    VirtualHost vHost2 = VirtualHost.create("virtualhost02.googleapis.com",
-        Collections.singletonList("a.googleapis.*"), routes,
-        ImmutableMap.of());
-    VirtualHost vHost3 = VirtualHost.create("virtualhost03.googleapis.com",
-        Collections.singletonList("*"), routes,
-        ImmutableMap.of());
-    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
-    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
-        .isEqualTo(vHost1);
-  }
-
-  @Test
-  public void findVirtualHostForHostName_asteriskMatchAnyDomain() {
-    String hostname = "a.googleapis.com";
-    List<Route> routes = Collections.emptyList();
-    VirtualHost vHost1 = VirtualHost.create("virtualhost01.googleapis.com",
-        Collections.singletonList("*"), routes,
-        ImmutableMap.of());
-    VirtualHost vHost2 = VirtualHost.create("virtualhost02.googleapis.com",
-        Collections.singletonList("b.googleapis.com"), routes,
-        ImmutableMap.of());
-    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2);
-    assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
-        .isEqualTo(vHost1);
-  }
-
-  @Test
   public void resolved_faultAbortInLdsUpdate() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -1736,7 +1726,7 @@ public class XdsNameResolverTest {
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
         "Deadline exceeded after up to 5000 ns of fault-injected delay:"
-            + " Deadline exceeded after 0.000004000s. "));
+            + " Deadline CallOptions will be exceeded in 0.000004000s. "));
   }
 
   @Test
@@ -1899,154 +1889,9 @@ public class XdsNameResolverTest {
     verifyRpcFailed(listener, expectedStatus);
   }
 
-  @Test
-  public void routeMatching_pathOnly() {
-    Metadata headers = new Metadata();
-    ThreadSafeRandom random = mock(ThreadSafeRandom.class);
-
-    RouteMatch routeMatch1 =
-        RouteMatch.create(
-            PathMatcher.fromPath("/FooService/barMethod", true),
-            Collections.emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
-        .isTrue();
-    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/bazMethod", headers, random))
-        .isFalse();
-
-    RouteMatch routeMatch2 =
-        RouteMatch.create(
-            PathMatcher.fromPrefix("/FooService/", true),
-            Collections.emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
-        .isTrue();
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/bazMethod", headers, random))
-        .isTrue();
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/BarService/bazMethod", headers, random))
-        .isFalse();
-
-    RouteMatch routeMatch3 =
-        RouteMatch.create(
-            PathMatcher.fromRegEx(Pattern.compile(".*Foo.*")),
-            Collections.emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
-        .isTrue();
-  }
-
-  @Test
-  public void routeMatching_pathOnly_caseInsensitive() {
-    Metadata headers = new Metadata();
-    ThreadSafeRandom random = mock(ThreadSafeRandom.class);
-
-    RouteMatch routeMatch1 =
-        RouteMatch.create(
-            PathMatcher.fromPath("/FooService/barMethod", false),
-            Collections.emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/fooservice/barmethod", headers, random))
-        .isTrue();
-
-    RouteMatch routeMatch2 =
-        RouteMatch.create(
-            PathMatcher.fromPrefix("/FooService", false),
-            Collections.emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/fooservice/barmethod", headers, random))
-        .isTrue();
-  }
-
-  @Test
-  public void routeMatching_withHeaders() {
-    Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of("authority", Metadata.ASCII_STRING_MARSHALLER),
-        "foo.googleapis.com");
-    headers.put(Metadata.Key.of("grpc-encoding", Metadata.ASCII_STRING_MARSHALLER), "gzip");
-    headers.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "gRPC-Java");
-    headers.put(Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER), "1000");
-    headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value1");
-    headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value2");
-    ThreadSafeRandom random = mock(ThreadSafeRandom.class);
-
-    PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
-    RouteMatch routeMatch1 = RouteMatch.create(
-        pathMatcher,
-        Arrays.asList(
-            HeaderMatcher.forExactValue("grpc-encoding", "gzip", false),
-            HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), false),
-            HeaderMatcher.forRange(
-                "content-length", HeaderMatcher.Range.create(100, 10000), false),
-            HeaderMatcher.forPresent("user-agent", true, false),
-            HeaderMatcher.forPrefix("custom-key", "custom-", false),
-            HeaderMatcher.forSuffix("custom-key", "value2", false)),
-        null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
-        .isTrue();
-
-    RouteMatch routeMatch2 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(
-            HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), true)),
-        null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
-        .isFalse();
-
-    RouteMatch routeMatch3 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(
-            HeaderMatcher.forExactValue("user-agent", "gRPC-Go", false)), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
-        .isFalse();
-
-    RouteMatch routeMatch4 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, false)),
-        null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch4, "/FooService/barMethod", headers, random))
-        .isFalse();
-
-    RouteMatch routeMatch5 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, true)), // inverted
-        null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch5, "/FooService/barMethod", headers, random))
-        .isTrue();
-
-    RouteMatch routeMatch6 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(HeaderMatcher.forPresent("user-agent", true, true)),
-        null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch6, "/FooService/barMethod", headers, random))
-        .isFalse();
-
-    RouteMatch routeMatch7 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(
-            HeaderMatcher.forExactValue("custom-key", "custom-value1,custom-value2", false)),
-        null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch7, "/FooService/barMethod", headers, random))
-        .isTrue();
-
-    RouteMatch routeMatch8 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(
-            HeaderMatcher.forExactValue("content-type", "application/grpc", false)),
-        null);
-    assertThat(XdsNameResolver.matchRoute(
-        routeMatch8, "/FooService/barMethod", new Metadata(), random)).isTrue();
-
-    RouteMatch routeMatch9 = RouteMatch.create(
-        pathMatcher,
-        Collections.singletonList(
-            HeaderMatcher.forExactValue("custom-key!", "custom-value1,custom-value2", false)),
-        null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch9, "/FooService/barMethod", headers, random))
-        .isFalse();
-  }
-
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
-    Map<String, ?> bootstrap;
-
     @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      this.bootstrap = bootstrap;
-    }
+    public void setBootstrapOverride(Map<String, ?> bootstrap) {}
 
     @Override
     @Nullable
@@ -2078,25 +1923,26 @@ public class XdsNameResolverTest {
     private ResourceWatcher<RdsUpdate> rdsWatcher;
 
     @Override
-    BootstrapInfo getBootstrapInfo() {
+    public BootstrapInfo getBootstrapInfo() {
       return bootstrapInfo;
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                    String resourceName,
-                                                    ResourceWatcher<T> watcher) {
+    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
+            String resourceName,
+            ResourceWatcher<T> watcher,
+            Executor syncContext) {
 
       switch (resourceType.typeName()) {
-        case LDS:
+        case "LDS":
           assertThat(ldsResource).isNull();
           assertThat(ldsWatcher).isNull();
           assertThat(resourceName).isEqualTo(expectedLdsResourceName);
           ldsResource = resourceName;
           ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
           break;
-        case RDS:
+        case "RDS":
           assertThat(rdsResource).isNull();
           assertThat(rdsWatcher).isNull();
           rdsResource = resourceName;
@@ -2107,18 +1953,18 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                           String resourceName,
-                                                           ResourceWatcher<T> watcher) {
+    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                                  String resourceName,
+                                                                  ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
-        case LDS:
+        case "LDS":
           assertThat(ldsResource).isNotNull();
           assertThat(ldsWatcher).isNotNull();
           assertThat(resourceName).isEqualTo(expectedLdsResourceName);
           ldsResource = null;
           ldsWatcher = null;
           break;
-        case RDS:
+        case "RDS":
           assertThat(rdsResource).isNotNull();
           assertThat(rdsWatcher).isNotNull();
           rdsResource = null;
@@ -2129,8 +1975,10 @@ public class XdsNameResolverTest {
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          httpMaxStreamDurationNano, virtualHosts, null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null)));
+      });
     }
 
     void deliverLdsUpdate(final List<Route> routes) {
@@ -2138,8 +1986,10 @@ public class XdsNameResolverTest {
           VirtualHost.create(
               "virtual-host", Collections.singletonList(expectedLdsResourceName), routes,
               ImmutableMap.of());
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), null)));
+      });
     }
 
     void deliverLdsUpdateWithFaultInjection(
@@ -2183,8 +2033,10 @@ public class XdsNameResolverTest {
           Collections.singletonList(expectedLdsResourceName),
           Collections.singletonList(route),
           overrideConfig);
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), filterChain)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), filterChain)));
+      });
     }
 
     void deliverLdsUpdateForRdsNameWithFaultInjection(
@@ -2196,17 +2048,23 @@ public class XdsNameResolverTest {
       ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-          0L, rdsName, filterChain)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0L, rdsName, filterChain)));
+      });
     }
 
     void deliverLdsUpdateForRdsName(String rdsName) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-          0, rdsName, null)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0, rdsName, null)));
+      });
     }
 
     void deliverLdsResourceNotFound() {
-      ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+      syncContext.execute(() -> {
+        ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+      });
     }
 
     void deliverRdsUpdateWithFaultInjection(
@@ -2242,29 +2100,39 @@ public class XdsNameResolverTest {
           Collections.singletonList(expectedLdsResourceName),
           Collections.singletonList(route),
           overrideConfig);
-      rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+      syncContext.execute(() -> {
+        rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+      });
     }
 
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
       if (!resourceName.equals(rdsResource)) {
         return;
       }
-      rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+      syncContext.execute(() -> {
+        rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+      });
     }
 
     void deliverRdsResourceNotFound(String resourceName) {
       if (!resourceName.equals(rdsResource)) {
         return;
       }
-      rdsWatcher.onResourceDoesNotExist(rdsResource);
+      syncContext.execute(() -> {
+        rdsWatcher.onResourceDoesNotExist(rdsResource);
+      });
     }
 
     void deliverError(final Status error) {
       if (ldsWatcher != null) {
-        ldsWatcher.onError(error);
+        syncContext.execute(() -> {
+          ldsWatcher.onError(error);
+        });
       }
       if (rdsWatcher != null) {
-        rdsWatcher.onError(error);
+        syncContext.execute(() -> {
+          rdsWatcher.onError(error);
+        });
       }
     }
   }

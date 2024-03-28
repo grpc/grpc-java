@@ -1,8 +1,9 @@
 import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.CacheableTransformer
 import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
+import org.apache.tools.zip.ZipOutputStream
+import org.apache.tools.zip.ZipEntry
 import org.gradle.api.file.FileTreeElement
-import shadow.org.apache.tools.zip.ZipOutputStream
-import shadow.org.apache.tools.zip.ZipEntry
 
 plugins {
     id "java"
@@ -15,6 +16,8 @@ plugins {
 description = "gRPC: Netty Shaded"
 
 sourceSets { testShadow {} }
+
+evaluationDependsOn(':grpc-netty')
 
 dependencies {
     implementation project(':grpc-netty')
@@ -69,6 +72,9 @@ dependencies {
 tasks.named("jar").configure {
     // Must use a different archiveClassifier to avoid conflicting with shadowJar
     archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.netty.shaded')
+    }
 }
 
 tasks.named("shadowJar").configure {
@@ -110,15 +116,6 @@ publishing {
                     core.scope*.value = "compile"
                 }
             }
-
-            // shadow.component() is run after the main build.gradle's withXml
-            pom.withXml {
-                asNode().dependencies.'*'.findAll() { dep ->
-                    dep.artifactId.text() in ['grpc-api', 'grpc-core']
-                }.each() { core ->
-                    core.version*.value = "[" + core.version.text() + "]"
-                }
-            }
         }
     }
 }
@@ -140,6 +137,7 @@ tasks.named("test").configure {
  * A Transformer which updates the Netty JAR META-INF/ resources to accurately
  * reference shaded class names.
  */
+@CacheableTransformer
 class NettyResourceTransformer implements Transformer {
 
     // A map of resource file paths to be modified

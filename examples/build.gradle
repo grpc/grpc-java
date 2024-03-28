@@ -1,8 +1,7 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.18'
+    id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
@@ -14,20 +13,23 @@ repositories {
     mavenLocal()
 }
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
 
 // IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
 // are looking at a tagged version of the example and not "master"!
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.51.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.21.1'
+def grpcVersion = '1.63.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.1'
 def protocVersion = protobufVersion
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
@@ -37,8 +39,9 @@ dependencies {
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
-    testImplementation "junit:junit:4.12"
-    testImplementation "org.mockito:mockito-core:3.4.0"
+    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.mockito:mockito-core:4.4.0"
 }
 
 protobuf {
@@ -63,94 +66,57 @@ sourceSets {
 
 startScripts.enabled = false
 
-task routeGuideServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.routeguide.RouteGuideServer'
-    applicationName = 'route-guide-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
+// Creates start scripts for a class name and adds it to the distribution. The
+// base class name is used to name the task and scripts. For example, passed
+// the class io.grpc.examples.helloworld.HelloWorldClient, it creates the task
+// helloWorldClient with script name hello-world-client.
+def createStartScripts(String mainClassName) {
+    String bareName = mainClassName.substring(mainClassName.lastIndexOf('.') + 1);
+    String taskName = bareName.uncapitalize();
+    def newTask = tasks.register(taskName, CreateStartScripts) {
+        mainClass = mainClassName
+        applicationName = taskName.replaceAll('([A-Z])') { '-' + it[0].uncapitalize() }
+        outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+        classpath = startScripts.classpath
+    }
+    application {
+        applicationDistribution.into('bin') {
+            from(newTask)
+            fileMode = 0755
+        }
+    }
 }
 
-task routeGuideClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.routeguide.RouteGuideClient'
-    applicationName = 'route-guide-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task helloWorldServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.helloworld.HelloWorldServer'
-    applicationName = 'hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task helloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.helloworld.HelloWorldClient'
-    applicationName = 'hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task retryingHelloWorldServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.retrying.RetryingHelloWorldServer'
-    applicationName = 'retrying-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task retryingHelloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.retrying.RetryingHelloWorldClient'
-    applicationName = 'retrying-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task hedgingHelloWorldServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.hedging.HedgingHelloWorldServer'
-    applicationName = 'hedging-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task hedgingHelloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.hedging.HedgingHelloWorldClient'
-    applicationName = 'hedging-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task compressingHelloWorldClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
-    applicationName = 'compressing-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task manualFlowControlClient(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.manualflowcontrol.ManualFlowControlClient'
-    applicationName = 'manual-flow-control-client'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-task manualFlowControlServer(type: CreateStartScripts) {
-    mainClass = 'io.grpc.examples.manualflowcontrol.ManualFlowControlServer'
-    applicationName = 'manual-flow-control-server'
-    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
-    classpath = startScripts.classpath
-}
-
-applicationDistribution.into('bin') {
-    from(routeGuideServer)
-    from(routeGuideClient)
-    from(helloWorldServer)
-    from(helloWorldClient)
-    from(hedgingHelloWorldClient)
-    from(hedgingHelloWorldServer)
-    from(retryingHelloWorldClient)
-    from(retryingHelloWorldServer)
-    from(compressingHelloWorldClient)
-    from(manualFlowControlClient)
-    from(manualFlowControlServer)
-    fileMode = 0755
-}
+createStartScripts('io.grpc.examples.advanced.HelloJsonClient')
+createStartScripts('io.grpc.examples.advanced.HelloJsonServer')
+createStartScripts('io.grpc.examples.cancellation.CancellationClient')
+createStartScripts('io.grpc.examples.cancellation.CancellationServer')
+createStartScripts('io.grpc.examples.customloadbalance.CustomLoadBalanceClient')
+createStartScripts('io.grpc.examples.deadline.DeadlineClient')
+createStartScripts('io.grpc.examples.deadline.DeadlineServer')
+createStartScripts('io.grpc.examples.errordetails.ErrorDetailsExample')
+createStartScripts('io.grpc.examples.experimental.CompressingHelloWorldClient')
+createStartScripts('io.grpc.examples.grpcproxy.GrpcProxy')
+createStartScripts('io.grpc.examples.healthservice.HealthServiceClient')
+createStartScripts('io.grpc.examples.healthservice.HealthServiceServer')
+createStartScripts('io.grpc.examples.hedging.HedgingHelloWorldClient')
+createStartScripts('io.grpc.examples.hedging.HedgingHelloWorldServer')
+createStartScripts('io.grpc.examples.helloworld.HelloWorldClient')
+createStartScripts('io.grpc.examples.helloworld.HelloWorldServer')
+createStartScripts('io.grpc.examples.keepalive.KeepAliveClient')
+createStartScripts('io.grpc.examples.keepalive.KeepAliveServer')
+createStartScripts('io.grpc.examples.loadbalance.LoadBalanceClient')
+createStartScripts('io.grpc.examples.loadbalance.LoadBalanceServer')
+createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlClient')
+createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlServer')
+createStartScripts('io.grpc.examples.multiplex.MultiplexingServer')
+createStartScripts('io.grpc.examples.multiplex.SharingClient')
+createStartScripts('io.grpc.examples.nameresolve.NameResolveClient')
+createStartScripts('io.grpc.examples.nameresolve.NameResolveServer')
+createStartScripts('io.grpc.examples.preserialized.PreSerializedClient')
+createStartScripts('io.grpc.examples.preserialized.PreSerializedServer')
+createStartScripts('io.grpc.examples.retrying.RetryingHelloWorldClient')
+createStartScripts('io.grpc.examples.retrying.RetryingHelloWorldServer')
+createStartScripts('io.grpc.examples.routeguide.RouteGuideClient')
+createStartScripts('io.grpc.examples.routeguide.RouteGuideServer')
+createStartScripts('io.grpc.examples.waitforready.WaitForReadyClient')

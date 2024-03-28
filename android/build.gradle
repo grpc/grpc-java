@@ -2,26 +2,31 @@ plugins {
     id "maven-publish"
 
     id "com.android.library"
-    id "digital.wup.android-maven-publish"
 }
 
 description = 'gRPC: Android'
 
 android {
+    namespace 'io.grpc.android'
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    compileSdkVersion 29
+    compileSdkVersion 34
     defaultConfig {
-        consumerProguardFiles "proguard-rules.txt"
-        minSdkVersion 19
-        targetSdkVersion 29
+        minSdkVersion 21
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     lintOptions { abortOnError true }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 repositories {
@@ -30,15 +35,13 @@ repositories {
 }
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api')
+    implementation project(':grpc-core')
     implementation libraries.guava
     testImplementation project('::grpc-okhttp')
     testImplementation libraries.androidx.test.core
     testImplementation libraries.junit
-    testImplementation (libraries.robolectric) {
-        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
-        exclude group: 'com.google.auto.service', module: 'auto-service'
-    }
+    testImplementation libraries.robolectric
     testImplementation libraries.truth
 }
 
@@ -72,10 +75,9 @@ tasks.register("sourcesJar", Jar) {
 publishing {
     publications {
         maven {
-            from components.android
-
-            artifact javadocJar
-            artifact sourcesJar
+            afterEvaluate {
+                from components.release
+            }
         }
     }
 }

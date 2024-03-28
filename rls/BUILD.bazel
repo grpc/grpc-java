@@ -13,7 +13,7 @@ java_library(
         "//api",
         "//core",
         "//core:internal",
-        "//core:util",
+        "//util",
         "//stub",
         "@io_grpc_grpc_proto//:rls_config_java_proto",
         "@io_grpc_grpc_proto//:rls_java_proto",

@@ -70,8 +70,8 @@ public final class AutoConfiguredLoadBalancerFactory {
     }
 
     @Override
-    public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      return true;
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return Status.OK;
     }
 
     @Override
@@ -102,7 +102,7 @@ public final class AutoConfiguredLoadBalancerFactory {
      * Returns non-OK status if the delegate rejects the resolvedAddresses (e.g. if it does not
      * support an empty list).
      */
-    boolean tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    Status tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       PolicySelection policySelection =
           (PolicySelection) resolvedAddresses.getLoadBalancingPolicyConfig();
 
@@ -116,7 +116,7 @@ public final class AutoConfiguredLoadBalancerFactory {
           delegate.shutdown();
           delegateProvider = null;
           delegate = new NoopLoadBalancer();
-          return true;
+          return Status.OK;
         }
         policySelection =
             new PolicySelection(defaultProvider, /* config= */ null);

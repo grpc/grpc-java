@@ -71,13 +71,14 @@ import java.net.SocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Migration test XdsServerWrapper from previous XdsClientWrapperForServerSds. */
 @RunWith(JUnit4.class)
@@ -85,6 +86,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
 
   private static final int PORT = 7000;
   private static final int START_WAIT_AFTER_LISTENER_MILLIS = 100;
+
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private EmbeddedChannel channel;
   private ChannelPipeline pipeline;
@@ -107,7 +110,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     tlsContext1 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     tlsContext2 =

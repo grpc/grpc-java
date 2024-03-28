@@ -25,10 +25,12 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
 import com.google.android.gms.common.GooglePlayServicesRepairableException;
 import com.google.android.gms.security.ProviderInstaller;
-import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.android.integrationtest.InteropTask.Listener;
 import java.io.InputStream;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,6 +46,7 @@ public class InteropInstrumentationTest {
   private String serverHostOverride;
   private boolean useTestCa;
   private String testCase;
+  private ExecutorService executor = Executors.newSingleThreadExecutor();
 
   @Before
   public void setUp() throws Exception {
@@ -101,26 +104,22 @@ public class InteropInstrumentationTest {
   }
 
   private void runTest(String testCase) throws Exception {
-    final SettableFuture<String> resultFuture = SettableFuture.create();
-    InteropTask.Listener listener =
-        new Listener() {
-          @Override
-          public void onComplete(String result) {
-            resultFuture.set(result);
-          }
-        };
     InputStream testCa;
     if (useTestCa) {
       testCa = ApplicationProvider.getApplicationContext().getResources().openRawResource(R.raw.ca);
     } else {
       testCa = null;
     }
-    new InteropTask(
-            listener,
-            TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, useTls, testCa),
-            testCase)
-        .execute();
-    String result = resultFuture.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-    assertEquals(testCase + " failed", InteropTask.SUCCESS_MESSAGE, result);
+
+    String result = null;
+    try {
+      result = executor.submit(new TestCallable(
+              TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, useTls, testCa),
+              testCase)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
+      Log.e(LOG_TAG, "Error while executing test case " + testCase, e);
+      result = e.getMessage();
+    }
+    assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
   }
 }

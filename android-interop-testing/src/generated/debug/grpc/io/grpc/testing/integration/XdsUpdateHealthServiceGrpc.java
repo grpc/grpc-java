@@ -15,7 +15,7 @@ public final class XdsUpdateHealthServiceGrpc {
 
   private XdsUpdateHealthServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.XdsUpdateHealthService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.XdsUpdateHealthService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
@@ -127,48 +127,45 @@ public final class XdsUpdateHealthServiceGrpc {
    * A service to remotely control health status of an xDS test server.
    * </pre>
    */
-  public static abstract class XdsUpdateHealthServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public void setServing(io.grpc.testing.integration.EmptyProtos.Empty request,
+    default void setServing(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getSetServingMethod(), responseObserver);
     }
 
     /**
      */
-    public void setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request,
+    default void setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getSetNotServingMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getSetServingMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.EmptyProtos.Empty,
-                io.grpc.testing.integration.EmptyProtos.Empty>(
-                  this, METHODID_SET_SERVING)))
-          .addMethod(
-            getSetNotServingMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.EmptyProtos.Empty,
-                io.grpc.testing.integration.EmptyProtos.Empty>(
-                  this, METHODID_SET_NOT_SERVING)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>
    */
-  public static final class XdsUpdateHealthServiceStub extends io.grpc.stub.AbstractAsyncStub<XdsUpdateHealthServiceStub> {
+  public static abstract class XdsUpdateHealthServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return XdsUpdateHealthServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service XdsUpdateHealthService.
+   * <pre>
+   * A service to remotely control health status of an xDS test server.
+   * </pre>
+   */
+  public static final class XdsUpdateHealthServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<XdsUpdateHealthServiceStub> {
     private XdsUpdateHealthServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -198,11 +195,13 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>
    */
-  public static final class XdsUpdateHealthServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<XdsUpdateHealthServiceBlockingStub> {
+  public static final class XdsUpdateHealthServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<XdsUpdateHealthServiceBlockingStub> {
     private XdsUpdateHealthServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -230,11 +229,13 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>
    */
-  public static final class XdsUpdateHealthServiceFutureStub extends io.grpc.stub.AbstractFutureStub<XdsUpdateHealthServiceFutureStub> {
+  public static final class XdsUpdateHealthServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<XdsUpdateHealthServiceFutureStub> {
     private XdsUpdateHealthServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -271,10 +272,10 @@ public final class XdsUpdateHealthServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final XdsUpdateHealthServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(XdsUpdateHealthServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -305,6 +306,25 @@ public final class XdsUpdateHealthServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getSetServingMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.EmptyProtos.Empty,
+              io.grpc.testing.integration.EmptyProtos.Empty>(
+                service, METHODID_SET_SERVING)))
+        .addMethod(
+          getSetNotServingMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.EmptyProtos.Empty,
+              io.grpc.testing.integration.EmptyProtos.Empty>(
+                service, METHODID_SET_NOT_SERVING)))
+        .build();
   }
 
   private static volatile io.grpc.ServiceDescriptor serviceDescriptor;

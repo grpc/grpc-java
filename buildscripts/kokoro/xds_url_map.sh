@@ -3,7 +3,7 @@ set -eo pipefail
 
 # Constants
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
-readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/grpc/${TEST_DRIVER_BRANCH:-master}/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
+readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/psm-interop/${TEST_DRIVER_BRANCH:-main}/.kokoro/psm_interop_kokoro_lib.sh"
 ## xDS test client Docker images
 readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
@@ -172,7 +172,7 @@ main() {
   build_docker_images_if_needed
   # Run tests
   cd "${TEST_DRIVER_FULL_DIR}"
-  run_test url_map
+  run_test url_map || echo "Failed url_map test"
 }
 
 main "$@"

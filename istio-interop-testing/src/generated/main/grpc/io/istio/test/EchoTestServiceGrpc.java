@@ -12,7 +12,7 @@ public final class EchoTestServiceGrpc {
 
   private EchoTestServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "proto.EchoTestService";
+  public static final java.lang.String SERVICE_NAME = "proto.EchoTestService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.istio.test.Echo.EchoRequest,
@@ -123,45 +123,39 @@ public final class EchoTestServiceGrpc {
 
   /**
    */
-  public static abstract class EchoTestServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public void echo(io.istio.test.Echo.EchoRequest request,
+    default void echo(io.istio.test.Echo.EchoRequest request,
         io.grpc.stub.StreamObserver<io.istio.test.Echo.EchoResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getEchoMethod(), responseObserver);
     }
 
     /**
      */
-    public void forwardEcho(io.istio.test.Echo.ForwardEchoRequest request,
+    default void forwardEcho(io.istio.test.Echo.ForwardEchoRequest request,
         io.grpc.stub.StreamObserver<io.istio.test.Echo.ForwardEchoResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getForwardEchoMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getEchoMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.istio.test.Echo.EchoRequest,
-                io.istio.test.Echo.EchoResponse>(
-                  this, METHODID_ECHO)))
-          .addMethod(
-            getForwardEchoMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.istio.test.Echo.ForwardEchoRequest,
-                io.istio.test.Echo.ForwardEchoResponse>(
-                  this, METHODID_FORWARD_ECHO)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service EchoTestService.
    */
-  public static final class EchoTestServiceStub extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
+  public static abstract class EchoTestServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return EchoTestServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service EchoTestService.
+   */
+  public static final class EchoTestServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<EchoTestServiceStub> {
     private EchoTestServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -191,8 +185,10 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service EchoTestService.
    */
-  public static final class EchoTestServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
+  public static final class EchoTestServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {
     private EchoTestServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -220,8 +216,10 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service EchoTestService.
    */
-  public static final class EchoTestServiceFutureStub extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {
+  public static final class EchoTestServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<EchoTestServiceFutureStub> {
     private EchoTestServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -258,10 +256,10 @@ public final class EchoTestServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final EchoTestServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(EchoTestServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -294,6 +292,25 @@ public final class EchoTestServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getEchoMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.istio.test.Echo.EchoRequest,
+              io.istio.test.Echo.EchoResponse>(
+                service, METHODID_ECHO)))
+        .addMethod(
+          getForwardEchoMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.istio.test.Echo.ForwardEchoRequest,
+              io.istio.test.Echo.ForwardEchoResponse>(
+                service, METHODID_FORWARD_ECHO)))
+        .build();
+  }
+
   private static abstract class EchoTestServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     EchoTestServiceBaseDescriptorSupplier() {}
@@ -317,9 +334,9 @@ public final class EchoTestServiceGrpc {
   private static final class EchoTestServiceMethodDescriptorSupplier
       extends EchoTestServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    EchoTestServiceMethodDescriptorSupplier(String methodName) {
+    EchoTestServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

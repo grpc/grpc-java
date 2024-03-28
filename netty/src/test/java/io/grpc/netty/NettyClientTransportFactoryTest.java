@@ -16,8 +16,8 @@
 
 package io.grpc.netty;
 
+import io.grpc.internal.AbstractClientTransportFactoryTest;
 import io.grpc.internal.ClientTransportFactory;
-import io.grpc.internal.testing.AbstractClientTransportFactoryTest;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 

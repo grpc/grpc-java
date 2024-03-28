@@ -30,9 +30,6 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
-import android.os.Build;
-import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.os.Process;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
@@ -333,7 +330,6 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 18)
   public void testIsDeviceOwner_succeedsForDeviceOwner() throws Exception {
     PackageInfo info =
         newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
@@ -348,7 +344,6 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 18)
   public void testIsDeviceOwner_failsForNotDeviceOwner() throws Exception {
     PackageInfo info =
         newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
@@ -361,25 +356,12 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 18)
   public void testIsDeviceOwner_failsWhenNoPackagesForUid() throws Exception {
     policy = SecurityPolicies.isDeviceOwner(appContext);
 
     assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.UNAUTHENTICATED.getCode());
   }
 
-  @Test
-  @Config(sdk = 17)
-  public void testIsDeviceOwner_failsForSdkLevelTooLow() throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-
-    installPackages(OTHER_UID, info);
-
-    policy = SecurityPolicies.isDeviceOwner(appContext);
-
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
-  }
 
   @Test
   @Config(sdk = 21)
@@ -415,19 +397,6 @@ public final class SecurityPoliciesTest {
     policy = SecurityPolicies.isProfileOwner(appContext);
 
     assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.UNAUTHENTICATED.getCode());
-  }
-
-  @Test
-  @Config(sdk = 19)
-  public void testIsProfileOwner_failsForSdkLevelTooLow() throws Exception {
-    PackageInfo info =
-        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
-
-    installPackages(OTHER_UID, info);
-
-    policy = SecurityPolicies.isProfileOwner(appContext);
-
-    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
   }
 
   @Test
@@ -521,6 +490,7 @@ public final class SecurityPoliciesTest {
       return this;
     }
 
+    @SuppressWarnings("deprecation")  // 'signatures': We don't yet support signing cert rotation.
     public PackageInfo build() {
       checkState(this.packageName != null, "packageName is a mandatory field");
 

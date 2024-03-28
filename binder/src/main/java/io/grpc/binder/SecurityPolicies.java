@@ -26,6 +26,7 @@ import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Process;
+import androidx.annotation.RequiresApi;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
@@ -42,7 +43,6 @@ import java.util.List;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class SecurityPolicies {
 
   private static final int MY_UID = Process.myUid();
@@ -50,10 +50,15 @@ public final class SecurityPolicies {
 
   private SecurityPolicies() {}
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static ServerSecurityPolicy serverInternalOnly() {
     return new ServerSecurityPolicy();
   }
 
+  /**
+   * Creates a default {@link SecurityPolicy} that allows access only to callers with the same UID
+   * as the current process.
+   */
   public static SecurityPolicy internalOnly() {
     return new SecurityPolicy() {
       @Override
@@ -66,6 +71,7 @@ public final class SecurityPolicies {
     };
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy permissionDenied(String description) {
     Status denied = Status.PERMISSION_DENIED.withDescription(description);
     return new SecurityPolicy() {
@@ -84,6 +90,7 @@ public final class SecurityPolicies {
    * @param requiredSignature the allowed signature of the allowed package.
    * @throws NullPointerException if any of the inputs are {@code null}.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasSignature(
       PackageManager packageManager, String packageName, Signature requiredSignature) {
     return oneOfSignatures(
@@ -99,6 +106,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code requiredSignatureSha256Hash} is not of length 32.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasSignatureSha256Hash(
       PackageManager packageManager, String packageName, byte[] requiredSignatureSha256Hash) {
     return oneOfSignatureSha256Hash(
@@ -114,6 +122,7 @@ public final class SecurityPolicies {
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code requiredSignatures} is empty.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy oneOfSignatures(
       PackageManager packageManager,
       String packageName,
@@ -180,12 +189,12 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a device owner app. See
    * {@link DevicePolicyManager}.
    */
-  public static SecurityPolicy isDeviceOwner(Context applicationContext) {
+  @RequiresApi(18)
+  public static io.grpc.binder.SecurityPolicy isDeviceOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
     return anyPackageWithUidSatisfies(
-        applicationContext,
-        pkg -> VERSION.SDK_INT >= 18 && devicePolicyManager.isDeviceOwnerApp(pkg),
+        applicationContext, pkg -> devicePolicyManager.isDeviceOwnerApp(pkg),
         "Rejected by device owner policy. No packages found for UID.",
         "Rejected by device owner policy");
   }
@@ -194,12 +203,13 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See
    * {@link DevicePolicyManager}.
    */
+  @RequiresApi(21)
   public static SecurityPolicy isProfileOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
     return anyPackageWithUidSatisfies(
         applicationContext,
-        pkg -> VERSION.SDK_INT >= 21 && devicePolicyManager.isProfileOwnerApp(pkg),
+        pkg -> devicePolicyManager.isProfileOwnerApp(pkg),
         "Rejected by profile owner policy. No packages found for UID.",
         "Rejected by profile owner policy");
   }
@@ -413,6 +423,25 @@ public final class SecurityPolicies {
   /**
    * Creates a {@link SecurityPolicy} which checks if the caller has all of the given permissions
    * from {@code permissions}.
+   * 
+   * <p>The gRPC framework assumes that a {@link SecurityPolicy}'s verdict for a given peer UID will
+   * not change over the lifetime of any process with that UID. But Android runtime permissions can
+   * be granted or revoked by the user at any time and so using the {@link #hasPermissions}
+   * {@link SecurityPolicy} comes with certain special responsibilities.
+   * 
+   * <p>In particular, callers must ensure that the *subjects* of the returned
+   * {@link SecurityPolicy} hold all required {@code permissions} *before* making use of it. Android
+   * kills an app's processes when it loses any permission but the same isn't true when a permission
+   * is granted. And so without special care, a {@link #hasPermissions} denial could incorrectly
+   * persist even if the subject is later granted all required {@code permissions}.
+   * 
+   * <p>A server using {@link #hasPermissions} must, as part of its RPC API contract, require
+   * clients to request and receive all {@code permissions} before making a call. This is in line
+   * with official Android guidance to request and confirm receipt of runtime permissions before
+   * using them. 
+   * 
+   * <p>A client, on the other hand, should only use {@link #hasPermissions} policies that require
+   * install-time permissions which cannot change.
    *
    * @param permissions all permissions that the calling package needs to have
    * @throws NullPointerException if any of the inputs are {@code null}

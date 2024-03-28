@@ -15,7 +15,7 @@ public final class ReconnectServiceGrpc {
 
   private ReconnectServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.ReconnectService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.ReconnectService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.ReconnectParams,
@@ -127,48 +127,45 @@ public final class ReconnectServiceGrpc {
    * A service used to control reconnect server.
    * </pre>
    */
-  public static abstract class ReconnectServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      */
-    public void start(io.grpc.testing.integration.Messages.ReconnectParams request,
+    default void start(io.grpc.testing.integration.Messages.ReconnectParams request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStartMethod(), responseObserver);
     }
 
     /**
      */
-    public void stop(io.grpc.testing.integration.EmptyProtos.Empty request,
+    default void stop(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.ReconnectInfo> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getStopMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getStartMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.ReconnectParams,
-                io.grpc.testing.integration.EmptyProtos.Empty>(
-                  this, METHODID_START)))
-          .addMethod(
-            getStopMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.EmptyProtos.Empty,
-                io.grpc.testing.integration.Messages.ReconnectInfo>(
-                  this, METHODID_STOP)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>
    */
-  public static final class ReconnectServiceStub extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
+  public static abstract class ReconnectServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return ReconnectServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service ReconnectService.
+   * <pre>
+   * A service used to control reconnect server.
+   * </pre>
+   */
+  public static final class ReconnectServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
     private ReconnectServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -198,11 +195,13 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>
    */
-  public static final class ReconnectServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
+  public static final class ReconnectServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
     private ReconnectServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -230,11 +229,13 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReconnectService.
    * <pre>
    * A service used to control reconnect server.
    * </pre>
    */
-  public static final class ReconnectServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
+  public static final class ReconnectServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
     private ReconnectServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -271,10 +272,10 @@ public final class ReconnectServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ReconnectServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ReconnectServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -305,6 +306,25 @@ public final class ReconnectServiceGrpc {
           throw new AssertionError();
       }
     }
+  }
+
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getStartMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.ReconnectParams,
+              io.grpc.testing.integration.EmptyProtos.Empty>(
+                service, METHODID_START)))
+        .addMethod(
+          getStopMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.EmptyProtos.Empty,
+              io.grpc.testing.integration.Messages.ReconnectInfo>(
+                service, METHODID_STOP)))
+        .build();
   }
 
   private static volatile io.grpc.ServiceDescriptor serviceDescriptor;

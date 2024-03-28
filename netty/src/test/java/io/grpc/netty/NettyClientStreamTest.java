@@ -124,8 +124,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
               return null;
             }
           })
-      .when(listener)
-      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+        .when(listener)
+        .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Override
@@ -555,6 +555,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   }
 
   private class TransportStateImpl extends NettyClientStream.TransportState {
+    @SuppressWarnings("DirectInvocationOnMock")
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
       super(
           handler,
@@ -562,7 +563,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
           maxMessageSize,
           StatsTraceContext.NOOP,
           transportTracer,
-          "methodName");
+          "methodName",
+          CallOptions.DEFAULT);
     }
 
     @Override

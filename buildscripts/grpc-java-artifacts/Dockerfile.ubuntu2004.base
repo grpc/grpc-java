@@ -1,0 +1,13 @@
+FROM ubuntu:20.04
+
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        g++-s390x-linux-gnu \
+        openjdk-8-jdk \
+        && \
+    rm -rf /var/lib/apt/lists/*

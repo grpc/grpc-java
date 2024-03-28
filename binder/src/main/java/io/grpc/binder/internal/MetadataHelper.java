@@ -148,6 +148,9 @@ public final class MetadataHelper {
         }
         int parcelableStartPos = parcel.dataPosition();
         try {
+          // readParcelable(Classloader, Class<>) requires SDK 33 and at this layer we can't know
+          // value's type anyway.
+          @SuppressWarnings("deprecation")
           Parcelable value = parcel.readParcelable(MetadataHelper.class.getClassLoader());
           if (value == null) {
             throw Status.INTERNAL.withDescription("Read null parcelable in metadata").asException();

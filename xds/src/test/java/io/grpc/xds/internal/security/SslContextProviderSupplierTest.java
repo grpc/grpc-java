@@ -30,30 +30,27 @@ import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.Executor;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link SslContextProviderSupplier}.
  */
 @RunWith(JUnit4.class)
 public class SslContextProviderSupplierTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private TlsContextManager mockTlsContextManager;
   private SslContextProviderSupplier supplier;
   private SslContextProvider mockSslContextProvider;
   private EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext;
   private SslContextProvider.Callback mockCallback;
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   private void prepareSupplier() {
     upstreamTlsContext =
@@ -80,13 +77,14 @@ public class SslContextProviderSupplierTest {
         .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
     verify(mockTlsContextManager, times(0))
         .releaseClientSslContextProvider(any(SslContextProvider.class));
-    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+        ArgumentCaptor.forClass(SslContextProvider.Callback.class);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     SslContext mockSslContext = mock(SslContext.class);
-    capturedCallback.updateSecret(mockSslContext);
-    verify(mockCallback, times(1)).updateSecret(eq(mockSslContext));
+    capturedCallback.updateSslContext(mockSslContext);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
     verify(mockTlsContextManager, times(1))
         .releaseClientSslContextProvider(eq(mockSslContextProvider));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
@@ -99,7 +97,8 @@ public class SslContextProviderSupplierTest {
   public void get_onException() {
     prepareSupplier();
     callUpdateSslContext();
-    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+        ArgumentCaptor.forClass(SslContextProvider.Callback.class);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();

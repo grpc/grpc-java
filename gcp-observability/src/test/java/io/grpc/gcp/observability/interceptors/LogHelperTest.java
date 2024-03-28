@@ -26,26 +26,28 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.collect.Iterables;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
-import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.Durations;
+import com.google.rpc.Code;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
-import io.grpc.gcp.observability.interceptors.LogHelper.PayloadBuilder;
+import io.grpc.gcp.observability.interceptors.LogHelper.PayloadBuilderHelper;
 import io.grpc.gcp.observability.logging.GcpLogSink;
 import io.grpc.gcp.observability.logging.Sink;
-import io.grpc.internal.TimeProvider;
+import io.grpc.observabilitylog.v1.Address;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.Address;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.LogLevel;
-import io.grpc.observabilitylog.v1.GrpcLogRecord.MetadataEntry;
+import io.grpc.observabilitylog.v1.Payload;
+import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.SpanId;
+import io.opencensus.trace.TraceId;
+import io.opencensus.trace.TraceOptions;
+import io.opencensus.trace.Tracestate;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -55,8 +57,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -65,6 +66,7 @@ import org.junit.runners.JUnit4;
 /**
  * Tests for {@link LogHelper}.
  */
+@SuppressWarnings("AddressSelection") // It will only be one address
 @RunWith(JUnit4.class)
 public class LogHelperTest {
   public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
@@ -77,33 +79,23 @@ public class LogHelperTest {
       Metadata.Key.of("b", Metadata.ASCII_STRING_MARSHALLER);
   private static final Metadata.Key<String> KEY_C =
       Metadata.Key.of("c", Metadata.ASCII_STRING_MARSHALLER);
-  private static final MetadataEntry ENTRY_A =
-      MetadataEntry
-          .newBuilder()
-          .setKey(KEY_A.name())
-          .setValue(ByteString.copyFrom(DATA_A.getBytes(StandardCharsets.US_ASCII)))
-          .build();
-  private static final MetadataEntry ENTRY_B =
-      MetadataEntry
-          .newBuilder()
-          .setKey(KEY_B.name())
-          .setValue(ByteString.copyFrom(DATA_B.getBytes(StandardCharsets.US_ASCII)))
-          .build();
-  private static final MetadataEntry ENTRY_C =
-      MetadataEntry
-          .newBuilder()
-          .setKey(KEY_C.name())
-          .setValue(ByteString.copyFrom(DATA_C.getBytes(StandardCharsets.US_ASCII)))
-          .build();
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
+  private static final SpanContext CLIENT_SPAN_CONTEXT = SpanContext.create(
+      TraceId.fromLowerBase16("4c6af40c499951eb7de2777ba1e4fefa"),
+      SpanId.fromLowerBase16("de52e84d13dd232d"),
+      TraceOptions.builder().setIsSampled(true).build(),
+      Tracestate.builder().build());
+  private static final SpanContext SERVER_SPAN_CONTEXT = SpanContext.create(
+      TraceId.fromLowerBase16("549a8a64db2d0c757fdf6bb1bfe84e2c"),
+      SpanId.fromLowerBase16("a5b7704614fe903d"),
+      TraceOptions.builder().setIsSampled(true).build(),
+      Tracestate.builder().build());
 
   private final Metadata nonEmptyMetadata = new Metadata();
   private final Sink sink = mock(GcpLogSink.class);
-  private final Timestamp timestamp
-      = Timestamp.newBuilder().setSeconds(9876).setNanos(54321).build();
-  private final TimeProvider timeProvider = () -> TimeUnit.SECONDS.toNanos(9876) + 54321;
-  private final LogHelper logHelper = new LogHelper(sink, timeProvider);
+  private final LogHelper logHelper = new LogHelper(sink);
+
 
   @Before
   public void setUp() {
@@ -120,7 +112,7 @@ public class LogHelperTest {
     assertThat(LogHelper.socketAddressToProto(socketAddress))
         .isEqualTo(Address
             .newBuilder()
-            .setType(Address.Type.TYPE_IPV4)
+            .setType(Address.Type.IPV4)
             .setAddress("127.0.0.1")
             .setIpPort(12345)
             .build());
@@ -135,7 +127,7 @@ public class LogHelperTest {
     assertThat(LogHelper.socketAddressToProto(socketAddress))
         .isEqualTo(Address
             .newBuilder()
-            .setType(Address.Type.TYPE_IPV6)
+            .setType(Address.Type.IPV6)
             .setAddress("2001:db8::2:1") // RFC 5952 section 4: ipv6 canonical form required
             .setIpPort(12345)
             .build());
@@ -159,29 +151,26 @@ public class LogHelperTest {
   @Test
   public void metadataToProto_empty() {
     assertThat(metadataToProtoTestHelper(
-            EventType.GRPC_CALL_REQUEST_HEADER, new Metadata(), Integer.MAX_VALUE))
+            EventType.CLIENT_HEADER, new Metadata(), Integer.MAX_VALUE))
         .isEqualTo(GrpcLogRecord.newBuilder()
-            .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
-            .setMetadata(
-                GrpcLogRecord.Metadata.getDefaultInstance())
+            .setType(EventType.CLIENT_HEADER)
+            .setPayload(
+                Payload.newBuilder().putAllMetadata(new HashMap<>()))
             .build());
   }
 
   @Test
   public void metadataToProto() {
-    int nonEmptyMetadataSize = 30;
+    Payload.Builder payloadBuilder = Payload.newBuilder()
+        .putMetadata("a", DATA_A)
+            .putMetadata("b", DATA_B)
+                .putMetadata("c", DATA_C);
+
     assertThat(metadataToProtoTestHelper(
-            EventType.GRPC_CALL_REQUEST_HEADER, nonEmptyMetadata, Integer.MAX_VALUE))
+            EventType.CLIENT_HEADER, nonEmptyMetadata, Integer.MAX_VALUE))
         .isEqualTo(GrpcLogRecord.newBuilder()
-            .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
-            .setMetadata(
-                GrpcLogRecord.Metadata
-                    .newBuilder()
-                    .addEntry(ENTRY_A)
-                    .addEntry(ENTRY_B)
-                    .addEntry(ENTRY_C)
-                    .build())
-            .setPayloadSize(nonEmptyMetadataSize)
+            .setType(EventType.CLIENT_HEADER)
+            .setPayload(payloadBuilder)
             .build());
   }
 
@@ -193,44 +182,45 @@ public class LogHelperTest {
   @Test
   public void metadataToProto_truncated() {
     // 0 byte limit not enough for any metadata
-    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 0).payload.build())
-        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.getDefaultInstance());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 0).payloadBuilder.build())
+        .isEqualTo(
+            io.grpc.observabilitylog.v1.Payload.newBuilder()
+                .putAllMetadata(new HashMap<>())
+                .build());
     // not enough bytes for first key value
-    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 9).payload.build())
-        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.getDefaultInstance());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 9).payloadBuilder.build())
+        .isEqualTo(
+            io.grpc.observabilitylog.v1.Payload.newBuilder()
+                .putAllMetadata(new HashMap<>())
+                .build());
     // enough for first key value
-    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 10).payload.build())
-        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
-            .newBuilder()
-            .addEntry(ENTRY_A)
-            .build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 10).payloadBuilder.build())
+        .isEqualTo(
+            io.grpc.observabilitylog.v1.Payload.newBuilder().putMetadata("a", DATA_A).build());
     // Test edge cases for >= 2 key values
-    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 19).payload.build())
-        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
-            .newBuilder()
-            .addEntry(ENTRY_A)
-            .build());
-    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 20).payload.build())
-        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
-            .newBuilder()
-            .addEntry(ENTRY_A)
-            .addEntry(ENTRY_B)
-            .build());
-    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 29).payload.build())
-        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
-            .newBuilder()
-            .addEntry(ENTRY_A)
-            .addEntry(ENTRY_B)
-            .build());
-
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 19).payloadBuilder.build())
+        .isEqualTo(
+            io.grpc.observabilitylog.v1.Payload.newBuilder().putMetadata("a", DATA_A).build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 20).payloadBuilder.build())
+        .isEqualTo(
+            io.grpc.observabilitylog.v1.Payload.newBuilder()
+                .putMetadata("a", DATA_A)
+                .putMetadata("b", DATA_B)
+                .build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 29).payloadBuilder.build())
+        .isEqualTo(
+            io.grpc.observabilitylog.v1.Payload.newBuilder()
+                .putMetadata("a", DATA_A)
+                .putMetadata("b", DATA_B)
+                .build());
     // not truncated: enough for all keys
-    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 30).payload.build())
-        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
-            .newBuilder()
-            .addEntry(ENTRY_A)
-            .addEntry(ENTRY_B)
-            .addEntry(ENTRY_C)
-            .build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 30).payloadBuilder.build())
+        .isEqualTo(
+            io.grpc.observabilitylog.v1.Payload.newBuilder()
+                .putMetadata("a", DATA_A)
+                .putMetadata("b", DATA_B)
+                .putMetadata("c", DATA_C)
+                .build());
   }
 
   @Test
@@ -240,8 +230,11 @@ public class LogHelperTest {
         StandardCharsets.US_ASCII);
     assertThat(messageTestHelper(bytes, Integer.MAX_VALUE))
         .isEqualTo(GrpcLogRecord.newBuilder()
-            .setMessage(ByteString.copyFrom(bytes))
-            .setPayloadSize(bytes.length)
+            .setPayload(
+                Payload.newBuilder()
+                    .setMessage(
+                        ByteString.copyFrom(bytes))
+                    .setMessageLength(bytes.length))
             .build());
   }
 
@@ -252,18 +245,25 @@ public class LogHelperTest {
         StandardCharsets.US_ASCII);
     assertThat(messageTestHelper(bytes, 0))
         .isEqualTo(GrpcLogRecord.newBuilder()
-            .setPayloadSize(bytes.length)
+            .setPayload(
+                Payload.newBuilder()
+                    .setMessageLength(bytes.length))
             .setPayloadTruncated(true)
             .build());
 
     int limit = 10;
     String truncatedMessage = "this is a ";
     assertThat(messageTestHelper(bytes, limit))
-        .isEqualTo(GrpcLogRecord.newBuilder()
-            .setMessage(ByteString.copyFrom(truncatedMessage.getBytes(StandardCharsets.US_ASCII)))
-            .setPayloadSize(bytes.length)
-            .setPayloadTruncated(true)
-            .build());
+        .isEqualTo(
+            GrpcLogRecord.newBuilder()
+                .setPayload(
+                    Payload.newBuilder()
+                        .setMessage(
+                            ByteString.copyFrom(
+                                truncatedMessage.getBytes(StandardCharsets.US_ASCII)))
+                        .setMessageLength(bytes.length))
+                .setPayloadTruncated(true)
+                .build());
   }
 
 
@@ -274,30 +274,28 @@ public class LogHelperTest {
     String methodName = "method";
     String authority = "authority";
     Duration timeout = Durations.fromMillis(1234);
-    String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
+    String callId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress peerAddress = new InetSocketAddress(address, port);
 
     GrpcLogRecord.Builder builder =
-        metadataToProtoTestHelper(EventType.GRPC_CALL_REQUEST_HEADER, nonEmptyMetadata,
+        metadataToProtoTestHelper(EventType.CLIENT_HEADER, nonEmptyMetadata,
             HEADER_LIMIT)
             .toBuilder()
-            .setTimestamp(timestamp)
             .setSequenceId(seqId)
             .setServiceName(serviceName)
             .setMethodName(methodName)
-            .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
-            .setEventLogger(EventLogger.LOGGER_CLIENT)
-            .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-            .setRpcId(rpcId);
-    builder.setAuthority(authority)
-        .setTimeout(timeout);
+            .setType(EventType.CLIENT_HEADER)
+            .setLogger(EventLogger.CLIENT)
+            .setCallId(callId);
+    builder.setAuthority(authority);
+    builder.setPayload(builder.getPayload().toBuilder().setTimeout(timeout).build());
     GrpcLogRecord base = builder.build();
 
     // logged on client
     {
-      logHelper.logRequestHeader(
+      logHelper.logClientHeader(
           seqId,
           serviceName,
           methodName,
@@ -305,15 +303,16 @@ public class LogHelperTest {
           timeout,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          null);
-      verify(sink).write(base);
+          EventLogger.CLIENT,
+          callId,
+          null,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
 
     // logged on server
     {
-      logHelper.logRequestHeader(
+      logHelper.logClientHeader(
           seqId,
           serviceName,
           methodName,
@@ -321,19 +320,21 @@ public class LogHelperTest {
           timeout,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_SERVER,
-          rpcId,
-          peerAddress);
+          EventLogger.SERVER,
+          callId,
+          peerAddress,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .setPeerAddress(LogHelper.socketAddressToProto(peerAddress))
-              .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build());
+              .setPeer(LogHelper.socketAddressToProto(peerAddress))
+              .setLogger(EventLogger.SERVER)
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
 
     // timeout is null
     {
-      logHelper.logRequestHeader(
+      logHelper.logClientHeader(
           seqId,
           serviceName,
           methodName,
@@ -341,18 +342,20 @@ public class LogHelperTest {
           null,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          null);
+          EventLogger.CLIENT,
+          callId,
+          null,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .clearTimeout()
-              .build());
+              .setPayload(base.getPayload().toBuilder().clearTimeout().build())
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
 
     // peerAddress is not null (error on client)
     try {
-      logHelper.logRequestHeader(
+      logHelper.logClientHeader(
           seqId,
           serviceName,
           methodName,
@@ -360,9 +363,10 @@ public class LogHelperTest {
           timeout,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          peerAddress);
+          EventLogger.CLIENT,
+          callId,
+          peerAddress,
+          CLIENT_SPAN_CONTEXT);
       fail();
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("peerAddress can only be specified by server");
@@ -374,69 +378,76 @@ public class LogHelperTest {
     long seqId = 1;
     String serviceName = "service";
     String methodName = "method";
-    String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
+    String authority = "authority";
+    String callId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress peerAddress = new InetSocketAddress(address, port);
 
     GrpcLogRecord.Builder builder =
-        metadataToProtoTestHelper(EventType.GRPC_CALL_RESPONSE_HEADER, nonEmptyMetadata,
+        metadataToProtoTestHelper(EventType.SERVER_HEADER, nonEmptyMetadata,
             HEADER_LIMIT)
             .toBuilder()
-            .setTimestamp(timestamp)
             .setSequenceId(seqId)
             .setServiceName(serviceName)
             .setMethodName(methodName)
-            .setEventType(EventType.GRPC_CALL_RESPONSE_HEADER)
-            .setEventLogger(EventLogger.LOGGER_CLIENT)
-            .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-            .setRpcId(rpcId);
-    builder.setPeerAddress(LogHelper.socketAddressToProto(peerAddress));
+            .setAuthority(authority)
+            .setType(EventType.SERVER_HEADER)
+            .setLogger(EventLogger.CLIENT)
+            .setCallId(callId);
+    builder.setPeer(LogHelper.socketAddressToProto(peerAddress));
     GrpcLogRecord base = builder.build();
 
     // logged on client
     {
-      logHelper.logResponseHeader(
+      logHelper.logServerHeader(
           seqId,
           serviceName,
           methodName,
+          authority,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          peerAddress);
-      verify(sink).write(base);
+          EventLogger.CLIENT,
+          callId,
+          peerAddress,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
 
     // logged on server
     {
-      logHelper.logResponseHeader(
+      logHelper.logServerHeader(
           seqId,
           serviceName,
           methodName,
+          authority,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_SERVER,
-          rpcId,
-          null);
+          EventLogger.SERVER,
+          callId,
+          null,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .setEventLogger(EventLogger.LOGGER_SERVER)
-              .clearPeerAddress()
-              .build());
+              .setLogger(EventLogger.SERVER)
+              .clearPeer()
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
 
     // peerAddress is not null (error on server)
     try {
-      logHelper.logResponseHeader(
+      logHelper.logServerHeader(
           seqId,
           serviceName,
           methodName,
+          authority,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_SERVER,
-          rpcId,
-          peerAddress);
+          EventLogger.SERVER,
+          callId,
+          peerAddress,
+          SERVER_SPAN_CONTEXT);
 
       fail();
     } catch (IllegalArgumentException expected) {
@@ -450,27 +461,30 @@ public class LogHelperTest {
     long seqId = 1;
     String serviceName = "service";
     String methodName = "method";
-    String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
+    String authority = "authority";
+    String callId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
-    InetSocketAddress peerAddress = new InetSocketAddress(address, port);
+    InetSocketAddress peer = new InetSocketAddress(address, port);
     Status statusDescription = Status.INTERNAL.withDescription("test description");
 
     GrpcLogRecord.Builder builder =
-        metadataToProtoTestHelper(EventType.GRPC_CALL_RESPONSE_HEADER, nonEmptyMetadata,
+        metadataToProtoTestHelper(EventType.SERVER_HEADER, nonEmptyMetadata,
             HEADER_LIMIT)
             .toBuilder()
-            .setTimestamp(timestamp)
             .setSequenceId(seqId)
             .setServiceName(serviceName)
             .setMethodName(methodName)
-            .setEventType(EventType.GRPC_CALL_TRAILER)
-            .setEventLogger(EventLogger.LOGGER_CLIENT)
-            .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-            .setStatusCode(Status.INTERNAL.getCode().value())
+            .setAuthority(authority)
+            .setType(EventType.SERVER_TRAILER)
+            .setLogger(EventLogger.CLIENT)
+            .setCallId(callId);
+    builder.setPeer(LogHelper.socketAddressToProto(peer));
+    builder.setPayload(
+        builder.getPayload().toBuilder()
+            .setStatusCode(Code.forNumber(Status.INTERNAL.getCode().value()))
             .setStatusMessage("test description")
-            .setRpcId(rpcId);
-    builder.setPeerAddress(LogHelper.socketAddressToProto(peerAddress));
+            .build());
     GrpcLogRecord base = builder.build();
 
     // logged on client
@@ -479,13 +493,15 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
+          authority,
           statusDescription,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          peerAddress);
-      verify(sink).write(base);
+          EventLogger.CLIENT,
+          callId,
+          peer,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
 
     // logged on server
@@ -494,17 +510,20 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
+          authority,
           statusDescription,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_SERVER,
-          rpcId,
-          null);
+          EventLogger.SERVER,
+          callId,
+          null,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .clearPeerAddress()
-              .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build());
+              .clearPeer()
+              .setLogger(EventLogger.SERVER)
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
 
     // peer address is null
@@ -513,16 +532,19 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
+          authority,
           statusDescription,
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          null);
+          EventLogger.CLIENT,
+          callId,
+          null,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .clearPeerAddress()
-              .build());
+              .clearPeer()
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
 
     // status description is null
@@ -531,16 +553,19 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
+          authority,
           statusDescription.getCode().toStatus(),
           nonEmptyMetadata,
           HEADER_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          peerAddress);
+          EventLogger.CLIENT,
+          callId,
+          peer,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .clearStatusMessage()
-              .build());
+              .setPayload(base.getPayload().toBuilder().clearStatusMessage().build())
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
   }
 
@@ -551,10 +576,9 @@ public class LogHelperTest {
     Metadata metadata = new Metadata();
     metadata.put(key, new byte[1]);
     int zeroHeaderBytes = 0;
-    PayloadBuilder<io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.Builder> pair =
+    PayloadBuilderHelper<Payload.Builder> pair =
         LogHelper.createMetadataProto(metadata, zeroHeaderBytes);
-    assertThat(Objects.requireNonNull(Iterables.getOnlyElement(pair.payload.getEntryBuilderList()))
-            .getKey()).isEqualTo(key.name());
+    assertThat(pair.payloadBuilder.build().getMetadataMap().containsKey(key.name())).isTrue();
     assertFalse(pair.truncated);
   }
 
@@ -565,9 +589,9 @@ public class LogHelperTest {
     Metadata metadata = new Metadata();
     metadata.put(key, new byte[1]);
     int unlimitedHeaderBytes = Integer.MAX_VALUE;
-    PayloadBuilder<io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.Builder> pair
+    PayloadBuilderHelper<Payload.Builder> pair
         = LogHelper.createMetadataProto(metadata, unlimitedHeaderBytes);
-    assertThat(pair.payload.getEntryBuilderList()).isEmpty();
+    assertThat(pair.payloadBuilder.getMetadataMap()).isEmpty();
     assertFalse(pair.truncated);
   }
 
@@ -576,19 +600,19 @@ public class LogHelperTest {
     long seqId = 1;
     String serviceName = "service";
     String methodName = "method";
-    String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
+    String authority = "authority";
+    String callId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
     byte[] message = new byte[100];
 
     GrpcLogRecord.Builder builder = messageTestHelper(message, MESSAGE_LIMIT)
         .toBuilder()
-        .setTimestamp(timestamp)
         .setSequenceId(seqId)
         .setServiceName(serviceName)
         .setMethodName(methodName)
-        .setEventType(EventType.GRPC_CALL_REQUEST_MESSAGE)
-        .setEventLogger(EventLogger.LOGGER_CLIENT)
-        .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-        .setRpcId(rpcId);
+        .setAuthority(authority)
+        .setType(EventType.CLIENT_MESSAGE)
+        .setLogger(EventLogger.CLIENT)
+        .setCallId(callId);
     GrpcLogRecord base = builder.build();
     // request message
     {
@@ -596,12 +620,14 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
-          EventType.GRPC_CALL_REQUEST_MESSAGE,
+          authority,
+          EventType.CLIENT_MESSAGE,
           message,
           MESSAGE_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId);
-      verify(sink).write(base);
+          EventLogger.CLIENT,
+          callId,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(base, CLIENT_SPAN_CONTEXT);
     }
     // response message, logged on client
     {
@@ -609,15 +635,18 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
-          EventType.GRPC_CALL_RESPONSE_MESSAGE,
+          authority,
+          EventType.SERVER_MESSAGE,
           message,
           MESSAGE_LIMIT,
-          EventLogger.LOGGER_CLIENT,
-          rpcId);
+          EventLogger.CLIENT,
+          callId,
+          CLIENT_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .setEventType(EventType.GRPC_CALL_RESPONSE_MESSAGE)
-              .build());
+              .setType(EventType.SERVER_MESSAGE)
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
     // request message, logged on server
     {
@@ -625,15 +654,18 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
-          EventType.GRPC_CALL_REQUEST_MESSAGE,
+          authority,
+          EventType.CLIENT_MESSAGE,
           message,
           MESSAGE_LIMIT,
-          EventLogger.LOGGER_SERVER,
-          rpcId);
+          EventLogger.SERVER,
+          callId,
+          SERVER_SPAN_CONTEXT);
       verify(sink).write(
           base.toBuilder()
-              .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build());
+              .setLogger(EventLogger.SERVER)
+              .build(),
+          SERVER_SPAN_CONTEXT);
     }
     // response message, logged on server
     {
@@ -641,16 +673,39 @@ public class LogHelperTest {
           seqId,
           serviceName,
           methodName,
-          EventType.GRPC_CALL_RESPONSE_MESSAGE,
+          authority,
+          EventType.SERVER_MESSAGE,
           message,
           MESSAGE_LIMIT,
-          EventLogger.LOGGER_SERVER,
-          rpcId);
+          EventLogger.SERVER,
+          callId,
+          SpanContext.INVALID);
       verify(sink).write(
           base.toBuilder()
-              .setEventType(EventType.GRPC_CALL_RESPONSE_MESSAGE)
-              .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build());
+              .setType(EventType.SERVER_MESSAGE)
+              .setLogger(EventLogger.SERVER)
+              .build(),
+          SpanContext.INVALID);
+    }
+    // message is not of type : com.google.protobuf.Message or byte[]
+    {
+      logHelper.logRpcMessage(
+          seqId,
+          serviceName,
+          methodName,
+          authority,
+          EventType.CLIENT_MESSAGE,
+          "message",
+          MESSAGE_LIMIT,
+          EventLogger.CLIENT,
+          callId,
+          CLIENT_SPAN_CONTEXT);
+      verify(sink).write(
+          base.toBuilder()
+              .clearPayload()
+              .clearPayloadTruncated()
+              .build(),
+          CLIENT_SPAN_CONTEXT);
     }
   }
 
@@ -667,21 +722,19 @@ public class LogHelperTest {
   private static GrpcLogRecord metadataToProtoTestHelper(
       EventType type, Metadata metadata, int maxHeaderBytes) {
     GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder();
-    PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair
+    PayloadBuilderHelper<Payload.Builder> pair
         = LogHelper.createMetadataProto(metadata, maxHeaderBytes);
-    builder.setMetadata(pair.payload);
-    builder.setPayloadSize(pair.size);
+    builder.setPayload(pair.payloadBuilder);
     builder.setPayloadTruncated(pair.truncated);
-    builder.setEventType(type);
+    builder.setType(type);
     return builder.build();
   }
 
   private static GrpcLogRecord messageTestHelper(byte[] message, int maxMessageBytes) {
     GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder();
-    PayloadBuilder<ByteString> pair
+    PayloadBuilderHelper<Payload.Builder> pair
         = LogHelper.createMessageProto(message, maxMessageBytes);
-    builder.setMessage(pair.payload);
-    builder.setPayloadSize(pair.size);
+    builder.setPayload(pair.payloadBuilder);
     builder.setPayloadTruncated(pair.truncated);
     return builder.build();
   }

@@ -25,10 +25,11 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -60,7 +61,8 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
-    throw new UnsupportedOperationException("not supported as top-level LB policy");
+    return ConfigOrError.fromError(
+        Status.INTERNAL.withDescription(getPolicyName() + " cannot be used from service config"));
   }
 
   @Override

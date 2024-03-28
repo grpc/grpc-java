@@ -6,7 +6,7 @@
 set -ex
 
 # show pre-existing qemu registration
-cat /proc/sys/fs/binfmt_misc/qemu-aarch64
+cat /proc/sys/fs/binfmt_misc/qemu-aarch64 || true
 
 # Kokoro ubuntu1604 workers have already qemu-user and qemu-user-static packages installed, but it's and old version that:
 # * prints warning about some syscalls (e.g "qemu: Unsupported syscall: 278")

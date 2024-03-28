@@ -25,11 +25,12 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Uninterruptibles;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.GreeterGrpc.GreeterBlockingStub;
@@ -44,7 +45,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * Shows how to extract error information from a server response.
+ * Shows how to extract error information from a failed RPC.
  */
 public class ErrorHandlingClient {
   public static void main(String [] args) throws Exception {
@@ -55,15 +56,18 @@ public class ErrorHandlingClient {
 
   void run() throws Exception {
     // Port 0 means that the operating system will pick an available port to use.
-    Server server = ServerBuilder.forPort(0).addService(new GreeterGrpc.GreeterImplBase() {
+    Server server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+        .addService(new GreeterGrpc.GreeterImplBase() {
       @Override
       public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
+        // The server will always fail, and we'll see this failure on client-side. The exception is
+        // not sent to the client, only the status code (i.e., INTERNAL) and description.
         responseObserver.onError(Status.INTERNAL
             .withDescription("Eggplant Xerxes Crybaby Overbite Narwhal").asRuntimeException());
       }
     }).build().start();
-    channel =
-        ManagedChannelBuilder.forAddress("localhost", server.getPort()).usePlaintext().build();
+    channel = Grpc.newChannelBuilderForAddress(
+        "localhost", server.getPort(), InsecureChannelCredentials.create()).build();
 
     blockingCall();
     futureCallDirect();

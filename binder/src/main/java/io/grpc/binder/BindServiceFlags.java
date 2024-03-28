@@ -18,6 +18,7 @@ package io.grpc.binder;
 
 import static android.content.Context.BIND_ABOVE_CLIENT;
 import static android.content.Context.BIND_ADJUST_WITH_ACTIVITY;
+import static android.content.Context.BIND_ALLOW_ACTIVITY_STARTS;
 import static android.content.Context.BIND_ALLOW_OOM_MANAGEMENT;
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.content.Context.BIND_IMPORTANT;
@@ -27,6 +28,7 @@ import static android.content.Context.BIND_NOT_PERCEPTIBLE;
 import static android.content.Context.BIND_WAIVE_PRIORITY;
 import static java.lang.Integer.toHexString;
 
+import android.os.Build;
 import androidx.annotation.RequiresApi;
 
 /**
@@ -99,6 +101,18 @@ public final class BindServiceFlags {
      */
     public Builder setAdjustWithActivity(boolean newValue) {
       return setFlag(BIND_ADJUST_WITH_ACTIVITY, newValue);
+    }
+
+    /**
+     * Sets or clears the {@code android.content.Context#BIND_ALLOW_ACTIVITY_STARTS} flag.
+     *
+     * <p>This flag has no additional meaning at the gRPC layer. See the Android docs for more.
+     *
+     * @return this, for fluent construction
+     */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    public Builder setAllowActivityStarts(boolean newValue) {
+      return setFlag(BIND_ALLOW_ACTIVITY_STARTS, newValue);
     }
 
     /**

@@ -20,7 +20,7 @@ import com.google.common.base.MoreObjects;
 
 /**
  * A {@link ServerCall} which forwards all of it's methods to another {@link ServerCall} which
- * may have a different onMessage() message type.
+ * may have a different sendMessage() message type.
  */
 abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   /**
@@ -54,9 +54,14 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
   }
 
   @Override
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1703")
   public void setMessageCompression(boolean enabled) {
     delegate().setMessageCompression(enabled);
+  }
+
+  @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public void setOnReadyThreshold(int numBytes) {
+    delegate().setOnReadyThreshold(numBytes);
   }
 
   @Override
@@ -74,6 +79,12 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
   @Override
   public String getAuthority() {
     return delegate().getAuthority();
+  }
+  
+  @Override
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4692")
+  public SecurityLevel getSecurityLevel() {
+    return delegate().getSecurityLevel();
   }
 
   @Override

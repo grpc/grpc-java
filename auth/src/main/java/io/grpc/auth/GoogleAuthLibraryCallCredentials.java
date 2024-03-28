@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
+import com.google.auth.Retryable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
 import io.grpc.InternalMayRequireSpecificExecutor;
@@ -28,7 +29,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StatusException;
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -63,7 +63,7 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   private Metadata lastHeaders;
   private Map<String, List<String>> lastMetadata;
 
-  private Boolean requiresSpecificExecutor;
+  private final boolean requiresSpecificExecutor;
 
   public GoogleAuthLibraryCallCredentials(Credentials creds) {
     this(creds, jwtHelper);
@@ -85,10 +85,14 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
     }
     this.requirePrivacy = requirePrivacy;
     this.creds = creds;
-  }
 
-  @Override
-  public void thisUsesUnstableApi() {}
+    // Cache the value so we only need to try to load the class once
+    if (APP_ENGINE_CREDENTIALS_CLASS == null) {
+      requiresSpecificExecutor = false;
+    } else {
+      requiresSpecificExecutor = APP_ENGINE_CREDENTIALS_CLASS.isInstance(creds);
+    }
+  }
 
   @Override
   public void applyRequestMetadata(
@@ -139,8 +143,8 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
 
       @Override
       public void onFailure(Throwable e) {
-        if (e instanceof IOException) {
-          // Since it's an I/O failure, let the call be retried with UNAVAILABLE.
+        if (e instanceof Retryable && ((Retryable) e).isRetryable()) {
+          // Let the call be retried with UNAVAILABLE.
           applier.fail(Status.UNAVAILABLE
               .withDescription("Credentials failed to obtain metadata")
               .withCause(e));
@@ -377,15 +381,6 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
    */
   @Override
   public boolean isSpecificExecutorRequired() {
-    // Cache the value so we only need to try to load the class once
-    if (requiresSpecificExecutor == null) {
-      if (APP_ENGINE_CREDENTIALS_CLASS == null) {
-        requiresSpecificExecutor = Boolean.FALSE;
-      } else {
-        requiresSpecificExecutor = APP_ENGINE_CREDENTIALS_CLASS.isInstance(creds);
-      }
-    }
-
     return requiresSpecificExecutor;
   }
 

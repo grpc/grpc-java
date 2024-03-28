@@ -65,5 +65,8 @@ java_library(
     exported_plugins = [":auto_value"],
     neverlink = 1,
     visibility = ["//:__subpackages__"],
-    exports = [artifact("com.google.auto.value:auto-value-annotations")],
+    exports = [
+        artifact("com.google.auto.value:auto-value-annotations"),
+        artifact("org.apache.tomcat:annotations-api"),  # @Generated for Java 9+
+    ],
 )

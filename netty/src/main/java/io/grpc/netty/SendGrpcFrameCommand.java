@@ -55,37 +55,8 @@ final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQu
   }
 
   @Override
-  public ByteBufHolder copy() {
-    return new SendGrpcFrameCommand(stream, content().copy(), endStream);
-  }
-
-  @Override
-  public ByteBufHolder duplicate() {
-    return new SendGrpcFrameCommand(stream, content().duplicate(), endStream);
-  }
-
-  @Override
-  public SendGrpcFrameCommand retain() {
-    super.retain();
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand retain(int increment) {
-    super.retain(increment);
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand touch() {
-    super.touch();
-    return this;
-  }
-
-  @Override
-  public SendGrpcFrameCommand touch(Object hint) {
-    super.touch(hint);
-    return this;
+  public ByteBufHolder replace(ByteBuf content) {
+    return new SendGrpcFrameCommand(stream, content, endStream);
   }
 
   @Override

@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.CharStreams;
@@ -33,6 +34,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.HttpURLConnection;
@@ -42,11 +44,15 @@ import java.net.URL;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * CloudToProd version of {@link NameResolver}.
  */
 final class GoogleCloudToProdNameResolver extends NameResolver {
+  private static final Logger logger =
+      Logger.getLogger(GoogleCloudToProdNameResolver.class.getName());
 
   @VisibleForTesting
   static final String METADATA_URL_ZONE =
@@ -54,6 +60,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   @VisibleForTesting
   static final String METADATA_URL_SUPPORT_IPV6 =
       "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ipv6s";
+  static final String C2P_AUTHORITY = "traffic-director-c2p.xds.googleapis.com";
   @VisibleForTesting
   static boolean isOnGcp = InternalCheckGcpEnvironment.isOnGcp();
   @VisibleForTesting
@@ -62,6 +69,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           || System.getProperty("io.grpc.xds.bootstrap") != null
           || System.getenv("GRPC_XDS_BOOTSTRAP_CONFIG") != null
           || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
+  @VisibleForTesting
+  static boolean enableFederation =
+      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
+          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
 
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
@@ -76,7 +87,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final boolean usingExecutorResource;
   // It's not possible to use both PSM and DirectPath C2P in the same application.
   // Delegate to DNS if user-provided bootstrap is found.
-  private final String schemeOverride = !isOnGcp || xdsBootstrapProvided ? "dns" : "xds";
+  private final String schemeOverride =
+      !isOnGcp
+      || (xdsBootstrapProvided && !enableFederation)
+      ? "dns" : "xds";
   private Executor executor;
   private Listener2 listener;
   private boolean succeeded;
@@ -103,8 +117,12 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         targetUri);
     authority = GrpcUtil.checkAuthority(targetPath.substring(1));
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
+    targetUri = overrideUriScheme(targetUri, schemeOverride);
+    if (schemeOverride.equals("xds") && enableFederation) {
+      targetUri = overrideUriAuthority(targetUri, C2P_AUTHORITY);
+    }
     delegate = checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(
-        overrideUriScheme(targetUri, schemeOverride), args);
+        targetUri, args);
     executor = args.getOffloadExecutor();
     usingExecutorResource = executor == null;
   }
@@ -129,13 +147,20 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (resolving || shutdown || delegate == null) {
       return;
     }
+
     resolving = true;
+    if (logger.isLoggable(Level.FINE)) {
+      logger.fine("resolve with schemaOverride = " + schemeOverride);
+    }
+
     if (schemeOverride.equals("dns")) {
       delegate.start(listener);
       succeeded = true;
       resolving = false;
       return;
     }
+
+    // Since not dns, we must be using xds
     if (executor == null) {
       executor = SharedResourceHolder.get(executorResource);
     }
@@ -143,22 +168,28 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     class Resolve implements Runnable {
       @Override
       public void run() {
-        String zone;
-        boolean supportIpv6;
         ImmutableMap<String, ?> rawBootstrap = null;
         try {
-          zone = queryZoneMetadata(METADATA_URL_ZONE);
-          supportIpv6 = queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6);
-          rawBootstrap = generateBootstrap(zone, supportIpv6);
+          // User provided bootstrap configs are only supported with federation. If federation is
+          // not enabled or there is no user provided config, we set a custom bootstrap override.
+          // Otherwise, we don't set the override, which will allow a user provided bootstrap config
+          // to take effect.
+          if (!enableFederation || !xdsBootstrapProvided) {
+            rawBootstrap = generateBootstrap(queryZoneMetadata(METADATA_URL_ZONE),
+                queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6));
+          }
         } catch (IOException e) {
-          listener.onError(Status.INTERNAL.withDescription("Unable to get metadata").withCause(e));
+          listener.onError(
+              Status.INTERNAL.withDescription("Unable to get metadata").withCause(e));
         } finally {
           final ImmutableMap<String, ?> finalRawBootstrap = rawBootstrap;
           syncContext.execute(new Runnable() {
             @Override
             public void run() {
-              if (!shutdown && finalRawBootstrap != null) {
-                bootstrapSetter.setBootstrap(finalRawBootstrap);
+              if (!shutdown) {
+                if (finalRawBootstrap != null) {
+                  bootstrapSetter.setBootstrap(finalRawBootstrap);
+                }
                 delegate.start(listener);
                 succeeded = true;
               }
@@ -190,10 +221,15 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     serverBuilder.put("server_uri", serverUri);
     serverBuilder.put("channel_creds",
         ImmutableList.of(ImmutableMap.of("type", "google_default")));
-    serverBuilder.put("server_features", ImmutableList.of("xds_v3"));
+    serverBuilder.put("server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
+    ImmutableMap.Builder<String, Object> authoritiesBuilder = ImmutableMap.builder();
+    authoritiesBuilder.put(
+        C2P_AUTHORITY,
+        ImmutableMap.of("xds_servers", ImmutableList.of(serverBuilder.buildOrThrow())));
     return ImmutableMap.of(
         "node", nodeBuilder.buildOrThrow(),
-        "xds_servers", ImmutableList.of(serverBuilder.buildOrThrow()));
+        "xds_servers", ImmutableList.of(serverBuilder.buildOrThrow()),
+        "authorities", authoritiesBuilder.buildOrThrow());
   }
 
   @Override
@@ -243,7 +279,13 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     HttpURLConnection con = null;
     try {
       con = httpConnectionProvider.createConnection(url);
-      return con.getResponseCode() == 200;
+      if (con.getResponseCode() != 200 ) {
+        return false;
+      }
+      InputStream inputStream = con.getInputStream();
+      int c;
+      return (inputStream != null
+          && (c = inputStream.read()) != -1 && !Character.isWhitespace(c));
     } finally {
       if (con != null) {
         con.disconnect();
@@ -262,6 +304,16 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       res = new URI(scheme, uri.getAuthority(), uri.getPath(), uri.getQuery(), uri.getFragment());
     } catch (URISyntaxException ex) {
       throw new IllegalArgumentException("Invalid scheme: " + scheme, ex);
+    }
+    return res;
+  }
+
+  private static URI overrideUriAuthority(URI uri, String authority) {
+    URI res;
+    try {
+      res = new URI(uri.getScheme(), authority, uri.getPath(), uri.getQuery(), uri.getFragment());
+    } catch (URISyntaxException ex) {
+      throw new IllegalArgumentException("Invalid authority: " + authority, ex);
     }
     return res;
   }

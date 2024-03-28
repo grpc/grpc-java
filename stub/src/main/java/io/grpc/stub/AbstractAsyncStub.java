@@ -35,7 +35,7 @@ import javax.annotation.concurrent.ThreadSafe;
 public abstract class AbstractAsyncStub<S extends AbstractAsyncStub<S>> extends AbstractStub<S> {
 
   protected AbstractAsyncStub(Channel channel, CallOptions callOptions) {
-      super(channel, callOptions);
+    super(channel, callOptions);
   }
 
   /**

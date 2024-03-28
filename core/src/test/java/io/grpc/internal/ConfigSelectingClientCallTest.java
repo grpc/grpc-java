@@ -31,6 +31,7 @@ import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.NoopClientCall;
 import io.grpc.Status;
 import io.grpc.internal.ManagedChannelImpl.ConfigSelectingClientCall;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
@@ -132,7 +133,7 @@ public class ConfigSelectingClientCallTest {
         method,
         CallOptions.DEFAULT);
     configSelectingClientCall.start(callListener, new Metadata());
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.DEADLINE_EXCEEDED);
 
@@ -157,7 +158,7 @@ public class ConfigSelectingClientCallTest {
         method,
         CallOptions.DEFAULT);
     configSelectingClientCall.start(callListener, new Metadata());
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
     // ... so it should be represented as an internal error to highlight the control plane bug.
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.INTERNAL);

@@ -33,6 +33,8 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link DnsNameResolverProvider}. */
 @RunWith(JUnit4.class)
 public class DnsNameResolverProviderTest {
+  private final FakeClock fakeClock = new FakeClock();
+
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -46,6 +48,7 @@ public class DnsNameResolverProviderTest {
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
       .setChannelLogger(mock(ChannelLogger.class))
+      .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
       .build();
 
   private DnsNameResolverProvider provider = new DnsNameResolverProvider();

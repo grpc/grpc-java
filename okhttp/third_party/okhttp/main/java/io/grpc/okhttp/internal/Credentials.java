@@ -27,6 +27,8 @@ public final class Credentials {
   }
 
   /** Returns an auth credential for the Basic scheme. */
+  @SuppressWarnings("StringCharset") // Changing old code doesn't fix any bugs and using
+                                     // Charsets/StandardCharsets adds bloat
   public static String basic(String userName, String password) {
     try {
       String usernameAndPassword = userName + ":" + password;

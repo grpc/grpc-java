@@ -19,6 +19,7 @@ package io.grpc.netty;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.TruthJUnit.assume;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
@@ -28,6 +29,7 @@ import io.grpc.InternalChannelz.SocketOptions;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
@@ -68,6 +70,21 @@ public class UtilsTest {
     assertStatusEquals(Status.INTERNAL.withCause(t), Utils.statusFromThrowable(t));
     t = new Exception("msg");
     assertStatusEquals(Status.UNKNOWN.withCause(t), Utils.statusFromThrowable(t));
+  }
+
+  @Test
+  public void testGetBufferAllocator() {
+    ByteBufAllocator heapAllocator = Utils.getByteBufAllocator(true);
+    ByteBufAllocator directAllocator = Utils.getByteBufAllocator(false);
+    assertNotEquals(heapAllocator, directAllocator);
+
+    System.setProperty("io.netty.allocator.type", "unpooled");
+    ByteBufAllocator unpooled1 = Utils.getByteBufAllocator(false);
+    assertThat(unpooled1.getClass().getName()).isNotEqualTo("UnpooledByteBufAllocator");
+
+    System.setProperty("io.netty.allocator.type", "pooled");
+    ByteBufAllocator unpooled2 = Utils.getByteBufAllocator(false);
+    assertEquals(directAllocator, unpooled2);
   }
 
   @Test

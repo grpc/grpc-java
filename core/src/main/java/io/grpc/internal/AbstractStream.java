@@ -25,6 +25,7 @@ import io.grpc.Compressor;
 import io.grpc.Decompressor;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
+import io.perfmark.TaskCloseable;
 import java.io.InputStream;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -74,6 +75,19 @@ public abstract class AbstractStream implements Stream {
     if (!framer().isClosed()) {
       framer().flush();
     }
+  }
+
+  /**
+   * A hint to the stream that specifies how many bytes must be queued before
+   * {@link #isReady()} will return false. A stream may ignore this property if
+   * unsupported. This may only be set during stream initialization before
+   * any messages are set.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  protected void setOnReadyThreshold(int numBytes) {
+    transportState().setOnReadyThreshold(numBytes);
   }
 
   /**
@@ -142,6 +156,9 @@ public abstract class AbstractStream implements Stream {
     @GuardedBy("onReadyLock")
     private boolean deallocated;
 
+    @GuardedBy("onReadyLock")
+    private int onReadyThreshold;
+
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
@@ -156,6 +173,7 @@ public abstract class AbstractStream implements Stream {
           transportTracer);
       // TODO(#7168): use MigratingThreadDeframer when enabling retry doesn't break.
       deframer = rawDeframer;
+      onReadyThreshold = DEFAULT_ONREADY_THRESHOLD;
     }
 
     final void optimizeForDirectExecutor() {
@@ -176,6 +194,20 @@ public abstract class AbstractStream implements Stream {
      * Override this method to provide a stream listener.
      */
     protected abstract StreamListener listener();
+
+    /**
+     * A hint to the stream that specifies how many bytes must be queued before
+     * {@link #isReady()} will return false. A stream may ignore this property if
+     * unsupported. This may only be set before any messages are sent.
+     *
+     * @param numBytes The number of bytes that must be queued. Must be a
+     *                 positive integer.
+     */
+    void setOnReadyThreshold(int numBytes) {
+      synchronized (onReadyLock) {
+        this.onReadyThreshold = numBytes;
+      }
+    }
 
     @Override
     public void messagesAvailable(StreamListener.MessageProducer producer) {
@@ -219,25 +251,19 @@ public abstract class AbstractStream implements Stream {
      */
     private void requestMessagesFromDeframer(final int numMessages) {
       if (deframer instanceof ThreadOptimizedDeframer) {
-        PerfMark.startTask("AbstractStream.request");
-        try {
+        try (TaskCloseable ignore = PerfMark.traceTask("AbstractStream.request")) {
           deframer.request(numMessages);
-        } finally {
-          PerfMark.stopTask("AbstractStream.request");
         }
         return;
       }
       final Link link = PerfMark.linkOut();
       class RequestRunnable implements Runnable {
         @Override public void run() {
-          PerfMark.startTask("AbstractStream.request");
-          PerfMark.linkIn(link);
-          try {
+          try (TaskCloseable ignore = PerfMark.traceTask("AbstractStream.request")) {
+            PerfMark.linkIn(link);
             deframer.request(numMessages);
           } catch (Throwable t) {
             deframeFailed(t);
-          } finally {
-            PerfMark.stopTask("AbstractStream.request");
           }
         }
       }
@@ -264,7 +290,7 @@ public abstract class AbstractStream implements Stream {
 
     private boolean isReady() {
       synchronized (onReadyLock) {
-        return allocated && numSentBytesQueued < DEFAULT_ONREADY_THRESHOLD && !deallocated;
+        return allocated && numSentBytesQueued < onReadyThreshold && !deallocated;
       }
     }
 
@@ -321,9 +347,9 @@ public abstract class AbstractStream implements Stream {
       synchronized (onReadyLock) {
         checkState(allocated,
             "onStreamAllocated was not called, but it seems the stream is active");
-        boolean belowThresholdBefore = numSentBytesQueued < DEFAULT_ONREADY_THRESHOLD;
+        boolean belowThresholdBefore = numSentBytesQueued < onReadyThreshold;
         numSentBytesQueued -= numBytes;
-        boolean belowThresholdAfter = numSentBytesQueued < DEFAULT_ONREADY_THRESHOLD;
+        boolean belowThresholdAfter = numSentBytesQueued < onReadyThreshold;
         doNotify = !belowThresholdBefore && belowThresholdAfter;
       }
       if (doNotify) {

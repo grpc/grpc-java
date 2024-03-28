@@ -29,7 +29,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class MetricRecorder {
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
   private volatile double cpuUtilization;
+  private volatile double applicationUtilization;
   private volatile double memoryUtilization;
+  private volatile double qps;
+  private volatile double eps;
 
   public static MetricRecorder newInstance() {
     return new MetricRecorder();
@@ -38,14 +41,18 @@ public final class MetricRecorder {
   private MetricRecorder() {}
 
   /**
-   * Update the metrics value corresponding to the specified key.
+   * Update the metrics value in the range [0, 1] corresponding to the specified key. Values outside
+   * the valid range are ignored.
    */
   public void putUtilizationMetric(String key, double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     metricsData.put(key, value);
   }
 
   /**
-   * Replace the whole metrics data using the specified map.
+   * Replace the whole metrics data using the specified map. No range validation.
    */
   public void setAllUtilizationMetrics(Map<String, Double> metrics) {
     metricsData = new ConcurrentHashMap<>(metrics);
@@ -59,9 +66,13 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the CPU utilization metrics data.
+   * Update the CPU utilization metrics data in the range [0, inf). Values outside the valid range
+   * are ignored.
    */
   public void setCpuUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
+      return;
+    }
     cpuUtilization = value;
   }
 
@@ -73,9 +84,31 @@ public final class MetricRecorder {
   }
 
   /**
-   * Update the memory utilization metrics data.
+   * Update the application specific utilization metrics data in the range [0, inf). Values outside
+   * the valid range are ignored.
+   */
+  public void setApplicationUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isCpuOrApplicationUtilizationValid(value)) {
+      return;
+    }
+    applicationUtilization = value;
+  }
+
+  /**
+   * Clear the application specific utilization metrics data.
+   */
+  public void clearApplicationUtilizationMetric() {
+    applicationUtilization = 0;
+  }
+
+  /**
+   * Update the memory utilization metrics data in the range [0, 1]. Values outside the valid range
+   * are ignored.
    */
   public void setMemoryUtilizationMetric(double value) {
+    if (!MetricRecorderHelper.isUtilizationValid(value)) {
+      return;
+    }
     memoryUtilization = value;
   }
 
@@ -86,8 +119,42 @@ public final class MetricRecorder {
     memoryUtilization = 0;
   }
 
+  /**
+   * Update the QPS metrics data in the range [0, inf). Values outside the valid range are ignored.
+   */
+  public void setQpsMetric(double value) {
+    if (!MetricRecorderHelper.isRateValid(value)) {
+      return;
+    }
+    qps = value;
+  }
+
+  /**
+   * Clear the QPS metrics data.
+   */
+  public void clearQpsMetric() {
+    qps = 0;
+  }
+
+  /**
+   * Update the EPS metrics data in the range [0, inf). Values outside the valid range are ignored.
+   */
+  public void setEpsMetric(double value) {
+    if (!MetricRecorderHelper.isRateValid(value)) {
+      return;
+    }
+    this.eps = value;
+  }
+
+  /**
+   * Clear the EPS metrics data.
+   */
+  public void clearEpsMetric() {
+    eps = 0;
+  }
+
   MetricReport getMetricReport() {
-    return new MetricReport(cpuUtilization, memoryUtilization,
-        Collections.emptyMap(), Collections.unmodifiableMap(metricsData));
+    return new MetricReport(cpuUtilization, applicationUtilization, memoryUtilization, qps, eps,
+        Collections.emptyMap(), Collections.unmodifiableMap(metricsData), Collections.emptyMap());
   }
 }

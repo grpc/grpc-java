@@ -2,7 +2,6 @@ plugins {
     id "maven-publish"
 
     id "com.android.library"
-    id "digital.wup.android-maven-publish"
 }
 
 description = "gRPC: Cronet Android"
@@ -13,10 +12,11 @@ repositories {
 }
 
 android {
-    compileSdkVersion 29
+    namespace 'io.grpc.cronet'
+    compileSdkVersion 33
     defaultConfig {
-        minSdkVersion 19
-        targetSdkVersion 29
+        minSdkVersion 21
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -34,11 +34,18 @@ android {
     }
     testOptions { unitTests { includeAndroidResources = true } }
     lintOptions { disable 'InvalidPackage' }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 dependencies {
-    api project(':grpc-core'),
+    api project(':grpc-api'),
             libraries.cronet.api
+    implementation project(':grpc-core')
     implementation libraries.guava
     testImplementation project(':grpc-testing')
 
@@ -46,10 +53,7 @@ dependencies {
 
     testImplementation libraries.junit
     testImplementation libraries.mockito.core
-    testImplementation (libraries.robolectric) {
-        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
-        exclude group: 'com.google.auto.service', module: 'auto-service'
-    }
+    testImplementation libraries.robolectric
 }
 
 task javadocs(type: Javadoc) {
@@ -82,10 +86,9 @@ task sourcesJar(type: Jar) {
 publishing {
     publications {
         maven {
-            from components.android
-
-            artifact javadocJar
-            artifact sourcesJar
+            afterEvaluate {
+                from components.release
+            }
         }
     }
 }

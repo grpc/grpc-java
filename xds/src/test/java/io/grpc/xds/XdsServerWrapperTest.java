@@ -47,6 +47,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -57,13 +58,16 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
 import io.grpc.xds.XdsServerWrapper.ConfigApplyingInterceptor;
 import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
@@ -125,15 +129,35 @@ public class XdsServerWrapperTest {
   }
 
   @Test
-  public void testBootstrap_notV3() throws Exception {
+  @SuppressWarnings("unchecked")
+  public void testBootstrap() throws Exception {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), false)))
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
             .build();
-    verifyBootstrapFail(b);
+    XdsClient xdsClient = mock(XdsClient.class);
+    XdsListenerResource listenerResource = XdsListenerResource.getInstance();
+    when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          xdsServerWrapper.start();
+        } catch (IOException ex) {
+          // ignore
+        }
+      }
+    });
+    verify(xdsClient, timeout(5000)).watchXdsResource(
+        eq(listenerResource),
+        eq("grpc/server?udpa.resource.listening_address=[::FFFF:129.144.52.38]:80"),
+        any(ResourceWatcher.class),
+        any(SynchronizationContext.class));
   }
 
   @Test
@@ -141,7 +165,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), true)))
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .build();
     verifyBootstrapFail(b);
@@ -181,7 +205,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
         .servers(Arrays.asList(
             Bootstrapper.ServerInfo.create(
-                "uri", InsecureChannelCredentials.create(), true)))
+                "uri", InsecureChannelCredentials.create())))
         .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
         .serverListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")
@@ -205,7 +229,8 @@ public class XdsServerWrapperTest {
         eq(listenerResource),
         eq("xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/"
             + "%5B::FFFF:129.144.52.38%5D:80"),
-        any(ResourceWatcher.class));
+        any(ResourceWatcher.class),
+        any(SynchronizationContext.class));
   }
 
   @Test
@@ -924,8 +949,8 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
-    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
-            "foo.google.com", "filter-type-url");
+    ServerRoutingConfig routingConfig =
+        createRoutingConfig("/FooService/barMethod", "foo.google.com");
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
         Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG,
@@ -964,8 +989,8 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
-    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
-            "foo.google.com", "filter-type-url");
+    ServerRoutingConfig routingConfig =
+        createRoutingConfig("/FooService/barMethod", "foo.google.com");
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
             Attributes.newBuilder()
@@ -1005,10 +1030,12 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
-    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
-        "foo.google.com", "filter-type-url", Route.RouteAction.forCluster(
-            "cluster", Collections.<Route.RouteAction.HashPolicy>emptyList(), null, null
-        ));
+    ServerRoutingConfig routingConfig =
+        createRoutingConfig(
+            "/FooService/barMethod",
+            "foo.google.com",
+            Route.RouteAction.forCluster(
+                "cluster", Collections.<Route.RouteAction.HashPolicy>emptyList(), null, null));
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
         Attributes.newBuilder()
@@ -1267,13 +1294,12 @@ public class XdsServerWrapperTest {
         "");
   }
 
-  private static ServerRoutingConfig createRoutingConfig(String path, String domain,
-                                                         String filterType) {
-    return createRoutingConfig(path, domain, filterType, null);
+  private static ServerRoutingConfig createRoutingConfig(String path, String domain) {
+    return createRoutingConfig(path, domain, null);
   }
 
-  private static ServerRoutingConfig createRoutingConfig(String path, String domain,
-      String filterType, Route.RouteAction action) {
+  private static ServerRoutingConfig createRoutingConfig(
+      String path, String domain, Route.RouteAction action) {
     RouteMatch routeMatch =
         RouteMatch.create(
             PathMatcher.fromPath(path, true),
@@ -1283,8 +1309,6 @@ public class XdsServerWrapperTest {
         Arrays.asList(Route.forAction(routeMatch, action,
             ImmutableMap.<String, FilterConfig>of())),
         Collections.<String, FilterConfig>emptyMap());
-    FilterConfig f0 = mock(FilterConfig.class);
-    when(f0.typeUrl()).thenReturn(filterType);
     return ServerRoutingConfig.create(ImmutableList.<VirtualHost>of(virtualHost),
         ImmutableMap.<Route, ServerInterceptor>of()
     );

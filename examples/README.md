@@ -23,6 +23,8 @@ before trying out the examples.
 
 - [Flow control](src/main/java/io/grpc/examples/manualflowcontrol)
 
+- [Wait For Ready](src/main/java/io/grpc/examples/waitforready)
+
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
 - <details>
@@ -117,6 +119,22 @@ before trying out the examples.
 
 </details>
 
+- <details>
+  <summary>Health Service</summary>
+
+  The [health service example](src/main/java/io/grpc/examples/healthservice)
+  provides a HelloWorld gRPC server that doesn't like short names along with a
+  health service.  It also provides a client application which makes HelloWorld 
+  calls and checks the health status.  
+
+  The client application also shows how the round robin load balancer can
+  utilize the health status to avoid making calls to a service that is
+  not actively serving.
+</details>
+
+
+- [Keep Alive](src/main/java/io/grpc/examples/keepalive)
+
 ### <a name="to-build-the-examples"></a> To build the examples
 
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
@@ -186,6 +204,10 @@ $ bazel-bin/hello-world-client
 - [Google Authentication](example-gauth)
 
 - [JWT-based Authentication](example-jwt-auth)
+
+- [OAuth2-based Authentication](example-oauth)
+
+- [Pre-serialized messages](src/main/java/io/grpc/examples/preserialized)
 
 ## Unit test examples
 

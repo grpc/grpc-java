@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2022 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,6 +57,15 @@ message CheckedExpr {
   // The source info derived from input that generated the parsed `expr` and
   // any optimizations made during the type-checking pass.
   SourceInfo source_info = 5;
+
+  // The expr version indicates the major / minor version number of the `expr`
+  // representation.
+  //
+  // The most common reason for a version change will be to indicate to the CEL
+  // runtimes that transformations have been performed on the expr during static
+  // analysis. In some cases, this will save the runtime the work of applying
+  // the same or similar transformations prior to evaluation.
+  string expr_version = 6;
 
   // The checked expression. Semantically equivalent to the parsed `expr`, but
   // may have structural differences.
@@ -228,15 +237,14 @@ message Decl {
   }
 
   // Function declaration specifies one or more overloads which indicate the
-  // function's parameter types and return type, and may optionally specify a
-  // function definition in terms of CEL expressions.
+  // function's parameter types and return type.
   //
   // Functions have no observable side-effects (there may be side-effects like
   // logging which are not observable from CEL).
   message FunctionDecl {
     // An overload indicates a function's parameter types and return type, and
-    // may optionally include a function body described in terms of [Expr][google.api.expr.v1alpha1.Expr]
-    // values.
+    // may optionally include a function body described in terms of
+    // [Expr][google.api.expr.v1alpha1.Expr] values.
     //
     // Functions overloads are declared in either a function or method
     // call-style. For methods, the `params[0]` is the expected type of the
@@ -248,11 +256,13 @@ message Decl {
       // Required. Globally unique overload name of the function which reflects
       // the function name and argument types.
       //
-      // This will be used by a [Reference][google.api.expr.v1alpha1.Reference] to indicate the `overload_id` that
-      // was resolved for the function `name`.
+      // This will be used by a [Reference][google.api.expr.v1alpha1.Reference]
+      // to indicate the `overload_id` that was resolved for the function
+      // `name`.
       string overload_id = 1;
 
-      // List of function parameter [Type][google.api.expr.v1alpha1.Type] values.
+      // List of function parameter [Type][google.api.expr.v1alpha1.Type]
+      // values.
       //
       // Param types are disjoint after generic type parameters have been
       // replaced with the type `DYN`. Since the `DYN` type is compatible with
@@ -275,7 +285,7 @@ message Decl {
       Type result_type = 4;
 
       // Whether the function is to be used in a method call-style `x.f(...)`
-      // of a function call-style `f(x, ...)`.
+      // or a function call-style `f(x, ...)`.
       //
       // For methods, the first parameter declaration, `params[0]` is the
       // expected type of the target receiver.
@@ -294,9 +304,11 @@ message Decl {
   // Declarations are organized in containers and this represents the full path
   // to the declaration in its container, as in `google.api.expr.Decl`.
   //
-  // Declarations used as [FunctionDecl.Overload][google.api.expr.v1alpha1.Decl.FunctionDecl.Overload] parameters may or may not
-  // have a name depending on whether the overload is function declaration or a
-  // function definition containing a result [Expr][google.api.expr.v1alpha1.Expr].
+  // Declarations used as
+  // [FunctionDecl.Overload][google.api.expr.v1alpha1.Decl.FunctionDecl.Overload]
+  // parameters may or may not have a name depending on whether the overload is
+  // function declaration or a function definition containing a result
+  // [Expr][google.api.expr.v1alpha1.Expr].
   string name = 1;
 
   // Required. The declaration kind.
@@ -321,7 +333,8 @@ message Reference {
   // presented candidates must happen at runtime because of dynamic types. The
   // type checker attempts to narrow down this list as much as possible.
   //
-  // Empty if this is not a reference to a [Decl.FunctionDecl][google.api.expr.v1alpha1.Decl.FunctionDecl].
+  // Empty if this is not a reference to a
+  // [Decl.FunctionDecl][google.api.expr.v1alpha1.Decl.FunctionDecl].
   repeated string overload_id = 3;
 
   // For references to constants, this may contain the value of the

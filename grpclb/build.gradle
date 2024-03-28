@@ -9,7 +9,11 @@ plugins {
 
 description = "gRPC: GRPCLB LoadBalancer plugin"
 
-evaluationDependsOn(project(':grpc-core').path)
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.grpclb')
+    }
+}
 
 dependencies {
     implementation project(':grpc-core'),
@@ -21,7 +25,8 @@ dependencies {
     runtimeOnly libraries.errorprone.annotations
     compileOnly libraries.javax.annotation
     testImplementation libraries.truth,
-            project(':grpc-core').sourceSets.test.output
+            project(':grpc-inprocess'),
+            testFixtures(project(':grpc-core'))
 
     signature libraries.signature.java
 }
@@ -30,6 +35,7 @@ configureProtoCompilation()
 
 tasks.named("javadoc").configure {
     exclude 'io/grpc/grpclb/Internal*'
+    exclude 'io/grpc/grpclb/*Provider.java'
 }
 
 tasks.named("jacocoTestReport").configure {

@@ -15,7 +15,7 @@ public final class LoadBalancerStatsServiceGrpc {
 
   private LoadBalancerStatsServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.LoadBalancerStatsService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.LoadBalancerStatsService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
@@ -129,14 +129,14 @@ public final class LoadBalancerStatsServiceGrpc {
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
    */
-  public static abstract class LoadBalancerStatsServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
      * Gets the backend distribution for RPCs sent by a test client.
      * </pre>
      */
-    public void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
+    default void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientStatsMethod(), responseObserver);
     }
@@ -146,37 +146,34 @@ public final class LoadBalancerStatsServiceGrpc {
      * Gets the accumulated stats for RPCs sent by a test client.
      * </pre>
      */
-    public void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
+    default void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientAccumulatedStatsMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getGetClientStatsMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
-                io.grpc.testing.integration.Messages.LoadBalancerStatsResponse>(
-                  this, METHODID_GET_CLIENT_STATS)))
-          .addMethod(
-            getGetClientAccumulatedStatsMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
-                io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>(
-                  this, METHODID_GET_CLIENT_ACCUMULATED_STATS)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
    */
-  public static final class LoadBalancerStatsServiceStub extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub> {
+  public static abstract class LoadBalancerStatsServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return LoadBalancerStatsServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service LoadBalancerStatsService.
+   * <pre>
+   * A service used to obtain stats for verifying LB behavior.
+   * </pre>
+   */
+  public static final class LoadBalancerStatsServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStatsServiceStub> {
     private LoadBalancerStatsServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -212,11 +209,13 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
    */
-  public static final class LoadBalancerStatsServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub> {
+  public static final class LoadBalancerStatsServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<LoadBalancerStatsServiceBlockingStub> {
     private LoadBalancerStatsServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -250,11 +249,13 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>
    */
-  public static final class LoadBalancerStatsServiceFutureStub extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub> {
+  public static final class LoadBalancerStatsServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<LoadBalancerStatsServiceFutureStub> {
     private LoadBalancerStatsServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -297,10 +298,10 @@ public final class LoadBalancerStatsServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final LoadBalancerStatsServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(LoadBalancerStatsServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -333,6 +334,25 @@ public final class LoadBalancerStatsServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getGetClientStatsMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
+              io.grpc.testing.integration.Messages.LoadBalancerStatsResponse>(
+                service, METHODID_GET_CLIENT_STATS)))
+        .addMethod(
+          getGetClientAccumulatedStatsMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
+              io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>(
+                service, METHODID_GET_CLIENT_ACCUMULATED_STATS)))
+        .build();
+  }
+
   private static abstract class LoadBalancerStatsServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     LoadBalancerStatsServiceBaseDescriptorSupplier() {}
@@ -356,9 +376,9 @@ public final class LoadBalancerStatsServiceGrpc {
   private static final class LoadBalancerStatsServiceMethodDescriptorSupplier
       extends LoadBalancerStatsServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    LoadBalancerStatsServiceMethodDescriptorSupplier(String methodName) {
+    LoadBalancerStatsServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

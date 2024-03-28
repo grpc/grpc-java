@@ -16,8 +16,10 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -32,6 +34,7 @@ import io.grpc.TlsServerCredentials;
 import io.grpc.TlsServerCredentials.ClientAuth;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -40,7 +43,6 @@ import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.util.AdvancedTlsX509TrustManager.SslSocketAndEnginePeerVerifier;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -57,9 +59,7 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLEngine;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -90,9 +90,6 @@ public class AdvancedTlsTest {
   private PrivateKey serverKeyBad;
   private X509Certificate[] serverCertBad;
 
-  @Rule
-  public ExpectedException exceptionRule = ExpectedException.none();
-
   @Before
   public void setUp()
       throws NoSuchAlgorithmException, IOException, CertificateException, InvalidKeySpecException {
@@ -102,20 +99,13 @@ public class AdvancedTlsTest {
     serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
     clientKey0File = TestUtils.loadCert(CLIENT_0_KEY_FILE);
     clientCert0File = TestUtils.loadCert(CLIENT_0_PEM_FILE);
-    caCert = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + CA_PEM_FILE));
-    serverKey0 = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_KEY_FILE));
-    serverCert0 = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_PEM_FILE));
-    clientKey0 = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_KEY_FILE));
-    clientCert0 = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_PEM_FILE));
-    serverKeyBad = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_BAD_KEY_FILE));
-    serverCertBad = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_BAD_PEM_FILE));
+    caCert = CertificateUtils.getX509Certificates(TlsTesting.loadCert(CA_PEM_FILE));
+    serverKey0 = CertificateUtils.getPrivateKey(TlsTesting.loadCert(SERVER_0_KEY_FILE));
+    serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
+    clientKey0 = CertificateUtils.getPrivateKey(TlsTesting.loadCert(CLIENT_0_KEY_FILE));
+    clientCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(CLIENT_0_PEM_FILE));
+    serverKeyBad = CertificateUtils.getPrivateKey(TlsTesting.loadCert(SERVER_BAD_KEY_FILE));
+    serverCertBad = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_BAD_PEM_FILE));
   }
 
   @After
@@ -208,7 +198,7 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+                if (!leafCert.getSubjectX500Principal().getName().contains("testclient")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
@@ -220,7 +210,7 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+                if (!leafCert.getSubjectX500Principal().getName().contains("testclient")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
@@ -247,7 +237,8 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+                if (!leafCert.getSubjectX500Principal().getName()
+                    .contains("*.test.google.com.au")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
@@ -259,7 +250,8 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+                if (!leafCert.getSubjectX500Principal().getName()
+                    .contains("*.test.google.com.au")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
@@ -428,24 +420,22 @@ public class AdvancedTlsTest {
 
   @Test
   public void onFileReloadingKeyManagerBadInitialContentTest() throws Exception {
-    exceptionRule.expect(GeneralSecurityException.class);
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
     // We swap the order of key and certificates to intentionally create an exception.
-    Closeable keyShutdown = keyManager.updateIdentityCredentialsFromFile(serverCert0File,
-        serverKey0File, 100, TimeUnit.MILLISECONDS, executor);
-    keyShutdown.close();
+    assertThrows(GeneralSecurityException.class,
+        () -> keyManager.updateIdentityCredentialsFromFile(serverCert0File,
+          serverKey0File, 100, TimeUnit.MILLISECONDS, executor));
   }
 
   @Test
   public void onFileReloadingTrustManagerBadInitialContentTest() throws Exception {
-    exceptionRule.expect(GeneralSecurityException.class);
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
     // We pass in a key as the trust certificates to intentionally create an exception.
-    Closeable trustShutdown = trustManager.updateTrustCredentialsFromFile(serverKey0File,
-        100, TimeUnit.MILLISECONDS, executor);
-    trustShutdown.close();
+    assertThrows(GeneralSecurityException.class,
+        () -> trustManager.updateTrustCredentialsFromFile(serverKey0File,
+          100, TimeUnit.MILLISECONDS, executor));
   }
 
   @Test
@@ -473,40 +463,38 @@ public class AdvancedTlsTest {
 
   @Test
   public void trustManagerCheckClientTrustedWithoutParameterTest() throws Exception {
-    exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage(
-        "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION).build();
-    tm.checkClientTrusted(serverCert0, "RSA");
+    CertificateException ex =
+        assertThrows(CertificateException.class, () -> tm.checkClientTrusted(serverCert0, "RSA"));
+    assertThat(ex).hasMessageThat()
+        .isEqualTo("Not enough information to validate peer. SSLEngine or Socket required.");
   }
 
   @Test
   public void trustManagerCheckServerTrustedWithoutParameterTest() throws Exception {
-    exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage(
-        "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION).build();
-    tm.checkServerTrusted(serverCert0, "RSA");
+    CertificateException ex =
+        assertThrows(CertificateException.class, () -> tm.checkServerTrusted(serverCert0, "RSA"));
+    assertThat(ex).hasMessageThat()
+        .isEqualTo("Not enough information to validate peer. SSLEngine or Socket required.");
   }
 
   @Test
   public void trustManagerEmptyChainTest() throws Exception {
-    exceptionRule.expect(IllegalArgumentException.class);
-    exceptionRule.expectMessage(
-        "Want certificate verification but got null or empty certificates");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
     tm.updateTrustCredentials(caCert);
-    tm.checkClientTrusted(null, "RSA", (SSLEngine) null);
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> tm.checkClientTrusted(null, "RSA", (SSLEngine) null));
+    assertThat(ex).hasMessageThat()
+        .isEqualTo("Want certificate verification but got null or empty certificates");
   }
 
   @Test
   public void trustManagerBadCustomVerificationTest() throws Exception {
-    exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage("Bad Custom Verification");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
@@ -524,7 +512,10 @@ public class AdvancedTlsTest {
               }
             }).build();
     tm.updateTrustCredentials(caCert);
-    tm.checkClientTrusted(serverCert0, "RSA", new Socket());
+    CertificateException ex = assertThrows(
+        CertificateException.class,
+        () -> tm.checkClientTrusted(serverCert0, "RSA", new Socket()));
+    assertThat(ex).hasMessageThat().isEqualTo("Bad Custom Verification");
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

@@ -58,27 +58,35 @@ import org.chromium.net.ExperimentalBidirectionalStream;
 import org.chromium.net.UrlResponseInfo;
 import org.chromium.net.impl.UrlResponseInfoImpl;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P)
 public final class CronetClientStreamTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private CronetClientTransport transport;
   private Metadata metadata = new Metadata();
   @Mock private StreamBuilderFactory factory;
   @Mock private ExperimentalBidirectionalStream cronetStream;
-  @Mock private Executor executor;
   @Mock private ClientStreamListener clientListener;
   @Mock private ExperimentalBidirectionalStream.Builder builder;
   private final Object lock = new Object();
   private final TransportTracer transportTracer = TransportTracer.getDefaultFactory().create();
+  private final Executor executor = new Executor() {
+      @Override
+      public void execute(Runnable r) {
+        r.run();
+      }
+    };
   CronetClientStream clientStream;
 
   private MethodDescriptor.Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
@@ -107,8 +115,6 @@ public final class CronetClientStreamTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     SetStreamFactoryRunnable callback = new SetStreamFactoryRunnable(factory);
     clientStream =
         new CronetClientStream(

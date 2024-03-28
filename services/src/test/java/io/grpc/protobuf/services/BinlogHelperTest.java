@@ -54,6 +54,8 @@ import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.NoopClientCall;
+import io.grpc.NoopServerCall;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
@@ -67,8 +69,6 @@ import io.grpc.binarylog.v1.Message;
 import io.grpc.binarylog.v1.MetadataEntry;
 import io.grpc.binarylog.v1.ServerHeader;
 import io.grpc.binarylog.v1.Trailer;
-import io.grpc.internal.NoopClientCall;
-import io.grpc.internal.NoopServerCall;
 import io.grpc.protobuf.StatusProto;
 import io.grpc.protobuf.services.BinlogHelper.FactoryImpl;
 import io.grpc.protobuf.services.BinlogHelper.MaybeTruncated;
@@ -92,6 +92,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 
 /** Tests for {@link BinlogHelper}. */
+@SuppressWarnings("AddressSelection") // It will only be one address
 @RunWith(JUnit4.class)
 public final class BinlogHelperTest {
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
@@ -979,7 +980,7 @@ public final class BinlogHelperTest {
         ArgumentMatchers.<SocketAddress>isNull());
     verifyNoMoreInteractions(mockSinkWriter);
     Duration timeout = timeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout)))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
   }
 
@@ -1000,7 +1001,7 @@ public final class BinlogHelperTest {
             .getClientInterceptor(CALL_ID)
             .interceptCall(
                 method,
-                CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                CallOptions.DEFAULT.withDeadlineAfter(2, TimeUnit.SECONDS),
                 new Channel() {
                   @Override
                   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -1028,17 +1029,18 @@ public final class BinlogHelperTest {
             AdditionalMatchers.or(ArgumentMatchers.<SocketAddress>isNull(),
                 ArgumentMatchers.<SocketAddress>any()));
     Duration timeout = callOptTimeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    assertThat(Math.abs(TimeUnit.SECONDS.toNanos(2) - Durations.toNanos(timeout)))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test
   public void clientDeadlineLogged_deadlineSetViaContext() throws Exception {
     // important: deadline is read from the ctx where call was created
     final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
+    Deadline expectedDeadline = Deadline.after(2, TimeUnit.SECONDS);
     Context.current()
         .withDeadline(
-            Deadline.after(1, TimeUnit.SECONDS), Executors.newSingleThreadScheduledExecutor())
+            expectedDeadline, Executors.newSingleThreadScheduledExecutor())
         .run(new Runnable() {
           @Override
           public void run() {
@@ -1054,7 +1056,7 @@ public final class BinlogHelperTest {
                 .getClientInterceptor(CALL_ID)
                 .interceptCall(
                     method,
-                    CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                    CallOptions.DEFAULT.withDeadlineAfter(10, TimeUnit.SECONDS),
                     new Channel() {
                       @Override
                       public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -1085,9 +1087,10 @@ public final class BinlogHelperTest {
             anyLong(),
             AdditionalMatchers.or(ArgumentMatchers.<SocketAddress>isNull(),
                 ArgumentMatchers.<SocketAddress>any()));
-    Duration timeout = callOptTimeoutCaptor.getValue();
-    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
-        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+    long expectedTimeRemaining = expectedDeadline.timeRemaining(TimeUnit.NANOSECONDS);
+    long timeout = Durations.toNanos(callOptTimeoutCaptor.getValue());
+    assertThat(Math.abs(expectedTimeRemaining - timeout))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(750));
   }
 
   @Test

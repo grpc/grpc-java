@@ -149,7 +149,7 @@ final class RoutingUtils {
       return false;
     }
     for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
-      if (!matchHeader(headerMatcher, getHeaderValue(headers, headerMatcher.name()))) {
+      if (!headerMatcher.matches(getHeaderValue(headers, headerMatcher.name()))) {
         return false;
       }
     }
@@ -165,38 +165,10 @@ final class RoutingUtils {
     } else if (pathMatcher.prefix() != null) {
       return pathMatcher.caseSensitive()
           ? fullMethodName.startsWith(pathMatcher.prefix())
-          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
+          : fullMethodName.toLowerCase(Locale.US).startsWith(
+              pathMatcher.prefix().toLowerCase(Locale.US));
     }
     return pathMatcher.regEx().matches(fullMethodName);
-  }
-
-  private static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
-    if (headerMatcher.present() != null) {
-      return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
-    }
-    if (value == null) {
-      return false;
-    }
-    boolean baseMatch;
-    if (headerMatcher.exactValue() != null) {
-      baseMatch = headerMatcher.exactValue().equals(value);
-    } else if (headerMatcher.safeRegEx() != null) {
-      baseMatch = headerMatcher.safeRegEx().matches(value);
-    } else if (headerMatcher.range() != null) {
-      long numValue;
-      try {
-        numValue = Long.parseLong(value);
-        baseMatch = numValue >= headerMatcher.range().start()
-            && numValue <= headerMatcher.range().end();
-      } catch (NumberFormatException ignored) {
-        baseMatch = false;
-      }
-    } else if (headerMatcher.prefix() != null) {
-      baseMatch = value.startsWith(headerMatcher.prefix());
-    } else {
-      baseMatch = value.endsWith(headerMatcher.suffix());
-    }
-    return baseMatch != headerMatcher.inverted();
   }
 
   @Nullable

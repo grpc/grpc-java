@@ -10,17 +10,20 @@ description = "gRPC: All"
 def subprojects = [
     project(':grpc-api'),
     project(':grpc-auth'),
-    project(':grpc-context'),
     project(':grpc-core'),
     project(':grpc-grpclb'),
+    project(':grpc-inprocess'),
     project(':grpc-netty'),
     project(':grpc-okhttp'),
     project(':grpc-protobuf'),
     project(':grpc-protobuf-lite'),
     project(':grpc-rls'),
     project(':grpc-services'),
+    project(':grpc-servlet'),
+    project(':grpc-servlet-jakarta'),
     project(':grpc-stub'),
     project(':grpc-testing'),
+    project(':grpc-util'),
     project(':grpc-xds'),
 ]
 
@@ -34,6 +37,7 @@ evaluationDependsOn(':grpc-interop-testing')
 
 dependencies {
     api subprojects.minus([project(':grpc-protobuf-lite')])
+    implementation libraries.guava.jre // JRE required by transitive protobuf-java-util
 }
 
 tasks.named("javadoc").configure {
@@ -45,23 +49,15 @@ tasks.named("javadoc").configure {
             continue;
         }
         source subproject.javadoc.source
-        options.links subproject.javadoc.options.links.toArray(new String[0])
+        options.linksOffline.addAll subproject.javadoc.options.linksOffline
     }
 }
 
-tasks.register("jacocoMerge", JacocoMerge) {
-    dependsOn(subprojects.jacocoTestReport.dependsOn)
-    dependsOn(project(':grpc-interop-testing').jacocoTestReport.dependsOn)
+tasks.named("jacocoTestReport").configure {
     mustRunAfter(subprojects.jacocoTestReport.mustRunAfter)
     mustRunAfter(project(':grpc-interop-testing').jacocoTestReport.mustRunAfter)
-    destinationFile = file("${buildDir}/jacoco/test.exec")
-    executionData = files(subprojects.jacocoTestReport.executionData)
+    executionData.from files(subprojects.jacocoTestReport.executionData)
             .plus(project(':grpc-interop-testing').jacocoTestReport.executionData)
-            .filter { f -> f.exists() }
-}
-
-tasks.named("jacocoTestReport").configure {
-    dependsOn(jacocoMerge)
     reports {
         xml.required = true
         html.required = true

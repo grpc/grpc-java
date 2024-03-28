@@ -1,0 +1,37 @@
+plugins {
+    id "java-library"
+}
+
+description = 'gRPC: OpenTelemetry'
+
+dependencies {
+    api project(':grpc-api')
+    implementation libraries.guava,
+            project(':grpc-core'),
+            libraries.opentelemetry.api,
+            libraries.auto.value.annotations
+
+    testImplementation testFixtures(project(':grpc-core')),
+            project(':grpc-testing'),
+            libraries.opentelemetry.sdk.testing,
+            "org.assertj:assertj-core:3.24.2"
+
+    annotationProcessor libraries.auto.value
+}
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.opentelemetry')
+    }
+}
+
+tasks.named("compileJava").configure {
+    it.options.compilerArgs += [
+            // only has AutoValue annotation processor
+            "-Xlint:-processing"
+    ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
+}

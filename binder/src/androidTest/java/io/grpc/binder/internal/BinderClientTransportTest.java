@@ -19,7 +19,9 @@ package io.grpc.binder.internal;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.content.Context;
+import android.os.DeadObjectException;
 import android.os.Parcel;
+import android.os.RemoteException;
 import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -35,11 +37,14 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
+import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.SecurityPolicy;
+import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
+import io.grpc.binder.internal.OneWayBinderProxies.ThrowingOneWayBinderProxy;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.FixedObjectPool;
@@ -48,11 +53,16 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.StreamListener;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ServerCalls;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -95,8 +105,6 @@ public final class BinderClientTransportTest {
   private final TestTransportListener transportListener = new TestTransportListener();
   private final TestStreamListener streamListener = new TestStreamListener();
 
-  private int serverCallsCompleted;
-
   @Before
   public void setUp() throws Exception {
     ServerCallHandler<Empty, Empty> callHandler =
@@ -104,17 +112,15 @@ public final class BinderClientTransportTest {
             (req, respObserver) -> {
               respObserver.onNext(req);
               respObserver.onCompleted();
-              serverCallsCompleted += 1;
             });
 
     ServerCallHandler<Empty, Empty> streamingCallHandler =
-        ServerCalls.asyncUnaryCall(
+        ServerCalls.asyncServerStreamingCall(
             (req, respObserver) -> {
               for (int i = 0; i < 100; i++) {
                 respObserver.onNext(req);
               }
               respObserver.onCompleted();
-              serverCallsCompleted += 1;
             });
 
     ServerServiceDefinition serviceDef =
@@ -137,22 +143,32 @@ public final class BinderClientTransportTest {
 
   private class BinderClientTransportBuilder {
     private SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
+    private OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
 
     public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
       this.securityPolicy = securityPolicy;
       return this;
     }
 
+    public BinderClientTransportBuilder setBinderDecorator(
+        OneWayBinderProxy.Decorator binderDecorator) {
+      this.binderDecorator = binderDecorator;
+      return this;
+    }
+
     public BinderTransport.BinderClientTransport build() {
       return new BinderTransport.BinderClientTransport(
           appContext,
+          BinderChannelCredentials.forDefault(),
           serverAddress,
+          null,
           BindServiceFlags.DEFAULTS,
           ContextCompat.getMainExecutor(appContext),
           executorServicePool,
           executorServicePool,
           securityPolicy,
           InboundParcelablePolicy.DEFAULT,
+          binderDecorator,
           Attributes.EMPTY);
     }
   }
@@ -188,9 +204,7 @@ public final class BinderClientTransportTest {
     stream.halfClose();
     stream.request(3);
 
-    streamListener.awaitMessages();
-    streamListener.messageProducer.next();
-    streamListener.messageProducer.next();
+    streamListener.readAndDiscardMessages(2);
 
     // Without the fix, this loops forever.
     stream.request(2);
@@ -228,17 +242,12 @@ public final class BinderClientTransportTest {
     stream.halfClose();
     stream.request(1000);
 
-    // Wait until we receive the first message.
-    streamListener.awaitMessages();
-    // Wait until the server actually provides all messages and completes the call.
-    awaitServerCallsCompleted(1);
-
-    // Now we should be able to receive all messages on a single message producer.
-    assertThat(streamListener.drainMessages()).isEqualTo(100);
+    // We should eventually see all messages despite receiving no more transactions from the server.
+    streamListener.readAndDiscardMessages(100);
   }
 
   @Test
-  public void testMessageProducerClosedAfterStream_b169313545() {
+  public void testMessageProducerClosedAfterStream_b169313545() throws Exception {
     transport = new BinderClientTransportBuilder().build();
     startAndAwaitReady(transport, transportListener);
     ClientStream stream =
@@ -275,14 +284,60 @@ public final class BinderClientTransportTest {
     transportListener.awaitReady();
   }
 
-  private synchronized void awaitServerCallsCompleted(int calls) {
-    while (serverCallsCompleted < calls) {
-      try {
-        wait(100);
-      } catch (InterruptedException inte) {
-        throw new AssertionError("Interrupted waiting for servercalls");
-      }
-    }
+  @Test
+  public void testTxnFailureDuringSetup() throws InterruptedException {
+    BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
+    transport = new BinderClientTransportBuilder()
+        .setBinderDecorator(decorator)
+        .build();
+    transport.start(transportListener).run();
+    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(
+        decorator.takeNextRequest());
+    DeadObjectException doe = new DeadObjectException("ouch");
+    endpointBinder.setRemoteException(doe);
+    decorator.putNextResult(endpointBinder);
+
+    Status shutdownStatus = transportListener.awaitShutdown();
+    assertThat(shutdownStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(shutdownStatus.getCause()).isInstanceOf(RemoteException.class);
+    transportListener.awaitTermination();
+
+    ClientStream stream =
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(streamListener);
+
+    Status streamStatus = streamListener.awaitClose();
+    assertThat(streamStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(streamStatus.getCause()).isSameInstanceAs(doe);
+  }
+
+  @Test
+  public void testTxnFailurePostSetup() throws InterruptedException {
+    BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
+    transport = new BinderClientTransportBuilder()
+        .setBinderDecorator(decorator)
+        .build();
+    transport.start(transportListener).run();
+    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(
+        decorator.takeNextRequest());
+    decorator.putNextResult(endpointBinder);
+    ThrowingOneWayBinderProxy serverBinder = new ThrowingOneWayBinderProxy(
+        decorator.takeNextRequest());
+    DeadObjectException doe = new DeadObjectException("ouch");
+    serverBinder.setRemoteException(doe);
+    decorator.putNextResult(serverBinder);
+    transportListener.awaitReady();
+
+    ClientStream stream =
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(streamListener);
+    stream.writeMessage(marshaller.stream(Empty.getDefaultInstance()));
+    stream.halfClose();
+    stream.request(1);
+
+    Status streamStatus = streamListener.awaitClose();
+    assertThat(streamStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(streamStatus.getCause()).isSameInstanceAs(doe);
   }
 
   private static void startAndAwaitReady(
@@ -292,31 +347,48 @@ public final class BinderClientTransportTest {
   }
 
   private static final class TestTransportListener implements ManagedClientTransport.Listener {
-    public boolean ready;
+    @GuardedBy("this")
+    private boolean ready;
+
     public boolean inUse;
     @Nullable public Status shutdownStatus;
     public boolean terminated;
 
     @Override
-    public void transportShutdown(Status shutdownStatus) {
+    public synchronized void transportShutdown(Status shutdownStatus) {
       this.shutdownStatus = shutdownStatus;
+      notifyAll();
+    }
+
+    public synchronized Status awaitShutdown() throws InterruptedException {
+      while (shutdownStatus == null) {
+        wait();
+      }
+      return shutdownStatus;
     }
 
     @Override
-    public void transportTerminated() {
+    public synchronized void transportTerminated() {
       terminated = true;
+      notifyAll();
+    }
+
+    public synchronized void awaitTermination() throws InterruptedException {
+      while (!terminated) {
+        wait();
+      }
     }
 
     @Override
     public synchronized void transportReady() {
       ready = true;
-      notify();
+      notifyAll();
     }
 
     public synchronized void awaitReady() {
       while (!ready) {
         try {
-          wait(100);
+          wait();
         } catch (InterruptedException inte) {
           throw new AssertionError("Interrupted waiting for ready");
         }
@@ -331,22 +403,45 @@ public final class BinderClientTransportTest {
 
   private static final class TestStreamListener implements ClientStreamListener {
 
-    public StreamListener.MessageProducer messageProducer;
     public boolean ready;
     public Metadata headers;
-    @Nullable public Status closedStatus;
+
+    @GuardedBy("this")
+    private final Deque<MessageProducer> messageProducers = new ArrayDeque<>();
+
+    @GuardedBy("this")
+    @Nullable
+    private Status closedStatus;
 
     @Override
-    public void messagesAvailable(StreamListener.MessageProducer messageProducer) {
-      this.messageProducer = messageProducer;
+    public synchronized void messagesAvailable(StreamListener.MessageProducer messageProducer) {
+      messageProducers.add(messageProducer);
+      notifyAll();
     }
 
-    public synchronized void awaitMessages() {
-      while (messageProducer == null) {
-        try {
-          wait(100);
-        } catch (InterruptedException inte) {
-          throw new AssertionError("Interrupted waiting for messages");
+    /** Blocks until at least one MessageProducer has been provided for reading. */
+    public synchronized void awaitMessages() throws InterruptedException {
+      while (messageProducers.isEmpty()) {
+        wait();
+      }
+    }
+
+    /** Blocks until {@code n} messages can be produced (and discarded). */
+    public synchronized void readAndDiscardMessages(int n)
+        throws InterruptedException, IOException {
+      while (n > 0) {
+        while (closedStatus == null && messageProducers.isEmpty()) {
+          wait();
+        }
+        if (closedStatus != null) {
+          throw closedStatus.withDescription("premature close").asRuntimeException();
+        }
+        try (InputStream message = messageProducers.peek().next()) {
+          if (message == null) {
+            messageProducers.remove();
+            continue;
+          }
+          n -= 1;
         }
       }
     }
@@ -354,7 +449,7 @@ public final class BinderClientTransportTest {
     public synchronized Status awaitClose() {
       while (closedStatus == null) {
         try {
-          wait(100);
+          wait();
         } catch (InterruptedException inte) {
           throw new AssertionError("Interrupted waiting for close");
         }
@@ -362,10 +457,17 @@ public final class BinderClientTransportTest {
       return closedStatus;
     }
 
-    public int drainMessages() {
+    /** Discards any messages available on the stream without reading them. Does not block. */
+    public synchronized int drainMessages() throws IOException {
       int n = 0;
-      while (messageProducer.next() != null) {
-        n += 1;
+      while (!messageProducers.isEmpty()) {
+        try (InputStream message = messageProducers.peek().next()) {
+          if (message == null) {
+            messageProducers.remove();
+            continue;
+          }
+          n += 1;
+        }
       }
       return n;
     }
@@ -381,8 +483,9 @@ public final class BinderClientTransportTest {
     }
 
     @Override
-    public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
+    public synchronized void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       this.closedStatus = status;
+      notifyAll();
     }
   }
 

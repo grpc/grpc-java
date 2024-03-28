@@ -23,19 +23,17 @@ import io.grpc.Status;
 import io.grpc.benchmarks.Utils;
 import io.grpc.benchmarks.proto.BenchmarkServiceGrpc;
 import io.grpc.benchmarks.proto.Messages;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
-import io.grpc.stub.StreamObservers;
+import io.grpc.testing.TlsTesting;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
+import java.io.InputStream;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinPool.ForkJoinWorkerThreadFactory;
 import java.util.concurrent.ForkJoinWorkerThread;
@@ -164,8 +162,8 @@ public class AsyncServer {
       System.out.println("Using fake CA for TLS certificate.\n"
           + "Run the Java client with --tls --testca");
 
-      File cert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
+      InputStream cert = TlsTesting.loadCert("server1.pem");
+      InputStream key = TlsTesting.loadCert("server1.key");
       builder.useTransportSecurity(cert, key);
     }
     if (config.directExecutor) {
@@ -289,26 +287,17 @@ public class AsyncServer {
       final Messages.SimpleResponse response = Utils.makeResponse(request);
       final ServerCallStreamObserver<Messages.SimpleResponse> responseObserver =
           (ServerCallStreamObserver<Messages.SimpleResponse>) observer;
-      // If the client cancels, copyWithFlowControl takes care of calling
-      // responseObserver.onCompleted() for us
-      StreamObservers.copyWithFlowControl(
-          new Iterator<Messages.SimpleResponse>() {
-            @Override
-            public boolean hasNext() {
-              return !shutdown.get() && !responseObserver.isCancelled();
-            }
-
-            @Override
-            public Messages.SimpleResponse next() {
-              return response;
-            }
-
-            @Override
-            public void remove() {
-              throw new UnsupportedOperationException();
-            }
-          },
-          responseObserver);
+      Runnable onReady = () -> {
+        if (shutdown.get()) {
+          responseObserver.onCompleted();
+          return;
+        }
+        while (responseObserver.isReady() && !responseObserver.isCancelled()) {
+          responseObserver.onNext(response);
+        }
+      };
+      responseObserver.setOnReadyHandler(onReady);
+      onReady.run();
     }
 
     @Override
@@ -317,28 +306,17 @@ public class AsyncServer {
       // receive data forever and send data forever until client cancels or we shut down.
       final ServerCallStreamObserver<Messages.SimpleResponse> responseObserver =
           (ServerCallStreamObserver<Messages.SimpleResponse>) observer;
-      // If the client cancels, copyWithFlowControl takes care of calling
-      // responseObserver.onCompleted() for us
-      StreamObservers.copyWithFlowControl(
-          new Iterator<Messages.SimpleResponse>() {
-            @Override
-            public boolean hasNext() {
-              return !shutdown.get() && !responseObserver.isCancelled();
-            }
-
-            @Override
-            public Messages.SimpleResponse next() {
-              return BIDI_RESPONSE;
-            }
-
-            @Override
-            public void remove() {
-              throw new UnsupportedOperationException();
-            }
-          },
-          responseObserver
-      );
-
+      Runnable onReady = () -> {
+        if (shutdown.get()) {
+          responseObserver.onCompleted();
+          return;
+        }
+        while (responseObserver.isReady() && !responseObserver.isCancelled()) {
+          responseObserver.onNext(BIDI_RESPONSE);
+        }
+      };
+      responseObserver.setOnReadyHandler(onReady);
+      onReady.run();
       return new StreamObserver<Messages.SimpleRequest>() {
         @Override
         public void onNext(final Messages.SimpleRequest request) {

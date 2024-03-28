@@ -16,7 +16,7 @@ public final class UnimplementedServiceGrpc {
 
   private UnimplementedServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.UnimplementedService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.UnimplementedService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
@@ -100,38 +100,43 @@ public final class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public static abstract class UnimplementedServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
      * A call that no server should implement
      * </pre>
      */
-    public void unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request,
+    default void unimplementedCall(io.grpc.testing.integration.EmptyProtos.Empty request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.EmptyProtos.Empty> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnimplementedCallMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getUnimplementedCallMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.testing.integration.EmptyProtos.Empty,
-                io.grpc.testing.integration.EmptyProtos.Empty>(
-                  this, METHODID_UNIMPLEMENTED_CALL)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.
    * </pre>
    */
-  public static final class UnimplementedServiceStub extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
+  public static abstract class UnimplementedServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return UnimplementedServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service UnimplementedService.
+   * <pre>
+   * A simple service NOT implemented at servers so clients can test for
+   * that case.
+   * </pre>
+   */
+  public static final class UnimplementedServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
     private UnimplementedServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -156,12 +161,14 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.
    * </pre>
    */
-  public static final class UnimplementedServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
+  public static final class UnimplementedServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
     private UnimplementedServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -185,12 +192,14 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.
    * </pre>
    */
-  public static final class UnimplementedServiceFutureStub extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
+  public static final class UnimplementedServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
     private UnimplementedServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -221,10 +230,10 @@ public final class UnimplementedServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final UnimplementedServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(UnimplementedServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -253,6 +262,18 @@ public final class UnimplementedServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getUnimplementedCallMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.integration.EmptyProtos.Empty,
+              io.grpc.testing.integration.EmptyProtos.Empty>(
+                service, METHODID_UNIMPLEMENTED_CALL)))
+        .build();
+  }
+
   private static abstract class UnimplementedServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     UnimplementedServiceBaseDescriptorSupplier() {}
@@ -276,9 +297,9 @@ public final class UnimplementedServiceGrpc {
   private static final class UnimplementedServiceMethodDescriptorSupplier
       extends UnimplementedServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    UnimplementedServiceMethodDescriptorSupplier(String methodName) {
+    UnimplementedServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

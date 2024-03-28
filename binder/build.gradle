@@ -1,42 +1,33 @@
 plugins {
     id "maven-publish"
     id "com.android.library"
-    id "digital.wup.android-maven-publish"
 }
 
 description = 'gRPC BinderChannel'
 
 android {
-    sourceSets {
-        test {
-            java {
-                srcDirs += "${projectDir}/../core/src/test/java/"
-                setIncludes(["io/grpc/internal/FakeClock.java",
-                             "io/grpc/binder/**"])
-            }
-        }
-        androidTest {
-            java {
-                srcDirs += "${projectDir}/../core/src/test/java/"
-                setIncludes(["io/grpc/internal/AbstractTransportTest.java",
-                             "io/grpc/binder/**"])
-            }
-        }
-    }
-    compileSdkVersion 30
+    namespace 'io.grpc.binder'
+    compileSdkVersion 34
     compileOptions {
         sourceCompatibility 1.8
         targetCompatibility 1.8
     }
     defaultConfig {
-        minSdkVersion 19
-        targetSdkVersion 30
+        minSdkVersion 21
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
     }
     lintOptions { abortOnError false }
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+    testFixtures { enable true }
 }
 
 repositories {
@@ -45,8 +36,9 @@ repositories {
 }
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-api')
 
+    implementation project(':grpc-core')
     implementation libraries.androidx.annotation
     implementation libraries.androidx.core
     implementation libraries.androidx.lifecycle.common
@@ -57,14 +49,13 @@ dependencies {
     testImplementation libraries.androidx.lifecycle.service
     testImplementation libraries.junit
     testImplementation libraries.mockito.core
-    testImplementation (libraries.robolectric) {
-        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
-        exclude group: 'com.google.auto.service', module: 'auto-service'
-    }
-    testImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    testImplementation libraries.robolectric
+    testImplementation libraries.guava.testlib
     testImplementation libraries.truth
+    testImplementation project(':grpc-protobuf-lite')
+    testImplementation project(':grpc-testing')
+    testImplementation project(':grpc-inprocess')
+    testImplementation testFixtures(project(':grpc-core'))
 
     androidTestAnnotationProcessor libraries.auto.value
     androidTestImplementation project(':grpc-testing')
@@ -78,20 +69,23 @@ dependencies {
     androidTestImplementation libraries.truth
     androidTestImplementation libraries.mockito.android
     androidTestImplementation libraries.androidx.lifecycle.service
-    androidTestImplementation (libraries.guava.testlib) {
-        exclude group: 'junit', module: 'junit'
-    }
+    androidTestImplementation libraries.guava.testlib
+    androidTestImplementation testFixtures(project(':grpc-core'))
+
+    testFixturesImplementation libraries.guava.testlib
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-            "-Xlint:-cast"
+            "-Xlint:-cast",
+            // For junit-1.15-api & org.robolectric/shadows-framework/4.11.1
+            "-Xlint:-classfile",
+            // Unclaimed annotations. TODO(jdcormie): Fix?
+            "-Xlint:-processing",
     ]
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
-    // Reuses source code from grpc-core, which targets Java 7 (no method references)
-    options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
 }
 
 tasks.register("javadocs", Javadoc) {
@@ -110,6 +104,9 @@ tasks.register("javadocs", Javadoc) {
             addStringOption('Xdoclint:none', '-quiet')
         }
     }
+    // This is to enable moving to Java 11. An existing problem with javadoc
+    // produces a warning under Java 8, but with Java 11 it fails the build.
+    failOnError false
 }
 
 tasks.register("javadocJar", Jar) {
@@ -126,10 +123,14 @@ tasks.register("sourcesJar", Jar) {
 publishing {
     publications {
         maven {
-            from components.android
-
-            artifact javadocJar
-            artifact sourcesJar
+            afterEvaluate {
+                from components.release
+            }
         }
     }
+}
+
+afterEvaluate {
+    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseApiPublication) { skip() }
+    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseRuntimePublication) { skip() }
 }

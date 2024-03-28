@@ -8,19 +8,8 @@ java_library(
 
 java_library(
     name = "inprocess",
-    srcs = glob([
-        "src/main/java/io/grpc/inprocess/*.java",
-    ]),
     visibility = ["//visibility:public"],
-    deps = [
-        ":internal",
-        "//api",
-        "//context",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.errorprone:error_prone_annotations"),
-        artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
-    ],
+    exports = ["//inprocess"],
 )
 
 java_library(
@@ -49,34 +38,19 @@ java_library(
 
 java_library(
     name = "util",
-    srcs = glob([
-        "src/main/java/io/grpc/util/*.java",
-    ]),
-    resources = glob([
-        "src/bazel-util/resources/**",
-    ]),
     visibility = ["//visibility:public"],
-    deps = [
-        ":internal",
-        "//api",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
-        artifact("org.codehaus.mojo:animal-sniffer-annotations"),
-    ],
+    exports = ["//util"],
 )
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Purposefully does not export any
-# symbols, as it should only be used as a dep for pre-compiled binaries on
-# Maven Central.
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
 java_library(
     name = "core_maven",
     visibility = ["//visibility:public"],
-    runtime_deps = [
-        ":inprocess",
+    exports = [
         ":internal",
-        ":util",
         "//api",
+        "//util",
     ],
 )

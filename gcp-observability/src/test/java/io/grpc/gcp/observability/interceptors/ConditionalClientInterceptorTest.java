@@ -32,17 +32,20 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import java.util.function.BiPredicate;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link ConditionalClientInterceptor}.
  */
 @RunWith(JUnit4.class)
 public class ConditionalClientInterceptorTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private ConditionalClientInterceptor conditionalClientInterceptor;
   @Mock private ClientInterceptor delegate;
@@ -54,7 +57,6 @@ public class ConditionalClientInterceptorTest {
   @Before
   @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     conditionalClientInterceptor = new ConditionalClientInterceptor(
         delegate, predicate);
     method = MethodDescriptor.newBuilder().setType(MethodType.UNARY)

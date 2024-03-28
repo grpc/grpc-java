@@ -22,13 +22,16 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
+import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.JsonFormat;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.least_request.v3.LeastRequest;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.pick_first.v3.PickFirst;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.ring_hash.v3.RingHash;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.RoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
@@ -36,8 +39,9 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.LoadBalancerConfigFactory.LoadBalancingPolicyConverter.MaxRecursionReachedException;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.io.IOException;
 import java.util.Map;
 
@@ -73,18 +77,32 @@ class LoadBalancerConfigFactory {
   static final String WRR_LOCALITY_FIELD_NAME = "wrr_locality_experimental";
   static final String CHILD_POLICY_FIELD = "childPolicy";
 
+  static final String BLACK_OUT_PERIOD = "blackoutPeriod";
+
+  static final String WEIGHT_EXPIRATION_PERIOD = "weightExpirationPeriod";
+
+  static final String OOB_REPORTING_PERIOD = "oobReportingPeriod";
+
+  static final String ENABLE_OOB_LOAD_REPORT = "enableOobLoadReport";
+
+  static final String WEIGHT_UPDATE_PERIOD = "weightUpdatePeriod";
+
+  static final String PICK_FIRST_FIELD_NAME = "pick_first";
+  static final String SHUFFLE_ADDRESS_LIST_FIELD_NAME = "shuffleAddressList";
+
+  static final String ERROR_UTILIZATION_PENALTY = "errorUtilizationPenalty";
+
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
    * Cluster}.
    *
    * @throws ResourceInvalidException If the {@link Cluster} has an invalid LB configuration.
    */
-  static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest,
-      boolean enableCustomLbConfig)
+  static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest)
       throws ResourceInvalidException {
     // The new load_balancing_policy will always be used if it is set, but for backward
     // compatibility we will fall back to using the old lb_policy field if the new field is not set.
-    if (cluster.hasLoadBalancingPolicy() && enableCustomLbConfig) {
+    if (cluster.hasLoadBalancingPolicy()) {
       try {
         return LoadBalancingPolicyConverter.convertToServiceConfig(cluster.getLoadBalancingPolicy(),
             0);
@@ -112,8 +130,41 @@ class LoadBalancerConfigFactory {
   }
 
   /**
+   * Builds a service config JSON object for the weighted_round_robin load balancer config based on
+   * the given config values.
+   */
+  private static ImmutableMap<String, ?> buildWrrConfig(String blackoutPeriod,
+                                                        String weightExpirationPeriod,
+                                                        String oobReportingPeriod,
+                                                        Boolean enableOobLoadReport,
+                                                        String weightUpdatePeriod,
+                                                        Float errorUtilizationPenalty) {
+    ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
+    if (blackoutPeriod != null) {
+      configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod);
+    }
+    if (weightExpirationPeriod != null) {
+      configBuilder.put(WEIGHT_EXPIRATION_PERIOD, weightExpirationPeriod);
+    }
+    if (oobReportingPeriod != null) {
+      configBuilder.put(OOB_REPORTING_PERIOD, oobReportingPeriod);
+    }
+    if (enableOobLoadReport != null) {
+      configBuilder.put(ENABLE_OOB_LOAD_REPORT, enableOobLoadReport);
+    }
+    if (weightUpdatePeriod != null) {
+      configBuilder.put(WEIGHT_UPDATE_PERIOD, weightUpdatePeriod);
+    }
+    if (errorUtilizationPenalty != null) {
+      configBuilder.put(ERROR_UTILIZATION_PENALTY, errorUtilizationPenalty);
+    }
+    return ImmutableMap.of(WeightedRoundRobinLoadBalancerProvider.SCHEME,
+        configBuilder.buildOrThrow());
+  }
+
+  /**
    * Builds a service config JSON object for the least_request load balancer config based on the
-   * given config values..
+   * given config values.
    */
   private static ImmutableMap<String, ?> buildLeastRequestConfig(Integer choiceCount) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
@@ -137,6 +188,16 @@ class LoadBalancerConfigFactory {
    */
   private static ImmutableMap<String, ?> buildRoundRobinConfig() {
     return ImmutableMap.of(ROUND_ROBIN_FIELD_NAME, ImmutableMap.of());
+  }
+
+  /**
+   * Builds a service config JSON object for the pick_first load balancer config based on the
+   * given config values.
+   */
+  private static ImmutableMap<String, ?> buildPickFirstConfig(boolean shuffleAddressList) {
+    ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
+    configBuilder.put(SHUFFLE_ADDRESS_LIST_FIELD_NAME, shuffleAddressList);
+    return ImmutableMap.of(PICK_FIRST_FIELD_NAME, configBuilder.buildOrThrow());
   }
 
   /**
@@ -170,6 +231,11 @@ class LoadBalancerConfigFactory {
             serviceConfig = convertRoundRobinConfig();
           } else if (typedConfig.is(LeastRequest.class)) {
             serviceConfig = convertLeastRequestConfig(typedConfig.unpack(LeastRequest.class));
+          } else if (typedConfig.is(ClientSideWeightedRoundRobin.class)) {
+            serviceConfig = convertWeightedRoundRobinConfig(
+                typedConfig.unpack(ClientSideWeightedRoundRobin.class));
+          } else if (typedConfig.is(PickFirst.class)) {
+            serviceConfig = convertPickFirstConfig(typedConfig.unpack(PickFirst.class));
           } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
             serviceConfig = convertCustomConfig(
                 typedConfig.unpack(com.github.xds.type.v3.TypedStruct.class));
@@ -217,12 +283,29 @@ class LoadBalancerConfigFactory {
           ringHash.hasMaximumRingSize() ? ringHash.getMaximumRingSize().getValue() : null);
     }
 
+    private static ImmutableMap<String, ?> convertWeightedRoundRobinConfig(
+            ClientSideWeightedRoundRobin wrr) throws ResourceInvalidException {
+      try {
+        return buildWrrConfig(
+            wrr.hasBlackoutPeriod() ? Durations.toString(wrr.getBlackoutPeriod()) : null,
+            wrr.hasWeightExpirationPeriod()
+                ? Durations.toString(wrr.getWeightExpirationPeriod()) : null,
+            wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
+            wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
+            wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null,
+            wrr.hasErrorUtilizationPenalty() ? wrr.getErrorUtilizationPenalty().getValue() : null);
+      } catch (IllegalArgumentException ex) {
+        throw new ResourceInvalidException("Invalid duration in weighted round robin config: "
+            + ex.getMessage());
+      }
+    }
+
     /**
      * Converts a wrr_locality {@link Any} configuration to service config format.
      */
     private static ImmutableMap<String, ?> convertWrrLocalityConfig(WrrLocality wrrLocality,
-        int recursionDepth) throws ResourceInvalidException,
-        MaxRecursionReachedException {
+        int recursionDepth)
+        throws ResourceInvalidException, MaxRecursionReachedException {
       return buildWrrLocalityConfig(
           convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(), recursionDepth + 1));
     }
@@ -232,6 +315,13 @@ class LoadBalancerConfigFactory {
      */
     private static ImmutableMap<String, ?> convertRoundRobinConfig() {
       return buildRoundRobinConfig();
+    }
+
+    /**
+     * "Converts" a pick_first configuration to service config format.
+     */
+    private static ImmutableMap<String, ?> convertPickFirstConfig(PickFirst pickFirst) {
+      return buildPickFirstConfig(pickFirst.getShuffleAddressList());
     }
 
     /**

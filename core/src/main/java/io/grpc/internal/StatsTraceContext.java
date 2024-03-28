@@ -119,10 +119,11 @@ public final class StatsTraceContext {
   }
 
   /**
-   * See {@link ServerStreamTracer#filterContext}.  For server-side only.
+   * See {@link ServerStreamTracer#filterContext}. For server-side only.
    *
    * <p>Called from {@link io.grpc.internal.ServerImpl}.
    */
+  @SuppressWarnings("UnusedTypeParameter")
   public <ReqT, RespT> Context serverFilterContext(Context context) {
     Context ctx = checkNotNull(context, "context");
     for (StreamTracer tracer : tracers) {

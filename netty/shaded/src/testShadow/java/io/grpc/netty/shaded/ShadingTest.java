@@ -26,7 +26,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
 import io.grpc.TlsServerCredentials;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
@@ -34,12 +33,12 @@ import io.grpc.netty.shaded.io.grpc.netty.NettySslContextChannelCredentials;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslContextBuilder;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslProvider;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.TlsTesting;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceBlockingStub;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceImplBase;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -79,7 +78,8 @@ public final class ShadingTest {
   public void nettyResourcesUpdated() throws IOException {
     InputStream inputStream = NettyChannelBuilder.class.getClassLoader()
         .getResourceAsStream(
-            "META-INF/native-image/io.grpc.netty.shaded.io.netty/transport/reflection-config.json");
+            "META-INF/native-image/io.grpc.netty.shaded.io.netty/netty-transport/"
+                + "reflection-config.json");
     assertThat(inputStream).isNotNull();
 
     Scanner s = new Scanner(inputStream, StandardCharsets.UTF_8.name()).useDelimiter("\\A");
@@ -112,13 +112,13 @@ public final class ShadingTest {
   @Test
   public void tcnative() throws Exception {
     ServerCredentials serverCreds = TlsServerCredentials.create(
-        TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+        TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
     server = Grpc.newServerBuilderForPort(0, serverCreds)
         .addService(new SimpleServiceImpl())
         .build().start();
     ChannelCredentials creds = NettySslContextChannelCredentials.create(
         GrpcSslContexts.configure(SslContextBuilder.forClient(), SslProvider.OPENSSL)
-            .trustManager(TestUtils.loadCert("ca.pem")).build());
+            .trustManager(TlsTesting.loadCert("ca.pem")).build());
     channel = Grpc.newChannelBuilder("localhost:" + server.getPort(), creds)
         .overrideAuthority("foo.test.google.fr")
         .build();

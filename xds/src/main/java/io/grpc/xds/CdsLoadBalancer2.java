@@ -35,18 +35,23 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 /**
@@ -79,9 +84,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (this.resolvedAddresses != null) {
-      return;
+      return Status.OK;
     }
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
@@ -91,6 +96,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     logger.log(XdsLogLevel.INFO, "Config: {0}", config);
     cdsLbState = new CdsLbState(config.name);
     cdsLbState.start();
+    return Status.OK;
   }
 
   @Override
@@ -99,7 +105,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     if (cdsLbState != null && cdsLbState.childLb != null) {
       cdsLbState.childLb.handleNameResolutionError(error);
     } else {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
@@ -119,7 +126,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
    * receiving the CDS LB policy config with the top-level cluster name.
    */
   private final class CdsLbState {
+
     private final ClusterState root;
+    private final Map<String, ClusterState> clusterStates = new ConcurrentHashMap<>();
     private LoadBalancer childLb;
 
     private CdsLbState(String rootCluster) {
@@ -139,6 +148,11 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
     private void handleClusterDiscovered() {
       List<DiscoveryMechanism> instances = new ArrayList<>();
+
+      // Used for loop detection to break the infinite recursion that loops would cause
+      Map<ClusterState, List<ClusterState>> parentClusters = new HashMap<>();
+      Status loopStatus = null;
+
       // Level-order traversal.
       // Collect configurations for all non-aggregate (leaf) clusters.
       Queue<ClusterState> queue = new ArrayDeque<>();
@@ -154,26 +168,57 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             continue;
           }
           if (clusterState.isLeaf) {
-            DiscoveryMechanism instance;
-            if (clusterState.result.clusterType() ==  ClusterType.EDS) {
-              instance = DiscoveryMechanism.forEds(
-                  clusterState.name, clusterState.result.edsServiceName(),
-                  clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
-                  clusterState.result.upstreamTlsContext(), clusterState.result.outlierDetection());
-            } else {  // logical DNS
-              instance = DiscoveryMechanism.forLogicalDns(
-                  clusterState.name, clusterState.result.dnsHostName(),
-                  clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
-                  clusterState.result.upstreamTlsContext());
+            if (instances.stream().map(inst -> inst.cluster).noneMatch(clusterState.name::equals)) {
+              DiscoveryMechanism instance;
+              if (clusterState.result.clusterType() == ClusterType.EDS) {
+                instance = DiscoveryMechanism.forEds(
+                    clusterState.name, clusterState.result.edsServiceName(),
+                    clusterState.result.lrsServerInfo(),
+                    clusterState.result.maxConcurrentRequests(),
+                    clusterState.result.upstreamTlsContext(),
+                    clusterState.result.outlierDetection());
+              } else {  // logical DNS
+                instance = DiscoveryMechanism.forLogicalDns(
+                    clusterState.name, clusterState.result.dnsHostName(),
+                    clusterState.result.lrsServerInfo(),
+                    clusterState.result.maxConcurrentRequests(),
+                    clusterState.result.upstreamTlsContext());
+              }
+              instances.add(instance);
             }
-            instances.add(instance);
           } else {
-            if (clusterState.childClusterStates != null) {
+            if (clusterState.childClusterStates == null) {
+              continue;
+            }
+            // Do loop detection and break recursion if detected
+            List<String> namesCausingLoops = identifyLoops(clusterState, parentClusters);
+            if (namesCausingLoops.isEmpty()) {
               queue.addAll(clusterState.childClusterStates.values());
+            } else {
+              // Do cleanup
+              if (childLb != null) {
+                childLb.shutdown();
+                childLb = null;
+              }
+              if (loopStatus != null) {
+                logger.log(XdsLogLevel.WARNING,
+                    "Multiple loops in CDS config.  Old msg:  " + loopStatus.getDescription());
+              }
+              loopStatus = Status.UNAVAILABLE.withDescription(String.format(
+                  "CDS error: circular aggregate clusters directly under %s for "
+                      + "root cluster %s, named %s",
+                  clusterState.name, root.name, namesCausingLoops));
             }
           }
         }
       }
+
+      if (loopStatus != null) {
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(loopStatus)));
+        return;
+      }
+
       if (instances.isEmpty()) {  // none of non-aggregate clusters exists
         if (childLb != null) {
           childLb.shutdown();
@@ -182,7 +227,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         Status unavailable =
             Status.UNAVAILABLE.withDescription("CDS error: found 0 leaf (logical DNS or EDS) "
                 + "clusters for root cluster " + root.name);
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(unavailable)));
         return;
       }
 
@@ -213,11 +259,49 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build());
     }
 
+    /**
+     * Returns children that would cause loops and builds up the parentClusters map.
+     **/
+
+    private List<String> identifyLoops(ClusterState clusterState,
+        Map<ClusterState, List<ClusterState>> parentClusters) {
+      Set<String> ancestors = new HashSet<>();
+      ancestors.add(clusterState.name);
+      addAncestors(ancestors, clusterState, parentClusters);
+
+      List<String> namesCausingLoops = new ArrayList<>();
+      for (ClusterState state : clusterState.childClusterStates.values()) {
+        if (ancestors.contains(state.name)) {
+          namesCausingLoops.add(state.name);
+        }
+      }
+
+      // Update parent map with entries from remaining children to clusterState
+      clusterState.childClusterStates.values().stream()
+          .filter(child -> !namesCausingLoops.contains(child.name))
+          .forEach(
+              child -> parentClusters.computeIfAbsent(child, k -> new ArrayList<>())
+                  .add(clusterState));
+
+      return namesCausingLoops;
+    }
+
+    /** Recursively add all parents to the ancestors list. **/
+    private void addAncestors(Set<String> ancestors, ClusterState clusterState,
+        Map<ClusterState, List<ClusterState>> parentClusters) {
+      List<ClusterState> directParents = parentClusters.get(clusterState);
+      if (directParents != null) {
+        directParents.stream().map(c -> c.name).forEach(ancestors::add);
+        directParents.forEach(p -> addAncestors(ancestors, p, parentClusters));
+      }
+    }
+
     private void handleClusterDiscoveryError(Status error) {
       if (childLb != null) {
         childLb.handleNameResolutionError(error);
       } else {
-        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
       }
     }
 
@@ -237,16 +321,18 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       private void start() {
-        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this);
+        shutdown = false;
+        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this, syncContext);
       }
 
       void shutdown() {
         shutdown = true;
         xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
-        if (childClusterStates != null) {  // recursively shut down all descendants
-          for (ClusterState state : childClusterStates.values()) {
-            state.shutdown();
-          }
+        if (childClusterStates != null) {
+          // recursively shut down all descendants
+          childClusterStates.values().stream()
+              .filter(state -> !state.shutdown)
+              .forEach(ClusterState::shutdown);
         }
       }
 
@@ -257,87 +343,85 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                 String.format("Unable to load CDS %s. xDS server returned: %s: %s",
                   name, error.getCode(), error.getDescription()))
             .withCause(error.getCause());
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (shutdown) {
-              return;
-            }
-            // All watchers should receive the same error, so we only propagate it once.
-            if (ClusterState.this == root) {
-              handleClusterDiscoveryError(status);
-            }
-          }
-        });
+        if (shutdown) {
+          return;
+        }
+        // All watchers should receive the same error, so we only propagate it once.
+        if (ClusterState.this == root) {
+          handleClusterDiscoveryError(status);
+        }
       }
 
       @Override
       public void onResourceDoesNotExist(String resourceName) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (shutdown) {
-              return;
-            }
-            discovered = true;
-            result = null;
-            if (childClusterStates != null) {
-              for (ClusterState state : childClusterStates.values()) {
-                state.shutdown();
-              }
-              childClusterStates = null;
-            }
-            handleClusterDiscovered();
+        if (shutdown) {
+          return;
+        }
+        discovered = true;
+        result = null;
+        if (childClusterStates != null) {
+          for (ClusterState state : childClusterStates.values()) {
+            state.shutdown();
           }
-        });
+          childClusterStates = null;
+        }
+        handleClusterDiscovered();
       }
 
       @Override
       public void onChanged(final CdsUpdate update) {
-        class ClusterDiscovered implements Runnable {
-          @Override
-          public void run() {
-            if (shutdown) {
-              return;
-            }
-
-            logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
-            discovered = true;
-            result = update;
-            if (update.clusterType() == ClusterType.AGGREGATE) {
-              isLeaf = false;
-              logger.log(XdsLogLevel.INFO, "Aggregate cluster {0}, underlying clusters: {1}",
-                  update.clusterName(), update.prioritizedClusterNames());
-              Map<String, ClusterState> newChildStates = new LinkedHashMap<>();
-              for (String cluster : update.prioritizedClusterNames()) {
-                if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
-                  ClusterState childState = new ClusterState(cluster);
-                  childState.start();
-                  newChildStates.put(cluster, childState);
-                } else {
-                  newChildStates.put(cluster, childClusterStates.remove(cluster));
-                }
-              }
-              if (childClusterStates != null) {  // stop subscribing to revoked child clusters
-                for (ClusterState watcher : childClusterStates.values()) {
-                  watcher.shutdown();
-                }
-              }
-              childClusterStates = newChildStates;
-            } else if (update.clusterType() == ClusterType.EDS) {
-              isLeaf = true;
-              logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
-                  update.clusterName(), update.edsServiceName());
-            } else {  // logical DNS
-              isLeaf = true;
-              logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", update.clusterName());
-            }
-            handleClusterDiscovered();
-          }
+        if (shutdown) {
+          return;
         }
-
-        syncContext.execute(new ClusterDiscovered());
+        logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
+        discovered = true;
+        result = update;
+        if (update.clusterType() == ClusterType.AGGREGATE) {
+          isLeaf = false;
+          logger.log(XdsLogLevel.INFO, "Aggregate cluster {0}, underlying clusters: {1}",
+              update.clusterName(), update.prioritizedClusterNames());
+          Map<String, ClusterState> newChildStates = new LinkedHashMap<>();
+          for (String cluster : update.prioritizedClusterNames()) {
+            if (newChildStates.containsKey(cluster)) {
+              logger.log(XdsLogLevel.WARNING,
+                  String.format("duplicate cluster name %s in aggregate %s is being ignored",
+                      cluster, update.clusterName()));
+              continue;
+            }
+            if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
+              ClusterState childState;
+              if (clusterStates.containsKey(cluster)) {
+                childState = clusterStates.get(cluster);
+                if (childState.shutdown) {
+                  childState.start();
+                }
+              } else {
+                childState = new ClusterState(cluster);
+                clusterStates.put(cluster, childState);
+                childState.start();
+              }
+              newChildStates.put(cluster, childState);
+            } else {
+              newChildStates.put(cluster, childClusterStates.remove(cluster));
+            }
+          }
+          if (childClusterStates != null) {  // stop subscribing to revoked child clusters
+            for (ClusterState watcher : childClusterStates.values()) {
+              watcher.shutdown();
+            }
+          }
+          childClusterStates = newChildStates;
+        } else if (update.clusterType() == ClusterType.EDS) {
+          isLeaf = true;
+          logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
+              update.clusterName(), update.edsServiceName());
+        } else {  // logical DNS
+          isLeaf = true;
+          logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", update.clusterName());
+        }
+        handleClusterDiscovered();
       }
+
     }
   }
 }

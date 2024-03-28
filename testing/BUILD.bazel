@@ -13,26 +13,13 @@ java_library(
     deps = [
         "//api",
         "//context",
-        "//core:inprocess",
-        "//core:util",
+        "//inprocess",
         "//stub",
+        "//util",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
         artifact("com.google.j2objc:j2objc-annotations"),
         artifact("com.google.truth:truth"),
         artifact("junit:junit"),
-    ],
-)
-
-java_library(
-    name = "internal",
-    srcs = glob([
-        "src/main/java/io/grpc/internal/*.java",
-    ]),
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//api",
-        "//core:internal",
-        artifact("io.opencensus:opencensus-api"),
     ],
 )

@@ -125,6 +125,14 @@ public interface ReadableBuffer extends Closeable {
   int arrayOffset();
 
   /**
+   * Note that the current callsite has access to this buffer, or do nothing. This is only useful
+   * when the buffer has leak detection and intrumentation to record usages before the buffer was
+   * leaked. That can make it much easier to track down where the buffer was leaked. If this isn't
+   * such a buffer, the method does nothing.
+   */
+  default void touch() {}
+
+  /**
    * Indicates whether or not {@link #mark} operation is supported for this buffer.
    */
   boolean markSupported();

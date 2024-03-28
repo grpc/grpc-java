@@ -88,8 +88,9 @@ public final class ParcelableInputStreamTest {
     stream.writeToParcel(parcel);
 
     parcel.setDataPosition(0);
-    assertThat((TestParcelable) parcel.readParcelable(getClass().getClassLoader()))
-        .isEqualTo(testParcelable);
+    @SuppressWarnings("deprecation") // readParcelable(ClassLoader)'s replacement is only in 33+.
+    TestParcelable clone = parcel.readParcelable(getClass().getClassLoader());
+    assertThat(clone).isEqualTo(testParcelable);
   }
 
   @Test
@@ -113,8 +114,9 @@ public final class ParcelableInputStreamTest {
     parcel.unmarshall(data, 0, data.length);
     parcel.setDataPosition(0);
 
-    assertThat((TestParcelable) parcel.readParcelable(getClass().getClassLoader()))
-        .isEqualTo(testParcelable);
+    @SuppressWarnings("deprecation") // readParcelable(ClassLoader)'s replacement is only in 33+.
+    TestParcelable clone = parcel.readParcelable(getClass().getClassLoader());
+    assertThat(clone).isEqualTo(testParcelable);
   }
 
   @Test

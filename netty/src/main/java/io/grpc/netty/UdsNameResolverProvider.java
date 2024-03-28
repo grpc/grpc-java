@@ -65,7 +65,7 @@ public final class UdsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(DomainSocketAddress.class);
   }
 }

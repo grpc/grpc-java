@@ -17,21 +17,25 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Context;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TimeProvider;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.XdsClientImpl.XdsChannelFactory;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClientImpl;
+import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -42,6 +46,9 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
+  private static final boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
+      System.getenv("GRPC_LOG_XDS_NODE_ID"));
+  private static final Logger log = Logger.getLogger(XdsClientImpl.class.getName());
 
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
@@ -49,7 +56,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private volatile ObjectPool<XdsClient> xdsClientPool;
 
   SharedXdsClientPoolProvider() {
-    this(new BootstrapperImpl());
+    this(new GrpcBootstrapperImpl());
   }
 
   @VisibleForTesting
@@ -103,7 +110,6 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @ThreadSafe
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
-    private final Context context = Context.ROOT;
     private final BootstrapInfo bootstrapInfo;
     private final Object lock = new Object();
     @GuardedBy("lock")
@@ -122,15 +128,18 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     public XdsClient getObject() {
       synchronized (lock) {
         if (refCount == 0) {
+          if (LOG_XDS_NODE_ID) {
+            log.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
+          }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           xdsClient = new XdsClientImpl(
-              XdsChannelFactory.DEFAULT_XDS_CHANNEL_FACTORY,
+              DEFAULT_XDS_TRANSPORT_FACTORY,
               bootstrapInfo,
-              context,
               scheduler,
               new ExponentialBackoffPolicy.Provider(),
               GrpcUtil.STOPWATCH_SUPPLIER,
               TimeProvider.SYSTEM_TIME_PROVIDER,
+              MessagePrinter.INSTANCE,
               new TlsContextManagerImpl(bootstrapInfo));
         }
         refCount++;

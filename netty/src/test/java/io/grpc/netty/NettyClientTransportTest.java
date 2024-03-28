@@ -27,6 +27,7 @@ import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
+import static io.grpc.netty.NettyServerBuilder.MAX_RST_COUNT_DISABLED;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,7 +36,11 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+import com.google.common.base.Strings;
+import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -67,6 +72,8 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
+import io.grpc.testing.TlsTesting;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelDuplexHandler;
@@ -74,6 +81,7 @@ import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.local.LocalChannel;
@@ -84,14 +92,13 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -101,22 +108,27 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link NettyClientTransport}.
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
   private static final SslContext SSL_CONTEXT = createSslContext();
 
   @Mock
@@ -142,7 +154,7 @@ public class NettyClientTransportTest {
 
   @Before
   public void setup() {
-    MockitoAnnotations.initMocks(this);
+    when(clientTransportListener.filterTransport(any())).thenAnswer(i -> i.getArguments()[0]);
   }
 
   @After
@@ -196,7 +208,7 @@ public class NettyClientTransportTest {
         newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
-        new SocketPicker(), new FakeChannelLogger(), false);
+        new SocketPicker(), new FakeChannelLogger(), false, Ticker.systemTicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -298,22 +310,20 @@ public class NettyClientTransportTest {
 
   @Test
   public void tlsNegotiationFailurePropagatesToStatus() throws Exception {
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File serverKey = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream serverKey = TlsTesting.loadCert("server1.key");
     // Don't trust ca.pem, so that client auth fails
     SslContext sslContext = GrpcSslContexts.forServer(serverCert, serverKey)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .clientAuth(ClientAuth.REQUIRE)
         .build();
     negotiator = ProtocolNegotiators.serverTls(sslContext);
     startServer();
 
-    File caCert = TestUtils.loadCert("ca.pem");
-    File clientCert = TestUtils.loadCert("client.pem");
-    File clientKey = TestUtils.loadCert("client.key");
+    InputStream caCert = TlsTesting.loadCert("ca.pem");
+    InputStream clientCert = TlsTesting.loadCert("client.pem");
+    InputStream clientKey = TlsTesting.loadCert("client.key");
     SslContext clientContext = GrpcSslContexts.forClient()
         .trustManager(caCert)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext);
@@ -448,7 +458,7 @@ public class NettyClientTransportTest {
         newNegotiator(), false, DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
-        new FakeChannelLogger(), false);
+        new FakeChannelLogger(), false, Ticker.systemTicker());
     transports.add(transport);
 
     // Should not throw
@@ -539,6 +549,47 @@ public class NettyClientTransportTest {
       assertEquals(Status.Code.INTERNAL, status.getCode());
       assertEquals("RST_STREAM closed stream. HTTP/2 error code: PROTOCOL_ERROR",
           status.getDescription());
+    }
+  }
+
+  @Test
+  public void huffmanCodingShouldNotBePerformed() throws Exception {
+    @SuppressWarnings("InlineMeInliner") // Requires Java 11
+    String longStringOfA = Strings.repeat("a", 128);
+
+    negotiator = ProtocolNegotiators.serverPlaintext();
+    startServer();
+
+    NettyClientTransport transport = newTransport(ProtocolNegotiators.plaintext(),
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, false,
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
+
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        longStringOfA);
+
+    callMeMaybe(transport.start(clientTransportListener));
+
+    AtomicBoolean foundExpectedHeaderBytes = new AtomicBoolean(false);
+
+    transport.channel().pipeline().addFirst(new ChannelDuplexHandler() {
+      @Override
+      public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+          throws Exception {
+        if (msg instanceof ByteBuf) {
+          if (((ByteBuf) msg).toString(StandardCharsets.UTF_8).contains(longStringOfA)) {
+            foundExpectedHeaderBytes.set(true);
+          }
+        }
+        super.write(ctx, msg, promise);
+      }
+    });
+
+    new Rpc(transport, headers).halfClose().waitForResponse();
+
+    if (!foundExpectedHeaderBytes.get()) {
+      fail("expected to find UTF-8 encoded 'a's in the header");
     }
   }
 
@@ -692,10 +743,9 @@ public class NettyClientTransportTest {
     assertEquals(false, serverExecutorPool.isInUse());
     assertEquals(false, clientExecutorPool.isInUse());
 
-    File serverCert = TestUtils.loadCert("server1.pem");
-    File serverKey = TestUtils.loadCert("server1.key");
+    InputStream serverCert = TlsTesting.loadCert("server1.pem");
+    InputStream serverKey = TlsTesting.loadCert("server1.key");
     SslContext sslContext = GrpcSslContexts.forServer(serverCert, serverKey)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .clientAuth(ClientAuth.NONE)
         .build();
     negotiator = ProtocolNegotiators.serverTls(sslContext, serverExecutorPool);
@@ -703,12 +753,11 @@ public class NettyClientTransportTest {
     // after starting the server, the Executor in the server pool should be used
     assertEquals(true, serverExecutorPool.isInUse());
 
-    File caCert = TestUtils.loadCert("ca.pem");
-    File clientCert = TestUtils.loadCert("client.pem");
-    File clientKey = TestUtils.loadCert("client.key");
+    InputStream caCert = TlsTesting.loadCert("ca.pem");
+    InputStream clientCert = TlsTesting.loadCert("client.pem");
+    InputStream clientKey = TlsTesting.loadCert("client.key");
     SslContext clientContext = GrpcSslContexts.forClient()
         .trustManager(caCert)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool);
@@ -733,9 +782,8 @@ public class NettyClientTransportTest {
   }
 
   private ProtocolNegotiator newNegotiator() throws IOException {
-    File caCert = TestUtils.loadCert("ca.pem");
-    SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert)
-        .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
+    InputStream caCert = TlsTesting.loadCert("ca.pem");
+    SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert).build();
     return ProtocolNegotiators.tls(clientContext);
   }
 
@@ -763,7 +811,8 @@ public class NettyClientTransportTest {
         negotiator, false, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
-        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false);
+        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false,
+        Ticker.systemTicker());
     transports.add(transport);
     return transport;
   }
@@ -787,7 +836,7 @@ public class NettyClientTransportTest {
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,
         MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE, true, 0,
-        Attributes.EMPTY,
+        MAX_RST_COUNT_DISABLED, 0, Attributes.EMPTY,
         channelz);
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
@@ -802,10 +851,9 @@ public class NettyClientTransportTest {
 
   private static SslContext createSslContext() {
     try {
-      File serverCert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
-      return GrpcSslContexts.forServer(serverCert, key)
-          .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
+      InputStream serverCert = TlsTesting.loadCert("server1.pem");
+      InputStream key = TlsTesting.loadCert("server1.key");
+      return GrpcSslContexts.forServer(serverCert, key).build();
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
@@ -885,12 +933,10 @@ public class NettyClientTransportTest {
 
   private static final class EchoServerStreamListener implements ServerStreamListener {
     final ServerStream stream;
-    final String method;
     final Metadata headers;
 
-    EchoServerStreamListener(ServerStream stream, String method, Metadata headers) {
+    EchoServerStreamListener(ServerStream stream, Metadata headers) {
       this.stream = stream;
-      this.method = method;
       this.headers = headers;
     }
 
@@ -930,9 +976,9 @@ public class NettyClientTransportTest {
       return new ServerTransportListener() {
         @Override
         public void streamCreated(ServerStream stream, String method, Metadata headers) {
-          EchoServerStreamListener listener = new EchoServerStreamListener(stream, method, headers);
+          EchoServerStreamListener listener = new EchoServerStreamListener(stream, headers);
           stream.setListener(listener);
-          stream.writeHeaders(new Metadata());
+          stream.writeHeaders(new Metadata(), true);
           stream.request(1);
           streamListeners.add(listener);
         }

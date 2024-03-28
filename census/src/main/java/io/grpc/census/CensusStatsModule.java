@@ -17,6 +17,7 @@
 package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.census.internal.ObservabilityCensusConstants.API_LATENCY_PER_CALL;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -276,7 +277,7 @@ final class CensusStatsModule {
         outboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          startCtx, RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_METHOD, bytes);
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -288,7 +289,7 @@ final class CensusStatsModule {
         inboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          startCtx, RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_METHOD, bytes);
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -365,21 +366,27 @@ final class CensusStatsModule {
     }
 
     void recordFinishedAttempt() {
-      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-          // TODO(songya): remove the deprecated measure constants once they are completed removed.
-          .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
-          // The latency is double value
-          .put(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC, outboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC, outboundWireSize)
-          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC, inboundWireSize)
-          .put(
-              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
-              outboundUncompressedSize)
-          .put(
-              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
-              inboundUncompressedSize);
+      MeasureMap measureMap =
+          module
+              .statsRecorder
+              .newMeasureMap()
+              // TODO(songya): remove the deprecated measure constants once they are completed
+              // removed.
+              .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
+              // The latency is double value
+              .put(
+                  RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY,
+                  roundtripNanos / NANOS_PER_MILLI)
+              .put(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC, outboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC, (double) outboundWireSize)
+              .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC, (double) inboundWireSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
+                  (double) outboundUncompressedSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
+                  (double) inboundUncompressedSize);
       if (statusCode != Code.OK) {
         measureMap.put(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
@@ -409,6 +416,7 @@ final class CensusStatsModule {
     ClientTracer inboundMetricTracer;
     private final CensusStatsModule module;
     private final Stopwatch stopwatch;
+    private final Stopwatch callStopwatch;
     @GuardedBy("lock")
     private boolean callEnded;
     private final TagContext parentCtx;
@@ -423,6 +431,7 @@ final class CensusStatsModule {
     private final Object lock = new Object();
     // write @GuardedBy("lock") and happens before read
     private long retryDelayNanos;
+    private long callLatencyNanos;
     @GuardedBy("lock")
     private int activeStreams;
     @GuardedBy("lock")
@@ -434,6 +443,7 @@ final class CensusStatsModule {
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.stopwatch = module.stopwatchSupplier.get();
+      this.callStopwatch = module.stopwatchSupplier.get().start();
       TagValue methodTag = TagValue.create(fullMethodName);
       startCtx = module.tagger.toBuilder(parentCtx)
           .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
@@ -495,6 +505,7 @@ final class CensusStatsModule {
       if (!module.recordFinishedRpcs) {
         return;
       }
+      callStopwatch.stop();
       this.status = status;
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
@@ -532,10 +543,12 @@ final class CensusStatsModule {
       if (attempts > 0) {
         retriesPerCall = attempts - 1;
       }
+      callLatencyNanos = callStopwatch.elapsed(TimeUnit.NANOSECONDS);
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           .put(RETRIES_PER_CALL, retriesPerCall)
           .put(TRANSPARENT_RETRIES_PER_CALL, transparentRetriesPerCall.get())
-          .put(RETRY_DELAY_PER_CALL, retryDelayNanos / NANOS_PER_MILLI);
+          .put(RETRY_DELAY_PER_CALL, retryDelayNanos / NANOS_PER_MILLI)
+          .put(API_LATENCY_PER_CALL, callLatencyNanos / NANOS_PER_MILLI);
       TagValue methodTag = TagValue.create(fullMethodName);
       TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(
@@ -640,7 +653,7 @@ final class CensusStatsModule {
         outboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          parentCtx, RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_METHOD, bytes);
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -652,7 +665,7 @@ final class CensusStatsModule {
         inboundWireSize += bytes;
       }
       module.recordRealTimeMetric(
-          parentCtx, RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_METHOD, bytes);
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_METHOD, (double) bytes);
     }
 
     @Override
@@ -722,21 +735,27 @@ final class CensusStatsModule {
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-          // TODO(songya): remove the deprecated measure constants once they are completed removed.
-          .put(DeprecatedCensusConstants.RPC_SERVER_FINISHED_COUNT, 1)
-          // The latency is double value
-          .put(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC, outboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC, outboundWireSize)
-          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC, inboundWireSize)
-          .put(
-              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES,
-              outboundUncompressedSize)
-          .put(
-              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES,
-              inboundUncompressedSize);
+      MeasureMap measureMap =
+          module
+              .statsRecorder
+              .newMeasureMap()
+              // TODO(songya): remove the deprecated measure constants once they are completed
+              // removed.
+              .put(DeprecatedCensusConstants.RPC_SERVER_FINISHED_COUNT, 1)
+              // The latency is double value
+              .put(
+                  RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY,
+                  elapsedTimeNanos / NANOS_PER_MILLI)
+              .put(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC, outboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
+              .put(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC, (double) outboundWireSize)
+              .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC, (double) inboundWireSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES,
+                  (double) outboundUncompressedSize)
+              .put(
+                  DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES,
+                  (double) inboundUncompressedSize);
       if (!status.isOk()) {
         measureMap.put(DeprecatedCensusConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
@@ -751,10 +770,7 @@ final class CensusStatsModule {
 
     @Override
     public Context filterContext(Context context) {
-      if (!module.tagger.empty().equals(parentCtx)) {
-        return ContextUtils.withValue(context, parentCtx);
-      }
-      return context;
+      return ContextUtils.withValue(context, parentCtx);
     }
   }
 

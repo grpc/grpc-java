@@ -12,7 +12,7 @@ public final class ReportQpsScenarioServiceGrpc {
 
   private ReportQpsScenarioServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.testing.ReportQpsScenarioService";
+  public static final java.lang.String SERVICE_NAME = "grpc.testing.ReportQpsScenarioService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ScenarioResult,
@@ -92,34 +92,35 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static abstract class ReportQpsScenarioServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
      * Report results of a QPS test benchmark scenario.
      * </pre>
      */
-    public void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request,
+    default void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request,
         io.grpc.stub.StreamObserver<io.grpc.benchmarks.proto.Control.Void> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getReportScenarioMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getReportScenarioMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.benchmarks.proto.Control.ScenarioResult,
-                io.grpc.benchmarks.proto.Control.Void>(
-                  this, METHODID_REPORT_SCENARIO)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service ReportQpsScenarioService.
    */
-  public static final class ReportQpsScenarioServiceStub extends io.grpc.stub.AbstractAsyncStub<ReportQpsScenarioServiceStub> {
+  public static abstract class ReportQpsScenarioServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return ReportQpsScenarioServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service ReportQpsScenarioService.
+   */
+  public static final class ReportQpsScenarioServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<ReportQpsScenarioServiceStub> {
     private ReportQpsScenarioServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -144,8 +145,10 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service ReportQpsScenarioService.
    */
-  public static final class ReportQpsScenarioServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {
+  public static final class ReportQpsScenarioServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {
     private ReportQpsScenarioServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -169,8 +172,10 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service ReportQpsScenarioService.
    */
-  public static final class ReportQpsScenarioServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReportQpsScenarioServiceFutureStub> {
+  public static final class ReportQpsScenarioServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<ReportQpsScenarioServiceFutureStub> {
     private ReportQpsScenarioServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -201,10 +206,10 @@ public final class ReportQpsScenarioServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final ReportQpsScenarioServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(ReportQpsScenarioServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -233,6 +238,18 @@ public final class ReportQpsScenarioServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getReportScenarioMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.benchmarks.proto.Control.ScenarioResult,
+              io.grpc.benchmarks.proto.Control.Void>(
+                service, METHODID_REPORT_SCENARIO)))
+        .build();
+  }
+
   private static abstract class ReportQpsScenarioServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     ReportQpsScenarioServiceBaseDescriptorSupplier() {}
@@ -256,9 +273,9 @@ public final class ReportQpsScenarioServiceGrpc {
   private static final class ReportQpsScenarioServiceMethodDescriptorSupplier
       extends ReportQpsScenarioServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    ReportQpsScenarioServiceMethodDescriptorSupplier(String methodName) {
+    ReportQpsScenarioServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

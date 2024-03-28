@@ -7,12 +7,21 @@ plugins {
 }
 
 description = "gRPC: Stub"
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.stub')
+    }
+}
+
 dependencies {
     api project(':grpc-api'),
         libraries.guava
     implementation libraries.errorprone.annotations
     testImplementation libraries.truth,
-            project(':grpc-testing')
+            project(':grpc-inprocess'),
+            project(':grpc-testing'),
+            testFixtures(project(':grpc-api'))
     signature libraries.signature.java
     signature libraries.signature.android
 }

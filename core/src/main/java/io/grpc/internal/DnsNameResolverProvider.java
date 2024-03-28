@@ -46,8 +46,11 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "dns";
 
+  private static final boolean IS_ANDROID = InternalServiceProviders
+      .isAndroid(DnsNameResolverProvider.class.getClassLoader());
+
   @Override
-  public DnsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+  public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(targetPath.startsWith("/"),
@@ -59,7 +62,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
           args,
           GrpcUtil.SHARED_CHANNEL_EXECUTOR,
           Stopwatch.createUnstarted(),
-          InternalServiceProviders.isAndroid(getClass().getClassLoader()));
+          IS_ANDROID);
     } else {
       return null;
     }
@@ -81,7 +84,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  protected Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+  public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }
 }

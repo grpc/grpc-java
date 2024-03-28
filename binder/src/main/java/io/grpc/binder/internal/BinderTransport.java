@@ -28,8 +28,10 @@ import android.os.Parcel;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
+import android.os.UserHandle;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ticker;
+import com.google.common.base.Verify;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -46,6 +48,7 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
+import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.internal.ClientStream;
@@ -188,6 +191,7 @@ public abstract class BinderTransport
   private final LeakSafeOneWayBinder incomingBinder;
 
   protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
+  protected final OneWayBinderProxy.Decorator binderDecorator;
 
   @GuardedBy("this")
   private final LinkedHashSet<Integer> callIdsToNotifyWhenReady = new LinkedHashSet<>();
@@ -215,7 +219,9 @@ public abstract class BinderTransport
   private BinderTransport(
       ObjectPool<ScheduledExecutorService> executorServicePool,
       Attributes attributes,
+      OneWayBinderProxy.Decorator binderDecorator,
       InternalLogId logId) {
+    this.binderDecorator = binderDecorator;
     this.executorServicePool = executorServicePool;
     this.attributes = attributes;
     this.logId = logId;
@@ -280,6 +286,7 @@ public abstract class BinderTransport
 
   @GuardedBy("this")
   protected boolean setOutgoingBinder(OneWayBinderProxy binder) {
+    binder = binderDecorator.decorate(binder);
     this.outgoingBinder = binder;
     try {
       binder.getDelegate().linkToDeath(this, 0);
@@ -409,12 +416,28 @@ public abstract class BinderTransport
       TransactionUtils.fillInFlags(parcel.get(), flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
       sendTransaction(callId, parcel);
     } catch (StatusException e) {
-      logger.log(Level.WARNING, "Failed sending oob close transaction", e);
+      logger.log(Level.FINER, "Failed sending oob close transaction", e);
     }
   }
 
   @Override
   public final boolean handleTransaction(int code, Parcel parcel) {
+    try {
+      return handleTransactionInternal(code, parcel);
+    } catch (RuntimeException e) {
+      logger.log(Level.SEVERE,
+          "Terminating transport for uncaught Exception in transaction " + code, e);
+      synchronized (this) {
+        // This unhandled exception may have put us in an inconsistent state. Force terminate the
+        // whole transport so our peer knows something is wrong and so that clients can retry with
+        // a fresh transport instance on both sides.
+        shutdownInternal(Status.INTERNAL.withCause(e), true);
+        return false;
+      }
+    }
+  }
+
+  private boolean handleTransactionInternal(int code, Parcel parcel) {
     if (code < FIRST_CALL_ID) {
       synchronized (this) {
         switch (code) {
@@ -445,14 +468,11 @@ public abstract class BinderTransport
       if (inbound == null) {
         synchronized (this) {
           if (!isShutdown()) {
-            // Create a new inbound. Strictly speaking we could end up doing this twice on
-            // two threads, hence the need to use putIfAbsent, and check its result.
             inbound = createInbound(code);
             if (inbound != null) {
-              Inbound<?> inbound2 = ongoingCalls.putIfAbsent(code, inbound);
-              if (inbound2 != null) {
-                inbound = inbound2;
-              }
+              Inbound<?> existing = ongoingCalls.put(code, inbound);
+              // Can't happen as only one invocation of handleTransaction() is running at a time.
+              Verify.verify(existing == null, "impossible appearance of %s", existing);
             }
           }
         }
@@ -550,19 +570,29 @@ public abstract class BinderTransport
     @GuardedBy("this")
     private int latestCallId = FIRST_CALL_ID;
 
+    /**
+     * Constructs a new transport instance.
+     *
+     * @param binderDecorator used to decorate both the "endpoint" and "server" binders, for fault
+     *     injection.
+     */
     public BinderClientTransport(
         Context sourceContext,
+        BinderChannelCredentials channelCredentials,
         AndroidComponentAddress targetAddress,
+        @Nullable UserHandle targetUserHandle,
         BindServiceFlags bindServiceFlags,
         Executor mainThreadExecutor,
         ObjectPool<ScheduledExecutorService> executorServicePool,
         ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
         InboundParcelablePolicy inboundParcelablePolicy,
+        OneWayBinderProxy.Decorator binderDecorator,
         Attributes eagAttrs) {
       super(
           executorServicePool,
           buildClientAttributes(eagAttrs, sourceContext, targetAddress, inboundParcelablePolicy),
+          binderDecorator,
           buildLogId(sourceContext, targetAddress));
       this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
@@ -574,7 +604,9 @@ public abstract class BinderTransport
           new ServiceBinding(
               mainThreadExecutor,
               sourceContext,
+              channelCredentials,
               targetAddress.asBindIntent(),
+              targetUserHandle,
               bindServiceFlags.toInteger(),
               this);
     }
@@ -587,7 +619,7 @@ public abstract class BinderTransport
 
     @Override
     public synchronized void onBound(IBinder binder) {
-      sendSetupTransaction(OneWayBinderProxy.wrap(binder, offloadExecutor));
+      sendSetupTransaction(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
     }
 
     @Override
@@ -736,6 +768,7 @@ public abstract class BinderTransport
             // triggers), could have shut us down.
             if (!isShutdown()) {
               setState(TransportState.READY);
+              attributes = clientTransportListener.filterTransport(attributes);
               clientTransportListener.transportReady();
             }
           }
@@ -762,9 +795,7 @@ public abstract class BinderTransport
         Context sourceContext, AndroidComponentAddress targetAddress) {
       return InternalLogId.allocate(
           BinderClientTransport.class,
-          sourceContext.getClass().getSimpleName()
-              + "->"
-              + targetAddress.getComponent().toShortString());
+          sourceContext.getClass().getSimpleName() + "->" + targetAddress);
     }
 
     private static Attributes buildClientAttributes(
@@ -800,12 +831,18 @@ public abstract class BinderTransport
     private final List<ServerStreamTracer.Factory> streamTracerFactories;
     @Nullable private ServerTransportListener serverTransportListener;
 
+    /**
+     * Constructs a new transport instance.
+     *
+     * @param binderDecorator used to decorate 'callbackBinder', for fault injection.
+     */
     public BinderServerTransport(
         ObjectPool<ScheduledExecutorService> executorServicePool,
         Attributes attributes,
         List<ServerStreamTracer.Factory> streamTracerFactories,
+        OneWayBinderProxy.Decorator binderDecorator,
         IBinder callbackBinder) {
-      super(executorServicePool, attributes, buildLogId(attributes));
+      super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
       this.streamTracerFactories = streamTracerFactories;
       // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
       setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));

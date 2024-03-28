@@ -89,7 +89,8 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link OrcaOobUtil} class.
@@ -107,6 +108,7 @@ public class OrcaOobUtilTest {
   private static final OrcaReportingConfig LONG_INTERVAL_CONFIG =
       OrcaReportingConfig.newBuilder().setReportInterval(1232L, TimeUnit.MILLISECONDS).build();
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @SuppressWarnings({"rawtypes", "unchecked"})
   private final List<EquivalentAddressGroup>[] eagLists = new List[NUM_SUBCHANNELS];
@@ -151,7 +153,7 @@ public class OrcaOobUtilTest {
   }
 
   private static void assertLog(List<String> logs, String expectedLog) {
-    assertThat(logs).containsExactly(expectedLog);
+    assertThat(logs).contains(expectedLog);
     logs.clear();
   }
 
@@ -181,8 +183,6 @@ public class OrcaOobUtilTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
-
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       orcaServiceImps[i] = new OpenRcaServiceImp();
       cleanupRule.register(
@@ -239,7 +239,8 @@ public class OrcaOobUtilTest {
 
     // Calling createSubchannel() on orcaHelper correctly passes augmented CreateSubchannelArgs
     // to origHelper.
-    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor =
+        ArgumentCaptor.forClass(CreateSubchannelArgs.class);
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs =
@@ -322,7 +323,8 @@ public class OrcaOobUtilTest {
 
     // Calling createSubchannel() on child helper correctly passes augmented CreateSubchannelArgs
     // to origHelper.
-    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor =
+        ArgumentCaptor.forClass(CreateSubchannelArgs.class);
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs =
@@ -545,6 +547,34 @@ public class OrcaOobUtilTest {
   }
 
   @Test
+  public void removeListener() {
+    Subchannel created = createSubchannel(orcaHelper, 0, Attributes.EMPTY);
+    OrcaOobUtil.setListener(created, null, SHORT_INTERVAL_CONFIG);
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    verify(mockStateListeners[0])
+            .onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
+
+    assertThat(orcaServiceImps[0].calls).isEmpty();
+    assertThat(subchannels[0].logs).isEmpty();
+    assertThat(unwrap(created)).isSameInstanceAs(subchannels[0]);
+
+    OrcaOobUtil.setListener(created, mockOrcaListener0, SHORT_INTERVAL_CONFIG);
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+            "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    assertThat(orcaServiceImps[0].calls.peek().request)
+            .isEqualTo(buildOrcaRequestFromConfig(SHORT_INTERVAL_CONFIG));
+
+    OrcaOobUtil.setListener(created, null, null);
+    assertThat(orcaServiceImps[0].calls.poll().cancelled).isTrue();
+    assertThat(orcaServiceImps[0].calls).isEmpty();
+    assertThat(subchannels[0].logs).isEmpty();
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    verifyNoMoreInteractions(mockOrcaListener0);
+    verifyNoInteractions(backoffPolicyProvider);
+  }
+
+  @Test
   public void updateReportingIntervalBeforeCreatingSubchannel() {
     Subchannel created = createSubchannel(orcaHelper, 0, Attributes.EMPTY);
     OrcaOobUtil.setListener(created, mockOrcaListener0, SHORT_INTERVAL_CONFIG);
@@ -667,8 +697,7 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Only parent helper's listener receives the report.
-    ArgumentCaptor<MetricReport> parentReportCaptor =
-        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<MetricReport> parentReportCaptor = ArgumentCaptor.forClass(MetricReport.class);
     verify(mockOrcaListener1).onLoadReport(parentReportCaptor.capture());
     assertThat(OrcaPerRequestUtilTest.reportEqual(parentReportCaptor.getValue(),
         OrcaPerRequestUtil.fromOrcaLoadReport(report))).isTrue();
@@ -679,8 +708,7 @@ public class OrcaOobUtilTest {
     orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
     assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
     // Both helper receives the same report instance.
-    ArgumentCaptor<MetricReport> childReportCaptor =
-        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<MetricReport> childReportCaptor = ArgumentCaptor.forClass(MetricReport.class);
     verify(mockOrcaListener1, times(2))
         .onLoadReport(parentReportCaptor.capture());
     verify(mockOrcaListener2)

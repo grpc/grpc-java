@@ -41,8 +41,10 @@ import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -89,21 +91,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void request(int numMessages) {
-    PerfMark.startTask("ServerCall.request", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.request")) {
+      PerfMark.attachTag(tag);
       stream.request(numMessages);
-    } finally {
-      PerfMark.stopTask("ServerCall.request", tag);
     }
   }
 
   @Override
   public void sendHeaders(Metadata headers) {
-    PerfMark.startTask("ServerCall.sendHeaders", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.sendHeaders")) {
+      PerfMark.attachTag(tag);
       sendHeadersInternal(headers);
-    } finally {
-      PerfMark.stopTask("ServerCall.sendHeaders", tag);
     }
   }
 
@@ -144,16 +142,14 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     // Don't check if sendMessage has been called, since it requires that sendHeaders was already
     // called.
     sendHeadersCalled = true;
-    stream.writeHeaders(headers);
+    stream.writeHeaders(headers, !getMethodDescriptor().getType().serverSendsOneMessage());
   }
 
   @Override
   public void sendMessage(RespT message) {
-    PerfMark.startTask("ServerCall.sendMessage", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.sendMessage")) {
+      PerfMark.attachTag(tag);
       sendMessageInternal(message);
-    } finally {
-      PerfMark.stopTask("ServerCall.sendMessage", tag);
     }
   }
 
@@ -162,7 +158,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     checkState(!closeCalled, "call is closed");
 
     if (method.getType().serverSendsOneMessage() && messageSent) {
-      internalClose(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES));
+      handleInternalError(Status.INTERNAL.withDescription(TOO_MANY_RESPONSES).asRuntimeException());
       return;
     }
 
@@ -174,7 +170,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         stream.flush();
       }
     } catch (RuntimeException e) {
-      close(Status.fromThrowable(e), new Metadata());
+      handleInternalError(e);
     } catch (Error e) {
       close(
           Status.CANCELLED.withDescription("Server sendMessage() failed with Error"),
@@ -186,6 +182,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @Override
   public void setMessageCompression(boolean enable) {
     stream.setMessageCompression(enable);
+  }
+
+  @Override
+  public void setOnReadyThreshold(int numBytes) {
+    stream.setOnReadyThreshold(numBytes);
   }
 
   @Override
@@ -207,11 +208,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void close(Status status, Metadata trailers) {
-    PerfMark.startTask("ServerCall.close", tag);
-    try {
+    try (TaskCloseable ignore = PerfMark.traceTask("ServerCall.close")) {
+      PerfMark.attachTag(tag);
       closeInternal(status, trailers);
-    } finally {
-      PerfMark.stopTask("ServerCall.close", tag);
     }
   }
 
@@ -221,7 +220,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       closeCalled = true;
 
       if (status.isOk() && method.getType().serverSendsOneMessage() && !messageSent) {
-        internalClose(Status.INTERNAL.withDescription(MISSING_RESPONSE));
+        handleInternalError(Status.INTERNAL.withDescription(MISSING_RESPONSE).asRuntimeException());
         return;
       }
 
@@ -270,10 +269,14 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    * run until completion, but silently ignore interactions with the {@link ServerStream} from now
    * on.
    */
-  private void internalClose(Status internalError) {
-    log.log(Level.WARNING, "Cancelling the stream with status {0}", new Object[] {internalError});
-    stream.cancel(internalError);
-    serverCallTracer.reportCallEnded(internalError.isOk()); // error so always false
+  private void handleInternalError(Throwable internalError) {
+    log.log(Level.WARNING, "Cancelling the stream because of internal error", internalError);
+    Status status = (internalError instanceof StatusRuntimeException)
+        ? ((StatusRuntimeException) internalError).getStatus()
+        : Status.INTERNAL.withCause(internalError)
+            .withDescription("Internal error so cancelling stream.");
+    stream.cancel(status);
+    serverCallTracer.reportCallEnded(false); // error so always false
   }
 
   /**
@@ -311,11 +314,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
     @Override
     public void messagesAvailable(MessageProducer producer) {
-      PerfMark.startTask("ServerStreamListener.messagesAvailable", call.tag);
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.messagesAvailable")) {
+        PerfMark.attachTag(call.tag);
         messagesAvailableInternal(producer);
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.messagesAvailable", call.tag);
       }
     }
 
@@ -346,25 +347,21 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
     @Override
     public void halfClosed() {
-      PerfMark.startTask("ServerStreamListener.halfClosed", call.tag);
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.halfClosed")) {
+        PerfMark.attachTag(call.tag);
         if (call.cancelled) {
           return;
         }
 
         listener.onHalfClose();
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.halfClosed", call.tag);
       }
     }
 
     @Override
     public void closed(Status status) {
-      PerfMark.startTask("ServerStreamListener.closed", call.tag);
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.closed")) {
+        PerfMark.attachTag(call.tag);
         closedInternal(status);
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.closed", call.tag);
       }
     }
 
@@ -390,14 +387,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
     @Override
     public void onReady() {
-      PerfMark.startTask("ServerStreamListener.onReady", call.tag);
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.onReady")) {
+        PerfMark.attachTag(call.tag);
         if (call.cancelled) {
           return;
         }
         listener.onReady();
-      } finally {
-        PerfMark.stopTask("ServerCall.closed", call.tag);
       }
     }
   }

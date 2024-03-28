@@ -19,10 +19,8 @@ package io.grpc.netty;
 import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelProvider;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collection;
-import java.util.Collections;
 
 /** Provider for {@link NettyChannelBuilder} instances. */
 @Internal
@@ -59,6 +57,6 @@ public final class NettyChannelProvider extends ManagedChannelProvider {
 
   @Override
   protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
-    return Collections.singleton(InetSocketAddress.class);
+    return NettyChannelBuilder.getSupportedSocketAddressTypes();
   }
 }

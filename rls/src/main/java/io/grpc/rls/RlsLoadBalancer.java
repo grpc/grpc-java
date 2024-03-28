@@ -49,24 +49,18 @@ final class RlsLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(ChannelLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
-
-    if (resolvedAddresses.getAddresses().isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription(
-          "NameResolver returned no usable address. addrs=" + resolvedAddresses.getAddresses()
-              + ", attrs=" + resolvedAddresses.getAttributes()));
-      return false;
-    }
-
     LbPolicyConfiguration lbPolicyConfiguration =
         (LbPolicyConfiguration) resolvedAddresses.getLoadBalancingPolicyConfig();
-    checkNotNull(lbPolicyConfiguration, "Missing rls lb config");
+    checkNotNull(lbPolicyConfiguration, "Missing RLS LB config");
     if (!lbPolicyConfiguration.equals(this.lbPolicyConfiguration)) {
+      logger.log(ChannelLogLevel.DEBUG, "A new RLS LB config received");
       boolean needToConnect = this.lbPolicyConfiguration == null
           || !this.lbPolicyConfiguration.getRouteLookupConfig().lookupService().equals(
           lbPolicyConfiguration.getRouteLookupConfig().lookupService());
       if (needToConnect) {
+        logger.log(ChannelLogLevel.DEBUG, "RLS lookup service changed, need to connect");
         if (routeLookupClient != null) {
           routeLookupClient.close();
         }
@@ -86,13 +80,15 @@ final class RlsLoadBalancer extends LoadBalancer {
       //  not required.
       this.lbPolicyConfiguration = lbPolicyConfiguration;
     }
-
-    return true;
+    logger.log(ChannelLogLevel.DEBUG, "RLS LB accepted resolved addresses successfully");
+    return Status.OK;
   }
 
   @Override
   public void requestConnection() {
+    logger.log(ChannelLogLevel.DEBUG, "connection requested from RLS LB");
     if (routeLookupClient != null) {
+      logger.log(ChannelLogLevel.DEBUG, "requesting a connection from the routeLookupClient");
       routeLookupClient.requestConnection();
     }
   }
@@ -115,10 +111,13 @@ final class RlsLoadBalancer extends LoadBalancer {
     }
 
     if (routeLookupClient != null) {
+      logger.log(ChannelLogLevel.DEBUG, "closing the routeLookupClient on a name resolution error");
       routeLookupClient.close();
       routeLookupClient = null;
       lbPolicyConfiguration = null;
     }
+    logger.log(ChannelLogLevel.DEBUG,
+        "Updating balancing state to TRANSIENT_FAILURE with an error picker");
     helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker());
   }
 
@@ -126,6 +125,7 @@ final class RlsLoadBalancer extends LoadBalancer {
   public void shutdown() {
     logger.log(ChannelLogLevel.DEBUG, "Rls lb shutdown");
     if (routeLookupClient != null) {
+      logger.log(ChannelLogLevel.DEBUG, "closing the routeLookupClient because of RLS LB shutdown");
       routeLookupClient.close();
       routeLookupClient = null;
     }

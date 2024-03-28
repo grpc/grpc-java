@@ -54,7 +54,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-// TODO (zivy@): move certain tests down to XdsServerWrapperTest, or up to XdsSdsClientServerTest.
+// TODO (zivy@): move certain tests down to XdsServerWrapperTest or to XdsSecurityClientServerTest
 /**
  * Unit tests for {@link XdsServerBuilder}.
  */
@@ -103,7 +103,7 @@ public class XdsServerBuilderTest {
     assertThat(socketAddress.getPort()).isGreaterThan(-1);
     if (mockXdsServingStatusListener != null) {
       if (notServingStatus != null) {
-        ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
+        ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(Throwable.class);
         verify(mockXdsServingStatusListener, times(1)).onNotServing(argCaptor.capture());
         Throwable throwable = argCaptor.getValue();
         assertThat(throwable).isInstanceOf(StatusException.class);

@@ -17,6 +17,8 @@
 package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -41,6 +43,9 @@ import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Status;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -92,12 +97,9 @@ final class CensusTracingModule {
   final Metadata.Key<SpanContext> tracingHeader;
   private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
-  private final boolean addMessageEvents;
 
   CensusTracingModule(
-      Tracer censusTracer,
-      final BinaryFormat censusPropagationBinaryFormat,
-      boolean addMessageEvents) {
+      Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {
     this.censusTracer = checkNotNull(censusTracer, "censusTracer");
     checkNotNull(censusPropagationBinaryFormat, "censusPropagationBinaryFormat");
     this.tracingHeader =
@@ -117,7 +119,6 @@ final class CensusTracingModule {
               }
             }
           });
-    this.addMessageEvents = addMessageEvents;
   }
 
   /**
@@ -125,8 +126,8 @@ final class CensusTracingModule {
    */
   @VisibleForTesting
   CallAttemptsTracerFactory newClientCallTracer(
-      @Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
-    return new CallAttemptsTracerFactory(parentSpan, method);
+      @Nullable Span clientSpan, MethodDescriptor<?, ?> method) {
+    return new CallAttemptsTracerFactory(clientSpan, method);
   }
 
   /**
@@ -218,9 +219,6 @@ final class CensusTracingModule {
   private void recordMessageEvent(
       Span span, MessageEvent.Type type,
       int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-    if (!addMessageEvents) {
-      return;
-    }
     MessageEvent.Builder eventBuilder = MessageEvent.builder(type, seqNo);
     if (optionalUncompressedSize != -1) {
       eventBuilder.setUncompressedMessageSize(optionalUncompressedSize);
@@ -231,6 +229,19 @@ final class CensusTracingModule {
     span.addMessageEvent(eventBuilder.build());
   }
 
+  private void recordAnnotation(
+      Span span, MessageEvent.Type type, int seqNo, boolean isCompressed, long size) {
+    String messageType = isCompressed ? "compressed" : "uncompressed";
+    Map<String, AttributeValue> attributes = new HashMap<>();
+    attributes.put("id", AttributeValue.longAttributeValue(seqNo));
+    attributes.put("type", AttributeValue.stringAttributeValue(messageType));
+
+    String messageDirection = type == MessageEvent.Type.SENT ? "↗ " : "↘ ";
+    String inlineDescription =
+        messageDirection + size + " bytes " + type.name().toLowerCase(Locale.US);
+    span.addAnnotation(inlineDescription, attributes);
+  }
+
   @VisibleForTesting
   final class CallAttemptsTracerFactory extends ClientStreamTracer.Factory {
     volatile int callEnded;
@@ -239,17 +250,11 @@ final class CensusTracingModule {
     private final Span span;
     private final String fullMethodName;
 
-    CallAttemptsTracerFactory(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
+    CallAttemptsTracerFactory(@Nullable Span clientSpan, MethodDescriptor<?, ?> method) {
       checkNotNull(method, "method");
       this.isSampledToLocalTracing = method.isSampledToLocalTracing();
       this.fullMethodName = method.getFullMethodName();
-      this.span =
-          censusTracer
-              .spanBuilderWithExplicitParent(
-                  generateTraceSpanName(false, fullMethodName),
-                  parentSpan)
-              .setRecordEvents(true)
-              .startSpan();
+      this.span = clientSpan;
     }
 
     @Override
@@ -265,7 +270,10 @@ final class CensusTracingModule {
           "previous-rpc-attempts", AttributeValue.longAttributeValue(info.getPreviousAttempts()));
       attemptSpan.putAttribute(
           "transparent-retry", AttributeValue.booleanAttributeValue(info.isTransparentRetry()));
-      return new ClientTracer(attemptSpan, tracingHeader, isSampledToLocalTracing);
+      if (info.getCallOptions().getOption(NAME_RESOLUTION_DELAYED) != null) {
+        span.addAnnotation("Delayed name resolution complete");
+      }
+      return new ClientTracer(attemptSpan, span, tracingHeader, isSampledToLocalTracing);
     }
 
     /**
@@ -291,12 +299,17 @@ final class CensusTracingModule {
 
   private final class ClientTracer extends ClientStreamTracer {
     private final Span span;
+    private final Span parentSpan;
     final Metadata.Key<SpanContext> tracingHeader;
     final boolean isSampledToLocalTracing;
+    volatile int seqNo;
+    boolean isPendingStream;
 
     ClientTracer(
-        Span span, Metadata.Key<SpanContext> tracingHeader, boolean isSampledToLocalTracing) {
+        Span span, Span parentSpan, Metadata.Key<SpanContext> tracingHeader,
+        boolean isSampledToLocalTracing) {
       this.span = checkNotNull(span, "span");
+      this.parentSpan = checkNotNull(parentSpan, "parent span");
       this.tracingHeader = tracingHeader;
       this.isSampledToLocalTracing = isSampledToLocalTracing;
     }
@@ -307,6 +320,14 @@ final class CensusTracingModule {
         headers.discardAll(tracingHeader);
         headers.put(tracingHeader, span.getContext());
       }
+      if (isPendingStream) {
+        span.addAnnotation("Delayed LB pick complete");
+      }
+    }
+
+    @Override
+    public void createPendingStream() {
+      isPendingStream = true;
     }
 
     @Override
@@ -319,8 +340,19 @@ final class CensusTracingModule {
     @Override
     public void inboundMessageRead(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-      recordMessageEvent(
-          span, MessageEvent.Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
+      recordAnnotation(
+          span, MessageEvent.Type.RECEIVED, seqNo, true, optionalWireSize);
+    }
+
+    @Override
+    public void inboundMessage(int seqNo) {
+      this.seqNo = seqNo;
+    }
+
+    @Override
+    public void inboundUncompressedSize(long bytes) {
+      recordAnnotation(
+          parentSpan, MessageEvent.Type.RECEIVED, seqNo, false, bytes);
     }
 
     @Override
@@ -334,6 +366,7 @@ final class CensusTracingModule {
     private final Span span;
     volatile boolean isSampledToLocalTracing;
     volatile int streamClosed;
+    private int seqNo;
 
     ServerTracer(String fullMethodName, @Nullable SpanContext remoteSpan) {
       checkNotNull(fullMethodName, "fullMethodName");
@@ -396,8 +429,19 @@ final class CensusTracingModule {
     @Override
     public void inboundMessageRead(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-      recordMessageEvent(
-          span, MessageEvent.Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
+      recordAnnotation(
+          span, MessageEvent.Type.RECEIVED, seqNo, true, optionalWireSize);
+    }
+
+    @Override
+    public void inboundMessage(int seqNo) {
+      this.seqNo = seqNo;
+    }
+
+    @Override
+    public void inboundUncompressedSize(long bytes) {
+      recordAnnotation(
+          span, MessageEvent.Type.RECEIVED, seqNo, false, bytes);
     }
   }
 
@@ -425,13 +469,20 @@ final class CensusTracingModule {
       // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
       // as Tracer.getCurrentSpan() except when no value available when the return value is null
       // for the direct access and BlankSpan when Tracer API is used.
-      final CallAttemptsTracerFactory tracerFactory =
-          newClientCallTracer(
-              io.opencensus.trace.unsafe.ContextUtils.getValue(Context.current()), method);
+      Span parentSpan = io.opencensus.trace.unsafe.ContextUtils.getValue(Context.current());
+      Span clientSpan = censusTracer
+          .spanBuilderWithExplicitParent(
+              generateTraceSpanName(false, method.getFullMethodName()),
+              parentSpan)
+          .setRecordEvents(true)
+          .startSpan();
+
+      final CallAttemptsTracerFactory tracerFactory = newClientCallTracer(clientSpan, method);
       ClientCall<ReqT, RespT> call =
           next.newCall(
               method,
-              callOptions.withStreamTracerFactory(tracerFactory));
+              callOptions.withStreamTracerFactory(tracerFactory)
+                  .withOption(CLIENT_TRACE_SPAN_CONTEXT_KEY, clientSpan.getContext()));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {

@@ -14,12 +14,15 @@ tasks.named("jmh").configure {
     jvmArgs = ["-server", "-Xms2g", "-Xmx2g"]
 }
 
-configurations {
-    alpnagent
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.benchmarks')
+    }
 }
 
 dependencies {
     implementation project(':grpc-core'),
+            project(':grpc-inprocess'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-stub'),
@@ -36,7 +39,6 @@ dependencies {
         }
     }
     compileOnly libraries.javax.annotation
-    alpnagent libraries.jetty.alpn.agent
 
     testImplementation libraries.junit,
             libraries.mockito.core
@@ -99,12 +101,14 @@ def benchmark_worker = tasks.register("benchmark_worker", CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into("bin") {
-    from(qps_client)
-    from(openloop_client)
-    from(qps_server)
-    from(benchmark_worker)
-    fileMode = 0755
+application {
+    applicationDistribution.into("bin") {
+        from(qps_client)
+        from(openloop_client)
+        from(qps_server)
+        from(benchmark_worker)
+        fileMode = 0755
+    }
 }
 
 publishing {

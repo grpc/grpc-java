@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -33,19 +32,25 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.ObjectPool;
+import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
-import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
+import io.grpc.xds.orca.OrcaPerRequestUtil;
+import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -68,10 +73,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   static boolean enableCircuitBreaking =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
-  @VisibleForTesting
-  static boolean enableSecurity =
-      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"))
-          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
+
   private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
 
@@ -87,7 +89,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private CallCounterProvider callCounterProvider;
   private ClusterDropStats dropStats;
   private ClusterImplLbHelper childLbHelper;
-  private LoadBalancer childLb;
+  private GracefulSwitchLoadBalancer childSwitchLb;
 
   ClusterImplLoadBalancer(Helper helper) {
     this(helper, ThreadSafeRandomImpl.instance);
@@ -102,46 +104,57 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
       xdsClientPool = attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL);
+      assert xdsClientPool != null;
       xdsClient = xdsClientPool.getObject();
     }
     if (callCounterProvider == null) {
       callCounterProvider = attributes.get(InternalXdsAttributes.CALL_COUNTER_PROVIDER);
     }
+
     ClusterImplConfig config =
         (ClusterImplConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (config == null) {
+      return Status.INTERNAL.withDescription("No cluster configuration found");
+    }
+
     if (cluster == null) {
       cluster = config.cluster;
       edsServiceName = config.edsServiceName;
       childLbHelper = new ClusterImplLbHelper(
           callCounterProvider.getOrCreate(config.cluster, config.edsServiceName),
           config.lrsServerInfo);
-      childLb = config.childPolicy.getProvider().newLoadBalancer(childLbHelper);
+      childSwitchLb = new GracefulSwitchLoadBalancer(childLbHelper);
       // Assume load report server does not change throughout cluster lifetime.
       if (config.lrsServerInfo != null) {
         dropStats = xdsClient.addClusterDropStats(config.lrsServerInfo, cluster, edsServiceName);
       }
     }
+
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
-    childLb.handleResolvedAddresses(
+
+    childSwitchLb.switchTo(config.childPolicy.getProvider());
+    childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
             .build());
+    return Status.OK;
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
-    if (childLb != null) {
-      childLb.handleNameResolutionError(error);
+    if (childSwitchLb != null) {
+      childSwitchLb.handleNameResolutionError(error);
     } else {
-      helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker(error));
+      helper.updateBalancingState(
+          ConnectivityState.TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
@@ -150,8 +163,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (dropStats != null) {
       dropStats.release();
     }
-    if (childLb != null) {
-      childLb.shutdown();
+    if (childSwitchLb != null) {
+      childSwitchLb.shutdown();
       if (childLbHelper != null) {
         childLbHelper.updateSslContextProviderSupplier(null);
         childLbHelper = null;
@@ -162,11 +175,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
   }
 
-  @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
-  }
-
   /**
    * A decorated {@link LoadBalancer.Helper} that applies configurations for connections
    * or requests to endpoints in the cluster.
@@ -174,7 +182,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
     private final AtomicLong inFlights;
     private ConnectivityState currentState = ConnectivityState.IDLE;
-    private SubchannelPicker currentPicker = BUFFER_PICKER;
+    private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable
@@ -198,17 +206,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      List<EquivalentAddressGroup> addresses = new ArrayList<>();
-      for (EquivalentAddressGroup eag : args.getAddresses()) {
-        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
-            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
-        if (enableSecurity && sslContextProviderSupplier != null) {
-          attrBuilder.set(
-              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-              sslContextProviderSupplier);
-        }
-        addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
-      }
+      List<EquivalentAddressGroup> addresses = withAdditionalAttributes(args.getAddresses());
       Locality locality = args.getAddresses().get(0).getAttributes().get(
           InternalXdsAttributes.ATTR_LOCALITY);  // all addresses should be in the same locality
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
@@ -217,8 +215,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       if (locality == null) {
         locality = Locality.create("", "", "");
       }
-      final ClusterLocalityStats localityStats = lrsServerInfo == null ? null
-          : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster, edsServiceName, locality);
+      final ClusterLocalityStats localityStats =
+          (lrsServerInfo == null)
+              ? null
+              : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster,
+              edsServiceName, locality);
+
       Attributes attrs = args.getAttributes().toBuilder().set(
           ATTR_CLUSTER_LOCALITY_STATS, localityStats).build();
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrs).build();
@@ -234,10 +236,31 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         }
 
         @Override
+        public void updateAddresses(List<EquivalentAddressGroup> addresses) {
+          delegate().updateAddresses(withAdditionalAttributes(addresses));
+        }
+
+        @Override
         protected Subchannel delegate() {
           return subchannel;
         }
       };
+    }
+
+    private List<EquivalentAddressGroup> withAdditionalAttributes(
+        List<EquivalentAddressGroup> addresses) {
+      List<EquivalentAddressGroup> newAddresses = new ArrayList<>();
+      for (EquivalentAddressGroup eag : addresses) {
+        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
+            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
+        if (sslContextProviderSupplier != null) {
+          attrBuilder.set(
+              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+              sslContextProviderSupplier);
+        }
+        newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
+      }
+      return newAddresses;
     }
 
     @Override
@@ -276,7 +299,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
       sslContextProviderSupplier =
           tlsContext != null
-              ? new SslContextProviderSupplier(tlsContext, xdsClient.getTlsContextManager())
+              ? new SslContextProviderSupplier(tlsContext,
+                                               (TlsContextManager) xdsClient.getSecurityConfig())
               : null;
     }
 
@@ -322,7 +346,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           if (stats != null) {
             ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
                 stats, inFlights, result.getStreamTracerFactory());
-            return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
+            ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
+                .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
+            return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
           }
         }
         return result;
@@ -337,7 +363,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   private static final class CountingStreamTracerFactory extends
       ClientStreamTracer.Factory {
-    private ClusterLocalityStats stats;
+    private final ClusterLocalityStats stats;
     private final AtomicLong inFlights;
     @Nullable
     private final ClientStreamTracer.Factory delegate;
@@ -377,6 +403,24 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           delegate().streamClosed(status);
         }
       };
+    }
+  }
+
+  private static final class OrcaPerRpcListener implements OrcaPerRequestReportListener {
+
+    private final ClusterLocalityStats stats;
+
+    private OrcaPerRpcListener(ClusterLocalityStats stats) {
+      this.stats = checkNotNull(stats, "stats");
+    }
+
+    /**
+     * Copies {@link MetricReport#getNamedMetrics()} to {@link ClusterLocalityStats} such that it is
+     * included in the snapshot for the LRS report sent to the LRS server.
+     */
+    @Override
+    public void onLoadReport(MetricReport report) {
+      stats.recordBackendLoadMetricStats(report.getNamedMetrics());
     }
   }
 }

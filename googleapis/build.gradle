@@ -7,30 +7,19 @@ plugins {
 
 description = 'gRPC: googleapis'
 
-dependencies {
-    api project(':grpc-api')
-    implementation project(':grpc-alts'),
-                   project(':grpc-core'),
-                   project(':grpc-xds'),
-                   libraries.guava
-    testImplementation project(':grpc-core').sourceSets.test.output
-
-    signature libraries.signature.java
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.googleapis')
+    }
 }
 
-publishing {
-    publications {
-        maven(MavenPublication) {
-            pom {
-                withXml {
-                    // Since internal APIs are used, pin the version.
-                    asNode().dependencies.'*'.findAll() { dep ->
-                        dep.artifactId.text() in ['grpc-alts', 'grpc-xds']
-                    }.each() { core ->
-                        core.version*.value = "[" + core.version.text() + "]"
-                    }
-                }
-            }
-        }
-    }
+dependencies {
+    api project(':grpc-api')
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
+                   project(':grpc-core'),
+                   project(path: ':grpc-xds', configuration: 'shadow'),
+                   libraries.guava.jre // JRE required by transitive protobuf-java-util
+    testImplementation testFixtures(project(':grpc-core'))
+
+    signature libraries.signature.java
 }

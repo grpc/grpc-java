@@ -12,7 +12,7 @@ public final class HealthGrpc {
 
   private HealthGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.health.v1.Health";
+  public static final java.lang.String SERVICE_NAME = "grpc.health.v1.Health";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
@@ -123,7 +123,7 @@ public final class HealthGrpc {
 
   /**
    */
-  public static abstract class HealthImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -131,7 +131,7 @@ public final class HealthGrpc {
      * NOT_FOUND.
      * </pre>
      */
-    public void check(io.grpc.health.v1.HealthCheckRequest request,
+    default void check(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getCheckMethod(), responseObserver);
     }
@@ -153,34 +153,28 @@ public final class HealthGrpc {
      * clients should retry the call with appropriate exponential backoff.
      * </pre>
      */
-    public void watch(io.grpc.health.v1.HealthCheckRequest request,
+    default void watch(io.grpc.health.v1.HealthCheckRequest request,
         io.grpc.stub.StreamObserver<io.grpc.health.v1.HealthCheckResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getWatchMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getCheckMethod(),
-            io.grpc.stub.ServerCalls.asyncUnaryCall(
-              new MethodHandlers<
-                io.grpc.health.v1.HealthCheckRequest,
-                io.grpc.health.v1.HealthCheckResponse>(
-                  this, METHODID_CHECK)))
-          .addMethod(
-            getWatchMethod(),
-            io.grpc.stub.ServerCalls.asyncServerStreamingCall(
-              new MethodHandlers<
-                io.grpc.health.v1.HealthCheckRequest,
-                io.grpc.health.v1.HealthCheckResponse>(
-                  this, METHODID_WATCH)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service Health.
    */
-  public static final class HealthStub extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
+  public static abstract class HealthImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return HealthGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service Health.
+   */
+  public static final class HealthStub
+      extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
     private HealthStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -229,8 +223,10 @@ public final class HealthGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service Health.
    */
-  public static final class HealthBlockingStub extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
+  public static final class HealthBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
     private HealthBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -278,8 +274,10 @@ public final class HealthGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service Health.
    */
-  public static final class HealthFutureStub extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
+  public static final class HealthFutureStub
+      extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
     private HealthFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -312,10 +310,10 @@ public final class HealthGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final HealthImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(HealthImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -348,6 +346,25 @@ public final class HealthGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getCheckMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.health.v1.HealthCheckRequest,
+              io.grpc.health.v1.HealthCheckResponse>(
+                service, METHODID_CHECK)))
+        .addMethod(
+          getWatchMethod(),
+          io.grpc.stub.ServerCalls.asyncServerStreamingCall(
+            new MethodHandlers<
+              io.grpc.health.v1.HealthCheckRequest,
+              io.grpc.health.v1.HealthCheckResponse>(
+                service, METHODID_WATCH)))
+        .build();
+  }
+
   private static abstract class HealthBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     HealthBaseDescriptorSupplier() {}
@@ -371,9 +388,9 @@ public final class HealthGrpc {
   private static final class HealthMethodDescriptorSupplier
       extends HealthBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    HealthMethodDescriptorSupplier(String methodName) {
+    HealthMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

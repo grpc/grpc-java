@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -57,6 +58,16 @@ public final class NameResolverRegistry {
   @GuardedBy("this")
   private ImmutableMap<String, NameResolverProvider> effectiveProviders = ImmutableMap.of();
 
+  public synchronized String getDefaultScheme() {
+    return defaultScheme;
+  }
+
+  public NameResolverProvider getProviderForScheme(String scheme) {
+    if (scheme == null) {
+      return null;
+    }
+    return providers().get(scheme.toLowerCase(Locale.US));
+  }
 
   /**
    * Register a provider.
@@ -124,9 +135,7 @@ public final class NameResolverRegistry {
       instance = new NameResolverRegistry();
       for (NameResolverProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviders();
     }
@@ -164,15 +173,13 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      NameResolverProvider provider = providers().get(targetUri.getScheme());
+      NameResolverProvider provider = getProviderForScheme(targetUri.getScheme());
       return provider == null ? null : provider.newNameResolver(targetUri, args);
     }
 
     @Override
     public String getDefaultScheme() {
-      synchronized (NameResolverRegistry.this) {
-        return defaultScheme;
-      }
+      return NameResolverRegistry.this.getDefaultScheme();
     }
   }
 

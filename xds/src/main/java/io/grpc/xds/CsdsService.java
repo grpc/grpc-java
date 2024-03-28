@@ -28,16 +28,17 @@ import io.envoyproxy.envoy.service.status.v3.ClientConfig.GenericXdsConfig;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusRequest;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
-import io.grpc.ExperimentalApi;
+import io.grpc.BindableService;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.AbstractXdsClient.ResourceType;
-import io.grpc.xds.XdsClient.ResourceMetadata;
-import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
-import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceMetadata;
+import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
+import io.grpc.xds.client.XdsClient.ResourceMetadata.UpdateFailureState;
+import io.grpc.xds.client.XdsResourceType;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -55,11 +56,10 @@ import java.util.logging.Logger;
  *
  * @since 1.37.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8016")
-public final class CsdsService extends
-    ClientStatusDiscoveryServiceGrpc.ClientStatusDiscoveryServiceImplBase {
+public final class CsdsService implements BindableService {
   private static final Logger logger = Logger.getLogger(CsdsService.class.getName());
   private final XdsClientPoolFactory xdsClientPoolFactory;
+  private final CsdsServiceInternal delegate = new CsdsServiceInternal();
 
   @VisibleForTesting
   CsdsService(XdsClientPoolFactory xdsClientPoolFactory) {
@@ -76,32 +76,43 @@ public final class CsdsService extends
   }
 
   @Override
-  public void fetchClientStatus(
-      ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
-    if (handleRequest(request, responseObserver)) {
-      responseObserver.onCompleted();
-    }
+  public ServerServiceDefinition bindService() {
+    return delegate.bindService();
   }
 
-  @Override
-  public StreamObserver<ClientStatusRequest> streamClientStatus(
-      final StreamObserver<ClientStatusResponse> responseObserver) {
-    return new StreamObserver<ClientStatusRequest>() {
-      @Override
-      public void onNext(ClientStatusRequest request) {
-        handleRequest(request, responseObserver);
-      }
-
-      @Override
-      public void onError(Throwable t) {
-        onCompleted();
-      }
-
-      @Override
-      public void onCompleted() {
+  /** Hide protobuf from being exposed via the API. */
+  private final class CsdsServiceInternal
+      extends ClientStatusDiscoveryServiceGrpc.ClientStatusDiscoveryServiceImplBase {
+    @Override
+    public void fetchClientStatus(
+        ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
+      if (handleRequest(request, responseObserver)) {
         responseObserver.onCompleted();
       }
-    };
+      // TODO(sergiitk): Add a case covering mutating handleRequest return false to true - to verify
+      //   that responseObserver.onCompleted() isn't erroneously called on error.
+    }
+
+    @Override
+    public StreamObserver<ClientStatusRequest> streamClientStatus(
+        final StreamObserver<ClientStatusResponse> responseObserver) {
+      return new StreamObserver<ClientStatusRequest>() {
+        @Override
+        public void onNext(ClientStatusRequest request) {
+          handleRequest(request, responseObserver);
+        }
+
+        @Override
+        public void onError(Throwable t) {
+          onCompleted();
+        }
+
+        @Override
+        public void onCompleted() {
+          responseObserver.onCompleted();
+        }
+      };
+    }
   }
 
   private boolean handleRequest(
@@ -116,12 +127,11 @@ public final class CsdsService extends
       Thread.currentThread().interrupt();
       logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
       error = Status.ABORTED.withDescription("Thread interrupted").withCause(e).asException();
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
       error =
           Status.INTERNAL.withDescription("Unexpected internal error").withCause(e).asException();
     }
-
     responseObserver.onError(error);
     return false;
   }
@@ -156,12 +166,12 @@ public final class CsdsService extends
     ClientConfig.Builder builder = ClientConfig.newBuilder()
         .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
 
-    Map<ResourceType, Map<String, ResourceMetadata>> metadataByType =
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
         awaitSubscribedResourcesMetadata(xdsClient.getSubscribedResourcesMetadataSnapshot());
 
-    for (Map.Entry<ResourceType, Map<String, ResourceMetadata>> metadataByTypeEntry
+    for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry
         : metadataByType.entrySet()) {
-      ResourceType type = metadataByTypeEntry.getKey();
+      XdsResourceType<?> type = metadataByTypeEntry.getKey();
       Map<String, ResourceMetadata> metadataByResourceName = metadataByTypeEntry.getValue();
       for (Map.Entry<String, ResourceMetadata> metadataEntry : metadataByResourceName.entrySet()) {
         String resourceName = metadataEntry.getKey();
@@ -187,8 +197,9 @@ public final class CsdsService extends
     return builder.build();
   }
 
-  private static Map<ResourceType, Map<String, ResourceMetadata>> awaitSubscribedResourcesMetadata(
-      ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future)
+  private static Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
+      awaitSubscribedResourcesMetadata(
+      ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>> future)
       throws InterruptedException {
     try {
       // Normally this shouldn't take long, but add some slack for cases like a cold JVM.

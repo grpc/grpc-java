@@ -23,7 +23,10 @@ import java.util.Iterator;
 /**
  * Utility functions for working with {@link StreamObserver} and it's common subclasses like
  * {@link CallStreamObserver}.
+ *
+ * @deprecated Of questionable utility and generally not used.
  */
+@Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4694")
 public final class StreamObservers {
   /**

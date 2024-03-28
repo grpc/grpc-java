@@ -1,8 +1,7 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.17'
+    id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
@@ -15,16 +14,18 @@ repositories {
     mavenLocal()
 }
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
 
 // IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
 // are looking at a tagged version of the example and not "master"!
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.51.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.21.1'
+def grpcVersion = '1.63.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.1'
 def protocVersion = protobufVersion
 
 
@@ -33,7 +34,7 @@ dependencies {
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-auth:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-    implementation "com.google.auth:google-auth-library-oauth2-http:0.9.0"
+    implementation "com.google.auth:google-auth-library-oauth2-http:1.4.0"
     implementation "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 }
@@ -67,7 +68,9 @@ task googleAuthClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
-applicationDistribution.into('bin') {
-    from(googleAuthClient)
-    fileMode = 0755
+application {
+    applicationDistribution.into('bin') {
+        from(googleAuthClient)
+        fileMode = 0755
+    }
 }

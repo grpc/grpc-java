@@ -12,7 +12,7 @@ public final class HandshakerServiceGrpc {
 
   private HandshakerServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "grpc.gcp.HandshakerService";
+  public static final java.lang.String SERVICE_NAME = "grpc.gcp.HandshakerService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.alts.internal.HandshakerReq,
@@ -92,7 +92,7 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public static abstract class HandshakerServiceImplBase implements io.grpc.BindableService {
+  public interface AsyncService {
 
     /**
      * <pre>
@@ -104,27 +104,28 @@ public final class HandshakerServiceGrpc {
      * response before sending next request.
      * </pre>
      */
-    public io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerReq> doHandshake(
+    default io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerReq> doHandshake(
         io.grpc.stub.StreamObserver<io.grpc.alts.internal.HandshakerResp> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getDoHandshakeMethod(), responseObserver);
-    }
-
-    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
-          .addMethod(
-            getDoHandshakeMethod(),
-            io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
-              new MethodHandlers<
-                io.grpc.alts.internal.HandshakerReq,
-                io.grpc.alts.internal.HandshakerResp>(
-                  this, METHODID_DO_HANDSHAKE)))
-          .build();
     }
   }
 
   /**
+   * Base class for the server implementation of the service HandshakerService.
    */
-  public static final class HandshakerServiceStub extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub> {
+  public static abstract class HandshakerServiceImplBase
+      implements io.grpc.BindableService, AsyncService {
+
+    @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
+      return HandshakerServiceGrpc.bindService(this);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do asynchronous rpc calls to service HandshakerService.
+   */
+  public static final class HandshakerServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub> {
     private HandshakerServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -154,8 +155,10 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do synchronous rpc calls to service HandshakerService.
    */
-  public static final class HandshakerServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
+  public static final class HandshakerServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
     private HandshakerServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -169,8 +172,10 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service HandshakerService.
    */
-  public static final class HandshakerServiceFutureStub extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub> {
+  public static final class HandshakerServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub> {
     private HandshakerServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
@@ -190,10 +195,10 @@ public final class HandshakerServiceGrpc {
       io.grpc.stub.ServerCalls.ServerStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.ClientStreamingMethod<Req, Resp>,
       io.grpc.stub.ServerCalls.BidiStreamingMethod<Req, Resp> {
-    private final HandshakerServiceImplBase serviceImpl;
+    private final AsyncService serviceImpl;
     private final int methodId;
 
-    MethodHandlers(HandshakerServiceImplBase serviceImpl, int methodId) {
+    MethodHandlers(AsyncService serviceImpl, int methodId) {
       this.serviceImpl = serviceImpl;
       this.methodId = methodId;
     }
@@ -221,6 +226,18 @@ public final class HandshakerServiceGrpc {
     }
   }
 
+  public static final io.grpc.ServerServiceDefinition bindService(AsyncService service) {
+    return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
+        .addMethod(
+          getDoHandshakeMethod(),
+          io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
+            new MethodHandlers<
+              io.grpc.alts.internal.HandshakerReq,
+              io.grpc.alts.internal.HandshakerResp>(
+                service, METHODID_DO_HANDSHAKE)))
+        .build();
+  }
+
   private static abstract class HandshakerServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
     HandshakerServiceBaseDescriptorSupplier() {}
@@ -244,9 +261,9 @@ public final class HandshakerServiceGrpc {
   private static final class HandshakerServiceMethodDescriptorSupplier
       extends HandshakerServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final String methodName;
+    private final java.lang.String methodName;
 
-    HandshakerServiceMethodDescriptorSupplier(String methodName) {
+    HandshakerServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 

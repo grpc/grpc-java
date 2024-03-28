@@ -46,6 +46,7 @@ import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import io.perfmark.TaskCloseable;
 import javax.annotation.Nullable;
 
 /**
@@ -117,11 +118,9 @@ class NettyClientStream extends AbstractClientStream {
 
     @Override
     public void writeHeaders(Metadata headers, byte[] requestPayload) {
-      PerfMark.startTask("NettyClientStream$Sink.writeHeaders");
-      try {
+      try (TaskCloseable ignore =
+               PerfMark.traceTask("NettyClientStream$Sink.writeHeaders")) {
         writeHeadersInternal(headers, requestPayload);
-      } finally {
-        PerfMark.stopTask("NettyClientStream$Sink.writeHeaders");
       }
     }
 
@@ -207,21 +206,15 @@ class NettyClientStream extends AbstractClientStream {
     @Override
     public void writeFrame(
         WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
-      PerfMark.startTask("NettyClientStream$Sink.writeFrame");
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyClientStream$Sink.writeFrame")) {
         writeFrameInternal(frame, endOfStream, flush, numMessages);
-      } finally {
-        PerfMark.stopTask("NettyClientStream$Sink.writeFrame");
       }
     }
 
     @Override
     public void cancel(Status status) {
-      PerfMark.startTask("NettyClientStream$Sink.cancel");
-      try {
+      try (TaskCloseable ignore = PerfMark.traceTask("NettyClientStream$Sink.cancel")) {
         writeQueue.enqueue(new CancelClientStreamCommand(transportState(), status), true);
-      } finally {
-        PerfMark.stopTask("NettyClientStream$Sink.cancel");
       }
     }
   }
@@ -244,8 +237,9 @@ class NettyClientStream extends AbstractClientStream {
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer,
-        String methodName) {
-      super(maxMessageSize, statsTraceCtx, transportTracer);
+        String methodName,
+        CallOptions options) {
+      super(maxMessageSize, statsTraceCtx, transportTracer, options);
       this.methodName = checkNotNull(methodName, "methodName");
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = checkNotNull(eventLoop, "eventLoop");

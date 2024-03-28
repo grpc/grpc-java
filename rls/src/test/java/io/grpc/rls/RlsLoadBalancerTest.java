@@ -21,9 +21,9 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Converter;
@@ -36,7 +36,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ForwardingChannelBuilder;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -87,7 +87,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -107,8 +106,9 @@ public class RlsLoadBalancerTest {
           throw new RuntimeException(e);
         }
       });
+  private final FakeHelper helperDelegate = new FakeHelper();
   private final Helper helper =
-      mock(Helper.class, AdditionalAnswers.delegatesTo(new FakeHelper()));
+      mock(Helper.class, AdditionalAnswers.delegatesTo(helperDelegate));
   private final FakeRlsServerImpl fakeRlsServerImpl = new FakeRlsServerImpl();
   private final Deque<FakeSubchannel> subchannels = new LinkedList<>();
   private final FakeThrottler fakeThrottler = new FakeThrottler();
@@ -120,11 +120,11 @@ public class RlsLoadBalancerTest {
   private MethodDescriptor<Object, Object> fakeRescueMethod;
   private RlsLoadBalancer rlsLb;
   private String defaultTarget = "defaultTarget";
+  private PickSubchannelArgsImpl searchSubchannelArgs;
+  private PickSubchannelArgsImpl rescueSubchannelArgs;
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     fakeSearchMethod =
         MethodDescriptor.newBuilder()
             .setFullMethodName("com.google/Search")
@@ -162,6 +162,13 @@ public class RlsLoadBalancerTest {
             .setTicker(fakeClock.getTicker());
       }
     };
+
+    Metadata headers = new Metadata();
+    searchSubchannelArgs =
+        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    rescueSubchannelArgs =
+        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT);
+
   }
 
   @After
@@ -179,13 +186,13 @@ public class RlsLoadBalancerTest {
     Metadata headers = new Metadata();
     PickSubchannelArgsImpl fakeSearchMethodArgs =
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
-    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
-    FakeSubchannel subchannel = (FakeSubchannel) res.getSubchannel();
+    picker.pickSubchannel(fakeSearchMethodArgs); // Will create the subchannel
+    FakeSubchannel subchannel = subchannels.peek();
     assertThat(subchannel).isNotNull();
 
     // Ensure happy path is unaffected
     subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    res = picker.pickSubchannel(fakeSearchMethodArgs);
+    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
 
     // Check on conversion
@@ -206,34 +213,28 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
-    PickResult res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    PickResult res = picker.pickSubchannel(searchSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper)
+    inOrder.verify(helper, atLeast(0))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
-    assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
-
     assertThat(subchannels).hasSize(1);
     FakeSubchannel searchSubchannel = subchannels.getLast();
+    assertThat(subchannelIsReady(searchSubchannel)).isFalse();
+
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
     inOrder.verifyNoMoreInteractions();
+    res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
-    assertThat(res.getSubchannel().getAddresses()).isEqualTo(searchSubchannel.getAddresses());
-    assertThat(res.getSubchannel().getAttributes()).isEqualTo(searchSubchannel.getAttributes());
+    assertThat(res.getSubchannel()).isSameInstanceAs(searchSubchannel);
 
     // rescue should be pending status although the overall channel state is READY
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(rescueSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     // other rls picker itself is ready due to first channel.
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-    inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
     assertThat(subchannels).hasSize(2);
@@ -241,7 +242,6 @@ public class RlsLoadBalancerTest {
 
     // search subchannel is down, rescue subchannel is connecting
     searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
 
@@ -251,8 +251,7 @@ public class RlsLoadBalancerTest {
 
     // search again, verify that it doesn't use fallback, since RLS server responded, even though
     // subchannel is in failure mode
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
   }
@@ -266,52 +265,41 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
-    PickResult res;
 
     // Search that when the RLS server doesn't respond, that fallback is used
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    FakeSubchannel fallbackSubchannel = (FakeSubchannel) res.getSubchannel();
-    assertThat(fallbackSubchannel).isNotNull();
-
+    PickResult res = picker.pickSubchannel(searchSubchannelArgs); // create subchannel
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
-    assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
-    inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    fallbackSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    inOrder.verify(helper, times(1))
-        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    FakeSubchannel fallbackSubchannel =
+        (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
+    assertThat(fallbackSubchannel).isNotNull();
+    assertThat(subchannelIsReady(fallbackSubchannel)).isTrue();
     inOrder.verifyNoMoreInteractions();
 
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
-    assertThat(res.getSubchannel()).isSameInstanceAs(fallbackSubchannel);
+    Subchannel subchannel = picker.pickSubchannel(searchSubchannelArgs).getSubchannel();
+    assertThat(subchannelIsReady(subchannel)).isTrue();
+    assertThat(subchannel).isSameInstanceAs(fallbackSubchannel);
 
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
-    assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
-    assertThat(res.getSubchannel()).isSameInstanceAs(fallbackSubchannel);
+    subchannel = picker.pickSubchannel(searchSubchannelArgs).getSubchannel();
+    assertThat(subchannelIsReady(subchannel)).isTrue();
+    assertThat(subchannel).isSameInstanceAs(fallbackSubchannel);
 
     // Make sure that when RLS starts communicating that default stops being used
     fakeThrottler.nextResult = false;
     fakeClock.forwardTime(2, TimeUnit.SECONDS); // Expires backoff cache entries
-    // Create search subchannel
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
-    FakeSubchannel searchSubchannel = (FakeSubchannel) res.getSubchannel();
+
+    picker.pickSubchannel(searchSubchannelArgs);// Create search subchannel
+    FakeSubchannel searchSubchannel =
+        (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     assertThat(searchSubchannel).isNotNull();
-    searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    assertThat(searchSubchannel).isNotSameInstanceAs(fallbackSubchannel);
 
     // create rescue subchannel
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
-    assertThat(res.getSubchannel()).isNotSameInstanceAs(fallbackSubchannel);
-    assertThat(res.getSubchannel()).isNotSameInstanceAs(searchSubchannel);
-    FakeSubchannel rescueSubchannel = (FakeSubchannel) res.getSubchannel();
+    picker.pickSubchannel(rescueSubchannelArgs);
+    FakeSubchannel rescueSubchannel =
+        (FakeSubchannel) markReadyAndGetPickResult(inOrder, rescueSubchannelArgs).getSubchannel();
     assertThat(rescueSubchannel).isNotNull();
-    rescueSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    assertThat(rescueSubchannel).isNotSameInstanceAs(fallbackSubchannel);
+    assertThat(rescueSubchannel).isNotSameInstanceAs(searchSubchannel);
 
     // all channels are failed
     rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
@@ -319,7 +307,7 @@ public class RlsLoadBalancerTest {
     fallbackSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
 
     res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+        searchSubchannelArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(res.getSubchannel()).isNull();
   }
@@ -333,37 +321,29 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     Metadata headers = new Metadata();
-    PickResult res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    PickResult res = picker.pickSubchannel(searchSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper)
+    inOrder.verify(helper, atLeast(0))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
 
     assertThat(subchannels).hasSize(1);
-    FakeSubchannel searchSubchannel = subchannels.getLast();
-    searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    FakeSubchannel searchSubchannel =
+        (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     inOrder.verifyNoMoreInteractions();
-    assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
-    assertThat(res.getSubchannel().getAddresses()).isEqualTo(searchSubchannel.getAddresses());
-    assertThat(res.getSubchannel().getAttributes()).isEqualTo(searchSubchannel.getAttributes());
+    assertThat(subchannelIsReady(searchSubchannel)).isTrue();
+    assertThat(subchannels.getLast()).isSameInstanceAs(searchSubchannel);
 
     // rescue should be pending status although the overall channel state is READY
     picker = pickerCaptor.getValue();
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(rescueSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     // other rls picker itself is ready due to first channel.
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
-    inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
-    assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
     assertThat(subchannels).hasSize(2);
     FakeSubchannel rescueSubchannel = subchannels.getLast();
+    assertThat(subchannelIsReady(rescueSubchannel)).isFalse();
 
     // search subchannel is down, rescue subchannel is still connecting
     searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
@@ -391,6 +371,7 @@ public class RlsLoadBalancerTest {
     rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(helper, atLeast(0)).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
   }
 
@@ -409,10 +390,7 @@ public class RlsLoadBalancerTest {
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
 
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    inOrder.verify(helper)
-        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     assertThat(subchannels).hasSize(1);
-    inOrder.verifyNoMoreInteractions();
 
     FakeSubchannel searchSubchannel = subchannels.getLast();
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
@@ -439,6 +417,16 @@ public class RlsLoadBalancerTest {
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     assertThat(res.getStatus().isOk()).isFalse();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
+  }
+
+  private PickResult markReadyAndGetPickResult(InOrder inOrder,
+                                               PickSubchannelArgsImpl pickSubchannelArgs) {
+    subchannels.getLast().updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    inOrder.verify(helper, atLeast(1))
+        .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(pickSubchannelArgs);
+    inOrder.verify(helper, atLeast(0)).getChannelLogger();
+    return pickResult;
   }
 
   private void deliverResolvedAddresses() throws Exception {
@@ -522,7 +510,7 @@ public class RlsLoadBalancerTest {
       final InProcessChannelBuilder builder =
           InProcessChannelBuilder.forName(target).directExecutor();
 
-      class CleaningChannelBuilder extends ForwardingChannelBuilder<CleaningChannelBuilder> {
+      class CleaningChannelBuilder extends ForwardingChannelBuilder2<CleaningChannelBuilder> {
 
         @Override
         protected ManagedChannelBuilder<?> delegate() {

@@ -24,6 +24,7 @@ import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.util.Durations;
 import io.grpc.BindableService;
+import io.grpc.ExperimentalApi;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.SynchronizationContext;
 import io.grpc.services.InternalMetricRecorder;
@@ -41,6 +42,7 @@ import java.util.logging.Logger;
  * Implements a {@link BindableService} that generates Out-Of-Band server metrics.
  * Register the returned service to the server, then a client can request for periodic load reports.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
 public final class OrcaServiceImpl implements BindableService {
   private static final Logger logger = Logger.getLogger(OrcaServiceImpl.class.getName());
 
@@ -149,7 +151,10 @@ public final class OrcaServiceImpl implements BindableService {
     MetricReport internalReport =
         InternalMetricRecorder.getMetricReport(metricRecorder);
     return OrcaLoadReport.newBuilder().setCpuUtilization(internalReport.getCpuUtilization())
+        .setApplicationUtilization(internalReport.getApplicationUtilization())
         .setMemUtilization(internalReport.getMemoryUtilization())
+        .setRpsFractional(internalReport.getQps())
+        .setEps(internalReport.getEps())
         .putAllUtilization(internalReport.getUtilizationMetrics())
         .build();
   }

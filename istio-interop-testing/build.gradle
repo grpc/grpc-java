@@ -9,12 +9,6 @@ plugins {
 
 description = "gRPC: Istio Interop testing"
 
-configurations {
-    alpnagent
-}
-
-evaluationDependsOn(project(':grpc-context').path)
-
 dependencies {
     implementation  project(':grpc-core'),
             project(':grpc-netty'),
@@ -28,13 +22,11 @@ dependencies {
 
     runtimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
-    testImplementation project(':grpc-context').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
-            project(':grpc-core').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-api')),
+            testFixtures(project(':grpc-core')),
             libraries.mockito.core,
             libraries.junit,
             libraries.truth
-    alpnagent libraries.jetty.alpn.agent
 
     signature libraries.signature.java
 }
@@ -59,7 +51,7 @@ tasks.named("compileJava").configure {
 
 // For releasing to Docker Hub
 jib {
-    from.image = "gcr.io/distroless/java:8"
+    from.image = "gcr.io/distroless/java17-debian12"
     container {
         ports = ['50051']
         mainClass="io.grpc.testing.istio.EchoTestServer"

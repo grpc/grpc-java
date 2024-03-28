@@ -106,9 +106,7 @@ public final class ManagedChannelRegistry {
       instance = new ManagedChannelRegistry();
       for (ManagedChannelProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
+        instance.addProvider(provider);
       }
       instance.refreshProviders();
     }
@@ -163,13 +161,13 @@ public final class ManagedChannelRegistry {
     NameResolverProvider nameResolverProvider = null;
     try {
       URI uri = new URI(target);
-      nameResolverProvider = nameResolverRegistry.providers().get(uri.getScheme());
+      nameResolverProvider = nameResolverRegistry.getProviderForScheme(uri.getScheme());
     } catch (URISyntaxException ignore) {
       // bad URI found, just ignore and continue
     }
     if (nameResolverProvider == null) {
-      nameResolverProvider = nameResolverRegistry.providers().get(
-          nameResolverRegistry.asFactory().getDefaultScheme());
+      nameResolverProvider = nameResolverRegistry.getProviderForScheme(
+          nameResolverRegistry.getDefaultScheme());
     }
     Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
         = (nameResolverProvider != null)

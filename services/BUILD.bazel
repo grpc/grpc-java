@@ -4,14 +4,12 @@ load("//:java_grpc_library.bzl", "java_grpc_library")
 package(default_visibility = ["//visibility:public"])
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
-# with maven_install's override_targets. Purposefully does not export any
-# symbols, as it should only be used as a dep for pre-compiled binaries on
-# Maven Central.
+# with maven_install's override_targets. Should only be used as a dep for
+# pre-compiled binaries on Maven Central.
 java_library(
     name = "services_maven",
-    runtime_deps = [
+    exports = [
         ":admin",
-        ":binarylog",
         ":channelz",
         ":health",
         ":healthlb",
@@ -38,6 +36,7 @@ java_library(
     srcs = [
         "src/main/java/io/grpc/services/CallMetricRecorder.java",
         "src/main/java/io/grpc/services/MetricRecorder.java",
+        "src/main/java/io/grpc/services/MetricRecorderHelper.java",
         "src/main/java/io/grpc/services/MetricReport.java",
     ],
     deps = [
@@ -60,29 +59,6 @@ java_library(
         ":metrics",
         "//api",
         "//context",
-    ],
-)
-
-java_library(
-    name = "binarylog",
-    srcs = [
-        "src/main/java/io/grpc/protobuf/services/BinaryLogProvider.java",
-        "src/main/java/io/grpc/protobuf/services/BinaryLogProviderImpl.java",
-        "src/main/java/io/grpc/protobuf/services/BinaryLogSink.java",
-        "src/main/java/io/grpc/protobuf/services/BinaryLogs.java",
-        "src/main/java/io/grpc/protobuf/services/BinlogHelper.java",
-        "src/main/java/io/grpc/protobuf/services/InetAddressUtil.java",
-        "src/main/java/io/grpc/protobuf/services/TempFileSink.java",
-        "src/main/java/io/grpc/services/BinaryLogs.java",
-    ],
-    deps = [
-        "//api",
-        "//context",
-        "@com_google_protobuf//:protobuf_java",
-        "@com_google_protobuf//:protobuf_java_util",
-        "@io_grpc_grpc_proto//:binarylog_java_proto",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -155,7 +131,7 @@ java_library(
         ":_health_java_grpc",
         "//api",
         "//core:internal",
-        "//core:util",
+        "//util",
         "@io_grpc_grpc_proto//:health_java_proto",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),

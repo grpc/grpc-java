@@ -87,23 +87,20 @@ public class TransportBenchmark {
     ServerBuilder<?> serverBuilder;
     ManagedChannelBuilder<?> channelBuilder;
     switch (transport) {
-      case INPROCESS:
-      {
+      case INPROCESS: {
         String name = "bench" + Math.random();
         serverBuilder = InProcessServerBuilder.forName(name);
         channelBuilder = InProcessChannelBuilder.forName(name);
         break;
       }
-      case NETTY:
-      {
+      case NETTY: {
         InetSocketAddress address = new InetSocketAddress("localhost", pickUnusedPort());
         serverBuilder = NettyServerBuilder.forAddress(address, serverCreds);
         channelBuilder = NettyChannelBuilder.forAddress(address)
             .negotiationType(NegotiationType.PLAINTEXT);
         break;
       }
-      case NETTY_LOCAL:
-      {
+      case NETTY_LOCAL: {
         String name = "bench" + Math.random();
         LocalAddress address = new LocalAddress(name);
         EventLoopGroup group = new DefaultEventLoopGroup();
@@ -113,13 +110,12 @@ public class TransportBenchmark {
             .channelType(LocalServerChannel.class);
         channelBuilder = NettyChannelBuilder.forAddress(address)
             .eventLoopGroup(group)
-            .channelType(LocalChannel.class)
+            .channelType(LocalChannel.class, LocalAddress.class)
             .negotiationType(NegotiationType.PLAINTEXT);
         groupToShutdown = group;
         break;
       }
-      case NETTY_EPOLL:
-      {
+      case NETTY_EPOLL: {
         InetSocketAddress address = new InetSocketAddress("localhost", pickUnusedPort());
 
         // Reflection used since they are only available on linux.
@@ -138,13 +134,12 @@ public class TransportBenchmark {
               .asSubclass(Channel.class);
         channelBuilder = NettyChannelBuilder.forAddress(address)
             .eventLoopGroup(group)
-            .channelType(channelClass)
+            .channelType(channelClass, InetSocketAddress.class)
             .negotiationType(NegotiationType.PLAINTEXT);
         groupToShutdown = group;
         break;
       }
-      case OKHTTP:
-      {
+      case OKHTTP: {
         int port = pickUnusedPort();
         InetSocketAddress address = new InetSocketAddress("localhost", port);
         serverBuilder = NettyServerBuilder.forAddress(address, serverCreds);
@@ -219,6 +214,7 @@ public class TransportBenchmark {
     return stub.unaryCall(BYTE_THROUGHPUT_REQUEST);
   }
 
+  @SuppressWarnings("StaticAssignmentOfThrowable")
   private static final Throwable OK_THROWABLE = new RuntimeException("OK");
 
   @State(Scope.Thread)

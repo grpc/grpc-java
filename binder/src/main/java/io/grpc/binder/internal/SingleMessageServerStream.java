@@ -68,6 +68,11 @@ final class SingleMessageServerStream implements ServerStream {
   }
 
   @Override
+  public void setOnReadyThreshold(int numBytes) {
+    // No-op
+  }
+
+  @Override
   public boolean isReady() {
     return outbound.isReady();
   }
@@ -80,7 +85,7 @@ final class SingleMessageServerStream implements ServerStream {
   }
 
   @Override
-  public void writeHeaders(Metadata headers) {
+  public void writeHeaders(Metadata headers, boolean flush) {
     pendingHeaders = headers;
   }
 

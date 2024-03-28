@@ -234,10 +234,6 @@ public final class Status {
     }
   }
 
-  private static final String TEST_EQUALS_FAILURE_PROPERTY = "io.grpc.Status.failOnEqualsForTest";
-  private static final boolean FAIL_ON_EQUALS_FOR_TEST =
-      Boolean.parseBoolean(System.getProperty(TEST_EQUALS_FAILURE_PROPERTY, "false"));
-  
   // Create the canonical list of Status instances indexed by their code values.
   private static final List<Status> STATUS_LIST = buildStatusList();
 
@@ -307,7 +303,7 @@ public final class Status {
    * Return a {@link Status} given a canonical error {@link Code} value.
    */
   public static Status fromCodeValue(int codeValue) {
-    if (codeValue < 0 || codeValue > STATUS_LIST.size()) {
+    if (codeValue < 0 || codeValue >= STATUS_LIST.size()) {
       return UNKNOWN.withDescription("Unknown code " + codeValue);
     } else {
       return STATUS_LIST.get(codeValue);
@@ -418,7 +414,6 @@ public final class Status {
    * @return the trailers or {@code null} if not found.
    */
   @Nullable
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4683")
   public static Metadata trailersFromThrowable(Throwable t) {
     Throwable cause = checkNotNull(t, "t");
     while (cause != null) {
@@ -534,7 +529,6 @@ public final class Status {
    * Same as {@link #asRuntimeException()} but includes the provided trailers in the returned
    * exception.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4683")
   public StatusRuntimeException asRuntimeException(@Nullable Metadata trailers) {
     return new StatusRuntimeException(this, trailers);
   }
@@ -599,6 +593,8 @@ public final class Status {
     }
 
     /**
+     * Percent encode bytes to make them ASCII.
+     *
      * @param valueBytes the UTF-8 bytes
      * @param ri The reader index, pointed at the first byte that needs escaping.
      */
@@ -662,8 +658,6 @@ public final class Status {
    */
   @Override
   public boolean equals(Object obj) {
-    assert !FAIL_ON_EQUALS_FOR_TEST
-        : "Status.equals called; disable this by setting " + TEST_EQUALS_FAILURE_PROPERTY;
     return super.equals(obj);
   }
 

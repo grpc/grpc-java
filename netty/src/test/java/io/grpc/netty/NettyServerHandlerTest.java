@@ -23,6 +23,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
+import static io.grpc.netty.NettyServerBuilder.MAX_RST_COUNT_DISABLED;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
@@ -33,6 +34,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -60,6 +62,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
+import io.grpc.internal.AbstractStream;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveEnforcer;
 import io.grpc.internal.KeepAliveManager;
@@ -84,6 +87,7 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.InputStream;
+import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -99,8 +103,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -111,8 +116,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Rule
   public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
-
-  private static final int STREAM_ID = 3;
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
 
@@ -141,6 +146,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
+  private int maxRstCount = MAX_RST_COUNT_DISABLED;
+  private long maxRstPeriodNanos;
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
 
@@ -161,8 +168,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenReturn(streamTracer);
 
@@ -179,8 +184,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
               return null;
             }
           })
-      .when(streamListener)
-      .messagesAvailable(any(StreamListener.MessageProducer.class));
+        .when(streamListener)
+        .messagesAvailable(any(StreamListener.MessageProducer.class));
   }
 
   @Override
@@ -432,7 +437,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeSettings(
         any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
 
-    assertEquals(maxConcurrentStreams, captor.getValue().maxConcurrentStreams().intValue());
+    assertEquals(maxConcurrentStreams, captor.getValue().maxConcurrentStreams().longValue());
   }
 
   @Test
@@ -444,7 +449,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeSettings(
         any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
 
-    assertEquals(maxHeaderListSize, captor.getValue().maxHeaderListSize().intValue());
+    assertEquals(maxHeaderListSize, captor.getValue().maxHeaderListSize().longValue());
   }
 
   @Test
@@ -635,6 +640,34 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
+  public void headersWithErrAndEndStreamReturnErrorButNotThrowNpe() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .add(AsciiString.of("host"), AsciiString.of("example.com"))
+        .path(new AsciiString("/foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    channelRead(emptyGrpcFrame(STREAM_ID, true));
+
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Content-Type is missing from the request")
+        .status("" + 415)
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
+
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
+
+  }
+
+  @Test
   public void headersWithAuthorityAndHostUsesAuthority() throws Exception {
     manualSetUp();
     Http2Headers headers = new DefaultHttp2Headers()
@@ -774,7 +807,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     fakeClock().forwardNanos(keepAliveTimeoutInNanos);
 
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -907,7 +940,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -937,7 +970,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -981,7 +1014,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1025,7 +1058,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1079,7 +1112,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1110,7 +1143,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1178,7 +1211,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
 
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
   }
 
   @Test
@@ -1218,7 +1251,45 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
 
     // channel closed
-    assertTrue(!channel().isOpen());
+    assertFalse(channel().isOpen());
+  }
+
+  @Test
+  public void maxRstCount_withinLimit_succeeds() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    rapidReset(maxRstCount);
+    assertTrue(channel().isOpen());
+  }
+
+  @Test
+  public void maxRstCount_exceedsLimit_fails() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    assertThrows(ClosedChannelException.class, () -> rapidReset(maxRstCount + 1));
+    assertFalse(channel().isOpen());
+  }
+
+  private void rapidReset(int burstSize) throws Exception {
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, new AsciiString("application/grpc", UTF_8))
+        .set(TE_HEADER, TE_TRAILERS)
+        .path(new AsciiString("/foo/bar"));
+    int streamId = 1;
+    long rpcTimeNanos = maxRstPeriodNanos / 2 / burstSize;
+    for (int period = 0; period < 3; period++) {
+      for (int i = 0; i < burstSize; i++) {
+        channelRead(headersFrame(streamId, headers));
+        channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
+        streamId += 2;
+        fakeClock().forwardNanos(rpcTimeNanos);
+      }
+      while (channel().readOutbound() != null) {}
+      fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
+    }
   }
 
   private void createStream() throws Exception {
@@ -1268,7 +1339,10 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
-        Attributes.EMPTY);
+        maxRstCount,
+        maxRstPeriodNanos,
+        Attributes.EMPTY,
+        fakeClock().getTicker());
   }
 
   @Override
@@ -1280,4 +1354,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   protected void makeStream() throws Exception {
     createStream();
   }
+
+  @Override
+  protected AbstractStream stream() throws Exception {
+    if (stream == null) {
+      makeStream();
+    }
+
+    return stream;
+  }
+
 }

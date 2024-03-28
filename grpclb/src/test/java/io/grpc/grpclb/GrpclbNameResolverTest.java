@@ -32,6 +32,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -119,6 +120,13 @@ public class GrpclbNameResolverTest {
             /* isAndroid */false);
     hostName = resolver.getHost();
     assertThat(hostName).isEqualTo(NAME);
+  }
+
+  @Test
+  public void provider_isRegistered() {
+    NameResolverRegistry registry = NameResolverRegistry.getDefaultRegistry();
+    assertThat(registry.getProviderForScheme("dns").getClass().getName())
+        .isEqualTo("io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider");
   }
 
   @Test

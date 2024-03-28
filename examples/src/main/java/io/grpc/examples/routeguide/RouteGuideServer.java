@@ -25,6 +25,8 @@ import static java.lang.Math.sqrt;
 import static java.lang.Math.toRadians;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -55,7 +57,8 @@ public class RouteGuideServer {
 
   /** Create a RouteGuide server listening on {@code port} using {@code featureFile} database. */
   public RouteGuideServer(int port, URL featureFile) throws IOException {
-    this(ServerBuilder.forPort(port), port, RouteGuideUtil.parseFeatures(featureFile));
+    this(Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create()),
+        port, RouteGuideUtil.parseFeatures(featureFile));
   }
 
   /** Create a RouteGuide server using serverBuilder as a base and features as data. */

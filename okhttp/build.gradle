@@ -8,19 +8,27 @@ plugins {
 
 description = "gRPC: OkHttp"
 
-evaluationDependsOn(project(':grpc-core').path)
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.okhttp')
+    }
+}
 
 dependencies {
-    api project(':grpc-core')
-    implementation libraries.okio,
+    api project(':grpc-api')
+    implementation project(':grpc-util'),
+            project(':grpc-core'),
+            libraries.okio,
             libraries.guava,
             libraries.perfmark.api
     // Make okhttp dependencies compile only
     compileOnly libraries.okhttp
+
     // Tests depend on base class defined by core module.
-    testImplementation project(':grpc-core').sourceSets.test.output,
-            project(':grpc-api').sourceSets.test.output,
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
+            project(':grpc-testing-proto'),
             libraries.netty.codec.http2,
             libraries.okhttp
     signature libraries.signature.java
@@ -37,8 +45,10 @@ tasks.named("checkstyleMain").configure {
 }
 
 tasks.named("javadoc").configure {
-    options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+    options.linksOffline 'https://square.github.io/okhttp/2.x/okhttp/',
+        "${rootProject.projectDir}/gradle/javadoc/square.github.io-okhttp-2.x-okhttp/"
     exclude 'io/grpc/okhttp/Internal*'
+    exclude 'io/grpc/okhttp/*Provider.java'
     exclude 'io/grpc/okhttp/internal/**'
 }
 

@@ -183,7 +183,11 @@ public class NameResolverRegistryTest {
         });
 
     assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().newNameResolver(URI.create("/0.0.0.0:80"), args)).isNull();
+    assertThat(registry.asFactory().newNameResolver(URI.create("///0.0.0.0:80"), args)).isNull();
     assertThat(registry.asFactory().newNameResolver(URI.create("other:///0.0.0.0:80"), args))
+            .isSameInstanceAs(nr);
+    assertThat(registry.asFactory().newNameResolver(URI.create("OTHER:///0.0.0.0:80"), args))
             .isSameInstanceAs(nr);
     assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("dns");
   }
@@ -200,9 +204,9 @@ public class NameResolverRegistryTest {
     Map<String, NameResolverProvider> providers =
             NameResolverRegistry.getDefaultRegistry().providers();
     assertThat(providers).hasSize(1);
-    // 2 name resolvers from grpclb and core, higher priority one is returned.
-    assertThat(providers.get("dns").getClass().getName())
-        .isEqualTo("io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider");
+    // 2 name resolvers from core
+    assertThat(providers.get("dns"))
+        .isInstanceOf(io.grpc.internal.DnsNameResolverProvider.class);
     assertThat(NameResolverRegistry.getDefaultRegistry().asFactory().getDefaultScheme())
         .isEqualTo("dns");
   }

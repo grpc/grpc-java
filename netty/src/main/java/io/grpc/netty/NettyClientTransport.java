@@ -23,6 +23,7 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -102,6 +103,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final LocalSocketPicker localSocketPicker;
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
+  private final Ticker ticker;
 
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
@@ -112,7 +114,8 @@ class NettyClientTransport implements ConnectionClientTransport {
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
       LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
-      boolean useGetForSafeMethods) {
+      boolean useGetForSafeMethods, Ticker ticker) {
+
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.negotiationScheme = this.negotiator.scheme();
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
@@ -137,6 +140,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.useGetForSafeMethods = useGetForSafeMethods;
+    this.ticker = Preconditions.checkNotNull(ticker, "ticker");
   }
 
   @Override
@@ -184,7 +188,8 @@ class NettyClientTransport implements ConnectionClientTransport {
             maxMessageSize,
             statsTraceCtx,
             transportTracer,
-            method.getFullMethodName()) {
+            method.getFullMethodName(),
+            callOptions) {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);
@@ -225,7 +230,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         transportTracer,
         eagAttributes,
         authorityString,
-        channelLogger);
+        channelLogger,
+        ticker);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
