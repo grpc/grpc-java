@@ -22,11 +22,11 @@ java_library(
         artifact("io.netty:netty-codec-http2"),
         artifact("io.netty:netty-codec-socks"),
         artifact("io.netty:netty-common"),
-        artifact("io.netty:netty-transport-native-unix-common"),
         artifact("io.netty:netty-handler"),
         artifact("io.netty:netty-handler-proxy"),
         artifact("io.netty:netty-resolver"),
         artifact("io.netty:netty-transport"),
+        artifact("io.netty:netty-transport-native-unix-common"),
         artifact("io.perfmark:perfmark-api"),
     ],
 )

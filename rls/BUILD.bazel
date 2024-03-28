@@ -13,14 +13,13 @@ java_library(
         "//api",
         "//core",
         "//core:internal",
-        "//util",
         "//stub",
+        "//util",
         "@io_grpc_grpc_proto//:rls_config_java_proto",
         "@io_grpc_grpc_proto//:rls_java_proto",
         artifact("com.google.auto.value:auto-value-annotations"),
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
-        artifact("org.apache.tomcat:annotations-api"),
     ],
 )
 
