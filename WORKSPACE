@@ -48,7 +48,3 @@ maven_install(
 load("@maven//:defs.bzl", "pinned_maven_install")
 
 pinned_maven_install()
-
-load("@maven//:compat.bzl", "compat_repositories")
-
-compat_repositories()
