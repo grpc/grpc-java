@@ -1,5 +1,7 @@
 [versions]
-googleauth = "1.22.0"
+# Compatibility problem with internal version getting onto 1.5.3.
+# https://github.com/grpc/grpc-java/pull/9118
+googleauth = "1.4.0"
 netty = '4.1.100.Final'
 # Keep the following references of tcnative version in sync whenever it's updated:
 #   SECURITY.md
