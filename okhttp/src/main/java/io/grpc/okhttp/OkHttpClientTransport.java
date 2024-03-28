@@ -412,6 +412,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
   }
 
+  @VisibleForTesting
+  InUseStateAggregator<OkHttpClientStream> inUseState() {
+    synchronized (lock) {
+      return inUseState;
+    }
+  }
+
   @GuardedBy("lock")
   void streamReadyToStart(OkHttpClientStream clientStream) {
     if (goAwayStatus != null) {
@@ -951,9 +958,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
                   stopDelivery,
                   trailers != null ? trailers : new Metadata());
         }
+        maybeClearInUse(stream);
         if (!startPendingStreams()) {
           stopIfNecessary();
-          maybeClearInUse(stream);
         }
       }
     }
