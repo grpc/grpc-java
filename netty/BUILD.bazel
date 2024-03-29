@@ -12,70 +12,22 @@ java_library(
     deps = [
         "//api",
         "//core:internal",
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.errorprone:error_prone_annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.j2objc:j2objc-annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-buffer",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-codec",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-codec-http",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-codec-http2",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-codec-socks",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-common",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-handler",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-handler-proxy",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-resolver",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-transport",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.netty:netty-transport-native-unix-common",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.perfmark:perfmark-api",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.google.j2objc:j2objc-annotations"),
+        artifact("io.netty:netty-buffer"),
+        artifact("io.netty:netty-codec"),
+        artifact("io.netty:netty-codec-http"),
+        artifact("io.netty:netty-codec-http2"),
+        artifact("io.netty:netty-codec-socks"),
+        artifact("io.netty:netty-common"),
+        artifact("io.netty:netty-handler"),
+        artifact("io.netty:netty-handler-proxy"),
+        artifact("io.netty:netty-resolver"),
+        artifact("io.netty:netty-transport"),
+        artifact("io.netty:netty-transport-native-unix-common"),
+        artifact("io.perfmark:perfmark-api"),
     ],
 )
 

@@ -7,23 +7,11 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        "//api",
-        "//context",
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.opencensus:opencensus-api",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.opencensus:opencensus-contrib-grpc-metrics",
-            repository_name = "grpc_java_maven",
-        ),
+            "//api",
+            "//context",
+            artifact("com.google.code.findbugs:jsr305"),
+            artifact("com.google.guava:guava"),
+            artifact("io.opencensus:opencensus-api"),
+            artifact("io.opencensus:opencensus-contrib-grpc-metrics"),
     ],
 )

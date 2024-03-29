@@ -17,18 +17,9 @@ java_library(
         "//util",
         "@io_grpc_grpc_proto//:rls_config_java_proto",
         "@io_grpc_grpc_proto//:rls_java_proto",
-        artifact(
-            "com.google.auto.value:auto-value-annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.auto.value:auto-value-annotations"),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 

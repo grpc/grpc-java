@@ -25,38 +25,14 @@ java_library(
     deps = [
         "//api",
         "//context",
-        artifact(
-            "com.google.code.gson:gson",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.android:annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.errorprone:error_prone_annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.j2objc:j2objc-annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "io.perfmark:perfmark-api",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "org.codehaus.mojo:animal-sniffer-annotations",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.code.gson:gson"),
+        artifact("com.google.android:annotations"),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.google.j2objc:j2objc-annotations"),
+        artifact("io.perfmark:perfmark-api"),
+        artifact("org.codehaus.mojo:animal-sniffer-annotations"),
     ],
 )
 

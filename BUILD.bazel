@@ -35,14 +35,8 @@ java_library(
         "//stub",
         "//stub:javax_annotation",
         "@com_google_protobuf//:protobuf_java",
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -54,14 +48,8 @@ java_library(
         "//protobuf-lite",
         "//stub",
         "//stub:javax_annotation",
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -69,10 +57,7 @@ java_plugin(
     name = "auto_value",
     generates_api = 1,
     processor_class = "com.google.auto.value.processor.AutoValueProcessor",
-    deps = [artifact(
-        "com.google.auto.value:auto-value",
-        repository_name = "grpc_java_maven",
-    )],
+    deps = [artifact("com.google.auto.value:auto-value")],
 )
 
 java_library(
@@ -81,13 +66,7 @@ java_library(
     neverlink = 1,
     visibility = ["//:__subpackages__"],
     exports = [
-        artifact(
-            "com.google.auto.value:auto-value-annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "org.apache.tomcat:annotations-api",
-            repository_name = "grpc_java_maven",
-        ),  # @Generated for Java 9+
+        artifact("com.google.auto.value:auto-value-annotations"),
+        artifact("org.apache.tomcat:annotations-api"),  # @Generated for Java 9+
     ],
 )

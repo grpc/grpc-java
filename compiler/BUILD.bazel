@@ -23,14 +23,8 @@ java_library(
         "//protobuf",
         "//stub",
         "//stub:javax_annotation",
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
         "@com_google_protobuf//:protobuf_java",
     ],
 )
@@ -42,14 +36,8 @@ java_library(
         "//protobuf-lite",
         "//stub",
         "//stub:javax_annotation",
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 

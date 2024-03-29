@@ -9,22 +9,10 @@ java_library(
     deps = [
         "//api",
         "//context",
-        artifact(
-            "com.google.code.findbugs:jsr305",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.errorprone:error_prone_annotations",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.guava:guava",
-            repository_name = "grpc_java_maven",
-        ),
-        artifact(
-            "com.google.j2objc:j2objc-annotations",
-            repository_name = "grpc_java_maven",
-        ),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.google.j2objc:j2objc-annotations"),
     ],
 )
 
@@ -34,8 +22,5 @@ java_library(
     name = "javax_annotation",
     neverlink = 1,  # @Generated is source-retention
     visibility = ["//visibility:public"],
-    exports = [artifact(
-        "org.apache.tomcat:annotations-api",
-        repository_name = "grpc_java_maven",
-    )],
+    exports = [artifact("org.apache.tomcat:annotations-api")],
 )
