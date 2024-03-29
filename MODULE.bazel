@@ -68,9 +68,12 @@ maven.install(
         "org.apache.tomcat:annotations-api:6.0.53",
         "org.codehaus.mojo:animal-sniffer-annotations:1.23",
     ],
+    fail_if_repin_required = True,
+    lock_file = "//:maven_install.json",
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
+    strict_visibility = True,
 )
 use_repo(maven, "maven")
 maven.override(
