@@ -70,8 +70,7 @@ maven.install(
         "org.codehaus.mojo:animal-sniffer-annotations:1.23",
     ],
     repositories = [
-        "https://repo1.maven.org/maven2",
-        "https://maven.google.com",
+        "https://repo.maven.apache.org/maven2/",
     ],
 )
 use_repo(maven, "grpc_java_maven")
