@@ -16,10 +16,25 @@ java_library(
         "//inprocess",
         "//stub",
         "//util",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
-        artifact("com.google.truth:truth"),
-        artifact("junit:junit"),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.j2objc:j2objc-annotations",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.truth:truth",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "junit:junit",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )

@@ -6,9 +6,21 @@ java_library(
     visibility = ["//netty:__pkg__"],
     runtime_deps = [
         "//netty",
-        artifact("io.netty:netty-tcnative-boringssl-static"),
-        artifact("io.netty:netty-tcnative-classes"),
-        artifact("io.netty:netty-transport-native-unix-common"),
-        artifact("io.netty:netty-transport-native-epoll_linux_x86_64"),
+        artifact(
+            "io.netty:netty-tcnative-boringssl-static",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "io.netty:netty-tcnative-classes",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "io.netty:netty-transport-native-unix-common",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "io.netty:netty-transport-native-epoll_linux_x86_64",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )

@@ -27,7 +27,10 @@ java_library(
     deps = [
         ":channelz",
         "//api",
-        artifact("com.google.code.findbugs:jsr305"),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )
 
@@ -42,9 +45,18 @@ java_library(
     deps = [
         "//api",
         "//context",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.errorprone:error_prone_annotations"),
-        artifact("com.google.guava:guava"),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.errorprone:error_prone_annotations",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )
 
@@ -76,8 +88,14 @@ java_library(
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_proto//:channelz_java_proto",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )
 
@@ -94,8 +112,14 @@ java_library(
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_proto//:reflection_java_proto_deprecated",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )
 
@@ -112,8 +136,14 @@ java_library(
         "//context",
         "//stub",
         "@io_grpc_grpc_proto//:health_java_proto",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )
 
@@ -133,8 +163,14 @@ java_library(
         "//core:internal",
         "//util",
         "@io_grpc_grpc_proto//:health_java_proto",
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )
 

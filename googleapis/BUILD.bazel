@@ -11,6 +11,9 @@ java_library(
         "//api",
         "//core:internal",
         "//xds",
-        artifact("com.google.guava:guava"),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )

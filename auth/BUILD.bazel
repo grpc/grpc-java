@@ -8,9 +8,21 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api",
-        artifact("com.google.auth:google-auth-library-credentials"),
-        artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
+        artifact(
+            "com.google.auth:google-auth-library-credentials",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.code.findbugs:jsr305",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.guava:guava",
+            repository_name = "grpc_java_maven",
+        ),
+        artifact(
+            "com.google.j2objc:j2objc-annotations",
+            repository_name = "grpc_java_maven",
+        ),
     ],
 )
