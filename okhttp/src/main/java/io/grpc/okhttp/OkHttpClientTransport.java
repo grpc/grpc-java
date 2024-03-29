@@ -953,8 +953,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         }
         if (!startPendingStreams()) {
           stopIfNecessary();
-          maybeClearInUse(stream);
         }
+        maybeClearInUse(stream);
       }
     }
   }
