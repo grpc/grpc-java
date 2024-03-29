@@ -18,6 +18,7 @@ for general contribution guidelines.
 - [temawi](https://github.com/temawi), Google LLC
 - [YifeiZhuang](https://github.com/YifeiZhuang), Google LLC
 - [zhangkun83](https://github.com/zhangkun83), Google LLC
+- [kannanjgithub](https://github.com/kannanjgithub), Google LLC
 
 ## Emeritus Maintainers (in alphabetical order)
 - [carl-mastrangelo](https://github.com/carl-mastrangelo), Google LLC
