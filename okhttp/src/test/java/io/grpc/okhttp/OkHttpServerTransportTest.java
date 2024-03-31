@@ -1264,6 +1264,35 @@ public class OkHttpServerTransportTest {
         eq(ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII)));
   }
 
+  @Test
+  public void maxConcurrentCallsPerConnection_failsWithRst() throws Exception {
+    int maxConcurrentCallsPerConnection = 1;
+    serverBuilder.maxConcurrentCallsPerConnection(maxConcurrentCallsPerConnection);
+    initTransport();
+    handshake();
+
+    ArgumentCaptor<Settings> settingsCaptor = ArgumentCaptor.forClass(Settings.class);
+    verify(clientFramesRead).settings(eq(false), settingsCaptor.capture());
+    final Settings settings = settingsCaptor.getValue();
+    assertThat(OkHttpSettingsUtil.get(settings, OkHttpSettingsUtil.MAX_CONCURRENT_STREAMS))
+        .isEqualTo(maxConcurrentCallsPerConnection);
+
+    final List<Header> headers = Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService/doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER);
+
+    clientFrameWriter.headers(1, headers);
+    clientFrameWriter.headers(3, headers);
+    clientFrameWriter.flush();
+
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).rstStream(3, ErrorCode.REFUSED_STREAM);
+  }
+
   private void initTransport() throws Exception {
     serverTransport = new OkHttpServerTransport(
         new OkHttpServerTransport.Config(serverBuilder, Arrays.asList()),

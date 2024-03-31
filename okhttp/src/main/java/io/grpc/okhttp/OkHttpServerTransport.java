@@ -219,6 +219,10 @@ final class OkHttpServerTransport implements ServerTransport,
             OkHttpSettingsUtil.INITIAL_WINDOW_SIZE, config.flowControlWindow);
         OkHttpSettingsUtil.set(settings,
             OkHttpSettingsUtil.MAX_HEADER_LIST_SIZE, config.maxInboundMetadataSize);
+        if (config.maxConcurrentStreams != Integer.MAX_VALUE) {
+          OkHttpSettingsUtil.set(settings,
+              OkHttpSettingsUtil.MAX_CONCURRENT_STREAMS, config.maxConcurrentStreams);
+        }
         frameWriter.settings(settings);
         if (config.flowControlWindow > Utils.DEFAULT_WINDOW_SIZE) {
           frameWriter.windowUpdate(
@@ -520,6 +524,7 @@ final class OkHttpServerTransport implements ServerTransport,
     final long permitKeepAliveTimeInNanos;
     final long maxConnectionAgeInNanos;
     final long maxConnectionAgeGraceInNanos;
+    final int maxConcurrentStreams;
 
     public Config(
         OkHttpServerBuilder builder,
@@ -544,6 +549,7 @@ final class OkHttpServerTransport implements ServerTransport,
       permitKeepAliveTimeInNanos = builder.permitKeepAliveTimeInNanos;
       maxConnectionAgeInNanos = builder.maxConnectionAgeInNanos;
       maxConnectionAgeGraceInNanos = builder.maxConnectionAgeGraceInNanos;
+      maxConcurrentStreams = builder.maxConcurrentCallsPerConnection;
     }
   }
 
@@ -638,6 +644,11 @@ final class OkHttpServerTransport implements ServerTransport,
         newStream = streamId > lastStreamId;
         if (newStream) {
           lastStreamId = streamId;
+          if (config.maxConcurrentStreams <= streams.size()) {
+            streamError(streamId, ErrorCode.REFUSED_STREAM,
+                "Max concurrent stream reached. RFC7540 section 5.1.2");
+            return;
+          }
         }
       }
 
