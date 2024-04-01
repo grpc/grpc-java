@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
@@ -203,6 +204,14 @@ class NettyServerStream extends AbstractServerStream {
       log.log(Level.WARNING, "Exception processing message", cause);
       Status status = Status.fromThrowable(cause);
       transportReportStatus(status);
+
+      Metadata trailers = new Metadata();
+      trailers.put(InternalStatus.CODE_KEY, status);
+      if (status.getDescription() != null) {
+        trailers.put(InternalStatus.MESSAGE_KEY, status.getDescription());
+      }
+      Http2Headers http2Trailers = Utils.convertTrailers(trailers, /* headersSent = */ false);
+      handler.getWriteQueue().enqueue(SendResponseHeadersCommand.createTrailers(this, http2Trailers, status), false);
       handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
     }
 

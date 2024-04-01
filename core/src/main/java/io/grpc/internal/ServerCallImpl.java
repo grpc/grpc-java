@@ -215,6 +215,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   private void closeInternal(Status status, Metadata trailers) {
+    log.info(String.format("[RPB] closeInternal(%s, %s)", status, trailers));
     checkState(!closeCalled, "call already closed");
     try {
       closeCalled = true;
@@ -366,6 +367,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     }
 
     private void closedInternal(Status status) {
+      log.info(String.format("[RPB] closedInternal(%s)", status));
       Throwable cancelCause = null;
       try {
         if (status.isOk()) {

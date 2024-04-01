@@ -29,6 +29,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
+import java.util.logging.Logger;
 import java.util.zip.DataFormatException;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -41,6 +42,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 public class MessageDeframer implements Closeable, Deframer {
+  private static final Logger log = Logger.getLogger(MessageDeframer.class.getName());
   private static final int HEADER_LENGTH = 5;
   private static final int COMPRESSED_FLAG_MASK = 1;
   private static final int RESERVED_MASK = 0xFE;
@@ -231,6 +233,7 @@ public class MessageDeframer implements Closeable, Deframer {
       unprocessed = null;
       nextFrame = null;
     }
+    log.info(String.format("[RPB] listener.deframerClosed(%s)", hasPartialMessage));
     listener.deframerClosed(hasPartialMessage);
   }
 

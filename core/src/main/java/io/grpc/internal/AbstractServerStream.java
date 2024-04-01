@@ -23,6 +23,7 @@ import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import javax.annotation.Nullable;
+import java.util.logging.Logger;
 
 /**
  * Abstract base class for {@link ServerStream} implementations. Extending classes only need to
@@ -195,6 +196,7 @@ public abstract class AbstractServerStream extends AbstractStream
    * {@code AbstractServerStream}).
    */
   protected abstract static class TransportState extends AbstractStream.TransportState {
+    private static final Logger log = Logger.getLogger(TransportState.class.getName());
     /** Whether listener.closed() has been called. */
     private boolean listenerClosed;
     private ServerStreamListener listener;
@@ -301,6 +303,7 @@ public abstract class AbstractServerStream extends AbstractStream
             new Runnable() {
               @Override
               public void run() {
+                log.info(String.format("[RPB] closeListener(%s)", status));
                 closeListener(status);
               }
             };
