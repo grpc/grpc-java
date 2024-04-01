@@ -211,8 +211,7 @@ class NettyServerStream extends AbstractServerStream {
         trailers.put(InternalStatus.MESSAGE_KEY, status.getDescription());
       }
       Http2Headers http2Trailers = Utils.convertTrailers(trailers, /* headersSent = */ false);
-      handler.getWriteQueue().enqueue(SendResponseHeadersCommand.createTrailers(this, http2Trailers, status), false);
-      handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
+      handler.getWriteQueue().enqueue(SendResponseHeadersCommand.createTrailers(this, http2Trailers, status), /* flush = */ true);
     }
 
     void inboundDataReceived(ByteBuf frame, boolean endOfStream) {

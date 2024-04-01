@@ -718,12 +718,16 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
-  private void closeStreamWhenDone(ChannelPromise promise, Http2Stream stream) {
+  private void closeStreamWhenDone(ChannelPromise promise, Http2Stream stream, Status status) {
     promise.addListener(
         new ChannelFutureListener() {
           @Override
           public void operationComplete(ChannelFuture future) {
-            serverStream(stream).complete();
+            if (status.isOk()) {
+              serverStream(stream).complete();
+            } else {
+              serverStream(stream).transportReportStatus(status);
+            }
           }
         });
   }
@@ -753,7 +757,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         return;
       }
       if (cmd.endStream()) {
-        closeStreamWhenDone(promise, stream);
+        closeStreamWhenDone(promise, stream, Status.OK);
       }
       // Call the base class to write the HTTP/2 DATA frame.
       encoder().writeData(ctx, streamId, cmd.content(), 0, cmd.endStream(), promise);
@@ -775,7 +779,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         return;
       }
       if (cmd.endOfStream()) {
-        closeStreamWhenDone(promise, stream);
+        closeStreamWhenDone(promise, stream, cmd.status());
       }
       encoder().writeHeaders(ctx, streamId, cmd.headers(), 0, cmd.endOfStream(), promise);
     }

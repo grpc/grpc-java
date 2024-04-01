@@ -343,7 +343,7 @@ public abstract class AbstractServerStream extends AbstractStream
       // and the status passed in there was the actual status of the RPC.
       // If newStatus non-OK, then the RPC ended some other way and the server application did
       // not initiate the termination.
-      Preconditions.checkState(!newStatus.isOk() || closedStatus != null);
+      Preconditions.checkState(!newStatus.isOk() || closedStatus != null, "%s should be non-OK if closedStatus == null", newStatus);
       if (!listenerClosed) {
         if (!newStatus.isOk()) {
           statsTraceCtx.streamClosed(newStatus);
