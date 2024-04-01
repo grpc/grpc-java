@@ -16,6 +16,7 @@
 
 package io.grpc.examples.helloworld;
 
+import com.google.common.base.Strings;
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -44,7 +45,7 @@ public class HelloWorldClient {
 
   /** Say hello to server. */
   public void greet(String name) {
-    logger.info("Will try to greet " + name + " ...");
+    // logger.info("Will try to greet " + name + " ...");
     HelloRequest request = HelloRequest.newBuilder().setName(name).build();
     HelloReply response;
     try {
@@ -61,7 +62,7 @@ public class HelloWorldClient {
    * greeting. The second argument is the target server.
    */
   public static void main(String[] args) throws Exception {
-    String user = "world";
+    String user = Strings.repeat("world", 1_000_000);
     // Access a service running on the local machine on port 50051
     String target = "localhost:50051";
     // Allow passing in the user and target strings as command line arguments
