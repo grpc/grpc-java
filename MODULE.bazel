@@ -86,7 +86,7 @@ maven.override(
 )
 maven.override(
     coordinates = "com.google.protobuf:protobuf-javalite",
-    target = "@com_google_protobuf_javalite//:protobuf_javalite",
+    target = "@com_google_protobuf//:protobuf_javalite",
 )
 maven.override(
     coordinates = "io.grpc:grpc-alts",
