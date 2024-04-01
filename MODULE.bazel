@@ -75,7 +75,7 @@ maven.install(
     ],
     strict_visibility = True,
 )
-use_repo(maven, "maven")
+use_repo(maven, "maven", "unpinned_maven")
 maven.override(
     coordinates = "com.google.protobuf:protobuf-java",
     target = "@com_google_protobuf//:protobuf_java",
