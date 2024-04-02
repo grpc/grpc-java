@@ -197,7 +197,7 @@ public class RlsLoadBalancerTest {
 
     // Ensure happy path is unaffected
     subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
+    res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
 
     // Check on conversion
