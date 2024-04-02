@@ -16,6 +16,8 @@
 
 package io.grpc.stub;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import io.grpc.ExperimentalApi;
 
 /**
@@ -75,7 +77,9 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    *                 positive integer.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
-  public abstract void setOnReadyThreshold(int numBytes);
+  public void setOnReadyThreshold(int numBytes) {
+    checkArgument(numBytes > 0, "numBytes must be positive: %s", numBytes);
+  }
 
   /**
    * Sets the compression algorithm to use for the call. May only be called before sending any
