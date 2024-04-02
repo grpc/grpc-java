@@ -277,7 +277,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("12");
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
-    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.IDLE);
+    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.CONNECTING);
 
     reset(mockLoadBalancer);
     nameResolverFactory.servers.clear();
@@ -480,7 +480,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(newResolvedAddress.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
     assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
-    assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
+    assertThat(channel.getState(false)).isEqualTo(ConnectivityState.CONNECTING);
   }
 
   @Test

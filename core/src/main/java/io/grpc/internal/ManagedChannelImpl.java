@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
@@ -423,6 +424,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // may throw. We don't want to confuse our state, even if we will enter panic mode.
     this.lbHelper = lbHelper;
 
+    channelStateManager.gotoState(CONNECTING);
     NameResolverListener listener = new NameResolverListener(lbHelper, nameResolver);
     nameResolver.start(listener);
     nameResolverStarted = true;

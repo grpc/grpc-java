@@ -32,7 +32,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.Lists;
 import io.grpc.Attributes;
@@ -41,6 +40,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.util.AbstractTestHelper.FakeSocketAddress;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.util.MultiChildLoadBalancer.Endpoint;
@@ -81,8 +81,8 @@ public class MultiChildLoadBalancerTest {
   private ArgumentCaptor<ConnectivityState> stateCaptor;
   @Captor
   private ArgumentCaptor<LoadBalancer.CreateSubchannelArgs> createArgsCaptor;
-  private TestHelper testHelperInst = new TestHelper();
-  private LoadBalancer.Helper mockHelper =
+  private final TestHelper testHelperInst = new TestHelper();
+  private final LoadBalancer.Helper mockHelper =
       mock(LoadBalancer.Helper.class, delegatesTo(testHelperInst));
   private TestLb loadBalancer;
 
@@ -99,7 +99,7 @@ public class MultiChildLoadBalancerTest {
   }
 
   @Test
-  public void pickAfterResolved() throws Exception {
+  public void pickAfterResolved() {
     Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         LoadBalancer.ResolvedAddresses.newBuilder().setAddresses(servers).build());
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
@@ -127,11 +127,11 @@ public class MultiChildLoadBalancerTest {
         (TestLb.TestSubchannelPicker) pickerCaptor.getValue();
     assertThat(subchannelPicker.getReadySubchannels()).containsExactly(readySubchannel);
 
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test
-  public void pickAfterResolvedUpdatedHosts() throws Exception {
+  public void pickAfterResolvedUpdatedHosts() {
     Attributes.Key<String> key = Attributes.Key.create("check-that-it-is-propagated");
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
     EquivalentAddressGroup removedEag = new EquivalentAddressGroup(removedAddr);
@@ -191,11 +191,11 @@ public class MultiChildLoadBalancerTest {
     verify(mockHelper, times(3)).createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class));
     inOrder.verify(mockHelper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
 
-    verifyNoMoreInteractions(mockHelper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
   @Test
-  public void pickFromMultiAddressEags() throws Exception {
+  public void pickFromMultiAddressEags() {
     List<SocketAddress> addressList1 = new ArrayList<>();
     List<SocketAddress> addressList2 = new ArrayList<>();
     for (int i = 0; i < 3; i++) {
@@ -215,7 +215,7 @@ public class MultiChildLoadBalancerTest {
         LoadBalancer.ResolvedAddresses.newBuilder().setAddresses(multiGroups).build());
 
     assertTrue(addressesAcceptanceStatus.isOk());
-    LoadBalancer.Subchannel evens = subchannels.get(Collections.singletonList(eag1));
+    LoadBalancer.Subchannel evens = getSubchannel(eag1);
     deliverSubchannelState(evens, ConnectivityStateInfo.forNonError(READY));
     verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(TestLb.TestSubchannelPicker.class);
@@ -321,8 +321,20 @@ public class MultiChildLoadBalancerTest {
     return new Endpoint(eag);
   }
   
-  private LoadBalancer.Subchannel getSubchannel(EquivalentAddressGroup removedEag) {
-    return subchannels.get(Collections.singletonList(removedEag));
+  private LoadBalancer.Subchannel getSubchannel(EquivalentAddressGroup eag) {
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      for (SocketAddress addr : eag.getAddresses()) {
+        LoadBalancer.Subchannel subchannel = subchannels.get(
+            Arrays.asList(new EquivalentAddressGroup(addr, eag.getAttributes())));
+        if (subchannel != null) {
+          return subchannel;
+        }
+      }
+    } else {
+      return subchannels.get(Collections.singletonList(eag));
+    }
+
+    return null;
   }
 
   private static List<Object> getChildEags(MultiChildLoadBalancer loadBalancer) {

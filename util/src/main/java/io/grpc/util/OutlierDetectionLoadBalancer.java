@@ -377,8 +377,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     void eject() {
       ejected = true;
-      subchannelStateListener.onSubchannelState(
-          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+      subchannelStateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(
+          Status.UNAVAILABLE.withDescription(
+              "The subchannel has been ejected by outlier detection")));
       logger.log(ChannelLogLevel.INFO, "Subchannel ejected: {0}", this);
     }
 

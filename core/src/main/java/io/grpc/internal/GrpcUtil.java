@@ -221,7 +221,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  public static final String IMPLEMENTATION_VERSION = "1.63.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  public static final String IMPLEMENTATION_VERSION = "1.64.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -953,6 +953,9 @@ public final class GrpcUtil {
     String envVar = System.getenv(envVarName);
     if (envVar == null) {
       envVar = System.getProperty(envVarName);
+    }
+    if (envVar != null) {
+      envVar = envVar.trim();
     }
     if (enableByDefault) {
       return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);

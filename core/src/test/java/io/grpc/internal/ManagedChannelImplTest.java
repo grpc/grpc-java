@@ -2338,7 +2338,7 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
-    assertEquals(IDLE, channel.getState(false));
+    assertEquals(CONNECTING, channel.getState(false));
 
     updateBalancingStateSafely(helper, TRANSIENT_FAILURE, mockPicker);
     assertEquals(TRANSIENT_FAILURE, channel.getState(false));
@@ -2395,21 +2395,21 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
-    assertEquals(IDLE, channel.getState(false));
+    assertEquals(CONNECTING, channel.getState(false));
 
-    channel.notifyWhenStateChanged(IDLE, onStateChanged);
+    channel.notifyWhenStateChanged(CONNECTING, onStateChanged);
     executor.runDueTasks();
     assertFalse(stateChanged.get());
 
-    // state change from IDLE to CONNECTING
-    updateBalancingStateSafely(helper, CONNECTING, mockPicker);
+    // state change from CONNECTING to IDLE
+    updateBalancingStateSafely(helper, IDLE, mockPicker);
     // onStateChanged callback should run
     executor.runDueTasks();
     assertTrue(stateChanged.get());
 
-    // clear and test form CONNECTING
+    // clear and test form IDLE
     stateChanged.set(false);
-    channel.notifyWhenStateChanged(IDLE, onStateChanged);
+    channel.notifyWhenStateChanged(CONNECTING, onStateChanged);
     // onStateChanged callback should run immediately
     executor.runDueTasks();
     assertTrue(stateChanged.get());
@@ -2428,8 +2428,8 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
-    assertEquals(IDLE, channel.getState(false));
-    channel.notifyWhenStateChanged(IDLE, onStateChanged);
+    assertEquals(CONNECTING, channel.getState(false));
+    channel.notifyWhenStateChanged(CONNECTING, onStateChanged);
     executor.runDueTasks();
     assertFalse(stateChanged.get());
 
@@ -2452,9 +2452,6 @@ public class ManagedChannelImplTest {
     long idleTimeoutMillis = 2000L;
     channelBuilder.idleTimeout(idleTimeoutMillis, TimeUnit.MILLISECONDS);
     createChannel();
-    assertEquals(IDLE, channel.getState(false));
-
-    updateBalancingStateSafely(helper, CONNECTING, mockPicker);
     assertEquals(CONNECTING, channel.getState(false));
 
     timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
@@ -2677,11 +2674,11 @@ public class ManagedChannelImplTest {
 
     // Updating on the old helper (whose balancer has been shutdown) does not change the channel
     // state.
-    updateBalancingStateSafely(helper, CONNECTING, mockPicker);
-    assertEquals(IDLE, channel.getState(false));
-
-    updateBalancingStateSafely(helper2, CONNECTING, mockPicker);
+    updateBalancingStateSafely(helper, IDLE, mockPicker);
     assertEquals(CONNECTING, channel.getState(false));
+
+    updateBalancingStateSafely(helper2, IDLE, mockPicker);
+    assertEquals(IDLE, channel.getState(false));
   }
 
   @Test
@@ -2695,7 +2692,7 @@ public class ManagedChannelImplTest {
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build());
     createChannel();
-    assertEquals(IDLE, channel.getState(false));
+    assertEquals(CONNECTING, channel.getState(false));
 
     // This call will be buffered in delayedTransport
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
@@ -2790,7 +2787,7 @@ public class ManagedChannelImplTest {
     // enterIdle() will shut down the name resolver and lb policy used to get a pick for the delayed
     // call
     channel.enterIdle();
-    assertEquals(IDLE, channel.getState(false));
+    assertEquals(CONNECTING, channel.getState(false));
 
     // enterIdle() will restart the delayed call by exiting idle. This creates a new helper.
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
@@ -2912,14 +2909,14 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri).setResolvedAtStart(false).build());
     createChannel();
-    assertEquals(IDLE, channel.getState(false));
+    assertEquals(CONNECTING, channel.getState(false));
 
     Runnable onStateChanged = mock(Runnable.class);
-    channel.notifyWhenStateChanged(IDLE, onStateChanged);
+    channel.notifyWhenStateChanged(CONNECTING, onStateChanged);
 
     updateBalancingStateSafely(helper, SHUTDOWN, mockPicker);
 
-    assertEquals(IDLE, channel.getState(false));
+    assertEquals(CONNECTING, channel.getState(false));
     executor.runDueTasks();
     verify(onStateChanged, never()).run();
   }
@@ -3222,8 +3219,6 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
 
-    assertEquals(IDLE, getStats(channel).state);
-    updateBalancingStateSafely(helper, CONNECTING, mockPicker);
     assertEquals(CONNECTING, getStats(channel).state);
 
     AbstractSubchannel subchannel =
@@ -3434,7 +3429,7 @@ public class ManagedChannelImplTest {
     assertEquals(READY, getStats(oobChannel).state);
 
     // oobchannel state is separate from the ManagedChannel
-    assertEquals(IDLE, getStats(channel).state);
+    assertEquals(CONNECTING, getStats(channel).state);
     channel.shutdownNow();
     assertEquals(SHUTDOWN, getStats(channel).state);
     assertEquals(SHUTDOWN, getStats(oobChannel).state);

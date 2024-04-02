@@ -697,6 +697,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       public int streamId() {
         return -1;
       }
+
+      @Override
+      public void setOnReadyThreshold(int numBytes) {
+        // noop
+      }
     }
 
     private class InProcessClientStream implements ClientStream {

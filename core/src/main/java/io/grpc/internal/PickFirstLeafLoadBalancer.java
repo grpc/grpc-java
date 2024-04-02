@@ -31,9 +31,9 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -55,7 +55,6 @@ import javax.annotation.Nullable;
  * io.grpc.NameResolver}. The channel's default behavior is used, which is walking down the address
  * list and sticking to the first that works.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10383")
 final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
@@ -72,7 +71,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
   private final boolean enableHappyEyeballs =
-      GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
+      GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, true);
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -133,6 +132,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
+        SubchannelData subchannelData = subchannels.get(previousAddress);
+        subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
         return Status.OK;
       } else {
         addressIndex.reset(); // Previous ready subchannel not in the new list of addresses
@@ -354,7 +355,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     currentAddress = addressIndex.getCurrentAddress();
     subchannel = subchannels.containsKey(currentAddress)
         ? subchannels.get(currentAddress).getSubchannel()
-        : createNewSubchannel(currentAddress);
+        : createNewSubchannel(currentAddress, addressIndex.getCurrentEagAttributes());
 
     ConnectivityState subchannelState = subchannels.get(currentAddress).getState();
     switch (subchannelState) {
@@ -404,7 +405,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    scheduleConnectionTask = helper.getSynchronizationContext().schedule(
+    SynchronizationContext synchronizationContext = null;
+    try {
+      synchronizationContext = helper.getSynchronizationContext();
+    } catch (NullPointerException e) {
+      // All helpers should have a sync context, but if one doesn't (ex. user had a custom test)
+      // we don't want to break previously working functionality.
+      return;
+    }
+
+    scheduleConnectionTask = synchronizationContext.schedule(
         new StartNextConnection(),
         CONNECTION_DELAY_INTERVAL_MS,
         TimeUnit.MILLISECONDS,
@@ -418,12 +428,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  private Subchannel createNewSubchannel(SocketAddress addr) {
+  private Subchannel createNewSubchannel(SocketAddress addr, Attributes attrs) {
     HealthListener hcListener = new HealthListener();
     final Subchannel subchannel = helper.createSubchannel(
         CreateSubchannelArgs.newBuilder()
         .setAddresses(Lists.newArrayList(
-            new EquivalentAddressGroup(addr)))
+            new EquivalentAddressGroup(addr, attrs)))
         .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
             .build());
     if (subchannel == null) {
@@ -433,8 +443,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     SubchannelData subchannelData = new SubchannelData(subchannel, IDLE, hcListener);
     hcListener.subchannelData = subchannelData;
     subchannels.put(addr, subchannelData);
-    Attributes attrs = subchannel.getAttributes();
-    if (attrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
+    Attributes scAttrs = subchannel.getAttributes();
+    if (scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
       hcListener.healthStateInfo = ConnectivityStateInfo.forNonError(READY);
     }
     subchannel.start(stateInfo -> processSubchannelState(subchannel, stateInfo));
@@ -463,9 +473,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       log.log(Level.FINE, "Received health status {0} for subchannel {1}",
           new Object[]{newState, subchannelData.subchannel});
       healthStateInfo = newState;
-      if (addressIndex.isValid()
-          && subchannels.get(addressIndex.getCurrentAddress()).healthListener == this) {
-        updateHealthCheckedState(subchannelData);
+      try {
+        SubchannelData curSubChanData = subchannels.get(addressIndex.getCurrentAddress());
+        if (curSubChanData != null && curSubChanData.healthListener == this) {
+          updateHealthCheckedState(subchannelData);
+        }
+      } catch (IllegalStateException e) {
+        log.fine("Health listener received state change after subchannel was removed");
       }
     }
   }
@@ -582,6 +596,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         throw new IllegalStateException("Index is off the end of the address group list");
       }
       return addressGroups.get(groupIndex).getAttributes();
+    }
+
+    public List<EquivalentAddressGroup> getCurrentEagAsList() {
+      return Collections.singletonList(
+          new EquivalentAddressGroup(getCurrentAddress(), getCurrentEagAttributes()));
     }
 
     /**

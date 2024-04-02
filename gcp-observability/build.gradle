@@ -34,6 +34,7 @@ dependencies {
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-census'),
+            project(":grpc-context"), // Override opencensus dependency with our newer version
             libraries.opencensus.contrib.grpc.metrics
     // Avoid gradle using project dependencies without configuration: shadow
     implementation (libraries.google.cloud.logging) {
