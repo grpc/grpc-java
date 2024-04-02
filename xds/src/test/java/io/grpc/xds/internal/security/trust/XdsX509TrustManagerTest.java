@@ -534,6 +534,7 @@ public class XdsX509TrustManagerTest {
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
     verify(sslEngine, times(1)).getHandshakeSession();
+    assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
   @Test
@@ -561,6 +562,7 @@ public class XdsX509TrustManagerTest {
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
     verify(sslSocket, times(1)).isConnected();
     verify(sslSocket, times(1)).getHandshakeSession();
+    assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
   @Test
