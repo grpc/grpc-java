@@ -192,12 +192,6 @@ final class CachingRlsLbClient {
             serverName, status.getCode(), status.getDescription()));
   }
 
-  private void periodicClean() {
-    synchronized (lock) {
-      linkedHashLruCache.cleanupExpiredEntries();
-    }
-  }
-
   /** Populates async cache entry for new request. */
   @GuardedBy("lock")
   private CachedRouteLookupResponse asyncRlsCall(
