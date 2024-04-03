@@ -23,10 +23,8 @@ auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.10.4"
 checkstyle = "com.puppycrawl.tools:checkstyle:10.12.5"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
-# Update notes / 2023-07-19 sergiitk:
-#     Cronet (API and Embedded) upgrade is blocked by https://github.com/grpc/grpc-java/issues/10396.
-cronet-api = "org.chromium.net:cronet-api:108.5359.79"
-cronet-embedded = "org.chromium.net:cronet-embedded:108.5359.79"
+cronet-api = "org.chromium.net:cronet-api:119.6045.31"
+cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.23.0"
 errorprone-core = "com.google.errorprone:error_prone_core:2.23.0"
 google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.29.0"

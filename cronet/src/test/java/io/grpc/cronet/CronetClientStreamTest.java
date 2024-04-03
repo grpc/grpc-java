@@ -54,7 +54,6 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import org.chromium.net.BidirectionalStream;
 import org.chromium.net.CronetException;
-import org.chromium.net.ExperimentalBidirectionalStream;
 import org.chromium.net.UrlResponseInfo;
 import org.chromium.net.impl.UrlResponseInfoImpl;
 import org.junit.Before;
@@ -76,9 +75,9 @@ public final class CronetClientStreamTest {
   @Mock private CronetClientTransport transport;
   private Metadata metadata = new Metadata();
   @Mock private StreamBuilderFactory factory;
-  @Mock private ExperimentalBidirectionalStream cronetStream;
+  @Mock private BidirectionalStream cronetStream;
   @Mock private ClientStreamListener clientListener;
-  @Mock private ExperimentalBidirectionalStream.Builder builder;
+  @Mock private BidirectionalStream.Builder builder;
   private final Object lock = new Object();
   private final TransportTracer transportTracer = TransportTracer.getDefaultFactory().create();
   private final Executor executor = new Executor() {
@@ -681,8 +680,8 @@ public final class CronetClientStreamTest {
             true,
             false);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder getBuilder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder getBuilder =
+        mock(BidirectionalStream.Builder.class);
     when(getFactory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(getBuilder);
@@ -738,8 +737,8 @@ public final class CronetClientStreamTest {
             true,
             true);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder builder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder builder =
+        mock(BidirectionalStream.Builder.class);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(builder);
@@ -770,8 +769,8 @@ public final class CronetClientStreamTest {
             true,
             true);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder builder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder builder =
+        mock(BidirectionalStream.Builder.class);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(builder);
@@ -810,8 +809,8 @@ public final class CronetClientStreamTest {
             false,
             false);
     callback.setStream(stream);
-    ExperimentalBidirectionalStream.Builder builder =
-        mock(ExperimentalBidirectionalStream.Builder.class);
+    BidirectionalStream.Builder builder =
+        mock(BidirectionalStream.Builder.class);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
         .thenReturn(builder);
