@@ -186,13 +186,18 @@ public class RlsLoadBalancerTest {
     Metadata headers = new Metadata();
     PickSubchannelArgsImpl fakeSearchMethodArgs =
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    // Warm-up pick; will be queued
+    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
+    assertThat(res.getStatus().isOk()).isTrue();
+    assertThat(res.getSubchannel()).isNull();
+    // Cache is warm, but still unconnected
     picker.pickSubchannel(fakeSearchMethodArgs); // Will create the subchannel
     FakeSubchannel subchannel = subchannels.peek();
     assertThat(subchannel).isNotNull();
 
     // Ensure happy path is unaffected
     subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
+    res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
 
     // Check on conversion
@@ -213,7 +218,12 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
+    // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);
+    assertThat(res.getStatus().isOk()).isTrue();
+    assertThat(res.getSubchannel()).isNull();
+    // Cache is warm, but still unconnected
+    res = picker.pickSubchannel(searchSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper, atLeast(0))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
@@ -323,7 +333,12 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
     Metadata headers = new Metadata();
+    // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);
+    assertThat(res.getStatus().isOk()).isTrue();
+    assertThat(res.getSubchannel()).isNull();
+    // Cache is warm, but still unconnected
+    res = picker.pickSubchannel(searchSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper, atLeast(0))
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
