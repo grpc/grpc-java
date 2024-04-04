@@ -9,6 +9,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 #         # Your own deps
 #     ] + IO_GRPC_GRPC_JAVA_ARTIFACTS,
 # )
+# GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
     "com.google.api.grpc:proto-google-common-protos:2.29.0",
@@ -46,6 +47,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "org.apache.tomcat:annotations-api:6.0.53",
     "org.codehaus.mojo:animal-sniffer-annotations:1.23",
 ]
+# GRPC_DEPS_END
 
 # For use with maven_install's override_targets.
 # maven_install(
