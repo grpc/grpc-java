@@ -81,6 +81,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Check versions match in MODULE.bazel and repositories.bzl
+      run: |
+        diff -u <(sed -n '/GRPC_DEPS_START/,/GRPC_DEPS_END/ {/GRPC_DEPS_/! p}' MODULE.bazel) \
+                <(sed -n '/GRPC_DEPS_START/,/GRPC_DEPS_END/ {/GRPC_DEPS_/! p}' repositories.bzl)
+
     - name: Bazel cache
       uses: actions/cache@v3
       with:
