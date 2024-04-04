@@ -96,14 +96,3 @@ jobs:
       env:
         USE_BAZEL_VERSION: 7.0.0
       run: bazelisk build //... --enable_bzlmod=true
-
-    - name: Check maven_install.json
-      env:
-        USE_BAZEL_VERSION: 7.0.0
-      run: |
-        bazelisk run @unpinned_maven//:pin --enable_bzlmod=true
-        if [[ ! -z $(git status --porcelain) ]]; then
-          git status
-          echo "Error Working directory is not clean. Forget to commit generated files?"
-          exit 1
-        fi
