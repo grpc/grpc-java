@@ -90,4 +90,9 @@ jobs:
         key: ${{ runner.os }}-bazel-${{ env.USE_BAZEL_VERSION }}-${{ hashFiles('WORKSPACE', 'repositories.bzl') }}
 
     - name: Run bazel build
-      run: bazelisk build //...
+      run: bazelisk build //... --enable_bzlmod=false
+
+    - name: Run bazel build (bzlmod)
+      env:
+        USE_BAZEL_VERSION: 7.0.0
+      run: bazelisk build //... --enable_bzlmod=true
