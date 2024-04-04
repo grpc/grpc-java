@@ -36,8 +36,8 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         ":alts_internal",
-        ":handshaker_java_proto",
         ":handshaker_java_grpc",
+        ":handshaker_java_proto",
         "//api",
         "//auth",
         "//core:internal",
