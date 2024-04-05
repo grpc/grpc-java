@@ -63,7 +63,7 @@ java_library(
 java_proto_library(
     name = "xds_protos_java",
     deps = [
-        "@com_github_cncf_udpa//udpa/type/v1:pkg",
+        "@com_github_cncf_xds//udpa/type/v1:pkg",
         "@com_github_cncf_xds//xds/data/orca/v3:pkg",
         "@com_github_cncf_xds//xds/service/orca/v3:pkg",
         "@com_github_cncf_xds//xds/type/v3:pkg",
