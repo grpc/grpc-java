@@ -173,7 +173,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
    * Sets specific UID to use when accounting socket traffic caused by this channel. See {@link
    * android.net.TrafficStats} for more information. Designed for use when performing an operation
    * on behalf of another application. Caller must hold {@link
-   * android.Manifest.permission#MODIFY_NETWORK_ACCOUNTING} permission. By default traffic is
+   * android.Manifest.permission#UPDATE_DEVICE_STATS} permission. By default traffic is
    * attributed to UID of caller.
    *
    * <p><b>NOTE:</b>Setting a UID disallows sharing of sockets with channels with other UIDs, which
