@@ -80,12 +80,7 @@ public final class CronetClientStreamTest {
   @Mock private BidirectionalStream.Builder builder;
   private final Object lock = new Object();
   private final TransportTracer transportTracer = TransportTracer.getDefaultFactory().create();
-  private final Executor executor = new Executor() {
-      @Override
-      public void execute(Runnable r) {
-        r.run();
-      }
-    };
+  private final Executor executor = Runnable::run;
   CronetClientStream clientStream;
 
   private MethodDescriptor.Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
@@ -171,7 +166,7 @@ public final class CronetClientStreamTest {
     String[] requests = new String[5];
     WritableBuffer[] buffers = new WritableBuffer[5];
     for (int i = 0; i < 5; ++i) {
-      requests[i] = new String("request" + String.valueOf(i));
+      requests[i] = "request" + i;
       buffers[i] = allocator.allocate(requests[i].length());
       buffers[i].write(requests[i].getBytes(Charset.forName("UTF-8")), 0, requests[i].length());
       // The 3rd and 5th writeFrame calls have flush=true.
@@ -206,27 +201,19 @@ public final class CronetClientStreamTest {
   }
 
   private static List<Map.Entry<String, String>> responseHeader(String status) {
-    Map<String, String> headers = new HashMap<String, String>();
+    Map<String, String> headers = new HashMap<>();
     headers.put(":status", status);
     headers.put("content-type", "application/grpc");
     headers.put("test-key", "test-value");
-    List<Map.Entry<String, String>> headerList = new ArrayList<Map.Entry<String, String>>(3);
-    for (Map.Entry<String, String> entry : headers.entrySet()) {
-      headerList.add(entry);
-    }
-    return headerList;
+    return new ArrayList<>(headers.entrySet());
   }
 
   private static List<Map.Entry<String, String>> trailers(int status) {
-    Map<String, String> trailers = new HashMap<String, String>();
+    Map<String, String> trailers = new HashMap<>();
     trailers.put("grpc-status", String.valueOf(status));
     trailers.put("content-type", "application/grpc");
     trailers.put("test-trailer-key", "test-trailer-value");
-    List<Map.Entry<String, String>> trailerList = new ArrayList<Map.Entry<String, String>>(3);
-    for (Map.Entry<String, String> entry : trailers.entrySet()) {
-      trailerList.add(entry);
-    }
-    return trailerList;
+    return new ArrayList<>(trailers.entrySet());
   }
 
   private static ByteBuffer createMessageFrame(byte[] bytes) {

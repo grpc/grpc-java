@@ -84,7 +84,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
 
   private final CronetEngine cronetEngine;
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
-  private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
+  private final TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
   private boolean alwaysUsePut = false;
 
@@ -132,7 +132,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
    * Sets the maximum message size allowed to be received on the channel. If not called,
    * defaults to {@link io.grpc.internal.GrpcUtil#DEFAULT_MAX_MESSAGE_SIZE}.
    */
-  public final CronetChannelBuilder maxMessageSize(int maxMessageSize) {
+  public CronetChannelBuilder maxMessageSize(int maxMessageSize) {
     checkArgument(maxMessageSize >= 0, "maxMessageSize must be >= 0");
     this.maxMessageSize = maxMessageSize;
     return this;
@@ -141,7 +141,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
   /**
    * Sets the Cronet channel to always use PUT instead of POST. Defaults to false.
    */
-  public final CronetChannelBuilder alwaysUsePut(boolean enable) {
+  public CronetChannelBuilder alwaysUsePut(boolean enable) {
     this.alwaysUsePut = enable;
     return this;
   }
@@ -163,7 +163,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
    *     application.
    * @return the builder to facilitate chaining.
    */
-  final CronetChannelBuilder setTrafficStatsTag(int tag) {
+  CronetChannelBuilder setTrafficStatsTag(int tag) {
     trafficStatsTagSet = true;
     trafficStatsTag = tag;
     return this;
@@ -184,7 +184,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
    * @param uid the UID to attribute socket traffic caused by this channel.
    * @return the builder to facilitate chaining.
    */
-  final CronetChannelBuilder setTrafficStatsUid(int uid) {
+  CronetChannelBuilder setTrafficStatsUid(int uid) {
     trafficStatsUidSet = true;
     trafficStatsUid = uid;
     return this;
@@ -200,7 +200,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
    *
    * @since 1.12.0
    */
-  public final CronetChannelBuilder scheduledExecutorService(
+  public CronetChannelBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
     this.scheduledExecutorService =
         checkNotNull(scheduledExecutorService, "scheduledExecutorService");

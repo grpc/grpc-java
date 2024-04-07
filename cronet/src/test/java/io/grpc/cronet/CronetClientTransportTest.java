@@ -71,12 +71,7 @@ public final class CronetClientTransportTest {
   private MethodDescriptor<Void, Void> descriptor = TestMethodDescriptors.voidMethod();
   @Mock private ManagedClientTransport.Listener clientTransportListener;
   @Mock private BidirectionalStream.Builder builder;
-  private final Executor executor = new Executor() {
-      @Override
-      public void execute(Runnable r) {
-        r.run();
-      }
-    };
+  private final Executor executor = Runnable::run;
 
   @Before
   public void setUp() {
