@@ -247,7 +247,7 @@ class CronetClientStream extends AbstractClientStream {
   class TransportState extends Http2ClientStreamTransportState {
     private final Object lock;
     @GuardedBy("lock")
-    private Collection<PendingData> pendingData = new ArrayList<PendingData>();
+    private final Collection<PendingData> pendingData = new ArrayList<>();
     @GuardedBy("lock")
     private boolean streamReady;
     @GuardedBy("lock")
