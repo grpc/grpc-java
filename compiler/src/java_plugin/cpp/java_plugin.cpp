@@ -61,22 +61,12 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     java_grpc_generator::GeneratedAnnotation generated_annotation =
         java_grpc_generator::GeneratedAnnotation::JAVAX;
 
-    /*
-        jakarta_mode has these values:
-        javax, the original behavior - add @javax.annotation.Generated
-        omit, "less controversial" = just add @io.grpc.stub.annotations.GrpcGenerated
-        and maybe others in the future
-    */
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {
       if (options[i].first == "lite") {
         flavor = java_grpc_generator::ProtoFlavor::LITE;
       } else if (options[i].first == "noversion") {
         disable_version = true;
-      } else if (options[i].first == "jakarta_javax") {
-        generated_annotation = java_grpc_generator::GeneratedAnnotation::JAVAX;
-      } else if (options[i].first == "jakarta_omit") {
-        generated_annotation = java_grpc_generator::GeneratedAnnotation::OMIT;
       } else if (options[i].first == "@generated") {
          if (options[i].second == "omit") {
            generated_annotation = java_grpc_generator::GeneratedAnnotation::OMIT;
