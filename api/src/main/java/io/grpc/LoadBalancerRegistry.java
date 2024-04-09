@@ -99,11 +99,11 @@ public final class LoadBalancerRegistry {
    */
   public static synchronized LoadBalancerRegistry getDefaultRegistry() {
     if (instance == null) {
-      List<LoadBalancerProvider> providerList = ServiceProviders.loadAll(
+      List<LoadBalancerProvider> providerList = ServiceProviders.loadAll(new LoadArgs<>(
           LoadBalancerProvider.class,
           HARDCODED_CLASSES,
           LoadBalancerProvider.class.getClassLoader(),
-          new LoadBalancerPriorityAccessor());
+          new LoadBalancerPriorityAccessor()));
       instance = new LoadBalancerRegistry();
       for (LoadBalancerProvider provider : providerList) {
         logger.fine("Service loader found " + provider);

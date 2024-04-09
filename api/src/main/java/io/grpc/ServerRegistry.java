@@ -91,11 +91,11 @@ public final class ServerRegistry {
    */
   public static synchronized ServerRegistry getDefaultRegistry() {
     if (instance == null) {
-      List<ServerProvider> providerList = ServiceProviders.loadAll(
+      List<ServerProvider> providerList = ServiceProviders.loadAll(new LoadArgs<>(
           ServerProvider.class,
           getHardCodedClasses(),
           ServerProvider.class.getClassLoader(),
-          new ServerPriorityAccessor());
+          new ServerPriorityAccessor()));
       instance = new ServerRegistry();
       for (ServerProvider provider : providerList) {
         logger.fine("Service loader found " + provider);

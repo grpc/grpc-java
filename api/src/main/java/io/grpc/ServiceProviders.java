@@ -34,12 +34,8 @@ final class ServiceProviders {
    * {@link ServiceLoader}.
    * If this is Android, returns an instance of the highest priority class in {@code hardcoded}.
    */
-  public static <T> T load(
-      Class<T> klass,
-      Iterable<Class<?>> hardcoded,
-      ClassLoader cl,
-      PriorityAccessor<T> priorityAccessor) {
-    List<T> candidates = loadAll(klass, hardcoded, cl, priorityAccessor);
+  public static <T> T load(LoadArgs<T> args) {
+    List<T> candidates = loadAll(args);
     if (candidates.isEmpty()) {
       return null;
     }
@@ -52,20 +48,13 @@ final class ServiceProviders {
    * If this is Android, returns all available implementations in {@code hardcoded}.
    * The list is sorted in descending priority order.
    */
-  public static <T> List<T> loadAll(
-      Class<T> klass,
-      Iterable<Class<?>> hardcoded,
-      ClassLoader cl,
-      final PriorityAccessor<T> priorityAccessor) {
-    Iterable<T> candidates;
-    if (isAndroid(cl)) {
-      candidates = getCandidatesViaHardCoded(klass, hardcoded);
-    } else {
-      candidates = getCandidatesViaServiceLoader(klass, cl);
-    }
+  public static <T> List<T> loadAll(LoadArgs<T> args) {
+    Iterable<T> candidates = isAndroid(args.classLoader)
+        ? getCandidatesViaHardCoded(args.klass, args.hardcoded)
+        : getCandidatesViaServiceLoader(args.klass, args.classLoader);
     List<T> list = new ArrayList<>();
     for (T current: candidates) {
-      if (!priorityAccessor.isAvailable(current)) {
+      if (!args.priorityAccessor.isAvailable(current)) {
         continue;
       }
       list.add(current);
@@ -76,7 +65,7 @@ final class ServiceProviders {
     Collections.sort(list, Collections.reverseOrder(new Comparator<T>() {
       @Override
       public int compare(T f1, T f2) {
-        int pd = priorityAccessor.getPriority(f1) - priorityAccessor.getPriority(f2);
+        int pd = args.priorityAccessor.getPriority(f1) - args.priorityAccessor.getPriority(f2);
         if (pd != 0) {
           return pd;
         }
