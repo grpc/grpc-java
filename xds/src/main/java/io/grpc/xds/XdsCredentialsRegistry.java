@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.InternalServiceProviders;
+import io.grpc.LoadArgs;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -107,11 +108,11 @@ final class XdsCredentialsRegistry {
    */
   public static synchronized XdsCredentialsRegistry getDefaultRegistry() {
     if (instance == null) {
-      List<XdsCredentialsProvider> providerList = InternalServiceProviders.loadAll(
+      List<XdsCredentialsProvider> providerList = InternalServiceProviders.loadAll(new LoadArgs<>(
               XdsCredentialsProvider.class,
               getHardCodedClasses(),
               XdsCredentialsProvider.class.getClassLoader(),
-              new XdsCredentialsProviderPriorityAccessor());
+              new XdsCredentialsProviderPriorityAccessor()));
       if (providerList.isEmpty()) {
         logger.warning("No XdsCredsRegistry found via ServiceLoader, including for GoogleDefault, "
             + "TLS and Insecure. This is probably due to a broken build.");

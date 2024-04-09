@@ -98,11 +98,11 @@ public final class ManagedChannelRegistry {
    */
   public static synchronized ManagedChannelRegistry getDefaultRegistry() {
     if (instance == null) {
-      List<ManagedChannelProvider> providerList = ServiceProviders.loadAll(
+      List<ManagedChannelProvider> providerList = ServiceProviders.loadAll(new LoadArgs<>(
           ManagedChannelProvider.class,
           getHardCodedClasses(),
           ManagedChannelProvider.class.getClassLoader(),
-          new ManagedChannelPriorityAccessor());
+          new ManagedChannelPriorityAccessor()));
       instance = new ManagedChannelRegistry();
       for (ManagedChannelProvider provider : providerList) {
         logger.fine("Service loader found " + provider);

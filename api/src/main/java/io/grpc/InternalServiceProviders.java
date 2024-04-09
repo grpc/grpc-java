@@ -27,23 +27,15 @@ public final class InternalServiceProviders {
   /**
    * Accessor for method.
    */
-  public static <T> T load(
-      Class<T> klass,
-      Iterable<Class<?>> hardcoded,
-      ClassLoader classLoader,
-      PriorityAccessor<T> priorityAccessor) {
-    return ServiceProviders.load(klass, hardcoded, classLoader, priorityAccessor);
+  public static <T> T load(LoadArgs<T> args) {
+    return ServiceProviders.load(args);
   }
 
   /**
    * Accessor for method.
    */
-  public static <T> List<T> loadAll(
-      Class<T> klass,
-      Iterable<Class<?>> hardCodedClasses,
-      ClassLoader classLoader,
-      PriorityAccessor<T> priorityAccessor) {
-    return ServiceProviders.loadAll(klass, hardCodedClasses, classLoader, priorityAccessor);
+  public static <T> List<T> loadAll(LoadArgs<T> args) {
+    return ServiceProviders.loadAll(args);
   }
 
   /**

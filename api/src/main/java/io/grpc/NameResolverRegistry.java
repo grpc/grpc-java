@@ -123,11 +123,12 @@ public final class NameResolverRegistry {
    */
   public static synchronized NameResolverRegistry getDefaultRegistry() {
     if (instance == null) {
-      List<NameResolverProvider> providerList = ServiceProviders.loadAll(
+      List<NameResolverProvider> providerList =
+          ServiceProviders.loadAll(new LoadArgs<NameResolverProvider>(
           NameResolverProvider.class,
           getHardCodedClasses(),
           NameResolverProvider.class.getClassLoader(),
-          new NameResolverPriorityAccessor());
+              new NameResolverPriorityAccessor()));
       if (providerList.isEmpty()) {
         logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "
             + "is probably due to a broken build. If using ProGuard, check your configuration");

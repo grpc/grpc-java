@@ -69,8 +69,8 @@ public class ServiceProvidersTest {
       Thread.currentThread().setContextClassLoader(rcll);
       assertEquals(
           Available7Provider.class,
-          ServiceProviders.load(
-              ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+          ServiceProviders.load(new LoadArgs<>(
+              ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR)).getClass());
     } finally {
       Thread.currentThread().setContextClassLoader(ccl);
     }
@@ -85,8 +85,8 @@ public class ServiceProvidersTest {
           serviceFile,
           "io/grpc/ServiceProvidersTestAbstractProvider-doesNotExist.txt");
       Thread.currentThread().setContextClassLoader(cl);
-      assertNull(ServiceProviders.load(
-          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
+      assertNull(ServiceProviders.load(new LoadArgs<>(
+          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR)));
     } finally {
       Thread.currentThread().setContextClassLoader(ccl);
     }
@@ -98,11 +98,11 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-multipleProvider.txt");
     assertSame(
         Available7Provider.class,
-        ServiceProviders.load(
-            ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+        ServiceProviders.load( new LoadArgs<>(
+            ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR)).getClass());
 
-    List<ServiceProvidersTestAbstractProvider> providers = ServiceProviders.loadAll(
-        ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+    List<ServiceProvidersTestAbstractProvider> providers = ServiceProviders.loadAll( new LoadArgs<>(
+        ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
     assertEquals(3, providers.size());
     assertEquals(Available7Provider.class, providers.get(0).getClass());
     assertEquals(Available5Provider.class, providers.get(1).getClass());
@@ -116,8 +116,8 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-unavailableProvider.txt");
     assertEquals(
         Available7Provider.class,
-        ServiceProviders.load(
-            ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+        ServiceProviders.load( new LoadArgs<>(
+            ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR)).getClass());
   }
 
   @Test
@@ -125,8 +125,8 @@ public class ServiceProvidersTest {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTestAbstractProvider-unknownClassProvider.txt");
     try {
-      ServiceProviders.load(
-          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      ServiceProviders.load( new LoadArgs<>(
+          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
       fail("Exception expected");
     } catch (ServiceConfigurationError e) {
       // noop
@@ -140,8 +140,8 @@ public class ServiceProvidersTest {
     try {
       // Even though there is a working provider, if any providers fail then we should fail
       // completely to avoid returning something unexpected.
-      ServiceProviders.load(
-          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      ServiceProviders.load( new LoadArgs<>(
+          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
       fail("Expected exception");
     } catch (ServiceConfigurationError expected) {
       // noop
@@ -154,8 +154,8 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-failAtPriorityProvider.txt");
     try {
       // The exception should be surfaced to the caller
-      ServiceProviders.load(
-          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      ServiceProviders.load( new LoadArgs<>(
+          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
       fail("Expected exception");
     } catch (FailAtPriorityProvider.PriorityException expected) {
       // noop
@@ -168,8 +168,8 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-failAtAvailableProvider.txt");
     try {
       // The exception should be surfaced to the caller
-      ServiceProviders.load(
-          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      ServiceProviders.load( new LoadArgs<>(
+          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
       fail("Expected exception");
     } catch (FailAtAvailableProvider.AvailableException expected) {
       // noop
