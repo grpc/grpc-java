@@ -146,7 +146,7 @@ public final class TestUtils {
   }
 
   @SuppressWarnings("ReferenceEquality")
-  public static final EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+  public static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
     if (eag.getAttributes() == Attributes.EMPTY) {
       return eag;
     }

@@ -38,7 +38,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder2<AltsChan
       new AltsChannelCredentials.Builder();
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
-  public static final AltsChannelBuilder forTarget(String target) {
+  public static AltsChannelBuilder forTarget(String target) {
     return new AltsChannelBuilder(target);
   }
 
