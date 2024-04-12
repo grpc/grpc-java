@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import java.util.List;
+
 /**
  * Represents a metric instrument. Metric instrument contains information used to describe a metric.
  */
@@ -48,4 +50,18 @@ public interface MetricInstrument {
    * @return the unit of measurement.
    */
   public String getUnit();
+
+  /**
+   * Returns a list of required label keys for this metric instrument.
+   *
+   * @return a list of required label keys.
+   */
+  public List<String> getRequiredLabelKeys();
+
+  /**
+   * Returns a list of optional label keys for this metric instrument.
+   *
+   * @return a list of optional label keys.
+   */
+  public List<String> getOptionalLabelKeys();
 }

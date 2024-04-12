@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -49,7 +50,7 @@ public final class MetricInstrumentRegistry {
    * Returns a list of registered metric instruments.
    */
   public List<MetricInstrument> getMetricInstruments() {
-    return metricInstruments;
+    return Collections.unmodifiableList(metricInstruments);
   }
 
   /**
@@ -60,21 +61,21 @@ public final class MetricInstrumentRegistry {
    * @param unit the unit of measurement for the metric
    * @param requiredLabelKeys a list of required label keys
    * @param optionalLabelKeys a list of optional label keys
-   * @param isEnabledByDefault whether the metric should be enabled by default
+   * @param enableByDefault whether the metric should be enabled by default
    * @return the newly created DoubleCounterMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
   // TODO(dnvindhya): Evaluate locks over synchronized methods and update if needed
   public synchronized DoubleCounterMetricInstrument registerDoubleCounter(String name,
       String description, String unit, List<String> requiredLabelKeys,
-      List<String> optionalLabelKeys, boolean isEnabledByDefault) {
+      List<String> optionalLabelKeys, boolean enableByDefault) {
     if (registeredMetricNames.contains(name)) {
       throw new IllegalStateException("Metric with name " + name + " already exists");
     }
     long instrumentIndex = metricInstruments.size();
     DoubleCounterMetricInstrument instrument = new DoubleCounterMetricInstrument(
         instrumentIndex, name, description, unit, requiredLabelKeys, optionalLabelKeys,
-        isEnabledByDefault);
+        enableByDefault);
     metricInstruments.add(instrument);
     registeredMetricNames.add(name);
     return instrument;
@@ -88,13 +89,13 @@ public final class MetricInstrumentRegistry {
    * @param unit the unit of measurement for the metric
    * @param requiredLabelKeys a list of required label keys
    * @param optionalLabelKeys a list of optional label keys
-   * @param isEnabledByDefault whether the metric should be enabled by default
+   * @param enableByDefault whether the metric should be enabled by default
    * @return the newly created LongCounterMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
   public synchronized LongCounterMetricInstrument registerLongCounter(String name,
       String description, String unit, List<String> requiredLabelKeys,
-      List<String> optionalLabelKeys, boolean isEnabledByDefault) {
+      List<String> optionalLabelKeys, boolean enableByDefault) {
     if (registeredMetricNames.contains(name)) {
       throw new IllegalStateException("Metric with name " + name + " already exists");
     }
@@ -102,7 +103,7 @@ public final class MetricInstrumentRegistry {
     long instrumentIndex = metricInstruments.size();
     LongCounterMetricInstrument instrument = new LongCounterMetricInstrument(
         instrumentIndex, name, description, unit, requiredLabelKeys, optionalLabelKeys,
-        isEnabledByDefault);
+        enableByDefault);
     metricInstruments.add(instrument);
     registeredMetricNames.add(name);
     return instrument;
@@ -117,13 +118,13 @@ public final class MetricInstrumentRegistry {
    * @param bucketBoundaries recommended set of explicit bucket boundaries for the histogram
    * @param requiredLabelKeys a list of required label keys
    * @param optionalLabelKeys a list of optional label keys
-   * @param isEnabledByDefault whether the metric should be enabled by default
+   * @param enableByDefault whether the metric should be enabled by default
    * @return the newly created DoubleHistogramMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
   public synchronized DoubleHistogramMetricInstrument registerDoubleHistogram(String name,
       String description, String unit, List<Double> bucketBoundaries,
-      List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean isEnabledByDefault) {
+      List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     if (registeredMetricNames.contains(name)) {
       throw new IllegalStateException("Metric with name " + name + " already exists");
     }
@@ -131,7 +132,7 @@ public final class MetricInstrumentRegistry {
     DoubleHistogramMetricInstrument instrument = new DoubleHistogramMetricInstrument(
         indexToInsertInstrument, name, description, unit, bucketBoundaries, requiredLabelKeys,
         optionalLabelKeys,
-        isEnabledByDefault);
+        enableByDefault);
     metricInstruments.add(instrument);
     registeredMetricNames.add(name);
     return instrument;
@@ -146,13 +147,13 @@ public final class MetricInstrumentRegistry {
    * @param bucketBoundaries recommended set of explicit bucket boundaries for the histogram
    * @param requiredLabelKeys a list of required label keys
    * @param optionalLabelKeys a list of optional label keys
-   * @param isEnabledByDefault whether the metric should be enabled by default
+   * @param enableByDefault whether the metric should be enabled by default
    * @return the newly created LongHistogramMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
   public synchronized LongHistogramMetricInstrument registerLongHistogram(String name,
       String description, String unit, List<Long> bucketBoundaries, List<String> requiredLabelKeys,
-      List<String> optionalLabelKeys, boolean isEnabledByDefault) {
+      List<String> optionalLabelKeys, boolean enableByDefault) {
     if (registeredMetricNames.contains(name)) {
       throw new IllegalStateException("Metric with name " + name + " already exists");
     }
@@ -160,7 +161,7 @@ public final class MetricInstrumentRegistry {
     LongHistogramMetricInstrument instrument = new LongHistogramMetricInstrument(
         indexToInsertInstrument, name, description, unit, bucketBoundaries, requiredLabelKeys,
         optionalLabelKeys,
-        isEnabledByDefault);
+        enableByDefault);
     metricInstruments.add(instrument);
     registeredMetricNames.add(name);
     return instrument;
@@ -175,23 +176,22 @@ public final class MetricInstrumentRegistry {
    * @param unit the unit of measurement for the metric
    * @param requiredLabelKeys a list of required label keys
    * @param optionalLabelKeys a list of optional label keys
-   * @param isEnabledByDefault whether the metric should be enabled by default
+   * @param enableByDefault whether the metric should be enabled by default
    * @return the newly created LongGaugeMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
   public synchronized LongGaugeMetricInstrument registerLongGauge(String name, String description,
       String unit, List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean
-      isEnabledByDefault) {
+      enableByDefault) {
     if (registeredMetricNames.contains(name)) {
       throw new IllegalStateException("Metric with name " + name + " already exists");
     }
     long indexToInsertInstrument = metricInstruments.size();
     LongGaugeMetricInstrument instrument = new LongGaugeMetricInstrument(
         indexToInsertInstrument, name, description, unit, requiredLabelKeys, optionalLabelKeys,
-        isEnabledByDefault);
+        enableByDefault);
     metricInstruments.add(instrument);
     registeredMetricNames.add(name);
     return instrument;
   }
-
 }

@@ -22,48 +22,16 @@ import java.util.List;
  * Represents a double-valued counter metric instrument.
  */
 @Internal
-public class DoubleCounterMetricInstrument extends PartialMetricInstrument  implements
-    MetricInstrument {
-  private final boolean isEnabledByDefault;
+public final class DoubleCounterMetricInstrument extends PartialMetricInstrument {
+  private final boolean enableByDefault;
 
   DoubleCounterMetricInstrument(long index, String name, String description, String unit,
-      List<String> requiredLabelKeys, List<String> optionalLabelKeys,
-      boolean isEnabledByDefault) {
+      List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys);
-    this.isEnabledByDefault = isEnabledByDefault;
+    this.enableByDefault = enableByDefault;
   }
 
-  @Override
-  public long getIndex() {
-    return index;
-  }
-
-  @Override
-  public String getName() {
-    return name;
-  }
-
-  @Override
-  public String getDescription() {
-    return description;
-  }
-
-  @Override
-  public String getUnit() {
-    return unit;
-  }
-
-  @Override
-  public List<String> getRequiredLabelKeys() {
-    return requiredLabelKeys;
-  }
-
-  @Override
-  public List<String> getOptionalLabelKeys() {
-    return optionalLabelKeys;
-  }
-
-  public boolean getEnabledByDefault() {
-    return isEnabledByDefault;
+  public boolean isEnableByDefault() {
+    return enableByDefault;
   }
 }

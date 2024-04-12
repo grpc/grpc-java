@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import com.google.common.collect.ImmutableList;
 import java.util.List;
 
 /**
@@ -23,7 +24,7 @@ import java.util.List;
  * provides common fields and functionality for metric instruments.
  */
 @Internal
-abstract class PartialMetricInstrument {
+abstract class PartialMetricInstrument implements MetricInstrument {
   protected final long index;
   protected final String name;
   protected final String description;
@@ -47,21 +48,37 @@ abstract class PartialMetricInstrument {
     this.name = name;
     this.description = description;
     this.unit = unit;
-    this.requiredLabelKeys = requiredLabelKeys;
-    this.optionalLabelKeys = optionalLabelKeys;
+    this.requiredLabelKeys = ImmutableList.copyOf(requiredLabelKeys);
+    this.optionalLabelKeys = ImmutableList.copyOf(optionalLabelKeys);
   }
 
-  /**
-   * Returns a list of required label keys for this metric instrument.
-   *
-   * @return a list of required label keys.
-   */
-  abstract List<String> getRequiredLabelKeys();
+  @Override
+  public long getIndex() {
+    return index;
+  }
 
-  /**
-   * Returns a list of optional label keys for this metric instrument.
-   *
-   * @return a list of optional label keys.
-   */
-  abstract List<String> getOptionalLabelKeys();
+  @Override
+  public String getName() {
+    return name;
+  }
+
+  @Override
+  public String getDescription() {
+    return description;
+  }
+
+  @Override
+  public String getUnit() {
+    return unit;
+  }
+
+  @Override
+  public List<String> getRequiredLabelKeys() {
+    return requiredLabelKeys;
+  }
+
+  @Override
+  public List<String> getOptionalLabelKeys() {
+    return optionalLabelKeys;
+  }
 }

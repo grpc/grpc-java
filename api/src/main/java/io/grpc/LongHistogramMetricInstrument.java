@@ -22,55 +22,23 @@ import java.util.List;
  * Represents a long-valued histogram metric instrument.
  */
 @Internal
-class LongHistogramMetricInstrument extends PartialMetricInstrument implements
-    MetricInstrument {
-  private final boolean isEnabledByDefault;
+public final class LongHistogramMetricInstrument extends PartialMetricInstrument {
+  private final boolean enableByDefault;
   private final List<Long> bucketBoundaries;
 
   LongHistogramMetricInstrument(long index, String name, String description, String unit,
       List<Long> bucketBoundaries, List<String> requiredLabelKeys, List<String> optionalLabelKeys,
-      boolean isEnabledByDefault) {
+      boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys);
-    this.isEnabledByDefault = isEnabledByDefault;
+    this.enableByDefault = enableByDefault;
     this.bucketBoundaries = bucketBoundaries;
   }
 
-  @Override
-  public long getIndex() {
-    return index;
-  }
-
-  @Override
-  public String getName() {
-    return name;
-  }
-
-  @Override
-  public String getDescription() {
-    return description;
-  }
-
-  @Override
-  public String getUnit() {
-    return unit;
-  }
-
-  @Override
-  public List<String> getRequiredLabelKeys() {
-    return requiredLabelKeys;
-  }
-
-  @Override
-  public List<String> getOptionalLabelKeys() {
-    return optionalLabelKeys;
-  }
-
-  public boolean getEnabledByDefault() {
-    return isEnabledByDefault;
+  public boolean isEnableByDefault() {
+    return enableByDefault;
   }
 
   public List<Long> getBucketBoundaries() {
     return bucketBoundaries;
   }
 }
-
