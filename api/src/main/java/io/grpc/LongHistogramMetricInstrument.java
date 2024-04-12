@@ -23,19 +23,13 @@ import java.util.List;
  */
 @Internal
 public final class LongHistogramMetricInstrument extends PartialMetricInstrument {
-  private final boolean enableByDefault;
   private final List<Long> bucketBoundaries;
 
   LongHistogramMetricInstrument(long index, String name, String description, String unit,
       List<Long> bucketBoundaries, List<String> requiredLabelKeys, List<String> optionalLabelKeys,
       boolean enableByDefault) {
-    super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys);
-    this.enableByDefault = enableByDefault;
+    super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
     this.bucketBoundaries = bucketBoundaries;
-  }
-
-  public boolean isEnableByDefault() {
-    return enableByDefault;
   }
 
   public List<Long> getBucketBoundaries() {

@@ -31,6 +31,7 @@ abstract class PartialMetricInstrument implements MetricInstrument {
   protected final String unit;
   protected final List<String> requiredLabelKeys;
   protected final List<String> optionalLabelKeys;
+  protected final boolean enableByDefault;
 
   /**
    * Constructs a new PartialMetricInstrument with the specified attributes.
@@ -41,15 +42,17 @@ abstract class PartialMetricInstrument implements MetricInstrument {
    * @param unit              the unit of measurement for the metric
    * @param requiredLabelKeys a list of required label keys for the metric
    * @param optionalLabelKeys a list of optional label keys for the metric
+   * @param enableByDefault   whether the metric should be enabled by default
    */
   protected PartialMetricInstrument(long index, String name, String description, String unit,
-      List<String> requiredLabelKeys, List<String> optionalLabelKeys) {
+      List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     this.index = index;
     this.name = name;
     this.description = description;
     this.unit = unit;
     this.requiredLabelKeys = ImmutableList.copyOf(requiredLabelKeys);
     this.optionalLabelKeys = ImmutableList.copyOf(optionalLabelKeys);
+    this.enableByDefault = enableByDefault;
   }
 
   @Override
@@ -80,5 +83,10 @@ abstract class PartialMetricInstrument implements MetricInstrument {
   @Override
   public List<String> getOptionalLabelKeys() {
     return optionalLabelKeys;
+  }
+
+  @Override
+  public boolean isEnableByDefault() {
+    return enableByDefault;
   }
 }

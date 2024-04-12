@@ -64,4 +64,12 @@ public interface MetricInstrument {
    * @return a list of optional label keys.
    */
   public List<String> getOptionalLabelKeys();
+
+  /**
+   * Indicates whether this metric instrument is enabled by default.
+   *
+   * @return {@code true} if this metric instrument is enabled by default,
+   *         {@code false} otherwise.
+   */
+  public boolean isEnableByDefault();
 }
