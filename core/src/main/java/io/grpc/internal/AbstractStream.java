@@ -322,6 +322,12 @@ public abstract class AbstractStream implements Stream {
       }
     }
 
+    protected boolean isStreamDeallocated() {
+      synchronized (onReadyLock) {
+        return deallocated;
+      }
+    }
+
     /**
      * Event handler to be called by the subclass when a number of bytes are being queued for
      * sending to the remote endpoint.
