@@ -178,11 +178,11 @@ public class StatusProtoTest {
 
   @Test
   public void toStatusExceptionWithMetadataAndCause_shouldCaptureCause() {
-    StatusException se = StatusProto.toStatusException(STATUS_PROTO, new Metadata(),
-        new RuntimeException("This is a test exception."));
+    RuntimeException exc = new RuntimeException("This is a test exception.");
+    StatusException se = StatusProto.toStatusException(STATUS_PROTO, new Metadata(), exc);
 
     assertNotNull(se.getCause());
-    assertEquals(se.getCause().getMessage(), "This is a test exception.");
+    assertEquals(se.getCause(), exc);
   }
 
   private static final Metadata.Key<String> METADATA_KEY =
