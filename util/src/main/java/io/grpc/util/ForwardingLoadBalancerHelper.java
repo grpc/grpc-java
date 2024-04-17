@@ -28,6 +28,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.SynchronizationContext;
@@ -138,6 +139,11 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   @Override
   public NameResolverRegistry getNameResolverRegistry() {
     return delegate().getNameResolverRegistry();
+  }
+
+  @Override
+  public MetricRecorder getMetricRecorder() {
+    return delegate().getMetricRecorder();
   }
 
   @Override
