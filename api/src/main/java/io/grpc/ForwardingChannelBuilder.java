@@ -242,12 +242,6 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
     return thisT();
   }
 
-  @Override
-  public T addMetricSink(MetricSink metricSink) {
-    delegate().addMetricSink(metricSink);
-    return thisT();
-  }
-
   /**
    * Returns the correctly typed version of the builder.
    */
