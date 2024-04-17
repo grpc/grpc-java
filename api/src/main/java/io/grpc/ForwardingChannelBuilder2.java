@@ -251,6 +251,12 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
     return thisT();
   }
 
+  @Override
+  public T addMetricSink(MetricSink metricSink) {
+    delegate().addMetricSink(metricSink);
+    return thisT();
+  }
+
   /**
    * Returns the {@link ManagedChannel} built by the delegate by default. Overriding method can
    * return different value.

@@ -1212,6 +1212,16 @@ public abstract class LoadBalancer {
     public NameResolverRegistry getNameResolverRegistry() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * Returns the {@link MetricRecorder} that the channel uses to record metrics.
+     *
+     * @since 1.64.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
+    public MetricRecorder getMetricRecorder() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**

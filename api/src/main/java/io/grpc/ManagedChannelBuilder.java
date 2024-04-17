@@ -608,6 +608,18 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
+   * Adds a {@link MetricSink} for channel to use for configuring and recording metrics.
+   *
+   * @return this
+   * @since 1.64.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
+  public T addMetricSink(MetricSink metricSink) {
+    throw new UnsupportedOperationException();
+  }
+
+
+  /**
    * Builds a channel using the given parameters.
    *
    * @since 1.0.0
