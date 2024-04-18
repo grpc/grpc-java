@@ -251,7 +251,7 @@ public class RouteGuideServer {
      * Get the notes list for the given location. If missing, create it.
      */
     private List<RouteNote> getOrCreateNotes(Point location) {
-      List<RouteNote> notes = Collections.synchronizedList(new ArrayList<RouteNote>());
+      List<RouteNote> notes = Collections.synchronizedList(new ArrayList<>());
       List<RouteNote> prevNotes = routeNotes.putIfAbsent(location, notes);
       return prevNotes != null ? prevNotes : notes;
     }
