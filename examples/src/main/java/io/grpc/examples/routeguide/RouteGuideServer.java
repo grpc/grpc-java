@@ -120,7 +120,7 @@ public class RouteGuideServer {
   private static class RouteGuideService extends RouteGuideGrpc.RouteGuideImplBase {
     private final Collection<Feature> features;
     private final ConcurrentMap<Point, List<RouteNote>> routeNotes =
-        new ConcurrentHashMap<>();
+        new ConcurrentHashMap<Point, List<RouteNote>>();
 
     RouteGuideService(Collection<Feature> features) {
       this.features = features;
