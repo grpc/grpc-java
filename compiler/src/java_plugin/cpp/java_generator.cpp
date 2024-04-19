@@ -1116,7 +1116,8 @@ static void PrintService(const ServiceDescriptor* service,
                          std::map<std::string, std::string>* vars,
                          Printer* p,
                          ProtoFlavor flavor,
-                         bool disable_version) {
+                         bool disable_version,
+                         GeneratedAnnotation generated_annotation) {
   (*vars)["service_name"] = service->name();
   (*vars)["file_name"] = service->file()->name();
   (*vars)["service_class_name"] = ServiceClassName(service);
@@ -1129,23 +1130,16 @@ static void PrintService(const ServiceDescriptor* service,
   // TODO(nmittler): Replace with WriteServiceDocComment once included by protobuf distro.
   GrpcWriteServiceDocComment(p, service, NONE);
 
-  if ((*vars)["JakartaMode"] == "javax") {
+  if (generated_annotation == GeneratedAnnotation::JAVAX) {
     p->Print(
         *vars,
         "@javax.annotation.Generated(\n"
         "    value = \"by gRPC proto compiler$grpc_version$\",\n"
         "    comments = \"Source: $file_name$\")\n"
         "@$GrpcGenerated$\n");
-  } else if ((*vars)["JakartaMode"] == "omit") {
+  } else { // GeneratedAnnotation::OMIT
     p->Print(
         *vars,
-        "@$GrpcGenerated$\n");
-  } else {
-    p->Print(
-        *vars,
-        "@javax.annotation.Generated(\n"
-        "    value = \"by gRPC proto compiler$grpc_version$\",\n"
-        "    comments = \"Source: $file_name$\")\n"
         "@$GrpcGenerated$\n");
   }
 
@@ -1232,7 +1226,7 @@ void GenerateService(const ServiceDescriptor* service,
                      protobuf::io::ZeroCopyOutputStream* out,
                      ProtoFlavor flavor,
                      bool disable_version,
-                     std::string jakarta_mode) {
+                     GeneratedAnnotation generated_annotation) {
   // All non-generated classes must be referred by fully qualified names to
   // avoid collision with generated classes.
   std::map<std::string, std::string> vars;
@@ -1264,7 +1258,6 @@ void GenerateService(const ServiceDescriptor* service,
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
   vars["Iterator"] = "java.util.Iterator";
-  vars["JakartaMode"] = jakarta_mode;
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
@@ -1283,7 +1276,7 @@ void GenerateService(const ServiceDescriptor* service,
   if (!vars["Package"].empty()) {
     vars["Package"].append(".");
   }
-  PrintService(service, &vars, &printer, flavor, disable_version);
+  PrintService(service, &vars, &printer, flavor, disable_version, generated_annotation);
 }
 
 std::string ServiceJavaPackage(const FileDescriptor* file) {

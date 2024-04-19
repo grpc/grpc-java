@@ -58,24 +58,21 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
 
     java_grpc_generator::ProtoFlavor flavor =
         java_grpc_generator::ProtoFlavor::NORMAL;
+    java_grpc_generator::GeneratedAnnotation generated_annotation =
+        java_grpc_generator::GeneratedAnnotation::JAVAX;
 
-    /*
-        jakarta_mode has these values:
-        javax, the original behavior - add @javax.annotation.Generated
-        omit, "less controversial" = just add @io.grpc.stub.annotations.GrpcGenerated
-        and maybe others in the future
-    */
-    std::string jakarta_mode;
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {
       if (options[i].first == "lite") {
         flavor = java_grpc_generator::ProtoFlavor::LITE;
       } else if (options[i].first == "noversion") {
         disable_version = true;
-      } else if (options[i].first == "jakarta_javax") {
-        jakarta_mode = "javax";
-      } else if (options[i].first == "jakarta_omit") {
-        jakarta_mode = "omit";
+      } else if (options[i].first == "@generated") {
+         if (options[i].second == "omit") {
+           generated_annotation = java_grpc_generator::GeneratedAnnotation::OMIT;
+         } else if (options[i].second == "javax") {
+           generated_annotation = java_grpc_generator::GeneratedAnnotation::JAVAX;
+         }
       }
     }
 
@@ -88,7 +85,7 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
       std::unique_ptr<protobuf::io::ZeroCopyOutputStream> output(
           context->Open(filename));
       java_grpc_generator::GenerateService(
-          service, output.get(), flavor, disable_version, jakarta_mode);
+          service, output.get(), flavor, disable_version, generated_annotation);
     }
     return true;
   }
