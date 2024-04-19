@@ -22,6 +22,7 @@ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TARGET_KEY;
 import static io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions.assertThat;
+import static java.util.Collections.emptyList;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -218,7 +219,7 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
     Metadata headers = new Metadata();
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
@@ -358,7 +359,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
-            method.getFullMethodName());
+            method.getFullMethodName(), emptyList());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
@@ -783,7 +784,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
-            method.getFullMethodName());
+            method.getFullMethodName(), emptyList());
     fakeClock.forwardTime(3000, MILLISECONDS);
     Status status = Status.DEADLINE_EXCEEDED.withDescription("5 seconds");
     callAttemptsTracerFactory.callEnded(status);
@@ -885,9 +886,9 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"));
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -953,9 +954,9 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"));
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1128,7 +1129,7 @@ public class OpenTelemetryMetricsModuleTest {
   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
       OpenTelemetryMetricsResource resource) {
     return new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, Arrays.asList());
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
   }
 
   static class CallInfo<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
