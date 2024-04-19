@@ -39,7 +39,6 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -122,7 +121,6 @@ final class OpenTelemetryMetricsModule {
 
     final Stopwatch stopwatch;
     final CallAttemptsTracerFactory attemptsState;
-    final AtomicBoolean inboundReceivedOrClosed = new AtomicBoolean();
     final OpenTelemetryMetricsModule module;
     final StreamInfo info;
     final String fullMethodName;
@@ -161,17 +159,6 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
-    @SuppressWarnings("NonAtomicVolatileUpdate")
-    public void inboundMessage(int seqNo) {
-      if (inboundReceivedOrClosed.compareAndSet(false, true)) {
-        // Because inboundUncompressedSize() might be called after streamClosed(),
-        // we will report stats in callEnded(). Note that this attempt is already committed.
-        attemptsState.inboundMetricTracer = this;
-      }
-    }
-
-
-    @Override
     public void streamClosed(Status status) {
       stopwatch.stop();
       attemptNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -186,12 +173,7 @@ final class OpenTelemetryMetricsModule {
         }
       }
       attemptsState.attemptEnded();
-      if (inboundReceivedOrClosed.compareAndSet(false, true)) {
-        // Stream is closed early. So no need to record metrics for any inbound events after this
-        // point.
-        recordFinishedAttempt();
-      } // Otherwise will report metrics in callEnded() to guarantee all inbound metrics are
-      // recorded.
+      recordFinishedAttempt();
     }
 
     void recordFinishedAttempt() {
@@ -211,7 +193,6 @@ final class OpenTelemetryMetricsModule {
 
   @VisibleForTesting
   static final class CallAttemptsTracerFactory extends ClientStreamTracer.Factory {
-    ClientTracer inboundMetricTracer;
     private final OpenTelemetryMetricsModule module;
     private final Stopwatch attemptStopwatch;
     private final Stopwatch callStopWatch;
@@ -310,10 +291,6 @@ final class OpenTelemetryMetricsModule {
         tracer.attemptNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
-      } else if (inboundMetricTracer != null) {
-        // activeStreams has been decremented to 0 by attemptEnded(),
-        // so inboundMetricTracer.statusCode is guaranteed to be assigned already.
-        inboundMetricTracer.recordFinishedAttempt();
       }
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
       // TODO(dnvindhya): record target as an attribute
