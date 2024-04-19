@@ -21,6 +21,8 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
@@ -184,10 +186,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (instance.type == DiscoveryMechanism.Type.EDS) {
           state = new EdsClusterState(instance.cluster, instance.edsServiceName,
               instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.outlierDetection);
+              instance.filterMetadata, instance.outlierDetection);
         } else {  // logical DNS
           state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext);
+              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
+              instance.filterMetadata);
         }
         clusterStates.put(instance.cluster, state);
         state.start();
@@ -323,6 +326,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       protected final Long maxConcurrentRequests;
       @Nullable
       protected final UpstreamTlsContext tlsContext;
+      protected final Map<String, Struct> filterMetadata;
       @Nullable
       protected final OutlierDetection outlierDetection;
       // Resolution status, may contain most recent error encountered.
@@ -337,11 +341,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private ClusterState(String name, @Nullable ServerInfo lrsServerInfo,
           @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-          @Nullable OutlierDetection outlierDetection) {
+          Map<String, Struct> filterMetadata, @Nullable OutlierDetection outlierDetection) {
         this.name = name;
         this.lrsServerInfo = lrsServerInfo;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.tlsContext = tlsContext;
+        this.filterMetadata = ImmutableMap.copyOf(filterMetadata);
         this.outlierDetection = outlierDetection;
       }
 
@@ -360,8 +365,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext, @Nullable OutlierDetection outlierDetection) {
-        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, outlierDetection);
+          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
+          @Nullable OutlierDetection outlierDetection) {
+        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
+            outlierDetection);
         this.edsServiceName = edsServiceName;
       }
 
@@ -447,8 +454,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             Map<String, PriorityChildConfig> priorityChildConfigs =
                 generateEdsBasedPriorityChildConfigs(
                     name, edsServiceName, lrsServerInfo, maxConcurrentRequests, tlsContext,
-                    outlierDetection, endpointLbPolicy, lbRegistry, prioritizedLocalityWeights,
-                    dropOverloads);
+                    filterMetadata, outlierDetection, endpointLbPolicy, lbRegistry,
+                    prioritizedLocalityWeights, dropOverloads);
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityChildConfigs,
@@ -533,8 +540,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private LogicalDnsClusterState(String name, String dnsHostName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext) {
-        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, null);
+          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata) {
+        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null);
         this.dnsHostName = checkNotNull(dnsHostName, "dnsHostName");
         nameResolverFactory =
             checkNotNull(helper.getNameResolverRegistry().asFactory(), "nameResolverFactory");
@@ -623,8 +630,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 addresses.add(eag);
               }
               PriorityChildConfig priorityChildConfig = generateDnsBasedPriorityChildConfig(
-                  name, lrsServerInfo, maxConcurrentRequests, tlsContext, lbRegistry,
-                  Collections.<DropOverload>emptyList());
+                  name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
+                  lbRegistry, Collections.<DropOverload>emptyList());
               status = Status.OK;
               resolved = true;
               result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
@@ -707,14 +714,14 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    */
   private static PriorityChildConfig generateDnsBasedPriorityChildConfig(
       String cluster, @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-      @Nullable UpstreamTlsContext tlsContext, LoadBalancerRegistry lbRegistry,
-      List<DropOverload> dropOverloads) {
+      @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
+      LoadBalancerRegistry lbRegistry, List<DropOverload> dropOverloads) {
     // Override endpoint-level LB policy with pick_first for logical DNS cluster.
     PolicySelection endpointLbPolicy =
         new PolicySelection(lbRegistry.getProvider("pick_first"), null);
     ClusterImplConfig clusterImplConfig =
         new ClusterImplConfig(cluster, null, lrsServerInfo, maxConcurrentRequests,
-            dropOverloads, endpointLbPolicy, tlsContext);
+            dropOverloads, endpointLbPolicy, tlsContext, filterMetadata);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
     PolicySelection clusterImplPolicy =
@@ -731,6 +738,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   private static Map<String, PriorityChildConfig> generateEdsBasedPriorityChildConfigs(
       String cluster, @Nullable String edsServiceName, @Nullable ServerInfo lrsServerInfo,
       @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
+      Map<String, Struct> filterMetadata,
       @Nullable OutlierDetection outlierDetection, PolicySelection endpointLbPolicy,
       LoadBalancerRegistry lbRegistry, Map<String,
       Map<Locality, Integer>> prioritizedLocalityWeights, List<DropOverload> dropOverloads) {
@@ -738,7 +746,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     for (String priority : prioritizedLocalityWeights.keySet()) {
       ClusterImplConfig clusterImplConfig =
           new ClusterImplConfig(cluster, edsServiceName, lrsServerInfo, maxConcurrentRequests,
-              dropOverloads, endpointLbPolicy, tlsContext);
+              dropOverloads, endpointLbPolicy, tlsContext, filterMetadata);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       PolicySelection priorityChildPolicy =
