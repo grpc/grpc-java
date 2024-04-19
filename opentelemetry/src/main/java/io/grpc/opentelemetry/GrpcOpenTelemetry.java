@@ -84,8 +84,8 @@ public final class GrpcOpenTelemetry {
     this.disableDefault = builder.disableAll;
     this.resource = createMetricInstruments(meter, enableMetrics, disableDefault);
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
-    this.openTelemetryMetricsModule =
-        new OpenTelemetryMetricsModule(STOPWATCH_SUPPLIER, resource, optionalLabels);
+    this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
+        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
 
@@ -272,6 +272,7 @@ public final class GrpcOpenTelemetry {
    */
   public static class Builder {
     private OpenTelemetry openTelemetrySdk = OpenTelemetry.noop();
+    private final List<OpenTelemetryPlugin> plugins = new ArrayList<>();
     private final Collection<String> optionalLabels = new ArrayList<>();
     private final Map<String, Boolean> enableMetrics = new HashMap<>();
     private boolean disableAll;
@@ -285,6 +286,11 @@ public final class GrpcOpenTelemetry {
      */
     public Builder sdk(OpenTelemetry sdk) {
       this.openTelemetrySdk = sdk;
+      return this;
+    }
+
+    Builder plugin(OpenTelemetryPlugin plugin) {
+      plugins.add(checkNotNull(plugin, "plugin"));
       return this;
     }
 
