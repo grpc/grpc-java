@@ -21,6 +21,7 @@ import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -32,6 +33,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
+import java.lang.reflect.Constructor;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -51,6 +53,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private static final boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
       System.getenv("GRPC_LOG_XDS_NODE_ID"));
   private static final Logger log = Logger.getLogger(XdsClientImpl.class.getName());
+  private Class<? extends BackoffPolicy.Provider> backoffProviderClass = null;
 
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
@@ -68,6 +71,11 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
 
   static SharedXdsClientPoolProvider getDefaultProvider() {
     return SharedXdsClientPoolProviderHolder.instance;
+  }
+
+  @VisibleForTesting
+  void setBackoffProviderClass(Class<? extends BackoffPolicy.Provider> backoffProviderClass) {
+    this.backoffProviderClass = backoffProviderClass;
   }
 
   @Override
@@ -98,7 +106,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           if (bootstrapInfo.servers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
-          ref = new RefCountedXdsClientObjectPool(bootstrapInfo, target);
+          ref = new RefCountedXdsClientObjectPool(bootstrapInfo, target, backoffProviderClass);
           targetToXdsClientMap.put(target, ref);
         }
       }
@@ -119,6 +127,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @ThreadSafe
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
+
     private final BootstrapInfo bootstrapInfo;
     private final String target; // The target associated with the xDS client.
     private final Object lock = new Object();
@@ -128,11 +137,21 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private XdsClient xdsClient;
     @GuardedBy("lock")
     private int refCount;
+    private final Constructor backoffProviderConstructor;
 
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target) {
+    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target,
+                                  Class<? extends BackoffPolicy.Provider> rawBackoffProviderClass) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
       this.target = target;
+      Class backoffProviderClass = rawBackoffProviderClass != null
+          ? rawBackoffProviderClass
+          : ExponentialBackoffPolicy.Provider.class;
+      try {
+        backoffProviderConstructor = backoffProviderClass.getDeclaredConstructor();
+      } catch (NoSuchMethodException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     @Override
@@ -143,15 +162,19 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
             log.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
           }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          xdsClient = new XdsClientImpl(
-              DEFAULT_XDS_TRANSPORT_FACTORY,
-              bootstrapInfo,
-              scheduler,
-              new ExponentialBackoffPolicy.Provider(),
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              TimeProvider.SYSTEM_TIME_PROVIDER,
-              MessagePrinter.INSTANCE,
-              new TlsContextManagerImpl(bootstrapInfo));
+          try {
+            xdsClient = new XdsClientImpl(
+                DEFAULT_XDS_TRANSPORT_FACTORY,
+                bootstrapInfo,
+                scheduler,
+                (BackoffPolicy.Provider) backoffProviderConstructor.newInstance(),
+                GrpcUtil.STOPWATCH_SUPPLIER,
+                TimeProvider.SYSTEM_TIME_PROVIDER,
+                MessagePrinter.INSTANCE,
+                new TlsContextManagerImpl(bootstrapInfo));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
         }
         refCount++;
         return xdsClient;
@@ -183,4 +206,5 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
       return target;
     }
   }
+
 }

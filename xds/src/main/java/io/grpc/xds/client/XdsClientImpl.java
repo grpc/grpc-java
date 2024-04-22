@@ -497,10 +497,16 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     }
   }
 
-  private void doFallback(ServerInfo serverInfo, ImmutableList<ServerInfo> serverInfos) {
+  /**
+   * Try to fallback to a lower priority control plane client.
+   * @param serverInfo Matches the currently active control plane client
+   * @param serverInfos The full ordered list of xds servers
+   * @return true if a fallback was successful, false otherwise.
+   */
+  private boolean doFallback(ServerInfo serverInfo, ImmutableList<ServerInfo> serverInfos) {
     List<ServerInfo> fallbackServers = new ArrayList<>();
     if (serverInfos == null) {
-      return;
+      return false;
     }
     // Build a list of servers with lower priority than the current server.
     boolean found = false;
@@ -512,6 +518,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       }
     }
 
+    boolean didFallback = false;
     ServerInfo fallbackTarget = !fallbackServers.isEmpty()
         ? getOrCreateControlPlaneClient(ImmutableList.copyOf(fallbackServers))
         : null;
@@ -521,9 +528,22 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
       ControlPlaneClient fallbackCpc = serverCpClientMap.get(fallbackTarget);
       updateRootResources(fallbackCpc);
+      // Make sure we get notifications of updates for leftover cached resources from the server.
+      rerequestNonRootResources(fallbackCpc);
+      didFallback = true;
     } else {
       logger.log(XdsLogLevel.WARNING, "No working fallback XDS Servers found from {0}",
           serverInfo.target());
+    }
+
+    return didFallback;
+  }
+
+  private void rerequestNonRootResources(ControlPlaneClient fallbackCpc) {
+    for (XdsResourceType<?> resourceType : resourceSubscribers.keySet()) {
+      if (!resourceType.updateInPlaceOnFallback()) {
+        fallbackCpc.adjustResourceSubscription(resourceType);
+      }
     }
   }
 
@@ -821,22 +841,21 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       cleanUpResourceTimers(cpcForThisStream);
 
       boolean hadError = false;
-      ImmutableList<ServerInfo> serverInfos = null;
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
           if (!subscriber.hasResult() && subscriber.controlPlaneClient.equals(cpcForThisStream)) {
+            if (!hadError) {
+              logger.log(XdsLogLevel.WARNING, "ADS stream closed with error: {0}", error);
+              // try to fallback to lower priority control plane client
+              if (doFallback(serverInfo, subscriber.serverInfos)) {
+                return;
+              }
+            }
             hadError = true;
             subscriber.onError(error, null);
-            serverInfos = subscriber.serverInfos;
           }
         }
-      }
-
-      if (hadError) {
-        logger.log(XdsLogLevel.WARNING, "ADS stream closed with error: {0}", error);
-        // Need to fallback to a lower priority control plane client.
-        doFallback(serverInfo, serverInfos);
       }
     }
 
