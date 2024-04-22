@@ -748,6 +748,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int streamId = cmd.stream().id();
       Http2Stream stream = connection().stream(streamId);
       if (stream == null) {
+        cmd.release();
         streamGone(streamId, promise);
         return;
       }
