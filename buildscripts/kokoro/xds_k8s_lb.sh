@@ -177,6 +177,11 @@ main() {
   cd "${TEST_DRIVER_FULL_DIR}"
   local failed_tests=0
   psm::get_lb_tests
+
+  set -x
+  echo "${TESTS[@]}"
+  printf "%s\n" "${TESTS[@]}"
+
   for test in "${TESTS[@]}"; do
     run_test "${test}" || (( ++failed_tests ))
   done
