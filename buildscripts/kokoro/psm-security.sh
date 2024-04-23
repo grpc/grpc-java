@@ -53,7 +53,6 @@ run_test() {
 #   Writes the output of test execution to stdout, stderr
 #######################################
 main() {
-  # Source the test driver from the master branch.
   echo "Sourcing test driver install script from: ${TEST_DRIVER_INSTALL_SCRIPT_URL}"
   source /dev/stdin <<< "$(curl -s "${TEST_DRIVER_INSTALL_SCRIPT_URL}")"
   psm::run "security"
