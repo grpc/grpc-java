@@ -2,12 +2,11 @@
 set -eo pipefail
 
 # Constants
+readonly GRPC_LANGUAGE="java"
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
 readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/psm-interop/${TEST_DRIVER_BRANCH:-main}/.kokoro/psm_interop_kokoro_lib.sh"
-## xDS test server/client Docker images
-readonly SERVER_IMAGE_NAME="us-docker.pkg.dev/grpc-testing/psm-interop/java-server"
-readonly CLIENT_IMAGE_NAME="us-docker.pkg.dev/grpc-testing/psm-interop/java-client"
-readonly FORCE_IMAGE_BUILD="${FORCE_IMAGE_BUILD:-0}"
+
+# Java-specific
 readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 
 #######################################
@@ -46,6 +45,8 @@ build_java_test_app() {
 #   Writes the output of `gcloud builds submit` to stdout, stderr
 #######################################
 build_test_app_docker_images() {
+  build_java_test_app
+
   echo "Building Java xDS interop test app Docker images"
   local docker_dir="${SRC_DIR}/buildscripts/xds-k8s"
   local build_dir
@@ -63,39 +64,6 @@ build_test_app_docker_images() {
   gcloud builds submit "${build_dir}" \
     --config "${docker_dir}/cloudbuild.yaml" \
     --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=${branch_name}"
-  # TODO(sergiitk): extra "cosmetic" tags for versioned branches, e.g. v1.34.x
-  # TODO(sergiitk): do this when adding support for custom configs per version
-}
-
-#######################################
-# Builds test app and its docker images unless they already exist
-# Globals:
-#   SERVER_IMAGE_NAME: Test server Docker image name
-#   CLIENT_IMAGE_NAME: Test client Docker image name
-#   GIT_COMMIT: SHA-1 of git commit being built
-#   FORCE_IMAGE_BUILD
-# Arguments:
-#   None
-# Outputs:
-#   Writes the output to stdout, stderr
-#######################################
-build_docker_images_if_needed() {
-  # Check if images already exist
-  server_tags="$(gcloud_gcr_list_image_tags "${SERVER_IMAGE_NAME}" "${GIT_COMMIT}")"
-  printf "Server image: %s:%s\n" "${SERVER_IMAGE_NAME}" "${GIT_COMMIT}"
-  echo "${server_tags:-Server image not found}"
-
-  client_tags="$(gcloud_gcr_list_image_tags "${CLIENT_IMAGE_NAME}" "${GIT_COMMIT}")"
-  printf "Client image: %s:%s\n" "${CLIENT_IMAGE_NAME}" "${GIT_COMMIT}"
-  echo "${client_tags:-Client image not found}"
-
-  # Build if any of the images are missing, or FORCE_IMAGE_BUILD=1
-  if [[ "${FORCE_IMAGE_BUILD}" == "1" || -z "${server_tags}" || -z "${client_tags}" ]]; then
-    build_java_test_app
-    build_test_app_docker_images
-  else
-    echo "Skipping Java test app build"
-  fi
 }
 
 #######################################
@@ -138,54 +106,16 @@ run_test() {
 #######################################
 # Main function: provision software necessary to execute tests, and run them
 # Globals:
-#   KOKORO_ARTIFACTS_DIR
-#   GITHUB_REPOSITORY_NAME
-#   SRC_DIR: Populated with absolute path to the source repo
-#   TEST_DRIVER_REPO_DIR: Populated with the path to the repo containing
-#                         the test driver
-#   TEST_DRIVER_FULL_DIR: Populated with the path to the test driver source code
-#   TEST_DRIVER_FLAGFILE: Populated with relative path to test driver flagfile
-#   TEST_XML_OUTPUT_DIR: Populated with the path to test xUnit XML report
-#   GIT_ORIGIN_URL: Populated with the origin URL of git repo used for the build
-#   GIT_COMMIT: Populated with the SHA-1 of git commit being built
-#   GIT_COMMIT_SHORT: Populated with the short SHA-1 of git commit being built
-#   KUBE_CONTEXT: Populated with name of kubectl context with GKE cluster access
+#   TEST_DRIVER_INSTALL_SCRIPT_URL
 # Arguments:
 #   None
 # Outputs:
 #   Writes the output of test execution to stdout, stderr
 #######################################
 main() {
-  local script_dir
-  script_dir="$(dirname "$0")"
-
-  # Source the test driver from the master branch.
   echo "Sourcing test driver install script from: ${TEST_DRIVER_INSTALL_SCRIPT_URL}"
   source /dev/stdin <<< "$(curl -s "${TEST_DRIVER_INSTALL_SCRIPT_URL}")"
-
-  activate_gke_cluster GKE_CLUSTER_PSM_LB
-  activate_secondary_gke_cluster GKE_CLUSTER_PSM_LB
-
-  set -x
-  if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
-    kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"
-  else
-    local_setup_test_driver "${script_dir}"
-  fi
-  build_docker_images_if_needed
-  # Run tests
-  cd "${TEST_DRIVER_FULL_DIR}"
-  local failed_tests=0
-  psm::get_lb_tests
-
-  set -x
-  echo "${TESTS[@]}"
-  printf "%s\n" "${TESTS[@]}"
-
-  for test in "${TESTS[@]}"; do
-    run_test "${test}" || (( ++failed_tests ))
-  done
-  echo "Failed test suites: ${failed_tests}"
+  psm::run "lb"
 }
 
 main "$@"
