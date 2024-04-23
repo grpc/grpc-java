@@ -27,7 +27,7 @@ readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 # Outputs:
 #   Writes the output of xds-test-client and xds-test-server --help to stderr
 #######################################
-build_java_test_app() {
+_build_java_test_app() {
   echo "Building Java test app"
   cd "${SRC_DIR}"
   GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'" \
@@ -52,8 +52,8 @@ build_java_test_app() {
 # Outputs:
 #   Writes the output of `gcloud builds submit` to stdout, stderr
 #######################################
-build_test_app_docker_images() {
-  build_java_test_app
+psm::lang::build_docker_images() {
+  _build_java_test_app
 
   echo "Building Java xDS interop test app Docker images"
   local docker_dir="${SRC_DIR}/buildscripts/xds-k8s"
