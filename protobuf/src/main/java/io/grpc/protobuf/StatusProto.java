@@ -105,8 +105,7 @@ public final class StatusProto {
 
   /**
    * Convert a {@link com.google.rpc.Status} instance to a {@link StatusException} with additional
-   * metadata and the root exception thrown. The exception isn't propagated over the wire, and
-   * needs to be user provided.
+   * metadata and the root exception thrown. The exception isn't propagated over the wire.
    *
    * <p>The returned {@link StatusException} will wrap a {@link Status} whose code and description
    * are set from the code and message in {@code statusProto}. {@code statusProto} will be
