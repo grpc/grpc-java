@@ -130,7 +130,7 @@ class NettyServerStream extends AbstractServerStream {
     @Override
     public void cancel(Status status) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.cancel")) {
-        writeQueue.enqueue(new CancelServerStreamCommand(transportState(), status), true);
+        writeQueue.enqueue(CancelServerStreamCommand.withReset(transportState(), status), true);
       }
     }
   }
@@ -189,7 +189,7 @@ class NettyServerStream extends AbstractServerStream {
       log.log(Level.WARNING, "Exception processing message", cause);
       Status status = Status.fromThrowable(cause);
       transportReportStatus(status);
-      handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
+      handler.getWriteQueue().enqueue(CancelServerStreamCommand.withReason(this, status), true);
     }
 
     private void onWriteFrameData(ChannelFuture future, int numMessages, int numBytes) {
@@ -222,7 +222,7 @@ class NettyServerStream extends AbstractServerStream {
      */
     protected void http2ProcessingFailed(Status status) {
       transportReportStatus(status);
-      handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
+      handler.getWriteQueue().enqueue(CancelServerStreamCommand.withReset(this, status), true);
     }
 
     void inboundDataReceived(ByteBuf frame, boolean endOfStream) {
