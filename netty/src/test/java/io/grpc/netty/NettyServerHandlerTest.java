@@ -89,8 +89,10 @@ import io.netty.util.AsciiString;
 import java.io.InputStream;
 import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
@@ -469,9 +471,39 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   public void cancelShouldSendRstStream() throws Exception {
     manualSetUp();
     createStream();
-    enqueue(new CancelServerStreamCommand(stream.transportState(), Status.DEADLINE_EXCEEDED));
+    enqueue(CancelServerStreamCommand.withReset(stream.transportState(), Status.DEADLINE_EXCEEDED));
     verifyWrite().writeRstStream(eq(ctx()), eq(stream.transportState().id()),
         eq(Http2Error.CANCEL.code()), any(ChannelPromise.class));
+  }
+
+  @Test
+  public void cancelWithNotify_shouldSendHeaders() throws Exception {
+    manualSetUp();
+    createStream();
+
+    enqueue(CancelServerStreamCommand.withReason(
+            stream.transportState(),
+            Status.RESOURCE_EXHAUSTED.withDescription("my custom description")
+    ));
+
+    ArgumentCaptor<Http2Headers> captor = ArgumentCaptor.forClass(Http2Headers.class);
+    verifyWrite()
+            .writeHeaders(
+                    eq(ctx()),
+                    eq(STREAM_ID),
+                    captor.capture(),
+                    eq(0),
+                    eq(true),
+                    any(ChannelPromise.class));
+
+    // For arcane reasons, the specific implementation of Http2Headers here doesn't actually support
+    // methods like `get(...)`, so we have to manually convert it into a map.
+    Map<String, String> actualHeaders = new HashMap<>();
+    for (Map.Entry<CharSequence, CharSequence> entry : captor.getValue()) {
+      actualHeaders.put(entry.getKey().toString(), entry.getValue().toString());
+    }
+    assertEquals("8", actualHeaders.get(InternalStatus.CODE_KEY.name()));
+    assertEquals("my custom description", actualHeaders.get(InternalStatus.MESSAGE_KEY.name()));
   }
 
   @Test
