@@ -181,8 +181,7 @@ public class StatusProtoTest {
     RuntimeException exc = new RuntimeException("This is a test exception.");
     StatusException se = StatusProto.toStatusException(STATUS_PROTO, new Metadata(), exc);
 
-    assertNotNull(se.getCause());
-    assertEquals(se.getCause(), exc);
+    assertEquals(exc, se.getCause());
   }
 
   private static final Metadata.Key<String> METADATA_KEY =
