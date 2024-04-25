@@ -23,7 +23,7 @@ import java.util.List;
  */
 @Internal
 public final class LongGaugeMetricInstrument extends PartialMetricInstrument {
-  LongGaugeMetricInstrument(long index, String name, String description, String unit,
+  public LongGaugeMetricInstrument(int index, String name, String description, String unit,
       List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
   }

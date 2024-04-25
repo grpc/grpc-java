@@ -23,7 +23,7 @@ import java.util.List;
  */
 @Internal
 public final class LongCounterMetricInstrument extends PartialMetricInstrument {
-  LongCounterMetricInstrument(long index, String name, String description, String unit,
+  public LongCounterMetricInstrument(int index, String name, String description, String unit,
       List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
   }

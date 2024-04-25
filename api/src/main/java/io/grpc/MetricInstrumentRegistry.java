@@ -16,24 +16,36 @@
 
 package io.grpc;
 
-import java.util.Collections;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A registry for globally registered metric instruments.
  */
 @Internal
 public final class MetricInstrumentRegistry {
+  private static final int DEFAULT_INSTRUMENT_LIST_CAPACITY = 20;
   private static MetricInstrumentRegistry instance;
-  private final List<MetricInstrument> metricInstruments;
+  private final Object lock = new Object();
   private final Set<String> registeredMetricNames;
+  private final AtomicInteger instrumentIndexAlloc = new AtomicInteger();
+  private volatile List<MetricInstrument> metricInstruments;
+  private volatile int instrumentListCapacity = DEFAULT_INSTRUMENT_LIST_CAPACITY;
 
   private MetricInstrumentRegistry() {
-    this.metricInstruments = new CopyOnWriteArrayList<>();
-    this.registeredMetricNames = new CopyOnWriteArraySet<>();
+    this(new ArrayList<>(DEFAULT_INSTRUMENT_LIST_CAPACITY), new HashSet<>());
+  }
+
+  @VisibleForTesting
+  MetricInstrumentRegistry(List<MetricInstrument> metricInstruments,
+      Set<String> registeredMetricNames) {
+    this.metricInstruments = metricInstruments;
+    this.registeredMetricNames = registeredMetricNames;
   }
 
   /**
@@ -50,7 +62,7 @@ public final class MetricInstrumentRegistry {
    * Returns a list of registered metric instruments.
    */
   public List<MetricInstrument> getMetricInstruments() {
-    return Collections.unmodifiableList(metricInstruments);
+    return ImmutableList.copyOf(metricInstruments);
   }
 
   /**
@@ -65,20 +77,25 @@ public final class MetricInstrumentRegistry {
    * @return the newly created DoubleCounterMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
-  // TODO(dnvindhya): Evaluate locks over synchronized methods and update if needed
-  public synchronized DoubleCounterMetricInstrument registerDoubleCounter(String name,
+  public DoubleCounterMetricInstrument registerDoubleCounter(String name,
       String description, String unit, List<String> requiredLabelKeys,
       List<String> optionalLabelKeys, boolean enableByDefault) {
-    if (registeredMetricNames.contains(name)) {
-      throw new IllegalStateException("Metric with name " + name + " already exists");
+    // Null check for arguments
+    synchronized (lock) {
+      if (registeredMetricNames.contains(name)) {
+        throw new IllegalStateException("Metric with name " + name + " already exists");
+      }
+      int index = instrumentIndexAlloc.getAndIncrement();
+      if (index + 1 == instrumentListCapacity) {
+        resizeMetricInstruments();
+      }
+      DoubleCounterMetricInstrument instrument = new DoubleCounterMetricInstrument(
+          index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
+          enableByDefault);
+      metricInstruments.add(index, instrument);
+      registeredMetricNames.add(name);
+      return instrument;
     }
-    long instrumentIndex = metricInstruments.size();
-    DoubleCounterMetricInstrument instrument = new DoubleCounterMetricInstrument(
-        instrumentIndex, name, description, unit, requiredLabelKeys, optionalLabelKeys,
-        enableByDefault);
-    metricInstruments.add(instrument);
-    registeredMetricNames.add(name);
-    return instrument;
   }
 
   /**
@@ -93,20 +110,24 @@ public final class MetricInstrumentRegistry {
    * @return the newly created LongCounterMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
-  public synchronized LongCounterMetricInstrument registerLongCounter(String name,
+  public LongCounterMetricInstrument registerLongCounter(String name,
       String description, String unit, List<String> requiredLabelKeys,
       List<String> optionalLabelKeys, boolean enableByDefault) {
-    if (registeredMetricNames.contains(name)) {
-      throw new IllegalStateException("Metric with name " + name + " already exists");
+    synchronized (lock) {
+      if (registeredMetricNames.contains(name)) {
+        throw new IllegalStateException("Metric with name " + name + " already exists");
+      }
+      int index = instrumentIndexAlloc.getAndIncrement();
+      if (index + 1 == instrumentListCapacity) {
+        resizeMetricInstruments();
+      }
+      LongCounterMetricInstrument instrument = new LongCounterMetricInstrument(
+          index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
+          enableByDefault);
+      metricInstruments.add(instrument);
+      registeredMetricNames.add(name);
+      return instrument;
     }
-    // Acquire lock?
-    long instrumentIndex = metricInstruments.size();
-    LongCounterMetricInstrument instrument = new LongCounterMetricInstrument(
-        instrumentIndex, name, description, unit, requiredLabelKeys, optionalLabelKeys,
-        enableByDefault);
-    metricInstruments.add(instrument);
-    registeredMetricNames.add(name);
-    return instrument;
   }
 
   /**
@@ -122,20 +143,25 @@ public final class MetricInstrumentRegistry {
    * @return the newly created DoubleHistogramMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
-  public synchronized DoubleHistogramMetricInstrument registerDoubleHistogram(String name,
+  public DoubleHistogramMetricInstrument registerDoubleHistogram(String name,
       String description, String unit, List<Double> bucketBoundaries,
       List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
-    if (registeredMetricNames.contains(name)) {
-      throw new IllegalStateException("Metric with name " + name + " already exists");
+    synchronized (lock) {
+      if (registeredMetricNames.contains(name)) {
+        throw new IllegalStateException("Metric with name " + name + " already exists");
+      }
+      int index = instrumentIndexAlloc.getAndIncrement();
+      if (index + 1 == instrumentListCapacity) {
+        resizeMetricInstruments();
+      }
+      DoubleHistogramMetricInstrument instrument = new DoubleHistogramMetricInstrument(
+          index, name, description, unit, bucketBoundaries, requiredLabelKeys,
+          optionalLabelKeys,
+          enableByDefault);
+      metricInstruments.add(instrument);
+      registeredMetricNames.add(name);
+      return instrument;
     }
-    long indexToInsertInstrument = metricInstruments.size();
-    DoubleHistogramMetricInstrument instrument = new DoubleHistogramMetricInstrument(
-        indexToInsertInstrument, name, description, unit, bucketBoundaries, requiredLabelKeys,
-        optionalLabelKeys,
-        enableByDefault);
-    metricInstruments.add(instrument);
-    registeredMetricNames.add(name);
-    return instrument;
   }
 
   /**
@@ -151,20 +177,25 @@ public final class MetricInstrumentRegistry {
    * @return the newly created LongHistogramMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
-  public synchronized LongHistogramMetricInstrument registerLongHistogram(String name,
+  public LongHistogramMetricInstrument registerLongHistogram(String name,
       String description, String unit, List<Long> bucketBoundaries, List<String> requiredLabelKeys,
       List<String> optionalLabelKeys, boolean enableByDefault) {
-    if (registeredMetricNames.contains(name)) {
-      throw new IllegalStateException("Metric with name " + name + " already exists");
+    synchronized (lock) {
+      if (registeredMetricNames.contains(name)) {
+        throw new IllegalStateException("Metric with name " + name + " already exists");
+      }
+      int index = instrumentIndexAlloc.getAndIncrement();
+      if (index + 1 == instrumentListCapacity) {
+        resizeMetricInstruments();
+      }
+      LongHistogramMetricInstrument instrument = new LongHistogramMetricInstrument(
+          index, name, description, unit, bucketBoundaries, requiredLabelKeys,
+          optionalLabelKeys,
+          enableByDefault);
+      metricInstruments.add(instrument);
+      registeredMetricNames.add(name);
+      return instrument;
     }
-    long indexToInsertInstrument = metricInstruments.size();
-    LongHistogramMetricInstrument instrument = new LongHistogramMetricInstrument(
-        indexToInsertInstrument, name, description, unit, bucketBoundaries, requiredLabelKeys,
-        optionalLabelKeys,
-        enableByDefault);
-    metricInstruments.add(instrument);
-    registeredMetricNames.add(name);
-    return instrument;
   }
 
 
@@ -180,18 +211,29 @@ public final class MetricInstrumentRegistry {
    * @return the newly created LongGaugeMetricInstrument
    * @throws IllegalStateException if a metric with the same name already exists
    */
-  public synchronized LongGaugeMetricInstrument registerLongGauge(String name, String description,
+  public LongGaugeMetricInstrument registerLongGauge(String name, String description,
       String unit, List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean
       enableByDefault) {
     if (registeredMetricNames.contains(name)) {
       throw new IllegalStateException("Metric with name " + name + " already exists");
     }
-    long indexToInsertInstrument = metricInstruments.size();
+    int index = instrumentIndexAlloc.getAndIncrement();
+    if (index + 1 == metricInstruments.size()) {
+      resizeMetricInstruments();
+    }
     LongGaugeMetricInstrument instrument = new LongGaugeMetricInstrument(
-        indexToInsertInstrument, name, description, unit, requiredLabelKeys, optionalLabelKeys,
+        index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
         enableByDefault);
     metricInstruments.add(instrument);
     registeredMetricNames.add(name);
     return instrument;
+  }
+
+  private synchronized void resizeMetricInstruments() {
+    // Resize by factor of DEFAULT_INSTRUMENT_LIST_CAPACITY
+    instrumentListCapacity = metricInstruments.size() + DEFAULT_INSTRUMENT_LIST_CAPACITY + 1;
+    List<MetricInstrument> newList = new ArrayList<>(instrumentListCapacity);
+    newList.addAll(metricInstruments);
+    metricInstruments = newList;
   }
 }

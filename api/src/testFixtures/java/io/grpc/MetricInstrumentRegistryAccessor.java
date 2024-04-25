@@ -17,22 +17,19 @@
 package io.grpc;
 
 import java.util.List;
+import java.util.Set;
 
 /**
- * Represents a long-valued histogram metric instrument.
+ * Accesses test-only methods of {@link MetricInstrumentRegistry}.
  */
-@Internal
-public final class LongHistogramMetricInstrument extends PartialMetricInstrument {
-  private final List<Long> bucketBoundaries;
+public final class MetricInstrumentRegistryAccessor {
 
-  public LongHistogramMetricInstrument(int index, String name, String description, String unit,
-      List<Long> bucketBoundaries, List<String> requiredLabelKeys, List<String> optionalLabelKeys,
-      boolean enableByDefault) {
-    super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
-    this.bucketBoundaries = bucketBoundaries;
+  private MetricInstrumentRegistryAccessor() {
   }
 
-  public List<Long> getBucketBoundaries() {
-    return bucketBoundaries;
+  public static MetricInstrumentRegistry createMetricInstrumentRegistry(
+      List<MetricInstrument> instruments,
+      Set<String> registeredNames) {
+    return new MetricInstrumentRegistry(instruments, registeredNames);
   }
 }

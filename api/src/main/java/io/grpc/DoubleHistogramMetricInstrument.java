@@ -25,7 +25,7 @@ import java.util.List;
 public final class DoubleHistogramMetricInstrument extends PartialMetricInstrument {
   private final List<Double> bucketBoundaries;
 
-  DoubleHistogramMetricInstrument(long index, String name, String description, String unit,
+  public DoubleHistogramMetricInstrument(int index, String name, String description, String unit,
       List<Double> bucketBoundaries, List<String> requiredLabelKeys, List<String> optionalLabelKeys,
       boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
