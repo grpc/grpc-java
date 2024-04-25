@@ -28,11 +28,14 @@ readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 #   Writes the output of xds-test-client and xds-test-server --help to stderr
 #######################################
 _build_java_test_app() {
-  echo "Building Java test app"
+  psm::tools::log "Building Java test app"
   cd "${SRC_DIR}"
+
+  set -x
   GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'" \
   ./gradlew --no-daemon grpc-interop-testing:installDist -x test \
     -PskipCodegen=true -PskipAndroid=true --console=plain
+  set +x
 
   # Test-run binaries
   run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-client" --help
@@ -53,16 +56,22 @@ _build_java_test_app() {
 #   Writes the output of `gcloud builds submit` to stdout, stderr
 #######################################
 psm::lang::build_docker_images() {
-  _build_java_test_app
+  local java_build_log="${BUILD_LOGS_ROOT}/build-lang-java.log"
+  _build_java_test_app |& tee "${java_build_log}"
 
-  echo "Building Java xDS interop test app Docker images"
+  psm::tools::log "Building Java xDS interop test app Docker images"
   local docker_dir="${SRC_DIR}/buildscripts/xds-k8s"
   local build_dir
   build_dir="$(mktemp -d)"
+
   # Copy Docker files, log properties, and the test app to the build dir
-  cp -v "${docker_dir}/"*.Dockerfile "${build_dir}"
-  cp -v "${docker_dir}/"*.properties "${build_dir}"
-  cp -rv "${SRC_DIR}/${BUILD_APP_PATH}" "${build_dir}"
+  {
+    cp -v "${docker_dir}/"*.Dockerfile "${build_dir}"
+    cp -v "${docker_dir}/"*.properties "${build_dir}"
+    cp -rv "${SRC_DIR}/${BUILD_APP_PATH}" "${build_dir}"
+  } >> "${java_build_log}"
+
+
   # Pick a branch name for the built image
   local branch_name='experimental'
   if is_version_branch "${TESTING_VERSION}"; then
@@ -70,6 +79,7 @@ psm::lang::build_docker_images() {
   fi
   # Run Google Cloud Build
   gcloud builds submit "${build_dir}" \
-    --config "${docker_dir}/cloudbuild.yaml" \
-    --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=${branch_name}"
+    --config="${docker_dir}/cloudbuild.yaml" \
+    --substitutions="_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=${branch_name}" \
+    | tee -a "${java_build_log}"
 }
