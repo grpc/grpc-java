@@ -178,7 +178,7 @@ public final class ProtoLiteUtils {
         if (protoStream.parser() == parser) {
           try {
             @SuppressWarnings("unchecked")
-            T message = (T) ((ProtoInputStream) stream).message();
+            T message = (T) protoStream.message();
             return message;
           } catch (IllegalStateException ignored) {
             // Stream must have been read from, which is a strange state. Since the point of this
