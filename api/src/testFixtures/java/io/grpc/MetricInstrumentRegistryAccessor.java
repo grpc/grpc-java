@@ -16,9 +16,6 @@
 
 package io.grpc;
 
-import java.util.List;
-import java.util.Set;
-
 /**
  * Accesses test-only methods of {@link MetricInstrumentRegistry}.
  */
@@ -27,9 +24,7 @@ public final class MetricInstrumentRegistryAccessor {
   private MetricInstrumentRegistryAccessor() {
   }
 
-  public static MetricInstrumentRegistry createMetricInstrumentRegistry(
-      List<MetricInstrument> instruments,
-      Set<String> registeredNames) {
-    return new MetricInstrumentRegistry(instruments, registeredNames);
+  public static MetricInstrumentRegistry createMetricInstrumentRegistry() {
+    return new MetricInstrumentRegistry();
   }
 }

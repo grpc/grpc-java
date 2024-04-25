@@ -17,10 +17,9 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.MetricInstrumentRegistry.INITIAL_INSTRUMENT_CAPACITY;
 
 import com.google.common.collect.ImmutableList;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -31,7 +30,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MetricInstrumentRegistryTest {
-  private static final int TEST_INSTRUMENT_CAPACITY = 20;
   private static final ImmutableList<String> REQUIRED_LABEL_KEYS = ImmutableList.of("KEY1", "KEY2");
   private static final ImmutableList<String> OPTIONAL_LABEL_KEYS = ImmutableList.of(
       "OPTIONAL_KEY_1");
@@ -43,14 +41,11 @@ public class MetricInstrumentRegistryTest {
   private static final String UNIT_1 = "unit1";
   private static final String UNIT_2 = "unit2";
   private static final boolean ENABLED = true;
-  private static final boolean DISABLED = true;
-  private MetricInstrumentRegistry registry;
+  private static final boolean DISABLED = false;
+  private MetricInstrumentRegistry registry = new MetricInstrumentRegistry();
 
   @Test
   public void registerDoubleCounterSuccess() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     DoubleCounterMetricInstrument instrument = registry.registerDoubleCounter(
         METRIC_NAME_1, DESCRIPTION_1, UNIT_1, REQUIRED_LABEL_KEYS, OPTIONAL_LABEL_KEYS, ENABLED);
     assertThat(registry.getMetricInstruments().contains(instrument)).isTrue();
@@ -65,9 +60,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test
   public void registerLongCounterSuccess() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     LongCounterMetricInstrument instrument2 = registry.registerLongCounter(
         METRIC_NAME_1, DESCRIPTION_1, UNIT_1, REQUIRED_LABEL_KEYS, OPTIONAL_LABEL_KEYS, ENABLED);
     assertThat(registry.getMetricInstruments().contains(instrument2)).isTrue();
@@ -82,9 +74,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test
   public void registerDoubleHistogramSuccess() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     DoubleHistogramMetricInstrument instrument3 = registry.registerDoubleHistogram(
         METRIC_NAME_1, DESCRIPTION_1, UNIT_1, DOUBLE_HISTOGRAM_BUCKETS, REQUIRED_LABEL_KEYS,
         OPTIONAL_LABEL_KEYS, ENABLED);
@@ -101,9 +90,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test
   public void registerLongHistogramSuccess() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     LongHistogramMetricInstrument instrument4 = registry.registerLongHistogram(
         METRIC_NAME_1, DESCRIPTION_1, UNIT_1, LONG_HISTOGRAM_BUCKETS, REQUIRED_LABEL_KEYS,
         OPTIONAL_LABEL_KEYS, ENABLED);
@@ -120,9 +106,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test
   public void registerLongGaugeSuccess() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     LongGaugeMetricInstrument instrument4 = registry.registerLongGauge(
         METRIC_NAME_1, DESCRIPTION_1, UNIT_1, REQUIRED_LABEL_KEYS,
         OPTIONAL_LABEL_KEYS, ENABLED);
@@ -138,9 +121,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test(expected = IllegalStateException.class)
   public void registerDoubleCounterDuplicateName() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     registry.registerDoubleCounter(METRIC_NAME_1, DESCRIPTION_1, UNIT_1, REQUIRED_LABEL_KEYS,
         OPTIONAL_LABEL_KEYS, ENABLED);
     registry.registerDoubleCounter(METRIC_NAME_1, DESCRIPTION_2, UNIT_2, REQUIRED_LABEL_KEYS,
@@ -149,9 +129,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test(expected = IllegalStateException.class)
   public void registerLongCounterDuplicateName() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     registry.registerDoubleCounter(METRIC_NAME_1, DESCRIPTION_1, UNIT_1, REQUIRED_LABEL_KEYS,
         OPTIONAL_LABEL_KEYS, ENABLED);
     registry.registerLongCounter(METRIC_NAME_1, DESCRIPTION_2, UNIT_2, REQUIRED_LABEL_KEYS,
@@ -160,9 +137,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test(expected = IllegalStateException.class)
   public void registerDoubleHistogramDuplicateName() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     registry.registerLongHistogram(METRIC_NAME_1, DESCRIPTION_1, UNIT_1, LONG_HISTOGRAM_BUCKETS,
         REQUIRED_LABEL_KEYS, OPTIONAL_LABEL_KEYS, ENABLED);
     registry.registerDoubleHistogram(METRIC_NAME_1, DESCRIPTION_2, UNIT_2, DOUBLE_HISTOGRAM_BUCKETS,
@@ -171,9 +145,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test(expected = IllegalStateException.class)
   public void registerLongHistogramDuplicateName() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     registry.registerLongCounter(METRIC_NAME_1, DESCRIPTION_1, UNIT_1, REQUIRED_LABEL_KEYS,
         OPTIONAL_LABEL_KEYS, ENABLED);
     registry.registerLongHistogram(METRIC_NAME_1, DESCRIPTION_2, UNIT_2, LONG_HISTOGRAM_BUCKETS,
@@ -182,9 +153,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test(expected = IllegalStateException.class)
   public void registerLongGaugeDuplicateName() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     registry.registerDoubleHistogram(METRIC_NAME_1, DESCRIPTION_1, UNIT_1, DOUBLE_HISTOGRAM_BUCKETS,
         REQUIRED_LABEL_KEYS, OPTIONAL_LABEL_KEYS, ENABLED);
     registry.registerLongGauge(METRIC_NAME_1, DESCRIPTION_2, UNIT_2, REQUIRED_LABEL_KEYS,
@@ -193,9 +161,6 @@ public class MetricInstrumentRegistryTest {
 
   @Test
   public void getMetricInstrumentsMultipleRegistered() {
-    registry = new MetricInstrumentRegistry(new ArrayList<>(TEST_INSTRUMENT_CAPACITY),
-        new HashSet<>());
-
     DoubleCounterMetricInstrument instrument1 = registry.registerDoubleCounter(
         "testMetric1", DESCRIPTION_1, UNIT_1, REQUIRED_LABEL_KEYS, OPTIONAL_LABEL_KEYS, ENABLED);
     LongCounterMetricInstrument instrument2 = registry.registerLongCounter(
@@ -213,17 +178,16 @@ public class MetricInstrumentRegistryTest {
 
   @Test
   public void resizeMetricInstrumentsCapacityIncrease() {
-    int initialCapacity = TEST_INSTRUMENT_CAPACITY;
-    registry = new MetricInstrumentRegistry(new ArrayList<>(initialCapacity),
-        new HashSet<>());
+    int initialCapacity = INITIAL_INSTRUMENT_CAPACITY;
+    MetricInstrumentRegistry testRegistry = new MetricInstrumentRegistry();
 
     // Registering enough instruments to trigger resize
     for (int i = 0; i < initialCapacity + 1; i++) {
-      registry.registerLongHistogram("name" + i, "desc", "unit", ImmutableList.of(),
+      testRegistry.registerLongHistogram("name" + i, "desc", "unit", ImmutableList.of(),
           ImmutableList.of(), ImmutableList.of(), true);
     }
 
-    assertThat(registry.getMetricInstruments().size()).isGreaterThan(initialCapacity);
+    assertThat(testRegistry.getMetricInstruments().size()).isGreaterThan(initialCapacity);
   }
 
 }

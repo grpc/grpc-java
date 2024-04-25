@@ -34,10 +34,10 @@ import java.util.List;
  * <p>This class encapsulates the interaction with metric sinks, including updating them with
  * the latest set of {@link MetricInstrument}s provided by the {@link MetricInstrumentRegistry}.
  */
-public final class MetricRecorderImpl implements MetricRecorder {
+final class MetricRecorderImpl implements MetricRecorder {
 
   private final List<MetricSink> metricSinks;
-  private volatile MetricInstrumentRegistry registry;
+  private final MetricInstrumentRegistry registry;
 
   @VisibleForTesting
   MetricRecorderImpl(List<MetricSink> metricSinks, MetricInstrumentRegistry registry) {
@@ -57,6 +57,7 @@ public final class MetricRecorderImpl implements MetricRecorder {
   public void recordDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
     for (MetricSink sink : metricSinks) {
+      // TODO(dnvindhya): Move updating measures logic from sink to here
       List<Object> measures = sink.getMetricsMeasures();
       if (measures.size() <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
@@ -67,7 +68,6 @@ public final class MetricRecorderImpl implements MetricRecorder {
       sink.recordDoubleCounter(metricInstrument, value, requiredLabelValues, optionalLabelValues);
     }
   }
-
 
   /**
    * Records a long counter value.

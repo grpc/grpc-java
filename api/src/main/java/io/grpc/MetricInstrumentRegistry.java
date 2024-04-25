@@ -17,35 +17,31 @@
 package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A registry for globally registered metric instruments.
  */
 @Internal
 public final class MetricInstrumentRegistry {
-  private static final int DEFAULT_INSTRUMENT_LIST_CAPACITY = 20;
+  public static final int INITIAL_INSTRUMENT_CAPACITY = 5;
   private static MetricInstrumentRegistry instance;
   private final Object lock = new Object();
   private final Set<String> registeredMetricNames;
-  private final AtomicInteger instrumentIndexAlloc = new AtomicInteger();
-  private volatile List<MetricInstrument> metricInstruments;
-  private volatile int instrumentListCapacity = DEFAULT_INSTRUMENT_LIST_CAPACITY;
-
-  private MetricInstrumentRegistry() {
-    this(new ArrayList<>(DEFAULT_INSTRUMENT_LIST_CAPACITY), new HashSet<>());
-  }
+  private volatile MetricInstrument[] metricInstruments;
+  private volatile int instrumentListCapacity = INITIAL_INSTRUMENT_CAPACITY;
+  @GuardedBy("lock")
+  private int nextAvailableMetricIndex;
 
   @VisibleForTesting
-  MetricInstrumentRegistry(List<MetricInstrument> metricInstruments,
-      Set<String> registeredMetricNames) {
-    this.metricInstruments = metricInstruments;
-    this.registeredMetricNames = registeredMetricNames;
+  MetricInstrumentRegistry() {
+    this.metricInstruments = new MetricInstrument[INITIAL_INSTRUMENT_CAPACITY];
+    this.registeredMetricNames = new HashSet<>();
   }
 
   /**
@@ -62,7 +58,10 @@ public final class MetricInstrumentRegistry {
    * Returns a list of registered metric instruments.
    */
   public List<MetricInstrument> getMetricInstruments() {
-    return ImmutableList.copyOf(metricInstruments);
+    synchronized (lock) {
+      return Collections.unmodifiableList(
+          Arrays.asList(Arrays.copyOfRange(metricInstruments, 0, nextAvailableMetricIndex)));
+    }
   }
 
   /**
@@ -85,15 +84,16 @@ public final class MetricInstrumentRegistry {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
-      int index = instrumentIndexAlloc.getAndIncrement();
+      int index = nextAvailableMetricIndex;
       if (index + 1 == instrumentListCapacity) {
         resizeMetricInstruments();
       }
       DoubleCounterMetricInstrument instrument = new DoubleCounterMetricInstrument(
           index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
           enableByDefault);
-      metricInstruments.add(index, instrument);
+      metricInstruments[index] = instrument;
       registeredMetricNames.add(name);
+      nextAvailableMetricIndex += 1;
       return instrument;
     }
   }
@@ -117,15 +117,16 @@ public final class MetricInstrumentRegistry {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
-      int index = instrumentIndexAlloc.getAndIncrement();
+      int index = nextAvailableMetricIndex;
       if (index + 1 == instrumentListCapacity) {
         resizeMetricInstruments();
       }
       LongCounterMetricInstrument instrument = new LongCounterMetricInstrument(
           index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
           enableByDefault);
-      metricInstruments.add(instrument);
+      metricInstruments[index] = instrument;
       registeredMetricNames.add(name);
+      nextAvailableMetricIndex += 1;
       return instrument;
     }
   }
@@ -150,7 +151,7 @@ public final class MetricInstrumentRegistry {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
-      int index = instrumentIndexAlloc.getAndIncrement();
+      int index = nextAvailableMetricIndex;
       if (index + 1 == instrumentListCapacity) {
         resizeMetricInstruments();
       }
@@ -158,8 +159,9 @@ public final class MetricInstrumentRegistry {
           index, name, description, unit, bucketBoundaries, requiredLabelKeys,
           optionalLabelKeys,
           enableByDefault);
-      metricInstruments.add(instrument);
+      metricInstruments[index] = instrument;
       registeredMetricNames.add(name);
+      nextAvailableMetricIndex += 1;
       return instrument;
     }
   }
@@ -184,7 +186,7 @@ public final class MetricInstrumentRegistry {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
-      int index = instrumentIndexAlloc.getAndIncrement();
+      int index = nextAvailableMetricIndex;
       if (index + 1 == instrumentListCapacity) {
         resizeMetricInstruments();
       }
@@ -192,8 +194,9 @@ public final class MetricInstrumentRegistry {
           index, name, description, unit, bucketBoundaries, requiredLabelKeys,
           optionalLabelKeys,
           enableByDefault);
-      metricInstruments.add(instrument);
+      metricInstruments[index] = instrument;
       registeredMetricNames.add(name);
+      nextAvailableMetricIndex += 1;
       return instrument;
     }
   }
@@ -214,26 +217,29 @@ public final class MetricInstrumentRegistry {
   public LongGaugeMetricInstrument registerLongGauge(String name, String description,
       String unit, List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean
       enableByDefault) {
-    if (registeredMetricNames.contains(name)) {
-      throw new IllegalStateException("Metric with name " + name + " already exists");
+    synchronized (lock) {
+      if (registeredMetricNames.contains(name)) {
+        throw new IllegalStateException("Metric with name " + name + " already exists");
+      }
+      int index = nextAvailableMetricIndex;
+      if (index + 1 == instrumentListCapacity) {
+        resizeMetricInstruments();
+      }
+      LongGaugeMetricInstrument instrument = new LongGaugeMetricInstrument(
+          index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
+          enableByDefault);
+      metricInstruments[index] = instrument;
+      registeredMetricNames.add(name);
+      nextAvailableMetricIndex += 1;
+      return instrument;
     }
-    int index = instrumentIndexAlloc.getAndIncrement();
-    if (index + 1 == metricInstruments.size()) {
-      resizeMetricInstruments();
-    }
-    LongGaugeMetricInstrument instrument = new LongGaugeMetricInstrument(
-        index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
-        enableByDefault);
-    metricInstruments.add(instrument);
-    registeredMetricNames.add(name);
-    return instrument;
   }
 
   private synchronized void resizeMetricInstruments() {
-    // Resize by factor of DEFAULT_INSTRUMENT_LIST_CAPACITY
-    instrumentListCapacity = metricInstruments.size() + DEFAULT_INSTRUMENT_LIST_CAPACITY + 1;
-    List<MetricInstrument> newList = new ArrayList<>(instrumentListCapacity);
-    newList.addAll(metricInstruments);
-    metricInstruments = newList;
+    // Increase the capacity of the metricInstruments array by INITIAL_INSTRUMENT_CAPACITY
+    instrumentListCapacity += INITIAL_INSTRUMENT_CAPACITY;
+    MetricInstrument[] resizedMetricInstruments = Arrays.copyOf(metricInstruments,
+        instrumentListCapacity);
+    metricInstruments = resizedMetricInstruments;
   }
 }
