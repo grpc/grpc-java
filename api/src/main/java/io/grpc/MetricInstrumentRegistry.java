@@ -58,6 +58,16 @@ public final class MetricInstrumentRegistry {
   }
 
   /**
+   * Allows the registry to be reset from unit tests.
+   */
+  @VisibleForTesting
+  public static synchronized void reset() {
+    if (instance != null) {
+      instance = new MetricInstrumentRegistry();
+    }
+  }
+
+  /**
    * Returns a list of registered metric instruments.
    */
   public List<MetricInstrument> getMetricInstruments() {
