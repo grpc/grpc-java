@@ -45,7 +45,9 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.perfmark:perfmark-api:0.26.0",
     "junit:junit:4.13.2",
     "org.apache.tomcat:annotations-api:6.0.53",
+    "org.checkerframework:checker-qual:3.12.0",
     "org.codehaus.mojo:animal-sniffer-annotations:1.23",
+    "org.jcommander:jcommander:1.83",
 ]
 # GRPC_DEPS_END
 
@@ -80,6 +82,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-rls": "@io_grpc_grpc_java//rls",
     "io.grpc:grpc-services": "@io_grpc_grpc_java//services:services_maven",
     "io.grpc:grpc-stub": "@io_grpc_grpc_java//stub",
+    "io.grpc:grpc-s2a": "@io_grpc_grpc_java//s2a",
     "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
     "io.grpc:grpc-xds": "@io_grpc_grpc_java//xds:xds_maven",
     "io.grpc:grpc-util": "@io_grpc_grpc_java//util",
