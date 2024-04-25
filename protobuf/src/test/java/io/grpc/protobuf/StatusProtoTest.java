@@ -176,6 +176,14 @@ public class StatusProtoTest {
     assertNull(StatusProto.fromThrowable(nestedSe));
   }
 
+  @Test
+  public void toStatusExceptionWithMetadataAndCause_shouldCaptureCause() {
+    RuntimeException exc = new RuntimeException("This is a test exception.");
+    StatusException se = StatusProto.toStatusException(STATUS_PROTO, new Metadata(), exc);
+
+    assertEquals(exc, se.getCause());
+  }
+
   private static final Metadata.Key<String> METADATA_KEY =
       Metadata.Key.of("test-metadata", Metadata.ASCII_STRING_MARSHALLER);
   private static final String METADATA_VALUE = "test metadata value";
