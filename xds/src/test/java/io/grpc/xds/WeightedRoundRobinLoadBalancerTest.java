@@ -1152,12 +1152,12 @@ public class WeightedRoundRobinLoadBalancerTest {
     // WRR creates a picker that updates the weights for each of the child subchannels. This should
     // give us three "rr_fallback" metric events as we don't yet have any weights to do weighted
     // round-robin.
-    assertLongCounter("grpc.lb.wrr.rr_fallback", 3l);
+    assertLongCounter("grpc.lb.wrr.rr_fallback", 3L);
 
     // Each time weights are updated, WRR will see if each subchannels weight is useable. We should
     // see 6 (first one has one subchannel, second two, third one all three) "endpoint_weight_not_
     // yet_usable" metric events since we have not gotten any weights yet.
-    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6l);
+    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6:);
 
     // We should not yet be seeing any "endpoint_weight_stale" events since we have no weights.
     assertLongCounter("grpc.lb.wrr.endpoint_weight_stale", null);
@@ -1188,10 +1188,10 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     // Since we have weights on all the child LB states, the weight update should not result in
     // further rr_fallback metric entries.
-    assertLongCounter("grpc.lb.wrr.rr_fallback", 3l);
+    assertLongCounter("grpc.lb.wrr.rr_fallback", 3L);
 
     // We should not see an increase to the earlier count of "endpoint_weight_not_yet_usable".
-    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6l);
+    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6L);
 
     // No endpoints should have gotten stale yet either.
     assertLongCounter("grpc.lb.wrr.endpoint_weight_stale", null);
@@ -1203,14 +1203,14 @@ public class WeightedRoundRobinLoadBalancerTest {
     // we get metrics events for each endpoint.
     fakeClock.forwardTime(3, TimeUnit.MINUTES);
 
-    assertLongCounter("grpc.lb.wrr.endpoint_weight_stale", 3l);
+    assertLongCounter("grpc.lb.wrr.endpoint_weight_stale", 3L);
 
     // Since the weights are now stale the update should have triggered a new rr_fallback event.
-    assertLongCounter("grpc.lb.wrr.rr_fallback", 4l);
+    assertLongCounter("grpc.lb.wrr.rr_fallback", 4L);
 
     // No further weights-not-useable events should not occur, since we have received weights and
     // are out of the blackout.
-    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6l);
+    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6L);
   }
 
   private void assertLongCounter(String metricName, Long expected) {
