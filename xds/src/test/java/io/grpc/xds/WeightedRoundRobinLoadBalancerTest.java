@@ -1157,7 +1157,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     // Each time weights are updated, WRR will see if each subchannels weight is useable. We should
     // see 6 (first one has one subchannel, second two, third one all three) "endpoint_weight_not_
     // yet_usable" metric events since we have not gotten any weights yet.
-    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6:);
+    assertLongCounter("grpc.lb.wrr.endpoint_weight_not_yet_usable", 6L);
 
     // We should not yet be seeing any "endpoint_weight_stale" events since we have no weights.
     assertLongCounter("grpc.lb.wrr.endpoint_weight_stale", null);
