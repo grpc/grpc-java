@@ -34,7 +34,7 @@ import java.util.List;
  * <p>This class encapsulates the interaction with metric sinks, including updating them with
  * the latest set of {@link MetricInstrument}s provided by the {@link MetricInstrumentRegistry}.
  */
-final class MetricRecorderImpl implements MetricRecorder {
+public final class MetricRecorderImpl implements MetricRecorder {
 
   private final List<MetricSink> metricSinks;
   private volatile MetricInstrumentRegistry registry;
