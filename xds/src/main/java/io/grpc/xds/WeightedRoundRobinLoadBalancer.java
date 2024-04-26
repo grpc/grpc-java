@@ -179,8 +179,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @Override
   public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
-        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper(),
-        RR_FALLBACK_COUNTER);
+        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper());
   }
 
   @VisibleForTesting
@@ -374,12 +373,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final AtomicInteger sequence;
     private final int hashCode;
     private final LoadBalancer.Helper helper;
-    private final LongCounterMetricInstrument rrFallbackCounter;
     private volatile StaticStrideScheduler scheduler;
 
     WeightedRoundRobinPicker(List<ChildLbState> children, boolean enableOobLoadReport,
-        float errorUtilizationPenalty, AtomicInteger sequence, LoadBalancer.Helper helper,
-        LongCounterMetricInstrument rrFallbackCounter) {
+        float errorUtilizationPenalty, AtomicInteger sequence, LoadBalancer.Helper helper) {
       checkNotNull(children, "children");
       Preconditions.checkArgument(!children.isEmpty(), "empty child list");
       this.children = children;
@@ -394,7 +391,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.errorUtilizationPenalty = errorUtilizationPenalty;
       this.sequence = checkNotNull(sequence, "sequence");
       this.helper = helper;
-      this.rrFallbackCounter = rrFallbackCounter;
 
       // For equality we treat children as a set; use hash code as defined by Set
       int sum = 0;
@@ -458,7 +454,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (this.scheduler.usesRoundRobin()) {
         // TODO: add target and locality labels once available
         helper.getMetricRecorder()
-            .addLongCounter(rrFallbackCounter, 1, ImmutableList.of(""), ImmutableList.of(""));
+            .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(""), ImmutableList.of(""));
       }
     }
 
