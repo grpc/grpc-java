@@ -36,18 +36,14 @@ public final class MetricInstrumentRegistry {
   static final int INITIAL_INSTRUMENT_CAPACITY = 5;
   private static MetricInstrumentRegistry instance;
   private final Object lock = new Object();
-  private final Set<String> registeredMetricNames;
-  private volatile MetricInstrument[] metricInstruments;
-  private volatile int instrumentListCapacity;
+  private final Set<String> registeredMetricNames = new HashSet<>();
+  private volatile MetricInstrument[] metricInstruments =
+      new MetricInstrument[INITIAL_INSTRUMENT_CAPACITY];
   @GuardedBy("lock")
   private int nextAvailableMetricIndex;
 
   @VisibleForTesting
-  MetricInstrumentRegistry() {
-    this.metricInstruments = new MetricInstrument[INITIAL_INSTRUMENT_CAPACITY];
-    this.registeredMetricNames = new HashSet<>();
-    this.instrumentListCapacity = metricInstruments.length;
-  }
+  MetricInstrumentRegistry() {}
 
   /**
    * Returns the default metric instrument registry.
@@ -94,7 +90,7 @@ public final class MetricInstrumentRegistry {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
       int index = nextAvailableMetricIndex;
-      if (index + 1 == instrumentListCapacity) {
+      if (index + 1 == metricInstruments.length) {
         resizeMetricInstruments();
       }
       DoubleCounterMetricInstrument instrument = new DoubleCounterMetricInstrument(
@@ -132,7 +128,7 @@ public final class MetricInstrumentRegistry {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
       int index = nextAvailableMetricIndex;
-      if (index + 1 == instrumentListCapacity) {
+      if (index + 1 == metricInstruments.length) {
         resizeMetricInstruments();
       }
       LongCounterMetricInstrument instrument = new LongCounterMetricInstrument(
@@ -172,7 +168,7 @@ public final class MetricInstrumentRegistry {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
       int index = nextAvailableMetricIndex;
-      if (index + 1 == instrumentListCapacity) {
+      if (index + 1 == metricInstruments.length) {
         resizeMetricInstruments();
       }
       DoubleHistogramMetricInstrument instrument = new DoubleHistogramMetricInstrument(
@@ -213,7 +209,7 @@ public final class MetricInstrumentRegistry {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
       int index = nextAvailableMetricIndex;
-      if (index + 1 == instrumentListCapacity) {
+      if (index + 1 == metricInstruments.length) {
         resizeMetricInstruments();
       }
       LongHistogramMetricInstrument instrument = new LongHistogramMetricInstrument(
@@ -253,7 +249,7 @@ public final class MetricInstrumentRegistry {
         throw new IllegalStateException("Metric with name " + name + " already exists");
       }
       int index = nextAvailableMetricIndex;
-      if (index + 1 == instrumentListCapacity) {
+      if (index + 1 == metricInstruments.length) {
         resizeMetricInstruments();
       }
       LongGaugeMetricInstrument instrument = new LongGaugeMetricInstrument(
@@ -268,9 +264,9 @@ public final class MetricInstrumentRegistry {
 
   private synchronized void resizeMetricInstruments() {
     // Increase the capacity of the metricInstruments array by INITIAL_INSTRUMENT_CAPACITY
-    instrumentListCapacity += INITIAL_INSTRUMENT_CAPACITY;
+    int newInstrumentsCapacity = metricInstruments.length + INITIAL_INSTRUMENT_CAPACITY;
     MetricInstrument[] resizedMetricInstruments = Arrays.copyOf(metricInstruments,
-        instrumentListCapacity);
+        newInstrumentsCapacity);
     metricInstruments = resizedMetricInstruments;
   }
 }
