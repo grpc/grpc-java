@@ -518,7 +518,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   static final class StaticStrideScheduler {
     private final short[] scaledWeights;
     private final AtomicInteger sequence;
-    private boolean usesRoundRobin;
+    private final boolean usesRoundRobin;
     private static final int K_MAX_WEIGHT = 0xFFFF;
 
     // Assuming the mean of all known weights is M, StaticStrideScheduler will clamp
@@ -559,6 +559,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (numWeightedChannels > 0) {
         unscaledMeanWeight = sumWeight / numWeightedChannels;
         unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
+        usesRoundRobin = false;
       } else {
         // Fall back to round robin if all values are non-positives
         usesRoundRobin = true;
