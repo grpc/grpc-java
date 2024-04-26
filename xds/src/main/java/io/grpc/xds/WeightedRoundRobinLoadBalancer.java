@@ -68,6 +68,10 @@ import java.util.logging.Logger;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
+  private static final LongCounterMetricInstrument RR_FALLBACK_COUNTER;
+  private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER;
+  private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_STALE_COUNTER;
+  private static final DoubleHistogramMetricInstrument ENDPOINT_WEIGHTS_HISTOGRAM;
   private static final Logger log = Logger.getLogger(
       WeightedRoundRobinLoadBalancer.class.getName());
   private WeightedRoundRobinLoadBalancerConfig config;
@@ -78,30 +82,26 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final AtomicInteger sequence;
   private final long infTime;
   private final Ticker ticker;
-  private static final LongCounterMetricInstrument rrFallbackCounter;
-  private static final LongCounterMetricInstrument endpointWeightNotYetUseableCounter;
-  private static final LongCounterMetricInstrument endpointWeightStaleCounter;
-  private static final DoubleHistogramMetricInstrument endpointWeightsHistogram;
 
   // The metric instruments are only registered once and shared by all instances of this LB.
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
         = MetricInstrumentRegistry.getDefaultRegistry();
-    rrFallbackCounter = metricInstrumentRegistry.registerLongCounter("grpc.lb.wrr.rr_fallback",
+    RR_FALLBACK_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.wrr.rr_fallback",
         "Number of scheduler updates in which there were not enough endpoints with valid "
             + "weight, which caused the WRR policy to fall back to RR behavior", "update",
         Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"), true);
-    endpointWeightNotYetUseableCounter = metricInstrumentRegistry.registerLongCounter(
+    ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER = metricInstrumentRegistry.registerLongCounter(
         "grpc.lb.wrr.endpoint_weight_not_yet_usable",
         "Number of endpoints from each scheduler update that don't yet have usable weight "
             + "information", "endpoint", Lists.newArrayList("grpc.target"),
         Lists.newArrayList("grpc.lb.locality"), true);
-    endpointWeightStaleCounter = metricInstrumentRegistry.registerLongCounter(
+    ENDPOINT_WEIGHT_STALE_COUNTER = metricInstrumentRegistry.registerLongCounter(
         "grpc.lb.wrr.endpoint_weight_stale",
         "Number of endpoints from each scheduler update whose latest weight is older than the "
             + "expiration period", "endpoint", Lists.newArrayList("grpc.target"),
         Lists.newArrayList("grpc.lb.locality"), true);
-    endpointWeightsHistogram = metricInstrumentRegistry.registerDoubleHistogram(
+    ENDPOINT_WEIGHTS_HISTOGRAM = metricInstrumentRegistry.registerDoubleHistogram(
         "grpc.lb.wrr.endpoint_weights", "The histogram buckets will be endpoint weight ranges.",
         "weight", Lists.newArrayList(), Lists.newArrayList("grpc.target"),
         Lists.newArrayList("grpc.lb.locality"),
@@ -180,7 +180,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
         config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper(),
-        rrFallbackCounter);
+        RR_FALLBACK_COUNTER);
   }
 
   @VisibleForTesting
@@ -436,21 +436,21 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
             notYetUsableEndpoints);
         // TODO: add target and locality labels once available
         helper.getMetricRecorder()
-            .recordDoubleHistogram(endpointWeightsHistogram, newWeight, ImmutableList.of(""),
+            .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight, ImmutableList.of(""),
                 ImmutableList.of(""));
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
       if (staleEndpoints.get() > 0) {
         // TODO: add target and locality labels once available
         helper.getMetricRecorder()
-            .addLongCounter(endpointWeightStaleCounter, staleEndpoints.get(),
+            .addLongCounter(ENDPOINT_WEIGHT_STALE_COUNTER, staleEndpoints.get(),
                 ImmutableList.of(""),
                 ImmutableList.of(""));
       }
       if (notYetUsableEndpoints.get() > 0) {
         // TODO: add target and locality labels once available
         helper.getMetricRecorder()
-            .addLongCounter(endpointWeightNotYetUseableCounter, notYetUsableEndpoints.get(),
+            .addLongCounter(ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER, notYetUsableEndpoints.get(),
                 ImmutableList.of(""), ImmutableList.of(""));
       }
 
