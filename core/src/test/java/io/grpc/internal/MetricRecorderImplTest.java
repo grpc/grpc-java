@@ -85,12 +85,12 @@ public class MetricRecorderImplTest {
     when(mockSink.getMetricsMeasures()).thenReturn(
         Arrays.asList(new Object(), new Object(), new Object(), new Object()));
 
-    recorder.recordDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
+    recorder.addDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
     verify(mockSink, times(2)).recordDoubleCounter(eq(doubleCounterInstrument), eq(1D),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
 
-    recorder.recordLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
+    recorder.addLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
     verify(mockSink, times(2)).recordLongCounter(eq(longCounterInstrument), eq(1L),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
@@ -122,14 +122,14 @@ public class MetricRecorderImplTest {
     when(mockSink.getMetricsMeasures()).thenReturn(new ArrayList<>());
 
     // Double Counter
-    recorder.recordDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
+    recorder.addDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
     verify(mockSink, times(2)).updateMeasures(anyList());
     verify(mockSink, times(2)).recordDoubleCounter(eq(doubleCounterInstrument), eq(1D),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
 
     // Long Counter
-    recorder.recordLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
+    recorder.addLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
     verify(mockSink, times(4)).updateMeasures(anyList());
     verify(mockSink, times(2)).recordLongCounter(eq(longCounterInstrument), eq(1L),
@@ -148,5 +148,77 @@ public class MetricRecorderImplTest {
     verify(mockSink, times(8)).updateMeasures(registry.getMetricInstruments());
     verify(mockSink, times(2)).recordLongHistogram(eq(longHistogramInstrument), eq(99L),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordDoubleCounterMismatchedRequiredLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.addDoubleCounter(doubleCounterInstrument, 1.0, ImmutableList.of(),
+        OPTIONAL_LABEL_VALUES);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordLongCounterMismatchedRequiredLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.addLongCounter(longCounterInstrument, 1, ImmutableList.of(),
+        OPTIONAL_LABEL_VALUES);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordDoubleHistogramMismatchedRequiredLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.recordDoubleHistogram(doubleHistogramInstrument, 99.0, ImmutableList.of(),
+        OPTIONAL_LABEL_VALUES);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordLongHistogramMismatchedRequiredLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.recordLongHistogram(longHistogramInstrument, 99, ImmutableList.of(),
+        OPTIONAL_LABEL_VALUES);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordDoubleCounterMismatchedOptionalLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.addDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
+        ImmutableList.of());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordLongCounterMismatchedOptionalLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.addLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
+        ImmutableList.of());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordDoubleHistogramMismatchedOptionalLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.recordDoubleHistogram(doubleHistogramInstrument, 99.0, REQUIRED_LABEL_VALUES,
+        ImmutableList.of());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void recordLongHistogramMismatchedOptionalLabelValues() {
+    when(mockSink.getMetricsMeasures()).thenReturn(
+        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+
+    recorder.recordLongHistogram(longHistogramInstrument, 99, REQUIRED_LABEL_VALUES,
+        ImmutableList.of());
   }
 }

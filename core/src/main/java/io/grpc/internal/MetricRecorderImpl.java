@@ -16,6 +16,8 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
@@ -54,8 +56,16 @@ final class MetricRecorderImpl implements MetricRecorder {
    * @param optionalLabelValues the optional label values for the metric.
    */
   @Override
-  public void recordDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
+  public void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       // TODO(dnvindhya): Move updating measures logic from sink to here
       List<Object> measures = sink.getMetricsMeasures();
@@ -78,8 +88,16 @@ final class MetricRecorderImpl implements MetricRecorder {
    * @param optionalLabelValues the optional label values for the metric.
    */
   @Override
-  public void recordLongCounter(LongCounterMetricInstrument metricInstrument, long value,
+  public void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       List<Object> measures = sink.getMetricsMeasures();
       if (measures.size() <= metricInstrument.getIndex()) {
@@ -103,6 +121,14 @@ final class MetricRecorderImpl implements MetricRecorder {
   @Override
   public void recordDoubleHistogram(DoubleHistogramMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       List<Object> measures = sink.getMetricsMeasures();
       if (measures.size() <= metricInstrument.getIndex()) {
@@ -126,6 +152,14 @@ final class MetricRecorderImpl implements MetricRecorder {
   @Override
   public void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       List<Object> measures = sink.getMetricsMeasures();
       if (measures.size() <= metricInstrument.getIndex()) {

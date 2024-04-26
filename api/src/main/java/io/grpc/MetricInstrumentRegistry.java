@@ -16,7 +16,11 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -79,7 +83,11 @@ public final class MetricInstrumentRegistry {
   public DoubleCounterMetricInstrument registerDoubleCounter(String name,
       String description, String unit, List<String> requiredLabelKeys,
       List<String> optionalLabelKeys, boolean enableByDefault) {
-    // Null check for arguments
+    checkArgument(!Strings.isNullOrEmpty(name), "missing metric name");
+    checkNotNull(description, "description");
+    checkNotNull(unit, "unit");
+    checkNotNull(requiredLabelKeys, "requiredLabelKeys");
+    checkNotNull(optionalLabelKeys, "optionalLabelKeys");
     synchronized (lock) {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
@@ -113,6 +121,11 @@ public final class MetricInstrumentRegistry {
   public LongCounterMetricInstrument registerLongCounter(String name,
       String description, String unit, List<String> requiredLabelKeys,
       List<String> optionalLabelKeys, boolean enableByDefault) {
+    checkArgument(!Strings.isNullOrEmpty(name), "missing metric name");
+    checkNotNull(description, "description");
+    checkNotNull(unit, "unit");
+    checkNotNull(requiredLabelKeys, "requiredLabelKeys");
+    checkNotNull(optionalLabelKeys, "optionalLabelKeys");
     synchronized (lock) {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
@@ -147,6 +160,12 @@ public final class MetricInstrumentRegistry {
   public DoubleHistogramMetricInstrument registerDoubleHistogram(String name,
       String description, String unit, List<Double> bucketBoundaries,
       List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
+    checkArgument(!Strings.isNullOrEmpty(name), "missing metric name");
+    checkNotNull(description, "description");
+    checkNotNull(unit, "unit");
+    checkNotNull(bucketBoundaries, "bucketBoundaries");
+    checkNotNull(requiredLabelKeys, "requiredLabelKeys");
+    checkNotNull(optionalLabelKeys, "optionalLabelKeys");
     synchronized (lock) {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
@@ -182,6 +201,12 @@ public final class MetricInstrumentRegistry {
   public LongHistogramMetricInstrument registerLongHistogram(String name,
       String description, String unit, List<Long> bucketBoundaries, List<String> requiredLabelKeys,
       List<String> optionalLabelKeys, boolean enableByDefault) {
+    checkArgument(!Strings.isNullOrEmpty(name), "missing metric name");
+    checkNotNull(description, "description");
+    checkNotNull(unit, "unit");
+    checkNotNull(bucketBoundaries, "bucketBoundaries");
+    checkNotNull(requiredLabelKeys, "requiredLabelKeys");
+    checkNotNull(optionalLabelKeys, "optionalLabelKeys");
     synchronized (lock) {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
@@ -217,6 +242,11 @@ public final class MetricInstrumentRegistry {
   public LongGaugeMetricInstrument registerLongGauge(String name, String description,
       String unit, List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean
       enableByDefault) {
+    checkArgument(!Strings.isNullOrEmpty(name), "missing metric name");
+    checkNotNull(description, "description");
+    checkNotNull(unit, "unit");
+    checkNotNull(requiredLabelKeys, "requiredLabelKeys");
+    checkNotNull(optionalLabelKeys, "optionalLabelKeys");
     synchronized (lock) {
       if (registeredMetricNames.contains(name)) {
         throw new IllegalStateException("Metric with name " + name + " already exists");
