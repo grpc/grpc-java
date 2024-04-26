@@ -1240,10 +1240,6 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
             return longCounterInstrument.getName().equals(name);
           }
-
-          public String toString() {
-            return name;
-          }
         }), eq(value), eq(Lists.newArrayList("")), eq(Lists.newArrayList("")));
   }
 
@@ -1255,10 +1251,6 @@ public class WeightedRoundRobinLoadBalancerTest {
           @Override
           public boolean matches(DoubleHistogramMetricInstrument doubleHistogramInstrument) {
             return doubleHistogramInstrument.getName().equals(name);
-          }
-
-          public String toString() {
-            return name;
           }
         }), eq(value), eq(Lists.newArrayList("")), eq(Lists.newArrayList("")));
   }
