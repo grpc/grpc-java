@@ -120,8 +120,6 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.updateWeightTask = new UpdateWeightTask();
     this.sequence = new AtomicInteger(random.nextInt());
-
-
     log.log(Level.FINE, "weighted_round_robin LB created");
   }
 
