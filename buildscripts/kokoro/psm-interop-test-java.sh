@@ -9,4 +9,4 @@ readonly BUILD_SCRIPT_DIR="$(dirname "$0")"
 
 echo "Sourcing test driver install script from: ${TEST_DRIVER_INSTALL_SCRIPT_URL}"
 source /dev/stdin <<< "$(curl -s "${TEST_DRIVER_INSTALL_SCRIPT_URL}")"
-psm::run "lb"
+psm::run "${PSM_TEST_SUITE}"
