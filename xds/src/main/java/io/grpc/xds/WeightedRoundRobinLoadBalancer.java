@@ -103,7 +103,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         Lists.newArrayList("grpc.lb.locality"), true);
     endpointWeightsHistogram = metricInstrumentRegistry.registerDoubleHistogram(
         "grpc.lb.wrr.endpoint_weights", "The histogram buckets will be endpoint weight ranges.",
-        "weight", null, Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"),
+        "weight", Lists.newArrayList(), Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality"),
         true);
   }
 
@@ -442,14 +443,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (staleEndpoints.get() > 0) {
         // TODO: add target and locality labels once available
         helper.getMetricRecorder()
-            .recordLongCounter(endpointWeightStaleCounter, staleEndpoints.get(),
+            .addLongCounter(endpointWeightStaleCounter, staleEndpoints.get(),
                 ImmutableList.of(""),
                 ImmutableList.of(""));
       }
       if (notYetUsableEndpoints.get() > 0) {
         // TODO: add target and locality labels once available
         helper.getMetricRecorder()
-            .recordLongCounter(endpointWeightNotYetUseableCounter, notYetUsableEndpoints.get(),
+            .addLongCounter(endpointWeightNotYetUseableCounter, notYetUsableEndpoints.get(),
                 ImmutableList.of(""), ImmutableList.of(""));
       }
 
@@ -457,7 +458,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (this.scheduler.usesRoundRobin()) {
         // TODO: add target and locality labels once available
         helper.getMetricRecorder()
-            .recordLongCounter(rrFallbackCounter, 1, ImmutableList.of(""), ImmutableList.of(""));
+            .addLongCounter(rrFallbackCounter, 1, ImmutableList.of(""), ImmutableList.of(""));
       }
     }
 

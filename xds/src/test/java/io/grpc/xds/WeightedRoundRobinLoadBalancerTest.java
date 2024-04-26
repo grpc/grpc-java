@@ -1234,7 +1234,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
   // given metric name, the given number of times
   private void verifyLongCounterRecord(String name, int times, long value) {
-    verify(mockMetricRecorder, times(times)).recordLongCounter(
+    verify(mockMetricRecorder, times(times)).addLongCounter(
         argThat(new ArgumentMatcher<LongCounterMetricInstrument>() {
           @Override
           public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
