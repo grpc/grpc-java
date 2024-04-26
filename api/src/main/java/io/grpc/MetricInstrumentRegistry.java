@@ -33,12 +33,12 @@ import javax.annotation.concurrent.GuardedBy;
  */
 @Internal
 public final class MetricInstrumentRegistry {
-  public static final int INITIAL_INSTRUMENT_CAPACITY = 5;
+  static final int INITIAL_INSTRUMENT_CAPACITY = 5;
   private static MetricInstrumentRegistry instance;
   private final Object lock = new Object();
   private final Set<String> registeredMetricNames;
   private volatile MetricInstrument[] metricInstruments;
-  private volatile int instrumentListCapacity = INITIAL_INSTRUMENT_CAPACITY;
+  private volatile int instrumentListCapacity;
   @GuardedBy("lock")
   private int nextAvailableMetricIndex;
 
@@ -46,6 +46,7 @@ public final class MetricInstrumentRegistry {
   MetricInstrumentRegistry() {
     this.metricInstruments = new MetricInstrument[INITIAL_INSTRUMENT_CAPACITY];
     this.registeredMetricNames = new HashSet<>();
+    this.instrumentListCapacity = metricInstruments.length;
   }
 
   /**
