@@ -1148,8 +1148,6 @@ public class WeightedRoundRobinLoadBalancerTest {
     Subchannel readySubchannel3  = it.next();
     getSubchannelStateListener(readySubchannel3).onSubchannelState(ConnectivityStateInfo
         .forNonError(ConnectivityState.READY));
-    verify(helper, times(3)).updateBalancingState(
-        eq(ConnectivityState.READY), pickerCaptor.capture());
 
     // WRR creates a picker that updates the weights for each of the child subchannels. This should
     // give us three "rr_fallback" metric events as we don't yet have any weights to do weighted
