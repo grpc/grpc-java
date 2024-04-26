@@ -37,7 +37,7 @@ _build_java_test_app() {
     -PskipCodegen=true -PskipAndroid=true --console=plain
   set +x
 
-  # Test-run binaries
+  psm::tools::log "Test-run grpc-java PSM interop binaries"
   run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-client" --help
   run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-server" --help
 }
