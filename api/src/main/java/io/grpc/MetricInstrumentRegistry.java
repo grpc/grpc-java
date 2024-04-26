@@ -36,8 +36,10 @@ public final class MetricInstrumentRegistry {
   static final int INITIAL_INSTRUMENT_CAPACITY = 5;
   private static MetricInstrumentRegistry instance;
   private final Object lock = new Object();
+  @GuardedBy("lock")
   private final Set<String> registeredMetricNames = new HashSet<>();
-  private volatile MetricInstrument[] metricInstruments =
+  @GuardedBy("lock")
+  private MetricInstrument[] metricInstruments =
       new MetricInstrument[INITIAL_INSTRUMENT_CAPACITY];
   @GuardedBy("lock")
   private int nextAvailableMetricIndex;
@@ -262,7 +264,8 @@ public final class MetricInstrumentRegistry {
     }
   }
 
-  private synchronized void resizeMetricInstruments() {
+  @GuardedBy("lock")
+  private void resizeMetricInstruments() {
     // Increase the capacity of the metricInstruments array by INITIAL_INSTRUMENT_CAPACITY
     int newInstrumentsCapacity = metricInstruments.length + INITIAL_INSTRUMENT_CAPACITY;
     MetricInstrument[] resizedMetricInstruments = Arrays.copyOf(metricInstruments,
