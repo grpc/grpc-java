@@ -21,6 +21,7 @@ import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WRR_LOCALITY_POLICY_NAME;
+import static java.util.stream.Collectors.toList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -909,11 +910,12 @@ public class ClusterResolverLoadBalancerTest {
     assertAddressesEqual(Arrays.asList(endpoint3, endpoint1, endpoint2),
         childBalancer.addresses);  // ordered by cluster then addresses
     assertAddressesEqual(AddressFilter.filter(AddressFilter.filter(
-        childBalancer.addresses, CLUSTER1 + "[child1]"), locality1.toString()),
+        childBalancer.addresses, CLUSTER1 + "[child1]"),
+          "{region=\"test-region-1\", zone=\"test-zone-1\", sub_zone=\"test-subzone-1\"}"),
         Collections.singletonList(endpoint3));
     assertAddressesEqual(AddressFilter.filter(AddressFilter.filter(
         childBalancer.addresses, CLUSTER_DNS + "[child0]"),
-        Locality.create("", "", "").toString()),
+        "{region=\"\", zone=\"\", sub_zone=\"\"}"),
         Arrays.asList(endpoint1, endpoint2));
   }
 
@@ -1142,10 +1144,11 @@ public class ClusterResolverLoadBalancerTest {
   /** Asserts two list of EAGs contains same addresses, regardless of attributes. */
   private static void assertAddressesEqual(
       List<EquivalentAddressGroup> expected, List<EquivalentAddressGroup> actual) {
-    assertThat(actual.size()).isEqualTo(expected.size());
-    for (int i = 0; i < actual.size(); i++) {
-      assertThat(actual.get(i).getAddresses()).isEqualTo(expected.get(i).getAddresses());
-    }
+    List<List<SocketAddress>> expectedAddresses
+        = expected.stream().map(EquivalentAddressGroup::getAddresses).collect(toList());
+    List<List<SocketAddress>> actualAddresses
+        = actual.stream().map(EquivalentAddressGroup::getAddresses).collect(toList());
+    assertThat(actualAddresses).isEqualTo(expectedAddresses);
   }
 
   private static EquivalentAddressGroup makeAddress(final String name) {
