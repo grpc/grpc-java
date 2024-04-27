@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.collect.ImmutableMap;
+import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -42,6 +43,8 @@ import javax.annotation.Nullable;
 
 /** Load balancer for weighted_target policy. */
 final class WeightedTargetLoadBalancer extends LoadBalancer {
+  public static final Attributes.Key<String> CHILD_NAME =
+      Attributes.Key.create("io.grpc.xds.WeightedTargetLoadBalancer.CHILD_NAME");
 
   private final XdsLogger logger;
   private final Map<String, GracefulSwitchLoadBalancer> childBalancers = new HashMap<>();
@@ -95,6 +98,9 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), targetName))
               .setLoadBalancingPolicyConfig(targets.get(targetName).policySelection.getConfig())
+              .setAttributes(resolvedAddresses.getAttributes().toBuilder()
+                .set(CHILD_NAME, targetName)
+                .build())
               .build());
     }
 
