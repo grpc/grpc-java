@@ -38,8 +38,8 @@ _build_java_test_app() {
   set +x
 
   psm::tools::log "Test-run grpc-java PSM interop binaries"
-  run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-client" --help
-  run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-server" --help
+  psm::tools::run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-client" --help
+  psm::tools::run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-server" --help
 }
 
 #######################################
