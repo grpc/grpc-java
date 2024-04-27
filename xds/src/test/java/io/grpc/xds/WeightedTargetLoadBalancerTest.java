@@ -220,6 +220,8 @@ public class WeightedTargetLoadBalancerTest {
       ResolvedAddresses resolvedAddresses = resolvedAddressesCaptor.getValue();
       assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo(configs[i]);
       assertThat(resolvedAddresses.getAttributes().get(fakeKey)).isEqualTo(fakeValue);
+      assertThat(resolvedAddresses.getAttributes().get(WeightedTargetLoadBalancer.CHILD_NAME))
+          .isEqualTo("target" + i);
       assertThat(Iterables.getOnlyElement(resolvedAddresses.getAddresses()).getAddresses())
           .containsExactly(socketAddresses[i]);
     }

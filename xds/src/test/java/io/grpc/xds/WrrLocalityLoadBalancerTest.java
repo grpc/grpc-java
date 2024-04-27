@@ -42,7 +42,6 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
-import io.grpc.xds.client.Locality;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
@@ -111,8 +110,8 @@ public class WrrLocalityLoadBalancerTest {
   @Test
   public void handleResolvedAddresses() {
     // A two locality cluster with a mock child LB policy.
-    Locality localityOne = Locality.create("region1", "zone1", "subzone1");
-    Locality localityTwo = Locality.create("region2", "zone2", "subzone2");
+    String localityOne = "localityOne";
+    String localityTwo = "localityTwo";
     PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
 
     // The child config is delivered wrapped in the wrr_locality config and the locality weights
@@ -130,9 +129,9 @@ public class WrrLocalityLoadBalancerTest {
     assertThat(config).isInstanceOf(WeightedTargetConfig.class);
     WeightedTargetConfig wtConfig = (WeightedTargetConfig) config;
     assertThat(wtConfig.targets).hasSize(2);
-    assertThat(wtConfig.targets).containsEntry(localityOne.toString(),
+    assertThat(wtConfig.targets).containsEntry(localityOne,
         new WeightedPolicySelection(1, childPolicy));
-    assertThat(wtConfig.targets).containsEntry(localityTwo.toString(),
+    assertThat(wtConfig.targets).containsEntry(localityTwo,
         new WeightedPolicySelection(2, childPolicy));
   }
 
@@ -144,8 +143,7 @@ public class WrrLocalityLoadBalancerTest {
     // The child config is delivered wrapped in the wrr_locality config and the locality weights
     // in a ResolvedAddresses attribute.
     WrrLocalityConfig wlConfig = new WrrLocalityConfig(childPolicy);
-    deliverAddresses(wlConfig, ImmutableList.of(
-        makeAddress("addr", Locality.create("test-region", "test-zone", "test-subzone"), null)));
+    deliverAddresses(wlConfig, ImmutableList.of(makeAddress("addr", "test-locality", null)));
 
     // With no locality weights, we should get a TRANSIENT_FAILURE.
     verify(mockHelper).getAuthority();
@@ -166,8 +164,7 @@ public class WrrLocalityLoadBalancerTest {
   @Test
   public void handleNameResolutionError_withChildLb() {
     deliverAddresses(new WrrLocalityConfig(new PolicySelection(mockChildProvider, null)),
-        ImmutableList.of(
-            makeAddress("addr1", Locality.create("test-region1", "test-zone", "test-subzone"), 1)));
+        ImmutableList.of(makeAddress("addr1", "test-locality", 1)));
     Status status = Status.DEADLINE_EXCEEDED.withDescription("too slow");
     loadBalancer.handleNameResolutionError(status);
 
@@ -181,8 +178,7 @@ public class WrrLocalityLoadBalancerTest {
     PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
 
     WrrLocalityConfig wlConfig = new WrrLocalityConfig(childPolicy);
-    deliverAddresses(wlConfig, ImmutableList.of(
-        makeAddress("addr1", Locality.create("test-region1", "test-zone", "test-subzone"), 1)));
+    deliverAddresses(wlConfig, ImmutableList.of(makeAddress("addr1", "test-locality", 1)));
 
     // Assert that the child policy and the locality weights were correctly mapped to a
     // WeightedTargetConfig.
@@ -195,8 +191,7 @@ public class WrrLocalityLoadBalancerTest {
   @Test
   public void shutdown() {
     deliverAddresses(new WrrLocalityConfig(new PolicySelection(mockChildProvider, null)),
-        ImmutableList.of(
-            makeAddress("addr", Locality.create("test-region", "test-zone", "test-subzone"), 1)));
+        ImmutableList.of(makeAddress("addr", "test-locality", 1)));
     loadBalancer.shutdown();
 
     verify(mockWeightedTargetLb).shutdown();
@@ -224,7 +219,7 @@ public class WrrLocalityLoadBalancerTest {
   /**
    * Create a locality-labeled address.
    */
-  private static EquivalentAddressGroup makeAddress(final String name, Locality locality,
+  private static EquivalentAddressGroup makeAddress(final String name, String locality,
       Integer localityWeight) {
     class FakeSocketAddress extends SocketAddress {
       private final String name;
@@ -257,13 +252,13 @@ public class WrrLocalityLoadBalancerTest {
     }
 
     Attributes.Builder attrBuilder = Attributes.newBuilder()
-        .set(InternalXdsAttributes.ATTR_LOCALITY, locality);
+        .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, locality);
     if (localityWeight != null) {
       attrBuilder.set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT, localityWeight);
     }
 
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
         attrBuilder.build());
-    return AddressFilter.setPathFilter(eag, Collections.singletonList(locality.toString()));
+    return AddressFilter.setPathFilter(eag, Collections.singletonList(locality));
   }
 }

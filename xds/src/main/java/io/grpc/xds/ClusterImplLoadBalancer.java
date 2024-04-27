@@ -76,6 +76,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
+  private static final Attributes.Key<String> ATTR_CLUSTER_LOCALITY_NAME =
+      Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityName");
 
   private final XdsLogger logger;
   private final Helper helper;
@@ -209,11 +211,14 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> addresses = withAdditionalAttributes(args.getAddresses());
       Locality locality = args.getAddresses().get(0).getAttributes().get(
           InternalXdsAttributes.ATTR_LOCALITY);  // all addresses should be in the same locality
+      String localityName = args.getAddresses().get(0).getAttributes().get(
+          InternalXdsAttributes.ATTR_LOCALITY_NAME);
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
       // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
       // In case of not (which really shouldn't), loads are aggregated under an empty locality.
       if (locality == null) {
         locality = Locality.create("", "", "");
+        localityName = "";
       }
       final ClusterLocalityStats localityStats =
           (lrsServerInfo == null)
@@ -221,8 +226,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
               : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster,
               edsServiceName, locality);
 
-      Attributes attrs = args.getAttributes().toBuilder().set(
-          ATTR_CLUSTER_LOCALITY_STATS, localityStats).build();
+      Attributes attrs = args.getAttributes().toBuilder()
+          .set(ATTR_CLUSTER_LOCALITY_STATS, localityStats)
+          .set(ATTR_CLUSTER_LOCALITY_NAME, localityName)
+          .build();
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrs).build();
       final Subchannel subchannel = delegate().createSubchannel(args);
 
@@ -344,6 +351,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           final ClusterLocalityStats stats =
               result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY_STATS);
           if (stats != null) {
+            String localityName =
+                result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY_NAME);
+            args.getPickDetailsConsumer().addOptionalLabel("grpc.lb.locality", localityName);
+
             ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
                 stats, inFlights, result.getStreamTracerFactory());
             ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()

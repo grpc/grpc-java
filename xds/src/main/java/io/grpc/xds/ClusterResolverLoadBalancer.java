@@ -412,17 +412,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   if (endpoint.loadBalancingWeight() != 0) {
                     weight *= endpoint.loadBalancingWeight();
                   }
+                  String localityName = localityName(locality);
                   Attributes attr =
                       endpoint.eag().getAttributes().toBuilder()
                           .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
+                          .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, localityName)
                           .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT,
                               localityLbInfo.localityWeight())
                           .set(InternalXdsAttributes.ATTR_SERVER_WEIGHT, weight)
                           .build();
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
                       endpoint.eag().getAddresses(), attr);
-                  eag = AddressFilter.setPathFilter(
-                      eag, Arrays.asList(priorityName, localityName(locality)));
+                  eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
                   addresses.add(eag);
                 }
               }
@@ -612,11 +613,13 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               for (EquivalentAddressGroup eag : resolutionResult.getAddresses()) {
                 // No weight attribute is attached, all endpoint-level LB policy should be able
                 // to handle such it.
-                Attributes attr = eag.getAttributes().toBuilder().set(
-                    InternalXdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY).build();
+                String localityName = localityName(LOGICAL_DNS_CLUSTER_LOCALITY);
+                Attributes attr = eag.getAttributes().toBuilder()
+                    .set(InternalXdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
+                    .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                    .build();
                 eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
-                eag = AddressFilter.setPathFilter(
-                    eag, Arrays.asList(priorityName, LOGICAL_DNS_CLUSTER_LOCALITY.toString()));
+                eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
                 addresses.add(eag);
               }
               PriorityChildConfig priorityChildConfig = generateDnsBasedPriorityChildConfig(
@@ -844,6 +847,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * across all localities in all clusters.
    */
   private static String localityName(Locality locality) {
-    return locality.toString();
+    return "{region=\"" + locality.region()
+        + "\", zone=\"" + locality.zone()
+        + "\", sub_zone=\"" + locality.subZone()
+        + "\"}";
   }
 }
