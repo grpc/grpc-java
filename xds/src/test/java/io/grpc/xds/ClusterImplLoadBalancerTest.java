@@ -19,12 +19,14 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -32,6 +34,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
@@ -45,8 +48,10 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.protobuf.ProtoUtils;
+import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -141,6 +146,9 @@ public class ClusterImplLoadBalancerTest {
     }
   };
   private final Helper helper = new FakeLbHelper();
+  private PickSubchannelArgs pickSubchannelArgs = new PickSubchannelArgsImpl(
+      TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+      new PickDetailsConsumer() {});
   @Mock
   private ThreadSafeRandom mockRandom;
   private int xdsClientRefs;
@@ -218,7 +226,7 @@ public class ClusterImplLoadBalancerTest {
   public void nameResolutionError_beforeChildPolicyInstantiated_returnErrorPickerToUpstream() {
     loadBalancer.handleNameResolutionError(Status.UNIMPLEMENTED.withDescription("not found"));
     assertThat(currentState).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
     assertThat(result.getStatus().getDescription()).isEqualTo("not found");
@@ -244,6 +252,32 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
+  public void pick_addsLocalityLabel() {
+    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
+    WeightedTargetConfig weightedTargetConfig =
+        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    Subchannel subchannel = leafBalancer.helper.createSubchannel(
+        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
+    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
+
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    pickSubchannelArgs = new PickSubchannelArgsImpl(
+      TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT, detailsConsumer);
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
+    assertThat(result.getStatus().isOk()).isTrue();
+    // The value will be determined by the parent policy, so can be different than the value used in
+    // makeAddress() for the test.
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.locality", locality.toString());
+  }
+
+  @Test
   public void recordLoadStats() {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
@@ -258,7 +292,7 @@ public class ClusterImplLoadBalancerTest {
         CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
     leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
     ClientStreamTracer streamTracer1 = result.getStreamTracerFactory().newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // first RPC call
@@ -347,7 +381,7 @@ public class ClusterImplLoadBalancerTest {
         CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
     leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: throttle");
@@ -373,7 +407,7 @@ public class ClusterImplLoadBalancerTest {
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build());
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: lb");
@@ -386,7 +420,7 @@ public class ClusterImplLoadBalancerTest {
         .isEqualTo(1L);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
 
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
   }
 
@@ -423,7 +457,7 @@ public class ClusterImplLoadBalancerTest {
     leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
     for (int i = 0; i < maxConcurrentRequests; i++) {
-      PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+      PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
       streamTracerFactory.newClientStreamTracer(
@@ -434,7 +468,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
@@ -455,7 +489,7 @@ public class ClusterImplLoadBalancerTest {
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
 
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
     result.getStreamTracerFactory().newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // 101th request
@@ -463,7 +497,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));  // 102th request
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);  // 102th request
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
@@ -511,7 +545,7 @@ public class ClusterImplLoadBalancerTest {
     leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
     for (int i = 0; i < ClusterImplLoadBalancer.DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS; i++) {
-      PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+      PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
       streamTracerFactory.newClientStreamTracer(
@@ -522,7 +556,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
@@ -697,7 +731,11 @@ public class ClusterImplLoadBalancerTest {
     }
 
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
-        Attributes.newBuilder().set(InternalXdsAttributes.ATTR_LOCALITY, locality).build());
+        Attributes.newBuilder()
+          .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
+          // Unique but arbitrary string
+          .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, locality.toString())
+          .build());
     return AddressFilter.setPathFilter(eag, Collections.singletonList(locality.toString()));
   }
 
