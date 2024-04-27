@@ -158,6 +158,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           throw new IllegalStateException("Resolution is pending");
         }
       };
+  private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
+      new LoadBalancer.PickDetailsConsumer() {};
 
   private final InternalLogId logId;
   private final String target;
@@ -519,11 +521,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final Metadata headers,
         final Context context) {
       if (!retryEnabled) {
-        ClientTransport transport =
-            getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
-        Context origContext = context.attach();
         ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
             callOptions, headers, 0, /* isTransparentRetry= */ false);
+        ClientTransport transport = getTransport(new PickSubchannelArgsImpl(
+            method, headers, callOptions, new PickDetailsConsumerImpl(tracers)));
+        Context origContext = context.attach();
         try {
           return transport.newStream(method, headers, callOptions, tracers);
         } finally {
@@ -566,8 +568,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
             ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
                 newOptions, newHeaders, previousAttempts, isTransparentRetry);
-            ClientTransport transport =
-                getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
+            ClientTransport transport = getTransport(new PickSubchannelArgsImpl(
+                method, newHeaders, newOptions, new PickDetailsConsumerImpl(tracers)));
             Context origContext = context.attach();
             try {
               return transport.newStream(method, newHeaders, newOptions, tracers);
@@ -1207,7 +1209,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @SuppressWarnings("unchecked")
     @Override
     public void start(Listener<RespT> observer, Metadata headers) {
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
+      PickSubchannelArgs args =
+          new PickSubchannelArgsImpl(method, headers, callOptions, NOOP_PICK_DETAILS_CONSUMER);
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
       Status status = result.getStatus();
       if (!status.isOk()) {

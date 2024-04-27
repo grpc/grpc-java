@@ -490,6 +490,29 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
+
+    /**
+     * Gets an object that can be informed about what sort of pick was made.
+     */
+    @Internal
+    public PickDetailsConsumer getPickDetailsConsumer() {
+      return new PickDetailsConsumer() {};
+    }
+  }
+
+  /** Receives information about the pick being chosen. */
+  @Internal
+  public interface PickDetailsConsumer {
+    /**
+     * Optional labels that provide context of how the pick was routed. Particularly helpful for
+     * per-RPC metrics.
+     *
+     * @throws NullPointerException if key or value is {@code null}
+     */
+    default void addOptionalLabel(String key, String value) {
+      checkNotNull(key, "key");
+      checkNotNull(value, "value");
+    }
   }
 
   /**
