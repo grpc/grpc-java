@@ -80,6 +80,13 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
+   * Information providing context to the call became available.
+   */
+  @Internal
+  public void addOptionalLabel(String key, String value) {
+  }
+
+  /**
    * Factory class for {@link ClientStreamTracer}.
    */
   public abstract static class Factory {

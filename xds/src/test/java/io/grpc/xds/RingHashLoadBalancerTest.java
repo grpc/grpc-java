@@ -50,6 +50,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
@@ -461,13 +462,14 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));
   }
 
-  private PickSubchannelArgsImpl getDefaultPickSubchannelArgs(long rpcHash) {
+  private PickSubchannelArgs getDefaultPickSubchannelArgs(long rpcHash) {
     return new PickSubchannelArgsImpl(
         TestMethodDescriptors.voidMethod(), new Metadata(),
-        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash),
+        new PickDetailsConsumer() {});
   }
 
-  private PickSubchannelArgsImpl getDefaultPickSubchannelArgsForServer(int serverid) {
+  private PickSubchannelArgs getDefaultPickSubchannelArgsForServer(int serverid) {
     long rpcHash = hashFunc.hashAsciiString("FakeSocketAddress-server" + serverid + "_0");
     return getDefaultPickSubchannelArgs(rpcHash);
   }
