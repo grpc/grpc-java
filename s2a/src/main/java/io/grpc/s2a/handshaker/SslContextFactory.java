@@ -102,7 +102,7 @@ final class SslContextFactory {
     checkNotNull(stub, "stub should not be null.");
     SessionReq.Builder reqBuilder = SessionReq.newBuilder();
     if (localIdentity.isPresent()) {
-      reqBuilder.setLocalIdentity(localIdentity.get().identity());
+      reqBuilder.setLocalIdentity(localIdentity.get().getIdentity());
     }
     Optional<AuthenticationMechanism> authMechanism =
         GetAuthenticationMechanisms.getAuthMechanism(localIdentity);

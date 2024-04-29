@@ -56,7 +56,7 @@ public final class S2AIdentity {
   }
 
   /** Returns the proto {@link Identity} representation of this identity instance. */
-  public Identity identity() {
+  public Identity getIdentity() {
     return identity;
   }
 }

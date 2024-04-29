@@ -114,7 +114,7 @@ final class S2ATrustManager implements X509TrustManager {
     SessionReq.Builder reqBuilder =
         SessionReq.newBuilder().setValidatePeerCertificateChainReq(validatePeerCertificateChainReq);
     if (localIdentity.isPresent()) {
-      reqBuilder.setLocalIdentity(localIdentity.get().identity());
+      reqBuilder.setLocalIdentity(localIdentity.get().getIdentity());
     }
 
     SessionResp resp;

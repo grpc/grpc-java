@@ -119,7 +119,7 @@ final class S2APrivateKeyMethod implements OpenSslPrivateKeyMethod {
                     .setSignatureAlgorithm(s2aSignatureAlgorithm)
                     .setRawBytes(ByteString.copyFrom(input)));
     if (localIdentity.isPresent()) {
-      reqBuilder.setLocalIdentity(localIdentity.get().identity());
+      reqBuilder.setLocalIdentity(localIdentity.get().getIdentity());
     }
 
     SessionResp resp = stub.send(reqBuilder.build());

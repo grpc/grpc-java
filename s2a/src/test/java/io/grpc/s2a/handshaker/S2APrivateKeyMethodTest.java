@@ -163,7 +163,7 @@ public final class S2APrivateKeyMethodTest {
         S2APrivateKeyMethod.create(mockStub, Optional.of(fakeIdentity));
     SessionReq req =
         SessionReq.newBuilder()
-            .setLocalIdentity(fakeIdentity.identity())
+            .setLocalIdentity(fakeIdentity.getIdentity())
             .setOffloadPrivateKeyOperationReq(
                 OffloadPrivateKeyOperationReq.newBuilder()
                     .setOperation(OffloadPrivateKeyOperationReq.PrivateKeyOperation.SIGN)

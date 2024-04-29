@@ -49,7 +49,7 @@ final class GetAuthenticationMechanisms {
       authMechanism =
           Optional.of(
               AuthenticationMechanism.newBuilder()
-                  .setIdentity(localIdentity.get().identity())
+                  .setIdentity(localIdentity.get().getIdentity())
                   .setToken(manager.getToken(localIdentity.get()))
                   .build());
     }

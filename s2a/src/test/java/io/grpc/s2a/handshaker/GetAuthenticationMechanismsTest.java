@@ -57,7 +57,7 @@ public final class GetAuthenticationMechanismsTest {
         .isEqualTo(
             Optional.of(
                 AuthenticationMechanism.newBuilder()
-                    .setIdentity(fakeIdentity.identity())
+                    .setIdentity(fakeIdentity.getIdentity())
                     .setToken("access_token")
                     .build()));
   }
