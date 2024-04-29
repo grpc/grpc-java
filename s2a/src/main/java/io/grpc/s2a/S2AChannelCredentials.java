@@ -39,7 +39,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * Configures gRPC to use S2A for transport security when establishing a secure channel. Only for
  * use on the client side of a gRPC connection.
  */
-@NotThreadSafe
 public final class S2AChannelCredentials {
   /**
    * Creates a channel credentials builder for establishing an S2A-secured connection.
@@ -53,6 +52,7 @@ public final class S2AChannelCredentials {
   }
 
   /** Builds an {@code S2AChannelCredentials} instance. */
+  @NotThreadSafe
   public static final class Builder {
     private final String s2aAddress;
     private ObjectPool<Channel> s2aChannelPool;
