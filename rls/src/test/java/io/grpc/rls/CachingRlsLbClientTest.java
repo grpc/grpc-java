@@ -43,6 +43,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
@@ -383,7 +384,8 @@ public class CachingRlsLbClientTest {
                 .setFullMethodName("doesn/exists")
                 .build(),
             headers,
-            CallOptions.DEFAULT));
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {}));
     assertThat(pickResult.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
     assertThat(fakeThrottler.getNumThrottled()).isEqualTo(1);
@@ -438,7 +440,8 @@ public class CachingRlsLbClientTest {
             TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("service1/create")
                 .build(),
             headers,
-            CallOptions.DEFAULT));
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {}));
   }
 
   @Test
@@ -521,7 +524,8 @@ public class CachingRlsLbClientTest {
             .setFullMethodName("doesn/exists")
             .build(),
         headers,
-        CallOptions.DEFAULT);
+        CallOptions.DEFAULT,
+        new PickDetailsConsumer() {});
     return invalidArgs;
   }
 
