@@ -43,34 +43,34 @@ public final class S2AGrpcChannelPoolTest {
   }
 
   @Test
-  public void returnChannel_success() throws Exception {
+  public void returnToPool_success() throws Exception {
     FakeChannelPool fakeChannelPool = new FakeChannelPool();
     S2AChannelPool s2aChannelPool = S2AGrpcChannelPool.create(fakeChannelPool);
 
-    s2aChannelPool.returnChannel(s2aChannelPool.getChannel());
+    s2aChannelPool.returnToPool(s2aChannelPool.getChannel());
 
     assertThat(fakeChannelPool.isChannelCached()).isFalse();
   }
 
   @Test
-  public void returnChannel_channelStillCachedBecauseMultipleChannelsRetrieved() throws Exception {
+  public void returnToPool_channelStillCachedBecauseMultipleChannelsRetrieved() throws Exception {
     FakeChannelPool fakeChannelPool = new FakeChannelPool();
     S2AChannelPool s2aChannelPool = S2AGrpcChannelPool.create(fakeChannelPool);
 
     s2aChannelPool.getChannel();
-    s2aChannelPool.returnChannel(s2aChannelPool.getChannel());
+    s2aChannelPool.returnToPool(s2aChannelPool.getChannel());
 
     assertThat(fakeChannelPool.isChannelCached()).isTrue();
   }
 
   @Test
-  public void returnChannel_failureBecauseChannelWasNotFromPool() throws Exception {
+  public void returnToPool_failureBecauseChannelWasNotFromPool() throws Exception {
     S2AChannelPool s2aChannelPool = S2AGrpcChannelPool.create(new FakeChannelPool());
 
     IllegalArgumentException expected =
         assertThrows(
             IllegalArgumentException.class,
-            () -> s2aChannelPool.returnChannel(mock(Channel.class)));
+            () -> s2aChannelPool.returnToPool(mock(Channel.class)));
     assertThat(expected)
         .hasMessageThat()
         .isEqualTo(

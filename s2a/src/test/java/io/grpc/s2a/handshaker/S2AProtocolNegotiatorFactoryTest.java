@@ -187,7 +187,7 @@ public class S2AProtocolNegotiatorFactoryTest {
     }
 
     @Override
-    public void returnChannel(Channel channel) {}
+    public void returnToPool(Channel channel) {}
 
     @Override
     public void close() {}

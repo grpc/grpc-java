@@ -87,7 +87,7 @@ public final class S2AGrpcChannelPool implements S2AChannelPool {
    * <p>The caller must ensure that {@code channel} was retrieved from this channel pool.
    */
   @Override
-  public synchronized void returnChannel(Channel channel) {
+  public synchronized void returnToPool(Channel channel) {
     checkState(state.equals(State.OPEN), "Channel pool is not open.");
     checkArgument(
         cachedChannel != null && numberOfUsersOfCachedChannel > 0 && cachedChannel.equals(channel),

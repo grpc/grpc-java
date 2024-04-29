@@ -32,7 +32,7 @@ public interface S2AChannelPool extends AutoCloseable {
   Channel getChannel();
 
   /** Returns a channel to the channel pool. */
-  void returnChannel(Channel channel);
+  void returnToPool(Channel channel);
 
   /**
    * Returns all channels to the channel pool and closes the pool so that no new channels can be
