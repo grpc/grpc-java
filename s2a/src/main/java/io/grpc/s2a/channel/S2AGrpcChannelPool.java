@@ -69,9 +69,6 @@ public final class S2AGrpcChannelPool implements S2AChannelPool {
   public synchronized Channel getChannel() {
     checkState(state.equals(State.OPEN), "Channel pool is not open.");
     checkState(
-        numberOfUsersOfCachedChannel >= 0,
-        "Number of users of cached channel must be non-negative.");
-    checkState(
         numberOfUsersOfCachedChannel < MAX_NUMBER_USERS_OF_CACHED_CHANNEL,
         "Max number of channels have been retrieved from the channel pool.");
     if (cachedChannel == null) {
