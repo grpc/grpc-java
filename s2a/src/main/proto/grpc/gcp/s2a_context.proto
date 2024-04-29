@@ -14,6 +14,7 @@
 
 // The canonical version of this proto can be found at
 // https://github.com/grpc/grpc-proto/blob/master/grpc/gcp/s2a/s2a_context.proto
+
 syntax = "proto3";
 
 package grpc.gcp;
