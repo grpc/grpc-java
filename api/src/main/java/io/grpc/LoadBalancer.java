@@ -1243,7 +1243,7 @@ public abstract class LoadBalancer {
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
     public MetricRecorder getMetricRecorder() {
-      throw new UnsupportedOperationException();
+      return new MetricRecorder() {};
     }
   }
 
