@@ -147,9 +147,9 @@ public class S2AStubTest {
   public void send_receiveCompleteStatus() throws Exception {
     writer.setBehavior(FakeWriter.Behavior.COMPLETE_STATUS);
 
-    ConnectionIsClosedException expected =
+    ConnectionClosedException expected =
         assertThrows(
-            ConnectionIsClosedException.class, () -> stub.send(SessionReq.getDefaultInstance()));
+            ConnectionClosedException.class, () -> stub.send(SessionReq.getDefaultInstance()));
 
     assertThat(expected).hasMessageThat().contains("Reading from the S2A is complete.");
   }
@@ -216,9 +216,9 @@ public class S2AStubTest {
     stub.close();
     expect.that(writer.isFakeWriterClosed()).isTrue();
 
-    ConnectionIsClosedException expected =
+    ConnectionClosedException expected =
         assertThrows(
-            ConnectionIsClosedException.class, () -> stub.send(SessionReq.getDefaultInstance()));
+            ConnectionClosedException.class, () -> stub.send(SessionReq.getDefaultInstance()));
 
     assertThat(expected).hasMessageThat().contains("Stream to the S2A is closed.");
   }

@@ -74,12 +74,12 @@ class S2AStub implements AutoCloseable {
 
   /**
    * Sends a request and returns the response. Caller must wait until this method executes prior to
-   * calling it again. If this method throws {@code ConnectionIsClosedException}, then it should not
+   * calling it again. If this method throws {@code ConnectionClosedException}, then it should not
    * be called again, and both {@code reader} and {@code writer} are closed.
    *
    * @param req the {@code SessionReq} message to be sent to the S2A server.
    * @return the {@code SessionResp} message received from the S2A server.
-   * @throws ConnectionIsClosedException if {@code reader} or {@code writer} calls their {@code
+   * @throws ConnectionClosedException if {@code reader} or {@code writer} calls their {@code
    *     onCompleted} method.
    * @throws IOException if an unexpected response is received, or if the {@code reader} or {@code
    *     writer} calls their {@code onError} method.
@@ -87,7 +87,7 @@ class S2AStub implements AutoCloseable {
   public SessionResp send(SessionReq req) throws IOException, InterruptedException {
     if (doneWriting && doneReading) {
       logger.log(Level.INFO, "Stream to the S2A is closed.");
-      throw new ConnectionIsClosedException("Stream to the S2A is closed.");
+      throw new ConnectionClosedException("Stream to the S2A is closed.");
     }
     createWriterIfNull();
     if (!responses.isEmpty()) {
@@ -121,10 +121,10 @@ class S2AStub implements AutoCloseable {
     }
     try {
       return responses.take().getResultOrThrow();
-    } catch (ConnectionIsClosedException e) {
-      // A ConnectionIsClosedException is thrown by getResultOrThrow when reader calls its
+    } catch (ConnectionClosedException e) {
+      // A ConnectionClosedException is thrown by getResultOrThrow when reader calls its
       // onCompleted method. The close method is called to also close the writer, and then the
-      // ConnectionIsClosedException is re-thrown in order to indicate to the caller that send
+      // ConnectionClosedException is re-thrown in order to indicate to the caller that send
       // should not be called again.
       close();
       throw e;
@@ -177,7 +177,7 @@ class S2AStub implements AutoCloseable {
     }
 
     /**
-     * Sets {@code doneReading} to true, and places a {@code ConnectionIsClosedException} in the
+     * Sets {@code doneReading} to true, and places a {@code ConnectionClosedException} in the
      * {@code responses} queue.
      */
     @Override
@@ -186,7 +186,7 @@ class S2AStub implements AutoCloseable {
       doneReading = true;
       responses.offer(
           Result.createWithThrowable(
-              new ConnectionIsClosedException("Reading from the S2A is complete.")));
+              new ConnectionClosedException("Reading from the S2A is complete.")));
     }
   }
 
@@ -211,8 +211,8 @@ class S2AStub implements AutoCloseable {
     /** Throws {@code throwable} if present, and returns {@code response} otherwise. */
     SessionResp getResultOrThrow() throws IOException {
       if (throwable.isPresent()) {
-        if (throwable.get() instanceof ConnectionIsClosedException) {
-          ConnectionIsClosedException exception = (ConnectionIsClosedException) throwable.get();
+        if (throwable.get() instanceof ConnectionClosedException) {
+          ConnectionClosedException exception = (ConnectionClosedException) throwable.get();
           throw exception;
         } else {
           throw new IOException(throwable.get());

@@ -66,7 +66,7 @@ java_library(
 java_library(
     name = "s2a_handshaker",
     srcs = [
-        "src/main/java/io/grpc/s2a/handshaker/ConnectionIsClosedException.java",
+        "src/main/java/io/grpc/s2a/handshaker/ConnectionClosedException.java",
         "src/main/java/io/grpc/s2a/handshaker/GetAuthenticationMechanisms.java",
         "src/main/java/io/grpc/s2a/handshaker/ProtoUtil.java",
         "src/main/java/io/grpc/s2a/handshaker/S2AConnectionException.java",

@@ -20,8 +20,8 @@ import java.io.IOException;
 
 /** Indicates that a connection has been closed. */
 @SuppressWarnings("serial") // This class is never serialized.
-final class ConnectionIsClosedException extends IOException {
-  public ConnectionIsClosedException(String errorMessage) {
+final class ConnectionClosedException extends IOException {
+  public ConnectionClosedException(String errorMessage) {
     super(errorMessage);
   }
 }
