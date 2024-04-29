@@ -6,13 +6,13 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  */
 @javax.annotation.Generated(
     value = "by gRPC proto compiler",
-    comments = "Source: grpc/gcp/s2a.proto")
+    comments = "Source: grpc/gcp/s2a/s2a.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class S2AServiceGrpc {
 
   private S2AServiceGrpc() {}
 
-  public static final java.lang.String SERVICE_NAME = "grpc.gcp.S2AService";
+  public static final java.lang.String SERVICE_NAME = "grpc.gcp.s2a.S2AService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<io.grpc.s2a.handshaker.SessionReq,

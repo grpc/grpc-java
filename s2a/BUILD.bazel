@@ -133,28 +133,28 @@ java_library(
 # bazel only accepts proto import with absolute path.
 genrule(
     name = "protobuf_imports",
-    srcs = glob(["src/main/proto/grpc/gcp/*.proto"]),
+    srcs = glob(["src/main/proto/grpc/gcp/s2a/*.proto"]),
     outs = [
-        "protobuf_out/grpc/gcp/s2a.proto",
-        "protobuf_out/grpc/gcp/s2a_context.proto",
-        "protobuf_out/grpc/gcp/common.proto",
+        "protobuf_out/grpc/gcp/s2a/s2a.proto",
+        "protobuf_out/grpc/gcp/s2a/s2a_context.proto",
+        "protobuf_out/grpc/gcp/s2a/common.proto",
     ],
     cmd = "for fname in $(SRCS); do " +
           "sed 's,import \",import \"s2a/protobuf_out/,g' $$fname > " +
-          "$(@D)/protobuf_out/grpc/gcp/$$(basename $$fname); done",
+          "$(@D)/protobuf_out/grpc/gcp/s2a/$$(basename $$fname); done",
 )
 
 proto_library(
     name = "common_proto",
     srcs = [
-        "protobuf_out/grpc/gcp/common.proto",
+        "protobuf_out/grpc/gcp/s2a/common.proto",
     ],
 )
 
 proto_library(
     name = "s2a_context_proto",
     srcs = [
-        "protobuf_out/grpc/gcp/s2a_context.proto",
+        "protobuf_out/grpc/gcp/s2a/s2a_context.proto",
     ],
     deps = [
         ":common_proto",
@@ -164,7 +164,7 @@ proto_library(
 proto_library(
     name = "s2a_proto",
     srcs = [
-        "protobuf_out/grpc/gcp/s2a.proto",
+        "protobuf_out/grpc/gcp/s2a/s2a.proto",
     ],
     deps = [
         ":common_proto",
