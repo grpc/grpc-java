@@ -16,7 +16,8 @@ openssl genrsa -out server_key.pem 2048
 openssl genrsa -out client_key.pem 2048
 ```
 
-Generate CSRs for server and client
+Generate CSRs for server and client (set Common Name to localhost, leave all
+other fields blank)
 
 ```
 openssl req -key server_key.pem -new -out server.csr -config config.cnf
