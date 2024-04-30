@@ -104,6 +104,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
@@ -112,6 +113,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
@@ -188,6 +190,15 @@ public class ManagedChannelImplTest {
           .setUserAgent(USER_AGENT);
   private static final String TARGET = "fake://" + SERVICE_NAME;
   private static final String MOCK_POLICY_NAME = "mock_lb";
+  private static final NameResolver.Args NAMERESOLVER_ARGS = NameResolver.Args.newBuilder()
+      .setDefaultPort(447)
+      .setProxyDetector(mock(ProxyDetector.class))
+      .setSynchronizationContext(
+          new SynchronizationContext(mock(Thread.UncaughtExceptionHandler.class)))
+      .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+      .setScheduledExecutorService(new FakeClock().getScheduledExecutorService())
+      .build();
+
   private URI expectedUri;
   private final SocketAddress socketAddress =
       new SocketAddress() {
@@ -4305,6 +4316,80 @@ public class ManagedChannelImplTest {
     transportListener.transportTerminated();
     assertEquals(1, terminationCallbackCalled.get());
   }
+
+  @Test
+  public void validAuthorityTarget_overrideAuthority() throws Exception {
+    String overrideAuthority = "override.authority";
+    String serviceAuthority = "fakeauthority";
+    NameResolverProvider nameResolverProvider = new NameResolverProvider() {
+      @Override protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override protected int priority() {
+        return 5;
+      }
+
+      @Override public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return new NameResolver() {
+          @Override public String getServiceAuthority() {
+            return serviceAuthority;
+          }
+
+          @Override public void start(final Listener2 listener) {}
+
+          @Override public void shutdown() {}
+        };
+      }
+
+      @Override public String getDefaultScheme() {
+        return "defaultscheme";
+      }
+    };
+
+    URI targetUri = new URI("defaultscheme", "", "/foo.googleapis.com:8080", null);
+    NameResolver nameResolver = ManagedChannelImpl.getNameResolver(
+        targetUri, null, nameResolverProvider, NAMERESOLVER_ARGS);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo(serviceAuthority);
+
+    nameResolver = ManagedChannelImpl.getNameResolver(
+        targetUri, overrideAuthority, nameResolverProvider, NAMERESOLVER_ARGS);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo(overrideAuthority);
+  }
+
+  @Test
+  public void validTargetNoResolver_throws() {
+    NameResolverProvider nameResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "defaultscheme";
+      }
+    };
+    try {
+      ManagedChannelImpl.getNameResolver(
+          URI.create("defaultscheme:///foo.gogoleapis.com:8080"),
+          null, nameResolverProvider, NAMERESOLVER_ARGS);
+      fail("Should fail");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+  }
+
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
