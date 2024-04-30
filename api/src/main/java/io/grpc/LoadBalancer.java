@@ -1186,6 +1186,13 @@ public abstract class LoadBalancer {
     public abstract String getAuthority();
 
     /**
+     * Returns the target string of the channel, guaranteed to include its scheme.
+     */
+    public String getChannelTarget() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
      * Returns the ChannelCredentials used to construct the channel, without bearer tokens.
      *
      * @since 1.35.0
