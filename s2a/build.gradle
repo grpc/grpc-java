@@ -26,7 +26,6 @@ dependencies {
             libraries.protobuf.java,
             libraries.conscrypt,
             libraries.guava.jre // JRE required by protobuf-java-util from grpclb
-    compileOnly 'org.jcommander:jcommander:1.83'
     def nettyDependency = implementation project(':grpc-netty')
     compileOnly libraries.javax.annotation
 
@@ -44,7 +43,6 @@ dependencies {
             libraries.conscrypt,
             libraries.netty.transport.epoll
 
-    testImplementation 'org.jcommander:jcommander:1.83'
     testImplementation 'com.google.truth:truth:1.4.2'
     testImplementation 'com.google.truth.extensions:truth-proto-extension:1.4.2' 
     testImplementation libraries.guava.testlib

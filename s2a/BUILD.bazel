@@ -59,7 +59,7 @@ java_library(
     deps = [
         ":s2a_identity",
         ":token_fetcher",
-        artifact("org.jcommander:jcommander"),
+        artifact("com.google.guava:guava"),
     ],
 )
 

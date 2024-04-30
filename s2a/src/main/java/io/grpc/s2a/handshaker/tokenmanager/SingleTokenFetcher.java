@@ -16,27 +16,15 @@
 
 package io.grpc.s2a.handshaker.tokenmanager;
 
-import com.beust.jcommander.Parameter;
-import com.beust.jcommander.Parameters;
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.s2a.handshaker.S2AIdentity;
 import java.util.Optional;
 
 /** Fetches a single access token via an environment variable. */
+@SuppressWarnings("NonFinalStaticField")
 public final class SingleTokenFetcher implements TokenFetcher {
   private static final String ENVIRONMENT_VARIABLE = "S2A_ACCESS_TOKEN";
-
-  /** Set an access token via a flag. */
-  @Parameters(separators = "=")
-  public static class Flags {
-    @Parameter(
-        names = "--s2a_access_token",
-        description = "The access token used to authenticate to S2A.")
-    private static String accessToken = System.getenv(ENVIRONMENT_VARIABLE);
-
-    public synchronized void reset() {
-      accessToken = null;
-    }
-  }
+  private static String accessToken = System.getenv(ENVIRONMENT_VARIABLE);
 
   private final String token;
 
@@ -45,7 +33,12 @@ public final class SingleTokenFetcher implements TokenFetcher {
    * {@code Optional} instance if the token could not be fetched.
    */
   public static Optional<TokenFetcher> create() {
-    return Optional.ofNullable(Flags.accessToken).map(SingleTokenFetcher::new);
+    return Optional.ofNullable(accessToken).map(SingleTokenFetcher::new);
+  }
+
+  @VisibleForTesting
+  public static void setAccessToken(String token) {
+    accessToken = token;
   }
 
   private SingleTokenFetcher(String token) {

@@ -18,7 +18,6 @@ package io.grpc.s2a.handshaker.tokenmanager;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.beust.jcommander.JCommander;
 import io.grpc.s2a.handshaker.S2AIdentity;
 import java.util.Optional;
 import org.junit.Before;
@@ -30,17 +29,15 @@ import org.junit.runners.JUnit4;
 public final class SingleTokenAccessTokenManagerTest {
   private static final S2AIdentity IDENTITY = S2AIdentity.fromSpiffeId("spiffe_id");
   private static final String TOKEN = "token";
-  private static final String[] SET_TOKEN = {"--s2a_access_token", TOKEN};
-  private static final SingleTokenFetcher.Flags FLAGS = new SingleTokenFetcher.Flags();
 
   @Before
   public void setUp() {
-    FLAGS.reset();
+    SingleTokenFetcher.setAccessToken(null);
   }
 
   @Test
   public void getDefaultToken_success() throws Exception {
-    JCommander.newBuilder().addObject(FLAGS).build().parse(SET_TOKEN);
+    SingleTokenFetcher.setAccessToken(TOKEN);
     Optional<AccessTokenManager> manager = AccessTokenManager.create();
     assertThat(manager).isPresent();
     assertThat(manager.get().getDefaultToken()).isEqualTo(TOKEN);
@@ -48,7 +45,7 @@ public final class SingleTokenAccessTokenManagerTest {
 
   @Test
   public void getToken_success() throws Exception {
-    JCommander.newBuilder().addObject(FLAGS).build().parse(SET_TOKEN);
+    SingleTokenFetcher.setAccessToken(TOKEN);
     Optional<AccessTokenManager> manager = AccessTokenManager.create();
     assertThat(manager).isPresent();
     assertThat(manager.get().getToken(IDENTITY)).isEqualTo(TOKEN);
@@ -61,7 +58,7 @@ public final class SingleTokenAccessTokenManagerTest {
 
   @Test
   public void create_success() throws Exception {
-    JCommander.newBuilder().addObject(FLAGS).build().parse(SET_TOKEN);
+    SingleTokenFetcher.setAccessToken(TOKEN);
     Optional<AccessTokenManager> manager = AccessTokenManager.create();
     assertThat(manager).isPresent();
     assertThat(manager.get().getToken(IDENTITY)).isEqualTo(TOKEN);

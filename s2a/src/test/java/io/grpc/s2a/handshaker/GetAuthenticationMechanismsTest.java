@@ -16,7 +16,6 @@
 
 package io.grpc.s2a.handshaker;
 
-import com.beust.jcommander.JCommander;
 import com.google.common.truth.Expect;
 import io.grpc.s2a.handshaker.S2AIdentity;
 import io.grpc.s2a.handshaker.tokenmanager.SingleTokenFetcher;
@@ -32,13 +31,11 @@ import org.junit.runners.JUnit4;
 public final class GetAuthenticationMechanismsTest {
   @Rule public final Expect expect = Expect.create();
   private static final String TOKEN = "access_token";
-  private static final String[] SET_TOKEN = {"--s2a_access_token", TOKEN};
-  private static final SingleTokenFetcher.Flags FLAGS = new SingleTokenFetcher.Flags();
 
   @BeforeClass
   public static void setUpClass() {
     // Set the token that the client will use to authenticate to the S2A.
-    JCommander.newBuilder().addObject(FLAGS).build().parse(SET_TOKEN);
+    SingleTokenFetcher.setAccessToken(TOKEN);
   }
 
   @Test
