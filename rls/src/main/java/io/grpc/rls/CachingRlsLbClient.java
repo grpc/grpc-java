@@ -24,6 +24,7 @@ import com.google.common.base.Converter;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Ticker;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -36,9 +37,11 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
+import io.grpc.MetricInstrumentRegistry;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -87,6 +90,10 @@ final class CachingRlsLbClient {
   /** Minimum bytes for a Java Object. */
   public static final int OBJ_OVERHEAD_B = 16;
 
+  private static final LongCounterMetricInstrument DEFAULT_TARGET_PICKS_COUNTER;
+  private static final LongCounterMetricInstrument TARGET_PICKS_COUNTER;
+  private static final LongCounterMetricInstrument FAILED_PICKS_COUNTER;
+
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
   // LRU cache based on access order (BACKOFF and actual data will be here)
@@ -114,6 +121,23 @@ final class CachingRlsLbClient {
   @GuardedBy("lock")
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
   private final ChannelLogger logger;
+
+  static {
+    MetricInstrumentRegistry metricInstrumentRegistry
+        = MetricInstrumentRegistry.getDefaultRegistry();
+    DEFAULT_TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.rls.default_target_picks", "Number of LB picks sent to the default target", "pick",
+        Lists.newArrayList("grpc.target", "grpc.lb.rls.server_target",
+            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Lists.newArrayList(), true);
+    TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.target_picks",
+        "Number of LB picks sent to each RLS target", "pick",
+        Lists.newArrayList("grpc.target", "grpc.lb.rls.server_target",
+            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Lists.newArrayList(), true);
+    FAILED_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.failed_picks",
+        "Number of LB picks failed due to either a failed RLS request or the RLS channel being "
+            + "throttled", "pick", Lists.newArrayList("grpc.target", "grpc.lb.rls.server_target"),
+        Lists.newArrayList(), true);
+  }
 
   private CachingRlsLbClient(Builder builder) {
     helper = new RlsLbHelper(checkNotNull(builder.helper, "helper"));
@@ -147,7 +171,7 @@ final class CachingRlsLbClient {
     }
     RlsRequestFactory requestFactory = new RlsRequestFactory(
         lbPolicyConfig.getRouteLookupConfig(), serverHost);
-    rlsPicker = new RlsPicker(requestFactory);
+    rlsPicker = new RlsPicker(requestFactory, rlsConfig);
     // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
     // RLS server using the same authority as the backends, even though the RLS server’s addresses
     // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
@@ -904,9 +928,11 @@ final class CachingRlsLbClient {
   final class RlsPicker extends SubchannelPicker {
 
     private final RlsRequestFactory requestFactory;
+    private final RouteLookupConfig rlsConfig;
 
-    RlsPicker(RlsRequestFactory requestFactory) {
+    RlsPicker(RlsRequestFactory requestFactory, RouteLookupConfig rlsConfig) {
       this.requestFactory = checkNotNull(requestFactory, "requestFactory");
+      this.rlsConfig = checkNotNull(rlsConfig, "rlsConfig");
     }
 
     @Override
@@ -941,7 +967,12 @@ final class CachingRlsLbClient {
         }
         // Happy path
         logger.log(ChannelLogLevel.DEBUG, "Returning PickResult");
-        return picker.pickSubchannel(args);
+        PickResult pickResult = picker.pickSubchannel(args);
+        // TODO: include the "grpc.target" label once target is available here.
+        helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
+            Lists.newArrayList("", rlsConfig.lookupService(), childPolicyWrapper.getTarget(),
+                determineMetricsPickResult(pickResult)), Lists.newArrayList());
+        return pickResult;
       } else if (response.hasError()) {
         logger.log(ChannelLogLevel.DEBUG, "RLS response has errors");
         if (hasFallback) {
@@ -949,6 +980,9 @@ final class CachingRlsLbClient {
           return useFallback(args);
         }
         logger.log(ChannelLogLevel.DEBUG, "No RLS fallback, returning PickResult with an error");
+        // TODO: include the "grpc.target" label once target is available here.
+        helper.getMetricRecorder().addLongCounter(FAILED_PICKS_COUNTER, 1,
+            Lists.newArrayList("", rlsConfig.lookupService()), Lists.newArrayList());
         return PickResult.withError(
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
@@ -969,7 +1003,22 @@ final class CachingRlsLbClient {
       if (picker == null) {
         return PickResult.withNoResult();
       }
-      return picker.pickSubchannel(args);
+      PickResult pickResult = picker.pickSubchannel(args);
+      // TODO: include the grpc.target label once target is available here.
+      helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
+          Lists.newArrayList("", rlsConfig.lookupService(), fallbackChildPolicyWrapper.getTarget(),
+              determineMetricsPickResult(pickResult)), Lists.newArrayList());
+      return pickResult;
+    }
+
+    private String determineMetricsPickResult(PickResult pickResult) {
+      if (pickResult.getStatus().equals(Status.OK)) {
+        return "complete";
+      } else if (pickResult.isDrop()) {
+        return "drop";
+      } else {
+        return "fail";
+      }
     }
 
     private void startFallbackChildPolicy() {
