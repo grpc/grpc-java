@@ -124,6 +124,7 @@ public class RlsLoadBalancerTest {
   private final FakeRlsServerImpl fakeRlsServerImpl = new FakeRlsServerImpl();
   private final Deque<FakeSubchannel> subchannels = new LinkedList<>();
   private final FakeThrottler fakeThrottler = new FakeThrottler();
+  private final String channelTarget = "channelTarget";
   @Mock
   private Marshaller<Object> mockMarshaller;
   @Captor
@@ -296,6 +297,7 @@ public class RlsLoadBalancerTest {
     PickResult res = picker.pickSubchannel(searchSubchannelArgs); // create subchannel
     assertThat(res.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
     verifyFailedPicksCounterAdd(1, 1);
     verifyNoMoreInteractions(mockMetricRecorder);
@@ -319,6 +321,7 @@ public class RlsLoadBalancerTest {
     assertThat(fallbackSubchannel).isNotNull();
     assertThat(subchannelIsReady(fallbackSubchannel)).isTrue();
     inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
     verifyLongCounterAdd("grpc.lb.rls.default_target_picks", 1, 1, "defaultTarget", "complete");
     verifyNoMoreInteractions(mockMetricRecorder);
@@ -393,6 +396,7 @@ public class RlsLoadBalancerTest {
     FakeSubchannel searchSubchannel =
         (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
     assertThat(subchannelIsReady(searchSubchannel)).isTrue();
     assertThat(subchannels.getLast()).isSameInstanceAs(searchSubchannel);
@@ -468,6 +472,7 @@ public class RlsLoadBalancerTest {
     verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
 
     rlsLb.handleNameResolutionError(Status.UNAVAILABLE);
@@ -559,7 +564,7 @@ public class RlsLoadBalancerTest {
             return longCounterInstrument.getName().equals(name);
           }
         }), eq(value),
-        eq(Lists.newArrayList("", "localhost:8972", dataPlaneTargetLabel, pickResult)),
+        eq(Lists.newArrayList(channelTarget, "localhost:8972", dataPlaneTargetLabel, pickResult)),
         eq(Lists.newArrayList()));
   }
 
@@ -573,7 +578,7 @@ public class RlsLoadBalancerTest {
             return longCounterInstrument.getName().equals("grpc.lb.rls.failed_picks");
           }
         }), eq(value),
-        eq(Lists.newArrayList("", "localhost:8972")),
+        eq(Lists.newArrayList(channelTarget, "localhost:8972")),
         eq(Lists.newArrayList()));
   }
 
@@ -674,6 +679,11 @@ public class RlsLoadBalancerTest {
     @Override
     public MetricRecorder getMetricRecorder() {
       return mockMetricRecorder;
+    }
+
+    @Override
+    public String getChannelTarget() {
+      return channelTarget;
     }
   }
 

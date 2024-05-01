@@ -968,11 +968,11 @@ final class CachingRlsLbClient {
         // Happy path
         logger.log(ChannelLogLevel.DEBUG, "Returning PickResult");
         PickResult pickResult = picker.pickSubchannel(args);
-        // TODO: include the "grpc.target" label once target is available here.
         if (pickResult.hasResult()) {
           helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
-              Lists.newArrayList("", lookupService, childPolicyWrapper.getTarget(),
-                  determineMetricsPickResult(pickResult)), Lists.newArrayList());
+              Lists.newArrayList(helper.getChannelTarget(), lookupService,
+                  childPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
+              Lists.newArrayList());
         }
         return pickResult;
       } else if (response.hasError()) {
@@ -982,9 +982,8 @@ final class CachingRlsLbClient {
           return useFallback(args);
         }
         logger.log(ChannelLogLevel.DEBUG, "No RLS fallback, returning PickResult with an error");
-        // TODO: include the "grpc.target" label once target is available here.
         helper.getMetricRecorder().addLongCounter(FAILED_PICKS_COUNTER, 1,
-            Lists.newArrayList("", lookupService), Lists.newArrayList());
+            Lists.newArrayList(helper.getChannelTarget(), lookupService), Lists.newArrayList());
         return PickResult.withError(
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
@@ -1007,10 +1006,10 @@ final class CachingRlsLbClient {
       }
       PickResult pickResult = picker.pickSubchannel(args);
       if (pickResult.hasResult()) {
-        // TODO: include the grpc.target label once target is available here.
         helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
-            Lists.newArrayList("", lookupService, fallbackChildPolicyWrapper.getTarget(),
-                determineMetricsPickResult(pickResult)), Lists.newArrayList());
+            Lists.newArrayList(helper.getChannelTarget(), lookupService,
+                fallbackChildPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
+            Lists.newArrayList());
       }
       return pickResult;
     }
