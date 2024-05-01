@@ -204,13 +204,12 @@ public class RlsLoadBalancerTest {
     picker.pickSubchannel(fakeSearchMethodArgs); // Will create the subchannel
     FakeSubchannel subchannel = subchannels.peek();
     assertThat(subchannel).isNotNull();
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     // Ensure happy path is unaffected
     subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 2, 1, "wilderness", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     // Check on conversion
     Throwable cause = new Throwable("cause");
@@ -242,9 +241,7 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
     inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
-    inOrder.verify(helper).getMetricRecorder();
     inOrder.verifyNoMoreInteractions();
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(subchannels).hasSize(1);
@@ -258,7 +255,7 @@ public class RlsLoadBalancerTest {
     res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
     assertThat(res.getSubchannel()).isSameInstanceAs(searchSubchannel);
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 2, 1, "wilderness", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     // rescue should be pending status although the overall channel state is READY
     res = picker.pickSubchannel(rescueSubchannelArgs);
@@ -327,18 +324,18 @@ public class RlsLoadBalancerTest {
     assertThat(subchannelIsReady(fallbackSubchannel)).isTrue();
     inOrder.verify(helper).getMetricRecorder();
     inOrder.verifyNoMoreInteractions();
-    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", 2, 1, "defaultTarget", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", 1, 1, "defaultTarget", "complete");
     verifyNoMoreInteractions(mockMetricRecorder);
 
     Subchannel subchannel = picker.pickSubchannel(searchSubchannelArgs).getSubchannel();
     assertThat(subchannelIsReady(subchannel)).isTrue();
     assertThat(subchannel).isSameInstanceAs(fallbackSubchannel);
-    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", 3, 1, "defaultTarget", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", 2, 1, "defaultTarget", "complete");
 
     subchannel = picker.pickSubchannel(searchSubchannelArgs).getSubchannel();
     assertThat(subchannelIsReady(subchannel)).isTrue();
     assertThat(subchannel).isSameInstanceAs(fallbackSubchannel);
-    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", 4, 1, "defaultTarget", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", 3, 1, "defaultTarget", "complete");
 
     // Make sure that when RLS starts communicating that default stops being used
     fakeThrottler.nextResult = false;
@@ -349,7 +346,7 @@ public class RlsLoadBalancerTest {
         (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     assertThat(searchSubchannel).isNotNull();
     assertThat(searchSubchannel).isNotSameInstanceAs(fallbackSubchannel);
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 2, 1, "wilderness", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     // create rescue subchannel
     picker.pickSubchannel(rescueSubchannelArgs);
@@ -394,10 +391,8 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
     inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
-    inOrder.verify(helper).getMetricRecorder();
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     assertThat(subchannels).hasSize(1);
     FakeSubchannel searchSubchannel =
@@ -432,7 +427,7 @@ public class RlsLoadBalancerTest {
         new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
     assertThat(res.getStatus().isOk()).isFalse();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", 2, 1, "wilderness", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     res = picker.pickSubchannel(
         new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));

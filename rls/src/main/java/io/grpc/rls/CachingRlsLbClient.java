@@ -969,9 +969,11 @@ final class CachingRlsLbClient {
         logger.log(ChannelLogLevel.DEBUG, "Returning PickResult");
         PickResult pickResult = picker.pickSubchannel(args);
         // TODO: include the "grpc.target" label once target is available here.
-        helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
-            Lists.newArrayList("", lookupService, childPolicyWrapper.getTarget(),
-                determineMetricsPickResult(pickResult)), Lists.newArrayList());
+        if (pickResult.hasResult()) {
+          helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
+              Lists.newArrayList("", lookupService, childPolicyWrapper.getTarget(),
+                  determineMetricsPickResult(pickResult)), Lists.newArrayList());
+        }
         return pickResult;
       } else if (response.hasError()) {
         logger.log(ChannelLogLevel.DEBUG, "RLS response has errors");
@@ -1004,10 +1006,12 @@ final class CachingRlsLbClient {
         return PickResult.withNoResult();
       }
       PickResult pickResult = picker.pickSubchannel(args);
-      // TODO: include the grpc.target label once target is available here.
-      helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
-          Lists.newArrayList("", lookupService, fallbackChildPolicyWrapper.getTarget(),
-              determineMetricsPickResult(pickResult)), Lists.newArrayList());
+      if (pickResult.hasResult()) {
+        // TODO: include the grpc.target label once target is available here.
+        helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
+            Lists.newArrayList("", lookupService, fallbackChildPolicyWrapper.getTarget(),
+                determineMetricsPickResult(pickResult)), Lists.newArrayList());
+      }
       return pickResult;
     }
 
