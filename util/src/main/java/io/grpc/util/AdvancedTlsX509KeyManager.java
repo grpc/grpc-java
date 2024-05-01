@@ -18,7 +18,6 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -26,7 +25,6 @@ import java.net.Socket;
 import java.security.GeneralSecurityException;
 import java.security.Principal;
 import java.security.PrivateKey;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,19 +37,20 @@ import javax.net.ssl.X509ExtendedKeyManager;
 
 /**
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
- * advanced TLS features, such as private key and certificate chain reloading, etc.
+ * advanced TLS features, such as private key and certificate chain reloading.
+ * We expect only one of {@link AdvancedTlsX509KeyManager#updateIdentityCredentials},
+ * {@link AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile
+ * (File, File, long, TimeUnit, ScheduledExecutorService)},
+ * {@link AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile
+ * (File, File, long, TimeUnit, ScheduledExecutorService)} methods to be called after instantiation
+ * of this class.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
-
-  // The credential information sent to peers to prove our identity.
+  // Minimum allowed period for refreshing files with credential information.
+  public final static int MINIMUM_REFRESH_PERIOD = 1 ;
+  // The credential information to be sent to peers to prove our identity.
   private volatile KeyInfo keyInfo;
-
-  /**
-   * Constructs an AdvancedTlsX509KeyManager.
-   */
-  public AdvancedTlsX509KeyManager() throws CertificateException { }
 
   @Override
   public PrivateKey getPrivateKey(String alias) {
@@ -107,14 +106,13 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param certs  the certificate chain that is going to be used
    */
   public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs) {
-    // TODO(ZhenLian): explore possibilities to do a crypto check here.
     this.keyInfo = new KeyInfo(checkNotNull(key, "key"), checkNotNull(certs, "certs"));
   }
 
   /**
    * Schedules a {@code ScheduledExecutorService} to read private key and certificate chains from
    * the local file paths periodically, and update the cached identity credentials if they are both
-   * updated.
+   * updated. Please make sure to close the returned Closebale before calling this method again.
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
@@ -131,14 +129,17 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
       throw new GeneralSecurityException(
           "Files were unmodified before their initial update. Probably a bug.");
     }
+    if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD) {
+      log.log(Level.INFO, "Provided refresh period of {} {} is too small. "
+          + "Default value of {} minute(s) will be used.", new Object[] {period, unit.name(),
+          MINIMUM_REFRESH_PERIOD});
+      period = MINIMUM_REFRESH_PERIOD;
+      unit = TimeUnit.MINUTES;
+    }
     final ScheduledFuture<?> future =
-        executor.scheduleWithFixedDelay(
+        checkNotNull(executor, "executor").scheduleWithFixedDelay(
             new LoadFilePathExecution(keyFile, certFile), period, period, unit);
-    return new Closeable() {
-      @Override public void close() {
-        future.cancel(false);
-      }
-    };
+    return () -> future.cancel(false);
   }
 
   /**
@@ -190,8 +191,9 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
           this.currentCertTime = newResult.certTime;
         }
       } catch (IOException | GeneralSecurityException e) {
-        log.log(Level.SEVERE, "Failed refreshing private key and certificate chain from files. "
-            + "Using previous ones", e);
+        log.log(Level.SEVERE, e, () -> String.format("Failed refreshing private key and certificate"
+                + " chain from files. Using previous ones (keyFile lastModified = %s, certFile "
+                + "lastModified = %s)", keyFile.lastModified(), certFile.lastModified()));
       }
     }
   }
@@ -220,8 +222,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    */
   private UpdateResult readAndUpdate(File keyFile, File certFile, long oldKeyTime, long oldCertTime)
       throws IOException, GeneralSecurityException {
-    long newKeyTime = keyFile.lastModified();
-    long newCertTime = certFile.lastModified();
+    long newKeyTime = checkNotNull(keyFile, "keyFile").lastModified();
+    long newCertTime = checkNotNull(certFile, "certFile").lastModified();
     // We only update when both the key and the certs are updated.
     if (newKeyTime != oldKeyTime && newCertTime != oldCertTime) {
       FileInputStream keyInputStream = new FileInputStream(keyFile);
