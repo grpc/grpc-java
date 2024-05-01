@@ -900,6 +900,11 @@ public class CachingRlsLbClientTest {
     public MetricRecorder getMetricRecorder() {
       return mockMetricRecorder;
     }
+
+    @Override
+    public String getChannelTarget() {
+      return "channelTarget";
+    }
   }
 
   private static final class FakeThrottler implements Throttler {
