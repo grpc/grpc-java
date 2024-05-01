@@ -50,6 +50,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -121,6 +122,8 @@ public class CachingRlsLbClientTest {
   private EvictionListener<RouteLookupRequest, CacheEntry> evictionListener;
   @Mock
   private SocketAddress socketAddress;
+  @Mock
+  private MetricRecorder mockMetricRecorder;
 
   private final SynchronizationContext syncContext =
       new SynchronizationContext(new UncaughtExceptionHandler() {
@@ -891,6 +894,11 @@ public class CachingRlsLbClientTest {
     @Override
     public ChannelLogger getChannelLogger() {
       return mock(ChannelLogger.class);
+    }
+
+    @Override
+    public MetricRecorder getMetricRecorder() {
+      return mockMetricRecorder;
     }
   }
 

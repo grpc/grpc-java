@@ -716,6 +716,13 @@ public abstract class LoadBalancer {
       return drop;
     }
 
+    /**
+     * Returns {@code true} if the pick was not created with {@link #withNoResult()}.
+     */
+    public boolean hasResult() {
+      return !(subchannel == null && status.isOk());
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
