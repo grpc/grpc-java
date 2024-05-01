@@ -72,6 +72,9 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricRecorder;
+import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
@@ -587,6 +590,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ChannelStreamProvider transportProvider = new ChannelStreamProvider();
 
   private final Rescheduler idleTimer;
+  private final List<MetricSink> metricSinks;
+  private final MetricRecorder metricRecorder;
 
   ManagedChannelImpl(
       ManagedChannelImplBuilder builder,
@@ -711,6 +716,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
       serviceConfigUpdated = true;
     }
+    this.metricSinks = builder.metricSinks;
+    this.metricRecorder = new MetricRecorderImpl(metricSinks,
+        MetricInstrumentRegistry.getDefaultRegistry());
   }
 
   private static NameResolver getNameResolver(
@@ -1726,6 +1734,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public NameResolverRegistry getNameResolverRegistry() {
       return nameResolverRegistry;
+    }
+
+    @Override
+    public MetricRecorder getMetricRecorder() {
+      return metricRecorder;
     }
 
     /**

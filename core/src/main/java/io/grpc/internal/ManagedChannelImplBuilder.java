@@ -30,12 +30,15 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
+import io.grpc.Configurator;
+import io.grpc.ConfiguratorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalGlobalInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
@@ -192,6 +195,7 @@ public final class ManagedChannelImplBuilder
   private boolean recordRealTimeMetrics = false;
   private boolean recordRetryMetrics = true;
   private boolean tracingEnabled = true;
+  List<MetricSink> metricSinks = new ArrayList<>();
 
   /**
    * An interface for Transport implementors to provide the {@link ClientTransportFactory}
@@ -339,6 +343,10 @@ public final class ManagedChannelImplBuilder
       this.channelBuilderDefaultPortProvider = channelBuilderDefaultPortProvider;
     } else {
       this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
+    }
+    // TODO(dnvindhya): Move configurator to all the individual builders
+    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
+      configurator.configureChannelBuilder(this);
     }
   }
 
@@ -662,6 +670,12 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
+  public ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
+    metricSinks.add(checkNotNull(metricSink, "metric sink"));
+    return this;
+  }
+
+  @Override
   public ManagedChannel build() {
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
@@ -680,6 +694,7 @@ public final class ManagedChannelImplBuilder
   List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
     boolean isGlobalInterceptorsSet = false;
+    // TODO(dnvindhya) : Convert to Configurator
     List<ClientInterceptor> globalClientInterceptors =
         InternalGlobalInterceptors.getClientInterceptors();
     if (globalClientInterceptors != null) {

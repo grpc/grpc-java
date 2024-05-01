@@ -18,11 +18,14 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableList;
+import io.grpc.MetricSink;
 import io.grpc.internal.GrpcUtil;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -38,8 +41,10 @@ public class OpenTelemetryModuleTest {
   public void build() {
     OpenTelemetrySdk sdk =
         OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build();
+
     OpenTelemetryModule openTelemetryModule = OpenTelemetryModule.newBuilder()
         .sdk(sdk)
+        .addOptionalLabel("version")
         .build();
 
     assertThat(openTelemetryModule.getOpenTelemetryInstance()).isSameInstanceAs(sdk);
@@ -48,6 +53,7 @@ public class OpenTelemetryModuleTest {
         meterProvider.meterBuilder("grpc-java")
             .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
             .build());
+    assertThat(openTelemetryModule.getOptionalLabels()).isEqualTo(ImmutableList.of("version"));
   }
 
   @Test
@@ -64,5 +70,37 @@ public class OpenTelemetryModuleTest {
         .meterBuilder("grpc-java")
         .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
         .build());
+    assertThat(module.getEnableMetrics()).isEmpty();
+    assertThat(module.getOptionalLabels()).isEmpty();
+    assertThat(module.getSink()).isInstanceOf(MetricSink.class);
   }
+
+  @Test
+  public void enableDisableMetrics() {
+    OpenTelemetryModule.Builder builder = OpenTelemetryModule.newBuilder();
+    builder.enableMetrics(Arrays.asList("metric1", "metric4"));
+    builder.disableMetrics(Arrays.asList("metric2", "metric3"));
+
+    OpenTelemetryModule module = builder.build();
+
+    assertThat(module.getEnableMetrics().get("metric1")).isTrue();
+    assertThat(module.getEnableMetrics().get("metric4")).isTrue();
+    assertThat(module.getEnableMetrics().get("metric2")).isFalse();
+    assertThat(module.getEnableMetrics().get("metric3")).isFalse();
+  }
+
+  @Test
+  public void disableAllMetrics() {
+    OpenTelemetryModule.Builder builder = OpenTelemetryModule.newBuilder();
+    builder.enableMetrics(Arrays.asList("metric1", "metric4"));
+    builder.disableMetrics(Arrays.asList("metric2", "metric3"));
+    builder.disableAllMetrics();
+
+    OpenTelemetryModule module = builder.build();
+
+    assertThat(module.getEnableMetrics()).isEmpty();
+  }
+
+  // TODO(dnvindhya): Add tests for configurator
+
 }

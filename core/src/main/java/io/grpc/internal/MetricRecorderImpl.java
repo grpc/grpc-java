@@ -68,14 +68,14 @@ final class MetricRecorderImpl implements MetricRecorder {
             + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       // TODO(dnvindhya): Move updating measures logic from sink to here
-      List<Object> measures = sink.getMetricsMeasures();
-      if (measures.size() <= metricInstrument.getIndex()) {
+      int measuresSize = sink.getMeasuresSize();
+      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.
         sink.updateMeasures(registry.getMetricInstruments());
       }
-      sink.recordDoubleCounter(metricInstrument, value, requiredLabelValues, optionalLabelValues);
+      sink.addDoubleCounter(metricInstrument, value, requiredLabelValues, optionalLabelValues);
     }
   }
 
@@ -99,14 +99,14 @@ final class MetricRecorderImpl implements MetricRecorder {
         "Incorrect number of optional labels provided. Expected: "
             + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
-      List<Object> measures = sink.getMetricsMeasures();
-      if (measures.size() <= metricInstrument.getIndex()) {
+      int measuresSize = sink.getMeasuresSize();
+      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.
         sink.updateMeasures(registry.getMetricInstruments());
       }
-      sink.recordLongCounter(metricInstrument, value, requiredLabelValues, optionalLabelValues);
+      sink.addLongCounter(metricInstrument, value, requiredLabelValues, optionalLabelValues);
     }
   }
 
@@ -130,8 +130,8 @@ final class MetricRecorderImpl implements MetricRecorder {
         "Incorrect number of optional labels provided. Expected: "
             + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
-      List<Object> measures = sink.getMetricsMeasures();
-      if (measures.size() <= metricInstrument.getIndex()) {
+      int measuresSize = sink.getMeasuresSize();
+      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.
@@ -161,8 +161,8 @@ final class MetricRecorderImpl implements MetricRecorder {
         "Incorrect number of optional labels provided. Expected: "
             + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
-      List<Object> measures = sink.getMetricsMeasures();
-      if (measures.size() <= metricInstrument.getIndex()) {
+      int measuresSize = sink.getMeasuresSize();
+      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.

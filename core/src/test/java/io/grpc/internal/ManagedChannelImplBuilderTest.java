@@ -39,6 +39,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.InternalGlobalInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.StaticTestingClassLoader;
@@ -732,5 +733,13 @@ public class ManagedChannelImplBuilderTest {
 
     builder.disableServiceConfigLookUp();
     assertThat(builder.lookUpServiceConfig).isFalse();
+  }
+
+  @Test
+  public void metricSinks() {
+    MetricSink mocksink = mock(MetricSink.class);
+    builder.addMetricSink(mocksink);
+
+    assertThat(builder.metricSinks).contains(mocksink);
   }
 }
