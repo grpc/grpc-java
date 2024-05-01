@@ -1012,7 +1012,7 @@ final class CachingRlsLbClient {
     }
 
     private String determineMetricsPickResult(PickResult pickResult) {
-      if (pickResult.getStatus().equals(Status.OK)) {
+      if (pickResult.getStatus().isOk()) {
         return "complete";
       } else if (pickResult.isDrop()) {
         return "drop";
