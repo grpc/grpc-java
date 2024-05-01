@@ -137,7 +137,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
       ClientStreamTracer[] tracers) {
     try {
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(
+          method, headers, callOptions, new PickDetailsConsumerImpl(tracers));
       SubchannelPicker picker = null;
       long pickerVersion = -1;
       while (true) {

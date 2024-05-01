@@ -107,6 +107,11 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
+  public String getChannelTarget() {
+    return delegate().getChannelTarget();
+  }
+
+  @Override
   public ChannelCredentials getChannelCredentials() {
     return delegate().getChannelCredentials();
   }

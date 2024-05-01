@@ -158,12 +158,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
           throw new IllegalStateException("Resolution is pending");
         }
       };
+  private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
+      new LoadBalancer.PickDetailsConsumer() {};
 
   private final InternalLogId logId;
   private final String target;
   @Nullable
   private final String authorityOverride;
   private final NameResolverRegistry nameResolverRegistry;
+  private final URI targetUri;
+  private final NameResolverProvider nameResolverProvider;
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
   private final ClientTransportFactory originalTransportFactory;
@@ -381,8 +385,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       nameResolverStarted = false;
       if (channelIsActive) {
         nameResolver = getNameResolver(
-            target, authorityOverride, nameResolverRegistry, nameResolverArgs,
-            transportFactory.getSupportedSocketAddressTypes());
+            targetUri, authorityOverride, nameResolverProvider, nameResolverArgs);
       } else {
         nameResolver = null;
       }
@@ -519,11 +522,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final Metadata headers,
         final Context context) {
       if (!retryEnabled) {
-        ClientTransport transport =
-            getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
-        Context origContext = context.attach();
         ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
             callOptions, headers, 0, /* isTransparentRetry= */ false);
+        ClientTransport transport = getTransport(new PickSubchannelArgsImpl(
+            method, headers, callOptions, new PickDetailsConsumerImpl(tracers)));
+        Context origContext = context.attach();
         try {
           return transport.newStream(method, headers, callOptions, tracers);
         } finally {
@@ -566,8 +569,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
             ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
                 newOptions, newHeaders, previousAttempts, isTransparentRetry);
-            ClientTransport transport =
-                getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
+            ClientTransport transport = getTransport(new PickSubchannelArgsImpl(
+                method, newHeaders, newOptions, new PickDetailsConsumerImpl(tracers)));
             Context origContext = context.attach();
             try {
               return transport.newStream(method, newHeaders, newOptions, tracers);
@@ -619,6 +622,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.retryEnabled = builder.retryEnabled;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
     this.nameResolverRegistry = builder.nameResolverRegistry;
+    ResolvedNameResolver resolvedResolver = getNameResolverProvider(
+        target, nameResolverRegistry, transportFactory.getSupportedSocketAddressTypes());
+    this.targetUri = resolvedResolver.targetUri;
+    this.nameResolverProvider = resolvedResolver.provider;
     ScParser serviceConfigParser =
         new ScParser(
             retryEnabled,
@@ -638,8 +645,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOverrideAuthority(this.authorityOverride)
             .build();
     this.nameResolver = getNameResolver(
-        target, authorityOverride, nameResolverRegistry, nameResolverArgs,
-        transportFactory.getSupportedSocketAddressTypes());
+        targetUri, authorityOverride, nameResolverProvider, nameResolverArgs);
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
     this.delayedTransport = new DelayedClientTransport(this.executor, this.syncContext);
@@ -711,8 +717,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private static NameResolver getNameResolver(
-      String target, NameResolverRegistry nameResolverRegistry, NameResolver.Args nameResolverArgs,
+  @VisibleForTesting
+  static class ResolvedNameResolver {
+    public final URI targetUri;
+    public final NameResolverProvider provider;
+
+    public ResolvedNameResolver(URI targetUri, NameResolverProvider provider) {
+      this.targetUri = checkNotNull(targetUri, "targetUri");
+      this.provider = checkNotNull(provider, "provider");
+    }
+  }
+
+  @VisibleForTesting
+  static ResolvedNameResolver getNameResolverProvider(
+      String target, NameResolverRegistry nameResolverRegistry,
       Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
@@ -759,23 +777,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
     }
 
-    NameResolver resolver = provider.newNameResolver(targetUri, nameResolverArgs);
-    if (resolver != null) {
-      return resolver;
-    }
-
-    throw new IllegalArgumentException(String.format(
-        "cannot create a NameResolver for %s%s",
-        target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+    return new ResolvedNameResolver(targetUri, provider);
   }
 
   @VisibleForTesting
   static NameResolver getNameResolver(
-      String target, @Nullable final String overrideAuthority,
-      NameResolverRegistry nameResolverRegistry, NameResolver.Args nameResolverArgs,
-      Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
-    NameResolver resolver = getNameResolver(target, nameResolverRegistry, nameResolverArgs,
-        channelTransportSocketAddressTypes);
+      URI targetUri, @Nullable final String overrideAuthority,
+      NameResolverProvider provider, NameResolver.Args nameResolverArgs) {
+    NameResolver resolver = provider.newNameResolver(targetUri, nameResolverArgs);
+    if (resolver == null) {
+      throw new IllegalArgumentException("cannot create a NameResolver for " + targetUri);
+    }
 
     // We wrap the name resolver in a RetryingNameResolver to give it the ability to retry failures.
     // TODO: After a transition period, all NameResolver implementations that need retry should use
@@ -1207,7 +1219,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @SuppressWarnings("unchecked")
     @Override
     public void start(Listener<RespT> observer, Metadata headers) {
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
+      PickSubchannelArgs args =
+          new PickSubchannelArgsImpl(method, headers, callOptions, NOOP_PICK_DETAILS_CONSUMER);
       InternalConfigSelector.Result result = configSelector.selectConfig(args);
       Status status = result.getStatus();
       if (!status.isOk()) {
@@ -1698,6 +1711,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public String getAuthority() {
       return ManagedChannelImpl.this.authority();
+    }
+
+    @Override
+    public String getChannelTarget() {
+      return targetUri.toString();
     }
 
     @Override

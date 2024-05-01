@@ -55,6 +55,11 @@ public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   }
 
   @Override
+  public void addOptionalLabel(String key, String value) {
+    delegate().addOptionalLabel(key, value);
+  }
+
+  @Override
   public void streamClosed(Status status) {
     delegate().streamClosed(status);
   }

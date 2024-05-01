@@ -43,7 +43,9 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -130,8 +132,8 @@ public class RlsLoadBalancerTest {
   private MethodDescriptor<Object, Object> fakeRescueMethod;
   private RlsLoadBalancer rlsLb;
   private String defaultTarget = "defaultTarget";
-  private PickSubchannelArgsImpl searchSubchannelArgs;
-  private PickSubchannelArgsImpl rescueSubchannelArgs;
+  private PickSubchannelArgs searchSubchannelArgs;
+  private PickSubchannelArgs rescueSubchannelArgs;
 
   @Before
   public void setUp() {
@@ -173,12 +175,8 @@ public class RlsLoadBalancerTest {
       }
     };
 
-    Metadata headers = new Metadata();
-    searchSubchannelArgs =
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
-    rescueSubchannelArgs =
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT);
-
+    searchSubchannelArgs = newPickSubchannelArgs(fakeSearchMethod);
+    rescueSubchannelArgs = newPickSubchannelArgs(fakeRescueMethod);
   }
 
   @After
@@ -193,9 +191,7 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
-    PickSubchannelArgsImpl fakeSearchMethodArgs =
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    PickSubchannelArgs fakeSearchMethodArgs = newPickSubchannelArgs(fakeSearchMethod);
     // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().isOk()).isTrue();
@@ -379,7 +375,6 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
     // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(res.getStatus().isOk()).isTrue();
@@ -423,14 +418,12 @@ public class RlsLoadBalancerTest {
 
     // search method will fail because there is no fallback target.
     picker = pickerCaptor.getValue();
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     assertThat(res.getStatus().isOk()).isFalse();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
     verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(newPickSubchannelArgs(fakeRescueMethod));
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
     assertThat(res.getSubchannel().getAddresses()).isEqualTo(rescueSubchannel.getAddresses());
     assertThat(res.getSubchannel().getAttributes()).isEqualTo(rescueSubchannel.getAttributes());
@@ -453,10 +446,7 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
-    PickResult res =
-        picker.pickSubchannel(
-            new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    PickResult res = picker.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
 
@@ -470,8 +460,7 @@ public class RlsLoadBalancerTest {
 
     SubchannelPicker picker2 = pickerCaptor.getValue();
     assertThat(picker2).isEqualTo(picker);
-    res = picker2.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = picker2.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     // verify success. Subchannel is wrapped, so checking attributes.
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
     assertThat(res.getSubchannel().getAddresses()).isEqualTo(searchSubchannel.getAddresses());
@@ -486,15 +475,14 @@ public class RlsLoadBalancerTest {
     verify(helper)
         .updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     SubchannelPicker failedPicker = pickerCaptor.getValue();
-    res = failedPicker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = failedPicker.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     assertThat(res.getStatus().isOk()).isFalse();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
     verifyNoMoreInteractions(mockMetricRecorder);
   }
 
   private PickResult markReadyAndGetPickResult(InOrder inOrder,
-                                               PickSubchannelArgsImpl pickSubchannelArgs) {
+                                               PickSubchannelArgs pickSubchannelArgs) {
     subchannels.getLast().updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     inOrder.verify(helper, atLeast(1))
         .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
@@ -587,6 +575,11 @@ public class RlsLoadBalancerTest {
         }), eq(value),
         eq(Lists.newArrayList("", "localhost:8972")),
         eq(Lists.newArrayList()));
+  }
+
+  private PickSubchannelArgs newPickSubchannelArgs(MethodDescriptor<?, ?> method) {
+    return new PickSubchannelArgsImpl(
+        method, new Metadata(), CallOptions.DEFAULT, new PickDetailsConsumer() {});
   }
 
   private final class FakeHelper extends Helper {
