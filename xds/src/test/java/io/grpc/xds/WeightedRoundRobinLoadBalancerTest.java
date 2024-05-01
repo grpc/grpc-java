@@ -144,6 +144,8 @@ public class WeightedRoundRobinLoadBalancerTest {
           }
       });
 
+  private String channelTarget = "channel-target";
+
   public WeightedRoundRobinLoadBalancerTest() {
     testHelperInstance = new TestHelper();
     helper = mock(Helper.class, delegatesTo(testHelperInstance));
@@ -1238,7 +1240,7 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
             return longCounterInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList("")), eq(Lists.newArrayList("")));
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList("")));
   }
 
   // Verifies that the MetricRecorder has been called to record a given double histogram value the
@@ -1250,7 +1252,7 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(DoubleHistogramMetricInstrument doubleHistogramInstrument) {
             return doubleHistogramInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList("")), eq(Lists.newArrayList("")));
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList("")));
   }
 
   private int getNumFilteredPendingTasks() {
@@ -1325,6 +1327,11 @@ public class WeightedRoundRobinLoadBalancerTest {
     @Override
     public MetricRecorder getMetricRecorder() {
       return mockMetricRecorder;
+    }
+
+    @Override
+    public String getChannelTarget() {
+      return channelTarget;
     }
   }
 }

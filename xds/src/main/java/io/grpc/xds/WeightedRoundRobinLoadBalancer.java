@@ -430,31 +430,33 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       for (int i = 0; i < children.size(); i++) {
         double newWeight = ((WeightedChildLbState) children.get(i)).getWeight(staleEndpoints,
             notYetUsableEndpoints);
-        // TODO: add target and locality labels once available
+        // TODO: add locality label once available
         helper.getMetricRecorder()
-            .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight, ImmutableList.of(""),
+            .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight,
+                ImmutableList.of(helper.getChannelTarget()),
                 ImmutableList.of(""));
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
       if (staleEndpoints.get() > 0) {
-        // TODO: add target and locality labels once available
+        // TODO: add locality label once available
         helper.getMetricRecorder()
             .addLongCounter(ENDPOINT_WEIGHT_STALE_COUNTER, staleEndpoints.get(),
-                ImmutableList.of(""),
+                ImmutableList.of(helper.getChannelTarget()),
                 ImmutableList.of(""));
       }
       if (notYetUsableEndpoints.get() > 0) {
-        // TODO: add target and locality labels once available
+        // TODO: add locality label once available
         helper.getMetricRecorder()
             .addLongCounter(ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER, notYetUsableEndpoints.get(),
-                ImmutableList.of(""), ImmutableList.of(""));
+                ImmutableList.of(helper.getChannelTarget()), ImmutableList.of(""));
       }
 
       this.scheduler = new StaticStrideScheduler(newWeights, sequence);
       if (this.scheduler.usesRoundRobin()) {
-        // TODO: add target and locality labels once available
+        // TODO: locality label once available
         helper.getMetricRecorder()
-            .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(""), ImmutableList.of(""));
+            .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(helper.getChannelTarget()),
+                ImmutableList.of(""));
       }
     }
 
