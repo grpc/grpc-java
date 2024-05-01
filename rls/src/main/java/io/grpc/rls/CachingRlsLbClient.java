@@ -171,7 +171,7 @@ final class CachingRlsLbClient {
     }
     RlsRequestFactory requestFactory = new RlsRequestFactory(
         lbPolicyConfig.getRouteLookupConfig(), serverHost);
-    rlsPicker = new RlsPicker(requestFactory, rlsConfig);
+    rlsPicker = new RlsPicker(requestFactory, rlsConfig.lookupService());
     // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
     // RLS server using the same authority as the backends, even though the RLS server’s addresses
     // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
@@ -928,11 +928,11 @@ final class CachingRlsLbClient {
   final class RlsPicker extends SubchannelPicker {
 
     private final RlsRequestFactory requestFactory;
-    private final RouteLookupConfig rlsConfig;
+    private final String lookupService;
 
-    RlsPicker(RlsRequestFactory requestFactory, RouteLookupConfig rlsConfig) {
+    RlsPicker(RlsRequestFactory requestFactory, String lookupService) {
       this.requestFactory = checkNotNull(requestFactory, "requestFactory");
-      this.rlsConfig = checkNotNull(rlsConfig, "rlsConfig");
+      this.lookupService = checkNotNull(lookupService, "rlsConfig");
     }
 
     @Override
@@ -970,7 +970,7 @@ final class CachingRlsLbClient {
         PickResult pickResult = picker.pickSubchannel(args);
         // TODO: include the "grpc.target" label once target is available here.
         helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
-            Lists.newArrayList("", rlsConfig.lookupService(), childPolicyWrapper.getTarget(),
+            Lists.newArrayList("", lookupService, childPolicyWrapper.getTarget(),
                 determineMetricsPickResult(pickResult)), Lists.newArrayList());
         return pickResult;
       } else if (response.hasError()) {
@@ -982,7 +982,7 @@ final class CachingRlsLbClient {
         logger.log(ChannelLogLevel.DEBUG, "No RLS fallback, returning PickResult with an error");
         // TODO: include the "grpc.target" label once target is available here.
         helper.getMetricRecorder().addLongCounter(FAILED_PICKS_COUNTER, 1,
-            Lists.newArrayList("", rlsConfig.lookupService()), Lists.newArrayList());
+            Lists.newArrayList("", lookupService), Lists.newArrayList());
         return PickResult.withError(
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
@@ -1006,7 +1006,7 @@ final class CachingRlsLbClient {
       PickResult pickResult = picker.pickSubchannel(args);
       // TODO: include the grpc.target label once target is available here.
       helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
-          Lists.newArrayList("", rlsConfig.lookupService(), fallbackChildPolicyWrapper.getTarget(),
+          Lists.newArrayList("", lookupService, fallbackChildPolicyWrapper.getTarget(),
               determineMetricsPickResult(pickResult)), Lists.newArrayList());
       return pickResult;
     }
