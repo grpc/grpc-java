@@ -61,6 +61,8 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,16 +129,16 @@ final class CachingRlsLbClient {
         = MetricInstrumentRegistry.getDefaultRegistry();
     DEFAULT_TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter(
         "grpc.lb.rls.default_target_picks", "Number of LB picks sent to the default target", "pick",
-        Lists.newArrayList("grpc.target", "grpc.lb.rls.server_target",
-            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Lists.newArrayList(), true);
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target",
+            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Collections.emptyList(), true);
     TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.target_picks",
         "Number of LB picks sent to each RLS target", "pick",
-        Lists.newArrayList("grpc.target", "grpc.lb.rls.server_target",
-            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Lists.newArrayList(), true);
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target",
+            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Collections.emptyList(), true);
     FAILED_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.failed_picks",
         "Number of LB picks failed due to either a failed RLS request or the RLS channel being "
-            + "throttled", "pick", Lists.newArrayList("grpc.target", "grpc.lb.rls.server_target"),
-        Lists.newArrayList(), true);
+            + "throttled", "pick", Arrays.asList("grpc.target", "grpc.lb.rls.server_target"),
+        Collections.emptyList(), true);
   }
 
   private CachingRlsLbClient(Builder builder) {
@@ -970,9 +972,9 @@ final class CachingRlsLbClient {
         PickResult pickResult = picker.pickSubchannel(args);
         if (pickResult.hasResult()) {
           helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
-              Lists.newArrayList(helper.getChannelTarget(), lookupService,
+              Arrays.asList(helper.getChannelTarget(), lookupService,
                   childPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
-              Lists.newArrayList());
+              Collections.emptyList());
         }
         return pickResult;
       } else if (response.hasError()) {
@@ -983,7 +985,7 @@ final class CachingRlsLbClient {
         }
         logger.log(ChannelLogLevel.DEBUG, "No RLS fallback, returning PickResult with an error");
         helper.getMetricRecorder().addLongCounter(FAILED_PICKS_COUNTER, 1,
-            Lists.newArrayList(helper.getChannelTarget(), lookupService), Lists.newArrayList());
+            Arrays.asList(helper.getChannelTarget(), lookupService), Collections.emptyList());
         return PickResult.withError(
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
@@ -1007,9 +1009,9 @@ final class CachingRlsLbClient {
       PickResult pickResult = picker.pickSubchannel(args);
       if (pickResult.hasResult()) {
         helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
-            Lists.newArrayList(helper.getChannelTarget(), lookupService,
+            Arrays.asList(helper.getChannelTarget(), lookupService,
                 fallbackChildPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
-            Lists.newArrayList());
+            Collections.emptyList());
       }
       return pickResult;
     }
