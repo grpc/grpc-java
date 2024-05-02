@@ -72,14 +72,16 @@ psm::lang::build_docker_images() {
   } >> "${java_build_log}"
 
 
-  # Pick a branch name for the built image
-  local branch_name='experimental'
-  if is_version_branch "${TESTING_VERSION}"; then
-    branch_name="${TESTING_VERSION}"
-  fi
+  # cloudbuild.yaml substitution variables
+  local substitutions=""
+  substitutions+="_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},"
+  substitutions+="_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},"
+  substitutions+="COMMIT_SHA=${GIT_COMMIT},"
+  substitutions+="BRANCH_NAME=${TESTING_VERSION},"
+
   # Run Google Cloud Build
   gcloud builds submit "${build_dir}" \
     --config="${docker_dir}/cloudbuild.yaml" \
-    --substitutions="_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=${branch_name}" \
+    --substitutions="${substitutions}" \
     | tee -a "${java_build_log}"
 }
