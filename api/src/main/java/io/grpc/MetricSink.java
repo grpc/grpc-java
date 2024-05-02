@@ -34,7 +34,7 @@ public interface MetricSink {
   Map<String, Boolean> getEnabledMetrics();
 
   /**
-   * Returns a set of label names that are considered optional for metrics collected.
+   * Returns a set of optional label names for metrics that the sink actually wants.
    *
    * @return A set of optional label names.
    */

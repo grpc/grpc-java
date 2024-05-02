@@ -37,7 +37,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -120,11 +119,11 @@ public class OpenTelemetryMetricSinkTest {
 
     com.google.common.truth.Truth.assertThat(sink.getMeasuresSize()).isEqualTo(3);
     // Metric is explicitly disabled
-    com.google.common.truth.Truth.assertThat(sink.getMeasures().get(0).getMeasure()).isNull();
+    com.google.common.truth.Truth.assertThat(sink.getMeasures().get(0)).isNull();
     // Metric is explicitly disabled
-    com.google.common.truth.Truth.assertThat(sink.getMeasures().get(1).getMeasure()).isNull();
+    com.google.common.truth.Truth.assertThat(sink.getMeasures().get(1)).isNull();
     // Metric is enabled by default, but all default metrics are disabled
-    com.google.common.truth.Truth.assertThat(sink.getMeasures().get(2).getMeasure()).isNull();
+    com.google.common.truth.Truth.assertThat(sink.getMeasures().get(2)).isNull();
 
   }
 
@@ -268,8 +267,7 @@ public class OpenTelemetryMetricSinkTest {
                                         .hasSum(123L))));
   }
 
-  // This test is failing, as it enables the second metric. Need to revisit shouldEnableMetric logic
-  @Ignore
+  @Test
   public void addHistogram_disabledMetric() {
     // set up sink with disabled metric
     Map<String, Boolean> enabledMetrics = new HashMap<>();

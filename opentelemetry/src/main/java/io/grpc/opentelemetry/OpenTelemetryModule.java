@@ -255,11 +255,12 @@ public final class OpenTelemetryModule {
 
   static boolean isMetricEnabled(String metricName, Map<String, Boolean> enableMetrics,
       boolean disableDefault) {
-    if (enableMetrics.getOrDefault(metricName, false) || !disableDefault
-        || OpenTelemetryMetricsModule.DEFAULT_PER_CALL_METRICS_SET.contains(metricName)) {
-      return true;
+    Boolean explicitlyEnabled = enableMetrics.get(metricName);
+    if (explicitlyEnabled != null) {
+      return explicitlyEnabled;
     }
-    return false;
+    return OpenTelemetryMetricsModule.DEFAULT_PER_CALL_METRICS_SET.contains(metricName)
+        && !disableDefault;
   }
 
 

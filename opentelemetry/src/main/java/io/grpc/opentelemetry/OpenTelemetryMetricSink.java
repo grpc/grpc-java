@@ -16,11 +16,12 @@
 
 package io.grpc.opentelemetry;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
-import io.grpc.Internal;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
 import io.grpc.MetricInstrument;
@@ -41,7 +42,6 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-@Internal
 final class OpenTelemetryMetricSink implements MetricSink {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricSink.class.getName());
   private final Object lock = new Object();
@@ -53,8 +53,8 @@ final class OpenTelemetryMetricSink implements MetricSink {
 
   OpenTelemetryMetricSink(Meter meter, Map<String, Boolean> enableMetrics,
       boolean disableDefaultMetrics, List<String> optionalLabels) {
-    this.openTelemetryMeter = meter;
-    this.enableMetrics = enableMetrics;
+    this.openTelemetryMeter = checkNotNull(meter);
+    this.enableMetrics = checkNotNull(enableMetrics);
     this.disableDefaultMetrics = disableDefaultMetrics;
     this.optionalLabels = ImmutableSet.copyOf(optionalLabels);
   }
@@ -84,65 +84,60 @@ final class OpenTelemetryMetricSink implements MetricSink {
   @Override
   public void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    int index = metricInstrument.getIndex();
-    DoubleCounter counter = (DoubleCounter) measures.get(index).getMeasure();
-    if (counter == null) {
+    MeasuresData instrumentData = measures.get(metricInstrument.getIndex());
+    if (instrumentData == null) {
       // Disabled metric
       return;
     }
     Attributes attributes = createAttributes(metricInstrument.getRequiredLabelKeys(),
         metricInstrument.getOptionalLabelKeys(), requiredLabelValues, optionalLabelValues,
-        measures.get(index).getOptionalLabelsBitSet());
+        instrumentData.getOptionalLabelsBitSet());
+    DoubleCounter counter = (DoubleCounter) instrumentData.getMeasure();
     counter.add(value, attributes);
   }
 
   @Override
   public void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    MetricSink.super.addLongCounter(metricInstrument, value, requiredLabelValues,
-        optionalLabelValues);
-    int index = metricInstrument.getIndex();
-    LongCounter counter = (LongCounter) measures.get(index).getMeasure();
-    if (counter == null) {
+    MeasuresData instrumentData = measures.get(metricInstrument.getIndex());
+    if (instrumentData == null) {
       // Disabled metric
       return;
     }
     Attributes attributes = createAttributes(metricInstrument.getRequiredLabelKeys(),
         metricInstrument.getOptionalLabelKeys(), requiredLabelValues, optionalLabelValues,
-        measures.get(index).getOptionalLabelsBitSet());
+        instrumentData.getOptionalLabelsBitSet());
+    LongCounter counter = (LongCounter) instrumentData.getMeasure();
     counter.add(value, attributes);
   }
 
   @Override
   public void recordDoubleHistogram(DoubleHistogramMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    MetricSink.super.recordDoubleHistogram(metricInstrument, value, requiredLabelValues,
-        optionalLabelValues);
-    int index = metricInstrument.getIndex();
-    DoubleHistogram histogram = (DoubleHistogram) measures.get(index).getMeasure();
-    if (histogram == null) {
+    MeasuresData instrumentData = measures.get(metricInstrument.getIndex());
+    if (instrumentData == null) {
       // Disabled metric
       return;
     }
     Attributes attributes = createAttributes(metricInstrument.getRequiredLabelKeys(),
         metricInstrument.getOptionalLabelKeys(), requiredLabelValues, optionalLabelValues,
-        measures.get(index).getOptionalLabelsBitSet());
-
+        instrumentData.getOptionalLabelsBitSet());
+    DoubleHistogram histogram = (DoubleHistogram) instrumentData.getMeasure();
     histogram.record(value, attributes);
   }
 
   @Override
   public void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    int index = metricInstrument.getIndex();
-    LongHistogram histogram = (LongHistogram) measures.get(index).getMeasure();
-    if (histogram == null) {
+    MeasuresData instrumentData = measures.get(metricInstrument.getIndex());
+    if (instrumentData == null) {
       // Disabled metric
       return;
     }
     Attributes attributes = createAttributes(metricInstrument.getRequiredLabelKeys(),
         metricInstrument.getOptionalLabelKeys(), requiredLabelValues, optionalLabelValues,
-        measures.get(index).getOptionalLabelsBitSet());
+        instrumentData.getOptionalLabelsBitSet());
+    LongHistogram histogram = (LongHistogram) instrumentData.getMeasure();
     histogram.record(value, attributes);
   }
 
@@ -160,11 +155,10 @@ final class OpenTelemetryMetricSink implements MetricSink {
 
       for (int i = measures.size(); i < instruments.size(); i++) {
         MetricInstrument instrument = instruments.get(i);
-        int optionalLabelsSize = instrument.getOptionalLabelKeys().size();
         // Check if the metric is disabled
         if (!shouldEnableMetric(instrument)) {
           // Adding null measure for disabled Metric
-          newMeasures.add(new MeasuresData(instrument, new BitSet(optionalLabelsSize), null));
+          newMeasures.add(null);
           continue;
         }
 
@@ -221,11 +215,14 @@ final class OpenTelemetryMetricSink implements MetricSink {
 
   private boolean shouldEnableMetric(MetricInstrument instrument) {
     String name = instrument.getName();
-    boolean enabledForSink = enableMetrics.getOrDefault(name, false);
-    boolean notDisabledDefault =  instrument.isEnableByDefault() && !disableDefaultMetrics;
-    return enabledForSink || notDisabledDefault;
-    // return enableMetrics.getOrDefault(name, false) || !disableDefaultMetrics
-    //     !! instrument.isEnableByDefault();
+    Boolean explicitlyEnabled = enableMetrics.get(name);
+    if (explicitlyEnabled != null) {
+      return explicitlyEnabled;
+    }
+    return instrument.isEnableByDefault() && !disableDefaultMetrics;
+    // boolean enabledForSink = enableMetrics.getOrDefault(name, false);
+    // boolean notDisabledDefault =  instrument.isEnableByDefault() && !disableDefaultMetrics;
+    // return enabledForSink || notDisabledDefault;
   }
 
 
@@ -238,8 +235,7 @@ final class OpenTelemetryMetricSink implements MetricSink {
       builder.put(requiredLabelKeys.get(i), requiredLabelValues.get(i));
     }
     // Optional labels
-    for (int i = bitSet.nextSetBit(0); i >= 0 && i < optionalLabelKeys.size();
-        i = bitSet.nextSetBit(i + 1)) {
+    for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {
       if (i == Integer.MAX_VALUE) {
         break; // or (i+1) would overflow
       }
@@ -249,20 +245,15 @@ final class OpenTelemetryMetricSink implements MetricSink {
   }
 
 
-  @Internal
   static final class MeasuresData {
-    MetricInstrument instrument;
-    BitSet optionalLabelsIndices;
-    Object measure;
+    final MetricInstrument instrument;
+    final BitSet optionalLabelsIndices;
+    final Object measure;
 
     MeasuresData(MetricInstrument instrument, BitSet optionalLabelsIndices, Object measure) {
       this.instrument = instrument;
       this.optionalLabelsIndices = optionalLabelsIndices;
       this.measure = measure;
-    }
-
-    public MetricInstrument getInstrument() {
-      return instrument;
     }
 
     public BitSet getOptionalLabelsBitSet() {
