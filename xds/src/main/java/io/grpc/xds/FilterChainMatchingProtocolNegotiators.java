@@ -329,7 +329,7 @@ final class FilterChainMatchingProtocolNegotiators {
       // use prefix_ranges (CIDR) and get the most specific matches
       private static Collection<FilterChain> filterOnIpAddress(
               Collection<FilterChain> filterChains, InetAddress address, boolean forDestination) {
-        // curent list of top ones
+        // current list of top ones
         ArrayList<FilterChain> topOnes = new ArrayList<>(filterChains.size());
         int topMatchingPrefixLen = -1;
         for (FilterChain filterChain : filterChains) {

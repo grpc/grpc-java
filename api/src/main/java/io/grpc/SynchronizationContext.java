@@ -163,7 +163,7 @@ public final class SynchronizationContext implements Executor {
   }
 
   /**
-   * Schedules a task to be added and run via {@link #execute} after an inital delay and then
+   * Schedules a task to be added and run via {@link #execute} after an initial delay and then
    * repeated after the delay until cancelled.
    *
    * @param task the task being scheduled

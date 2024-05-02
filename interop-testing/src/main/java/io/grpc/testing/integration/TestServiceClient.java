@@ -526,7 +526,7 @@ public class TestServiceClient {
 
   /* Parses input string as a semi-colon-separated list of colon-separated key/value pairs.
    * Allow any character but semicolons in values.
-   * If the string is emtpy, return null.
+   * If the string is empty, return null.
    * Otherwise, return a client interceptor which inserts the provided metadata.
    */
   @Nullable

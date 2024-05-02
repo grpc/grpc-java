@@ -932,7 +932,7 @@ public class ServerImplTest {
         } catch (Exception ex) {
           throw new AssertionError(ex);
         }
-        // If deadlock is possible with this setup, this sychronization completes the loop because
+        // If deadlock is possible with this setup, this synchronization completes the loop because
         // the serverShutdown needs a lock that Server is holding while calling this method.
         synchronized (lock) {
         }

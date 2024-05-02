@@ -120,7 +120,7 @@ message ClientHeader {
 
   // A single process may be used to run multiple virtual
   // servers with different identities.
-  // The authority is the name of such a server identitiy.
+  // The authority is the name of such a server identity.
   // It is typically a portion of the URI in the form of
   // <host> or <host>:<port> .
   string authority = 3;
