@@ -147,7 +147,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
       return;
     }
 
-    // Prepare the next message, if neeeded.
+    // Prepare the next message, if needed.
     if (sendBuffer == null) {
       if (sendState.next() != receiveState) {
         // We're still waiting for bytes from the peer, so bail.

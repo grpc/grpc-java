@@ -930,7 +930,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageMatchesEmtpy() {
+  public void maybeChooseServiceConfig_clientLanguageMatchesEmpty() {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<String> langs = new ArrayList<>();
     choice.put("clientLanguage", langs);
@@ -1099,7 +1099,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameMatchesEmtpy() {
+  public void maybeChooseServiceConfig_hostnameMatchesEmpty() {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<String> hosts = new ArrayList<>();
     choice.put("clientHostname", hosts);
@@ -1191,7 +1191,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void shouldUseJndi_trueIfLocalhostOverriden() {
+  public void shouldUseJndi_trueIfLocalhostOverridden() {
     boolean enableJndi = true;
     boolean enableJndiLocalhost = true;
     String host = "localhost";

@@ -203,7 +203,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final CompressorRegistry compressorRegistry;
 
   private final Supplier<Stopwatch> stopwatchSupplier;
-  /** The timout before entering idle mode. */
+  /** The timeout before entering idle mode. */
   private final long idleTimeoutMillis;
 
   private final ConnectivityStateManager channelStateManager = new ConnectivityStateManager();

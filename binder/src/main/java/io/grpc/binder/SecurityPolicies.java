@@ -321,7 +321,7 @@ public final class SecurityPolicies {
         packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
         if (packageInfo.signatures == null || packageInfo.signatures.length != 1) {
           // Reject multiply-signed apks because of b/13678484
-          // (See PackageManagerGetSignatures supression above).
+          // (See PackageManagerGetSignatures suppression above).
           return false;
         }
 

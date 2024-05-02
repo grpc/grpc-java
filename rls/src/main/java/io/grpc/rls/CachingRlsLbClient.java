@@ -206,7 +206,7 @@ final class CachingRlsLbClient {
   }
 
   /**
-   * Convert the status to UNAVAILBLE and enhance the error message.
+   * Convert the status to UNAVAILABLE and enhance the error message.
    * @param status status as provided by server
    * @param serverName Used for error description
    * @return Transformed status

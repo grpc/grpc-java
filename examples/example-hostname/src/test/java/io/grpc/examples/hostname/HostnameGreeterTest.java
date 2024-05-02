@@ -62,7 +62,7 @@ public class HostnameGreeterTest {
         InProcessServerBuilder.forName("hostname")
           .directExecutor().addService(new HostnameGreeter(null)).build().start());
 
-    // Just verifing the service doesn't crash
+    // Just verifying the service doesn't crash
     HelloReply reply =
         blockingStub.sayHello(HelloRequest.newBuilder().setName("anonymous").build());
     assertTrue(reply.getMessage(), reply.getMessage().startsWith("Hello anonymous, from "));

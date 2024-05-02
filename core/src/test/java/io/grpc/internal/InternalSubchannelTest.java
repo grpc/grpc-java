@@ -964,7 +964,7 @@ public class InternalSubchannelTest {
     // This should not lead to the creation of a new transport.
     reconnectTask.command.run();
 
-    // Futher call to obtainActiveTransport() is no-op.
+    // Further call to obtainActiveTransport() is no-op.
     assertNull(internalSubchannel.obtainActiveTransport());
     assertEquals(SHUTDOWN, internalSubchannel.getState());
     assertNoCallbackInvoke();

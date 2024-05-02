@@ -136,7 +136,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
     // refers to an Android Service class declared in an applications manifest.
     //
     // However, unlike a regular network server, which is responsible for listening on its port, a
-    // BinderServier is not responsible for the creation of its host Service. The opposite is
+    // BinderServer is not responsible for the creation of its host Service. The opposite is
     // the case, with the host Android Service (itself created by the Android platform in
     // response to a connection) building the gRPC server.
     //
