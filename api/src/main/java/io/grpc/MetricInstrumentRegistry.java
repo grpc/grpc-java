@@ -95,6 +95,7 @@ public final class MetricInstrumentRegistry {
       if (index + 1 == metricInstruments.length) {
         resizeMetricInstruments();
       }
+      // TODO(dnvindhya): add limit for number of optional labels allowed
       DoubleCounterMetricInstrument instrument = new DoubleCounterMetricInstrument(
           index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
           enableByDefault);

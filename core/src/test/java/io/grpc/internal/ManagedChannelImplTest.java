@@ -97,10 +97,13 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
@@ -222,6 +225,9 @@ public class ManagedChannelImplTest {
   private final FakeClock balancerRpcExecutor = new FakeClock();
 
   private final InternalChannelz channelz = new InternalChannelz();
+
+  private final MetricInstrumentRegistry metricInstrumentRegistry =
+      MetricInstrumentRegistry.getDefaultRegistry();
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -653,6 +659,24 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
 
     verify(tracer).addOptionalLabel("routed", "perfectly");
+  }
+
+  @Test
+  public void metricRecorder_recordsToMetricSink() {
+    MetricSink mockSink = mock(MetricSink.class);
+    channelBuilder.addMetricSink(mockSink);
+    createChannel();
+
+    LongCounterMetricInstrument counter = metricInstrumentRegistry.registerLongCounter(
+        "recorder_duration", "Time taken by metric recorder", "s",
+        ImmutableList.of("grpc.method"), Collections.emptyList(), false);
+    List<String> requiredLabelValues = ImmutableList.of("testMethod");
+    List<String> optionalLabelValues = Collections.emptyList();
+
+    helper.getMetricRecorder()
+        .addLongCounter(counter, 32, requiredLabelValues, optionalLabelValues);
+    verify(mockSink).addLongCounter(eq(counter), eq(32L), eq(requiredLabelValues),
+        eq(optionalLabelValues));
   }
 
   @Test
