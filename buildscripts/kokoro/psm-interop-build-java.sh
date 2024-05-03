@@ -14,13 +14,16 @@
 # limitations under the License.
 set -eo pipefail
 
-# Constants
+# This file defines psm::lang::build_docker_images, which is directly called
+# from psm_interop_kokoro_lib.sh.
+
+# Used locally.
 readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 
 #######################################
 # Builds the test app using gradle and smoke-checks its binaries
 # Globals:
-#   SRC_DIR
+#   SRC_DIR Absolute path to the source repo.
 #   BUILD_APP_PATH
 # Arguments:
 #   None
