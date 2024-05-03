@@ -60,7 +60,6 @@ use_repo(
     non_module_deps,
     "com_github_cncf_xds",
     "envoy_api",
-    "com_google_protobuf",
     "com_google_protobuf_javalite",
     "io_grpc_grpc_proto"
 )
