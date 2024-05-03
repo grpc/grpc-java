@@ -21,8 +21,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ClientInterceptor;
-import io.grpc.InternalGlobalInterceptors;
+import io.grpc.InternalConfigurator;
+import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.census.InternalCensusStatsAccessor;
@@ -55,7 +58,9 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -161,8 +166,39 @@ public final class GcpObservability implements AutoCloseable {
       tracerFactories.add(InternalCensusTracingAccessor.getServerStreamTracerFactory());
     }
 
-    InternalGlobalInterceptors.setInterceptorsTracers(
-        clientInterceptors, serverInterceptors, tracerFactories);
+    InternalConfiguratorRegistry.setConfigurators(Arrays.asList(
+        new ObservabilityConfigurator(clientInterceptors, serverInterceptors, tracerFactories)));
+  }
+
+  @VisibleForTesting
+  static final class ObservabilityConfigurator implements InternalConfigurator {
+    final List<ClientInterceptor> clientInterceptors;
+    final List<ServerInterceptor> serverInterceptors;
+    final List<ServerStreamTracer.Factory> tracerFactories;
+
+    ObservabilityConfigurator(
+        List<ClientInterceptor> clientInterceptors,
+        List<ServerInterceptor> serverInterceptors,
+        List<ServerStreamTracer.Factory> tracerFactories) {
+      this.clientInterceptors = checkNotNull(clientInterceptors, "clientInterceptors");
+      this.serverInterceptors = checkNotNull(serverInterceptors, "serverInterceptors");
+      this.tracerFactories = checkNotNull(tracerFactories, "tracerFactories");
+    }
+
+    @Override
+    public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+      builder.intercept(clientInterceptors);
+    }
+
+    @Override
+    public void configureServerBuilder(ServerBuilder<?> builder) {
+      for (ServerInterceptor interceptor : serverInterceptors) {
+        builder.intercept(interceptor);
+      }
+      for (ServerStreamTracer.Factory factory : tracerFactories) {
+        builder.addStreamTracerFactory(factory);
+      }
+    }
   }
 
   static ConditionalClientInterceptor getConditionalInterceptor(ClientInterceptor interceptor) {
