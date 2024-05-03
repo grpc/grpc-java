@@ -26,6 +26,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
+import static io.grpc.PickSubchannelArgsMatcher.eqPickSubchannelArgs;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
@@ -103,6 +104,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
@@ -111,6 +113,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
@@ -187,6 +190,15 @@ public class ManagedChannelImplTest {
           .setUserAgent(USER_AGENT);
   private static final String TARGET = "fake://" + SERVICE_NAME;
   private static final String MOCK_POLICY_NAME = "mock_lb";
+  private static final NameResolver.Args NAMERESOLVER_ARGS = NameResolver.Args.newBuilder()
+      .setDefaultPort(447)
+      .setProxyDetector(mock(ProxyDetector.class))
+      .setSynchronizationContext(
+          new SynchronizationContext(mock(Thread.UncaughtExceptionHandler.class)))
+      .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+      .setScheduledExecutorService(new FakeClock().getScheduledExecutorService())
+      .build();
+
   private URI expectedUri;
   private final SocketAddress socketAddress =
       new SocketAddress() {
@@ -618,6 +630,32 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void pickSubchannelAddOptionalLabel_callsTracer() {
+    channelBuilder.directExecutor();
+    createChannel();
+
+    updateBalancingStateSafely(helper, TRANSIENT_FAILURE, new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        args.getPickDetailsConsumer().addOptionalLabel("routed", "perfectly");
+        return PickResult.withError(Status.UNAVAILABLE.withDescription("expected"));
+      }
+    });
+    ClientStreamTracer tracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        return tracer;
+      }
+    };
+    ClientCall<String, Integer> call = channel.newCall(
+        method, CallOptions.DEFAULT.withStreamTracerFactory(tracerFactory));
+    call.start(mockCallListener, new Metadata());
+
+    verify(tracer).addOptionalLabel("routed", "perfectly");
+  }
+
+  @Test
   public void shutdownWithNoTransportsEverCreated() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
@@ -808,10 +846,10 @@ public class ManagedChannelImplTest {
         .thenReturn(mockStream2);
     transportListener.transportReady();
     when(mockPicker.pickSubchannel(
-        new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT))).thenReturn(
+        eqPickSubchannelArgs(method, headers, CallOptions.DEFAULT))).thenReturn(
         PickResult.withNoResult());
     when(mockPicker.pickSubchannel(
-        new PickSubchannelArgsImpl(method, headers2, CallOptions.DEFAULT))).thenReturn(
+        eqPickSubchannelArgs(method, headers2, CallOptions.DEFAULT))).thenReturn(
         PickResult.withSubchannel(subchannel));
     updateBalancingStateSafely(helper, READY, mockPicker);
 
@@ -875,7 +913,7 @@ public class ManagedChannelImplTest {
       assertFalse(nameResolverFactory.resolvers.get(0).shutdown);
       // call and call2 are still alive, and can still be assigned to a real transport
       SubchannelPicker picker2 = mock(SubchannelPicker.class);
-      when(picker2.pickSubchannel(new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT)))
+      when(picker2.pickSubchannel(eqPickSubchannelArgs(method, headers, CallOptions.DEFAULT)))
           .thenReturn(PickResult.withSubchannel(subchannel));
       updateBalancingStateSafely(helper, READY, picker2);
       executor.runDueTasks();
@@ -4278,6 +4316,80 @@ public class ManagedChannelImplTest {
     transportListener.transportTerminated();
     assertEquals(1, terminationCallbackCalled.get());
   }
+
+  @Test
+  public void validAuthorityTarget_overrideAuthority() throws Exception {
+    String overrideAuthority = "override.authority";
+    String serviceAuthority = "fakeauthority";
+    NameResolverProvider nameResolverProvider = new NameResolverProvider() {
+      @Override protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override protected int priority() {
+        return 5;
+      }
+
+      @Override public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return new NameResolver() {
+          @Override public String getServiceAuthority() {
+            return serviceAuthority;
+          }
+
+          @Override public void start(final Listener2 listener) {}
+
+          @Override public void shutdown() {}
+        };
+      }
+
+      @Override public String getDefaultScheme() {
+        return "defaultscheme";
+      }
+    };
+
+    URI targetUri = new URI("defaultscheme", "", "/foo.googleapis.com:8080", null);
+    NameResolver nameResolver = ManagedChannelImpl.getNameResolver(
+        targetUri, null, nameResolverProvider, NAMERESOLVER_ARGS);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo(serviceAuthority);
+
+    nameResolver = ManagedChannelImpl.getNameResolver(
+        targetUri, overrideAuthority, nameResolverProvider, NAMERESOLVER_ARGS);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo(overrideAuthority);
+  }
+
+  @Test
+  public void validTargetNoResolver_throws() {
+    NameResolverProvider nameResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "defaultscheme";
+      }
+    };
+    try {
+      ManagedChannelImpl.getNameResolver(
+          URI.create("defaultscheme:///foo.gogoleapis.com:8080"),
+          null, nameResolverProvider, NAMERESOLVER_ARGS);
+      fail("Should fail");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+  }
+
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override

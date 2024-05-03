@@ -37,6 +37,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
@@ -310,7 +311,8 @@ public class ClusterManagerLoadBalancerTest {
                 .build(),
             new Metadata(),
             CallOptions.DEFAULT.withOption(
-                XdsNameResolver.CLUSTER_SELECTION_KEY, clusterName));
+                XdsNameResolver.CLUSTER_SELECTION_KEY, clusterName),
+            new PickDetailsConsumer() {});
     return picker.pickSubchannel(args);
   }
 

@@ -16,11 +16,6 @@
 
 package io.grpc;
 
-import io.grpc.DoubleCounterMetricInstrument;
-import io.grpc.DoubleHistogramMetricInstrument;
-import io.grpc.Internal;
-import io.grpc.LongCounterMetricInstrument;
-import io.grpc.LongHistogramMetricInstrument;
 import java.util.List;
 
 /**
@@ -30,25 +25,25 @@ import java.util.List;
 @Internal
 public interface MetricRecorder {
   /**
-   * Records a value for a double-precision counter metric instrument.
+   * Adds a value for a double-precision counter metric instrument.
    *
-   * @param metricInstrument The counter metric instrument to record the value against.
-   * @param value The value to record.
+   * @param metricInstrument The counter metric instrument to add the value against.
+   * @param value The value to add.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
-  default void recordDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
+  default void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {}
 
   /**
-   * Records a value for a long valued counter metric instrument.
+   * Adds a value for a long valued counter metric instrument.
    *
-   * @param metricInstrument The counter metric instrument to record the value against.
-   * @param value The value to record.
+   * @param metricInstrument The counter metric instrument to add the value against.
+   * @param value The value to add.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
-  default void recordLongCounter(LongCounterMetricInstrument metricInstrument, long value,
+  default void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {}
 
   /**

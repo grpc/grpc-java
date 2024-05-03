@@ -24,13 +24,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Deadline.Ticker;
+import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LongCounterMetricInstrument;
+import io.grpc.MetricInstrumentRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -57,12 +61,17 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A {@link LoadBalancer} that provides weighted-round-robin load-balancing over
- * the {@link EquivalentAddressGroup}s from the {@link NameResolver}. The subchannel weights are
+ * A {@link LoadBalancer} that provides weighted-round-robin load-balancing over the
+ * {@link EquivalentAddressGroup}s from the {@link NameResolver}. The subchannel weights are
  * determined by backend metrics using ORCA.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
+
+  private static final LongCounterMetricInstrument RR_FALLBACK_COUNTER;
+  private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER;
+  private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_STALE_COUNTER;
+  private static final DoubleHistogramMetricInstrument ENDPOINT_WEIGHTS_HISTOGRAM;
   private static final Logger log = Logger.getLogger(
       WeightedRoundRobinLoadBalancer.class.getName());
   private WeightedRoundRobinLoadBalancerConfig config;
@@ -73,6 +82,31 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final AtomicInteger sequence;
   private final long infTime;
   private final Ticker ticker;
+
+  // The metric instruments are only registered once and shared by all instances of this LB.
+  static {
+    MetricInstrumentRegistry metricInstrumentRegistry
+        = MetricInstrumentRegistry.getDefaultRegistry();
+    RR_FALLBACK_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.wrr.rr_fallback",
+        "Number of scheduler updates in which there were not enough endpoints with valid "
+            + "weight, which caused the WRR policy to fall back to RR behavior", "update",
+        Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"), true);
+    ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.wrr.endpoint_weight_not_yet_usable",
+        "Number of endpoints from each scheduler update that don't yet have usable weight "
+            + "information", "endpoint", Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality"), true);
+    ENDPOINT_WEIGHT_STALE_COUNTER = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.wrr.endpoint_weight_stale",
+        "Number of endpoints from each scheduler update whose latest weight is older than the "
+            + "expiration period", "endpoint", Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality"), true);
+    ENDPOINT_WEIGHTS_HISTOGRAM = metricInstrumentRegistry.registerDoubleHistogram(
+        "grpc.lb.wrr.endpoint_weights", "The histogram buckets will be endpoint weight ranges.",
+        "weight", Lists.newArrayList(), Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality"),
+        true);
+  }
 
   public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
     this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker, new Random());
@@ -145,7 +179,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @Override
   public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
-        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence);
+        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper());
   }
 
   @VisibleForTesting
@@ -163,16 +197,18 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       super(key, policyProvider, childConfig, initialPicker);
     }
 
-    private double getWeight() {
+    private double getWeight(AtomicInteger staleEndpoints, AtomicInteger notYetUsableEndpoints) {
       if (config == null) {
         return 0;
       }
       long now = ticker.nanoTime();
       if (now - lastUpdated >= config.weightExpirationPeriodNanos) {
         nonEmptySince = infTime;
+        staleEndpoints.incrementAndGet();
         return 0;
       } else if (now - nonEmptySince < config.blackoutPeriodNanos
           && config.blackoutPeriodNanos > 0) {
+        notYetUsableEndpoints.incrementAndGet();
         return 0;
       } else {
         return weight;
@@ -336,10 +372,11 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final float errorUtilizationPenalty;
     private final AtomicInteger sequence;
     private final int hashCode;
+    private final LoadBalancer.Helper helper;
     private volatile StaticStrideScheduler scheduler;
 
     WeightedRoundRobinPicker(List<ChildLbState> children, boolean enableOobLoadReport,
-        float errorUtilizationPenalty, AtomicInteger sequence) {
+        float errorUtilizationPenalty, AtomicInteger sequence, LoadBalancer.Helper helper) {
       checkNotNull(children, "children");
       Preconditions.checkArgument(!children.isEmpty(), "empty child list");
       this.children = children;
@@ -353,6 +390,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.enableOobLoadReport = enableOobLoadReport;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
       this.sequence = checkNotNull(sequence, "sequence");
+      this.helper = helper;
 
       // For equality we treat children as a set; use hash code as defined by Set
       int sum = 0;
@@ -387,11 +425,39 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
 
     private void updateWeight() {
       float[] newWeights = new float[children.size()];
+      AtomicInteger staleEndpoints = new AtomicInteger();
+      AtomicInteger notYetUsableEndpoints = new AtomicInteger();
       for (int i = 0; i < children.size(); i++) {
-        double newWeight = ((WeightedChildLbState)children.get(i)).getWeight();
+        double newWeight = ((WeightedChildLbState) children.get(i)).getWeight(staleEndpoints,
+            notYetUsableEndpoints);
+        // TODO: add locality label once available
+        helper.getMetricRecorder()
+            .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight,
+                ImmutableList.of(helper.getChannelTarget()),
+                ImmutableList.of(""));
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
+      if (staleEndpoints.get() > 0) {
+        // TODO: add locality label once available
+        helper.getMetricRecorder()
+            .addLongCounter(ENDPOINT_WEIGHT_STALE_COUNTER, staleEndpoints.get(),
+                ImmutableList.of(helper.getChannelTarget()),
+                ImmutableList.of(""));
+      }
+      if (notYetUsableEndpoints.get() > 0) {
+        // TODO: add locality label once available
+        helper.getMetricRecorder()
+            .addLongCounter(ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER, notYetUsableEndpoints.get(),
+                ImmutableList.of(helper.getChannelTarget()), ImmutableList.of(""));
+      }
+
       this.scheduler = new StaticStrideScheduler(newWeights, sequence);
+      if (this.scheduler.usesRoundRobin()) {
+        // TODO: locality label once available
+        helper.getMetricRecorder()
+            .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(helper.getChannelTarget()),
+                ImmutableList.of(""));
+      }
     }
 
     @Override
@@ -454,6 +520,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   static final class StaticStrideScheduler {
     private final short[] scaledWeights;
     private final AtomicInteger sequence;
+    private final boolean usesRoundRobin;
     private static final int K_MAX_WEIGHT = 0xFFFF;
 
     // Assuming the mean of all known weights is M, StaticStrideScheduler will clamp
@@ -494,8 +561,10 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (numWeightedChannels > 0) {
         unscaledMeanWeight = sumWeight / numWeightedChannels;
         unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
+        usesRoundRobin = false;
       } else {
         // Fall back to round robin if all values are non-positives
+        usesRoundRobin = true;
         unscaledMeanWeight = 1;
         unscaledMaxWeight = 1;
       }
@@ -521,7 +590,14 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.sequence = sequence;
     }
 
-    /** Returns the next sequence number and atomically increases sequence with wraparound. */
+    // Without properly weighted channels, we do plain vanilla round_robin.
+    boolean usesRoundRobin() {
+      return usesRoundRobin;
+    }
+
+    /**
+     * Returns the next sequence number and atomically increases sequence with wraparound.
+     */
     private long nextSequence() {
       return Integer.toUnsignedLong(sequence.getAndIncrement());
     }

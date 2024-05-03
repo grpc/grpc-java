@@ -16,15 +16,15 @@
 
 package io.grpc;
 
-import java.util.List;
-
 /**
- * Represents a double-valued counter metric instrument.
+ * Accesses test-only methods of {@link MetricInstrumentRegistry}.
  */
-@Internal
-public final class DoubleCounterMetricInstrument extends PartialMetricInstrument {
-  DoubleCounterMetricInstrument(int index, String name, String description, String unit,
-      List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
-    super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
+public final class MetricInstrumentRegistryAccessor {
+
+  private MetricInstrumentRegistryAccessor() {
+  }
+
+  public static MetricInstrumentRegistry createMetricInstrumentRegistry() {
+    return new MetricInstrumentRegistry();
   }
 }

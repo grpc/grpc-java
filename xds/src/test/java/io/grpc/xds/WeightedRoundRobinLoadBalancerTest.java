@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -40,6 +41,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
@@ -49,6 +51,8 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.LongCounterMetricInstrument;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
@@ -82,6 +86,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -120,6 +125,9 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   private final FakeClock fakeClock = new FakeClock();
 
+  @Mock
+  private MetricRecorder mockMetricRecorder;
+
   private WeightedRoundRobinLoadBalancerConfig weightedConfig =
           WeightedRoundRobinLoadBalancerConfig.newBuilder().build();
 
@@ -135,6 +143,8 @@ public class WeightedRoundRobinLoadBalancerTest {
             throw new AssertionError(e);
           }
       });
+
+  private String channelTarget = "channel-target";
 
   public WeightedRoundRobinLoadBalancerTest() {
     testHelperInstance = new TestHelper();
@@ -1121,6 +1131,130 @@ public class WeightedRoundRobinLoadBalancerTest {
     inOrder.verify(subchannel2).shutdown();
   }
 
+
+  @Test
+  public void metrics() {
+    // Give WRR some valid addresses to work with.
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+
+    // Flip the three subchannels to READY state to initiate the WRR logic
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel2  = it.next();
+    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel3  = it.next();
+    getSubchannelStateListener(readySubchannel3).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+
+    // WRR creates a picker that updates the weights for each of the child subchannels. This should
+    // give us three "rr_fallback" metric events as we don't yet have any weights to do weighted
+    // round-robin.
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 3, 1);
+
+    // We should also see six records of endpoint weights. They should all be for 0 as we don't yet
+    // have valid weights.
+    verifyDoubleHistogramRecord("grpc.lb.wrr.endpoint_weights", 6, 0);
+
+    // We should not yet be seeing any "endpoint_weight_stale" events since we don't even have
+    // valid weights yet.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_stale", 0, 1);
+
+    // Each time weights are updated, WRR will see if each subchannel weight is useable. As we have
+    // no weights yet, we should see three "endpoint_weight_not_yet_usable" metric events with the
+    // value increasing by one each time as all the endpoints come online.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 1);
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 2);
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 3);
+
+    // Send each child LB state an ORCA update with some valid utilization/qps data so that weights
+    // can be calculated.
+    Iterator<ChildLbState> childLbStates = wrr.getChildLbStates().iterator();
+    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
+            new HashMap<>(), new HashMap<>()));
+    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
+            new HashMap<>(), new HashMap<>()));
+    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
+            new HashMap<>(), new HashMap<>()));
+
+    // Let's reset the mock MetricsRecorder so that it's easier to verify what happened after the
+    // weights were updated
+    reset(mockMetricRecorder);
+
+    // We go forward in time past the default 10s blackout period before weights can be considered
+    // for wrr. The eights would get updated as the default update interval is 1s.
+    fakeClock.forwardTime(11, TimeUnit.SECONDS);
+
+    // Since we have weights on all the child LB states, the weight update should not result in
+    // further rr_fallback metric entries.
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 0, 1);
+
+    // We should not see an increase to the earlier count of "endpoint_weight_not_yet_usable".
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 0, 1);
+
+    // No endpoints should have gotten stale yet either.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_stale", 0, 1);
+
+    // Now with valid weights we should have seen the value in the endpoint weights histogram.
+    verifyDoubleHistogramRecord("grpc.lb.wrr.endpoint_weights", 3, 10);
+
+    reset(mockMetricRecorder);
+
+    // Weights become stale in three minutes. Let's move ahead in time by 3 minutes and make sure
+    // we get metrics events for each endpoint.
+    fakeClock.forwardTime(3, TimeUnit.MINUTES);
+
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_stale", 1, 3);
+
+    // With the weights stale each three endpoints should report 0 weights.
+    verifyDoubleHistogramRecord("grpc.lb.wrr.endpoint_weights", 3, 0);
+
+    // Since the weights are now stale the update should have triggered an additional rr_fallback
+    // event.
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 1, 1);
+
+    // No further weights-not-useable events should occur, since we have received weights and
+    // are out of the blackout.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 0, 1);
+
+    // All metric events should be accounted for.
+    verifyNoMoreInteractions(mockMetricRecorder);
+  }
+
+  // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
+  // given metric name, the given number of times
+  private void verifyLongCounterRecord(String name, int times, long value) {
+    verify(mockMetricRecorder, times(times)).addLongCounter(
+        argThat(new ArgumentMatcher<LongCounterMetricInstrument>() {
+          @Override
+          public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
+            return longCounterInstrument.getName().equals(name);
+          }
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList("")));
+  }
+
+  // Verifies that the MetricRecorder has been called to record a given double histogram value the
+  // given amount of times.
+  private void verifyDoubleHistogramRecord(String name, int times, double value) {
+    verify(mockMetricRecorder, times(times)).recordDoubleHistogram(
+        argThat(new ArgumentMatcher<DoubleHistogramMetricInstrument>() {
+          @Override
+          public boolean matches(DoubleHistogramMetricInstrument doubleHistogramInstrument) {
+            return doubleHistogramInstrument.getName().equals(name);
+          }
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList("")));
+  }
+
   private int getNumFilteredPendingTasks() {
     return AbstractTestHelper.getNumFilteredPendingTasks(fakeClock);
   }
@@ -1188,6 +1322,16 @@ public class WeightedRoundRobinLoadBalancerTest {
     @Override
     public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
       return subchannelStateListeners;
+    }
+
+    @Override
+    public MetricRecorder getMetricRecorder() {
+      return mockMetricRecorder;
+    }
+
+    @Override
+    public String getChannelTarget() {
+      return channelTarget;
     }
   }
 }

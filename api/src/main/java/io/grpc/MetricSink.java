@@ -98,4 +98,6 @@ public interface MetricSink {
   default void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
   }
+
+  default void updateMeasures(List<MetricInstrument> instruments) {}
 }

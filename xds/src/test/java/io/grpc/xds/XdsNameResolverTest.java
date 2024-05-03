@@ -50,6 +50,8 @@ import io.grpc.Deadline;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -662,7 +664,7 @@ public class XdsNameResolverTest {
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     Result selectResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     Object config = selectResult.getConfig();
 
     // Purely validating the data (io.grpc.internal.RetryPolicy).
@@ -693,7 +695,7 @@ public class XdsNameResolverTest {
     InternalConfigSelector configSelector = resolveToClusters();
     CallInfo call = new CallInfo("FooService", "barMethod");
     Result selectResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+        newPickSubchannelArgs(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     Status status = selectResult.getStatus();
     assertThat(status.isOk()).isFalse();
     assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
@@ -727,7 +729,7 @@ public class XdsNameResolverTest {
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     // Simulates making a call1 RPC.
     Result selectResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     Status status = selectResult.getStatus();
     assertThat(status.isOk()).isFalse();
     assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
@@ -1166,7 +1168,7 @@ public class XdsNameResolverTest {
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     Result configResult = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+        newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     assertThat(configResult.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(configResult.getStatus().getDescription()).contains(resource);
   }
@@ -1175,7 +1177,7 @@ public class XdsNameResolverTest {
       CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
       @Nullable Double expectedTimeoutSec) {
     Result result = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+        newPickSubchannelArgs(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     assertThat(result.getStatus().isOk()).isTrue();
     ClientInterceptor interceptor = result.getInterceptor();
     ClientCall<Void, Void> clientCall = interceptor.interceptCall(
@@ -1203,7 +1205,7 @@ public class XdsNameResolverTest {
       CallInfo call, InternalConfigSelector configSelector, String expectedPluginName,
       Double expectedTimeoutSec) {
     Result result = configSelector.selectConfig(
-        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+        newPickSubchannelArgs(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     assertThat(result.getStatus().isOk()).isTrue();
     ClientInterceptor interceptor = result.getInterceptor();
     ClientCall<Void, Void> clientCall = interceptor.interceptCall(
@@ -1850,8 +1852,7 @@ public class XdsNameResolverTest {
     }
     @SuppressWarnings("unchecked")
     ClientCall.Listener<RespT> listener = mock(ClientCall.Listener.class);
-    Result result = selector.selectConfig(new PickSubchannelArgsImpl(
-        method, metadata, callOptions));
+    Result result = selector.selectConfig(newPickSubchannelArgs(method, metadata, callOptions));
     ClientCall<ReqT, RespT> call = ClientInterceptors.intercept(channel,
         result.getInterceptor()).newCall(method, callOptions);
     call.start(listener, metadata);
@@ -1887,6 +1888,11 @@ public class XdsNameResolverTest {
     verifyNoInteractions(listener);
     fakeClock.forwardNanos(expectedDelayNanos);
     verifyRpcFailed(listener, expectedStatus);
+  }
+
+  private PickSubchannelArgs newPickSubchannelArgs(
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+    return new PickSubchannelArgsImpl(method, headers, callOptions, new PickDetailsConsumer() {});
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
