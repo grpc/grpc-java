@@ -1,4 +1,4 @@
-∑"""External dependencies for grpc-java."""
+"""External dependencies for grpc-java."""
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
