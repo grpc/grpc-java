@@ -33,7 +33,6 @@ import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricInstrumentRegistryAccessor;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricSink;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -81,18 +80,17 @@ public class MetricRecorderImplTest {
   }
 
   @Test
-  public void recordCounter() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+  public void addCounter() {
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.addDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
-    verify(mockSink, times(2)).recordDoubleCounter(eq(doubleCounterInstrument), eq(1D),
+    verify(mockSink, times(2)).addDoubleCounter(eq(doubleCounterInstrument), eq(1D),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
 
     recorder.addLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
-    verify(mockSink, times(2)).recordLongCounter(eq(longCounterInstrument), eq(1L),
+    verify(mockSink, times(2)).addLongCounter(eq(longCounterInstrument), eq(1L),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
 
     verify(mockSink, never()).updateMeasures(registry.getMetricInstruments());
@@ -100,8 +98,7 @@ public class MetricRecorderImplTest {
 
   @Test
   public void recordHistogram() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.recordDoubleHistogram(doubleHistogramInstrument, 99.0, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
@@ -119,20 +116,20 @@ public class MetricRecorderImplTest {
   @Test
   public void newRegisteredMetricUpdateMeasures() {
     // Sink is initialized with zero measures, should trigger updateMeasures() on sinks
-    when(mockSink.getMetricsMeasures()).thenReturn(new ArrayList<>());
+    when(mockSink.getMeasuresSize()).thenReturn(0);
 
     // Double Counter
     recorder.addDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
     verify(mockSink, times(2)).updateMeasures(anyList());
-    verify(mockSink, times(2)).recordDoubleCounter(eq(doubleCounterInstrument), eq(1D),
+    verify(mockSink, times(2)).addDoubleCounter(eq(doubleCounterInstrument), eq(1D),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
 
     // Long Counter
     recorder.addLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
     verify(mockSink, times(4)).updateMeasures(anyList());
-    verify(mockSink, times(2)).recordLongCounter(eq(longCounterInstrument), eq(1L),
+    verify(mockSink, times(2)).addLongCounter(eq(longCounterInstrument), eq(1L),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
 
     // Double Histogram
@@ -151,18 +148,16 @@ public class MetricRecorderImplTest {
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void recordDoubleCounterMismatchedRequiredLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+  public void addDoubleCounterMismatchedRequiredLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.addDoubleCounter(doubleCounterInstrument, 1.0, ImmutableList.of(),
         OPTIONAL_LABEL_VALUES);
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void recordLongCounterMismatchedRequiredLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+  public void addLongCounterMismatchedRequiredLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.addLongCounter(longCounterInstrument, 1, ImmutableList.of(),
         OPTIONAL_LABEL_VALUES);
@@ -170,8 +165,7 @@ public class MetricRecorderImplTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void recordDoubleHistogramMismatchedRequiredLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.recordDoubleHistogram(doubleHistogramInstrument, 99.0, ImmutableList.of(),
         OPTIONAL_LABEL_VALUES);
@@ -179,26 +173,23 @@ public class MetricRecorderImplTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void recordLongHistogramMismatchedRequiredLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.recordLongHistogram(longHistogramInstrument, 99, ImmutableList.of(),
         OPTIONAL_LABEL_VALUES);
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void recordDoubleCounterMismatchedOptionalLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+  public void addDoubleCounterMismatchedOptionalLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.addDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
         ImmutableList.of());
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void recordLongCounterMismatchedOptionalLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+  public void addLongCounterMismatchedOptionalLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.addLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
         ImmutableList.of());
@@ -206,8 +197,7 @@ public class MetricRecorderImplTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void recordDoubleHistogramMismatchedOptionalLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.recordDoubleHistogram(doubleHistogramInstrument, 99.0, REQUIRED_LABEL_VALUES,
         ImmutableList.of());
@@ -215,8 +205,7 @@ public class MetricRecorderImplTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void recordLongHistogramMismatchedOptionalLabelValues() {
-    when(mockSink.getMetricsMeasures()).thenReturn(
-        Arrays.asList(new Object(), new Object(), new Object(), new Object()));
+    when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.recordLongHistogram(longHistogramInstrument, 99, REQUIRED_LABEL_VALUES,
         ImmutableList.of());

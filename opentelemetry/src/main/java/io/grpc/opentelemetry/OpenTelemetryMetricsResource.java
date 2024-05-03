@@ -20,29 +20,39 @@ import com.google.auto.value.AutoValue;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
+import javax.annotation.Nullable;
 
 @AutoValue
 abstract class OpenTelemetryMetricsResource {
 
   /* Client Metrics */
+  @Nullable
   abstract DoubleHistogram clientCallDurationCounter();
 
+  @Nullable
   abstract LongCounter clientAttemptCountCounter();
 
+  @Nullable
   abstract DoubleHistogram clientAttemptDurationCounter();
 
+  @Nullable
   abstract LongHistogram clientTotalSentCompressedMessageSizeCounter();
 
+  @Nullable
   abstract LongHistogram clientTotalReceivedCompressedMessageSizeCounter();
 
 
   /* Server Metrics */
+  @Nullable
   abstract LongCounter serverCallCountCounter();
 
+  @Nullable
   abstract DoubleHistogram serverCallDurationCounter();
 
+  @Nullable
   abstract LongHistogram serverTotalSentCompressedMessageSizeCounter();
 
+  @Nullable
   abstract LongHistogram serverTotalReceivedCompressedMessageSizeCounter();
 
   static Builder builder() {

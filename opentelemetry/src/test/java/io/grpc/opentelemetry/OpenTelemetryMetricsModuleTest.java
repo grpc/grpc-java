@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -50,6 +51,7 @@ import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import java.io.InputStream;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
@@ -141,6 +143,9 @@ public class OpenTelemetryMetricsModuleTest {
           .setSampledToLocalTracing(true)
           .build();
   private Meter testMeter;
+  private final Map<String, Boolean> enabledMetricsMap = ImmutableMap.of();
+
+  private final boolean disableDefaultMetrics = false;
 
   @Before
   public void setUp() throws Exception {
@@ -150,7 +155,8 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void testClientInterceptors() {
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     grpcServerRule.getServiceRegistry().addService(
@@ -205,7 +211,8 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void clientBasicMetrics() {
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);;
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -339,7 +346,8 @@ public class OpenTelemetryMetricsModuleTest {
   // This test is only unit-testing the metrics recording logic. The retry behavior is faked.
   @Test
   public void recordAttemptMetrics() {
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -759,7 +767,8 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void clientStreamNeverCreatedStillRecordMetrics() {
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -860,7 +869,8 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void serverBasicMetrics() {
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource);
     ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();

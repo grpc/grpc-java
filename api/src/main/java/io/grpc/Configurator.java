@@ -16,15 +16,22 @@
 
 package io.grpc;
 
-import java.util.List;
-
 /**
- * Represents a double-valued counter metric instrument.
+ * Provides hooks for modifying gRPC channels and servers during their construction.
  */
 @Internal
-public final class DoubleCounterMetricInstrument extends PartialMetricInstrument {
-  public DoubleCounterMetricInstrument(int index, String name, String description, String unit,
-      List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
-    super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
-  }
+public interface Configurator {
+  /**
+   * Allows implementations to modify the channel builder.
+   *
+   * @param channelBuilder the channel builder being constructed
+   */
+  default void configureChannelBuilder(ManagedChannelBuilder<?> channelBuilder) {}
+
+  /**
+   * Allows implementations to modify the server builder.
+   *
+   * @param serverBuilder the server builder being constructed
+   */
+  default void configureServerBuilder(ServerBuilder<?> serverBuilder) {}
 }

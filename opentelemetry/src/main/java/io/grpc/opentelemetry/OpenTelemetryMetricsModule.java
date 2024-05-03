@@ -23,6 +23,7 @@ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -61,6 +62,17 @@ import javax.annotation.concurrent.GuardedBy;
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
+  public static final ImmutableSet<String> DEFAULT_PER_CALL_METRICS_SET =
+      ImmutableSet.of(
+          "grpc.client.attempt.started",
+          "grpc.client.attempt.duration",
+          "grpc.client.attempt.sent_total_compressed_message_size",
+          "grpc.client.attempt.rcvd_total_compressed_message_size",
+          "grpc.client.call.duration",
+          "grpc.server.call.started",
+          "grpc.server.call.duration",
+          "grpc.server.call.sent_total_compressed_message_size",
+          "grpc.server.call.rcvd_total_compressed_message_size");
 
   // Using floating point because TimeUnit.NANOSECONDS.toSeconds would discard
   // fractional seconds.
@@ -182,12 +194,18 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
               STATUS_KEY, statusCode.toString());
 
-      module.resource.clientAttemptDurationCounter()
-          .record(attemptNanos * SECONDS_PER_NANO, attribute);
-      module.resource.clientTotalSentCompressedMessageSizeCounter()
-          .record(outboundWireSize, attribute);
-      module.resource.clientTotalReceivedCompressedMessageSizeCounter()
-          .record(inboundWireSize, attribute);
+      if (module.resource.clientAttemptCountCounter() != null ) {
+        module.resource.clientAttemptDurationCounter()
+            .record(attemptNanos * SECONDS_PER_NANO, attribute);
+      }
+      if (module.resource.clientTotalSentCompressedMessageSizeCounter() != null) {
+        module.resource.clientTotalSentCompressedMessageSizeCounter()
+            .record(outboundWireSize, attribute);
+      }
+      if (module.resource.clientTotalReceivedCompressedMessageSizeCounter() != null) {
+        module.resource.clientTotalReceivedCompressedMessageSizeCounter()
+            .record(inboundWireSize, attribute);
+      }
     }
   }
 
@@ -219,7 +237,9 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
 
       // Record here in case mewClientStreamTracer() would never be called.
-      module.resource.clientAttemptCountCounter().add(1, attribute);
+      if (module.resource.clientAttemptCountCounter() != null) {
+        module.resource.clientAttemptCountCounter().add(1, attribute);
+      }
     }
 
     @Override
@@ -240,7 +260,9 @@ final class OpenTelemetryMetricsModule {
         // TODO(dnvindhya): Add target as an attribute
         io.opentelemetry.api.common.Attributes attribute =
             io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
-        module.resource.clientAttemptCountCounter().add(1, attribute);
+        if (module.resource.clientAttemptCountCounter() != null) {
+          module.resource.clientAttemptCountCounter().add(1, attribute);
+        }
       }
       if (!info.isTransparentRetry()) {
         attemptsPerCall.incrementAndGet();
@@ -298,8 +320,10 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
               STATUS_KEY, status.getCode().toString());
 
-      module.resource.clientCallDurationCounter()
-          .record(callLatencyNanos * SECONDS_PER_NANO, attribute);
+      if (module.resource.clientCallDurationCounter() != null) {
+        module.resource.clientCallDurationCounter()
+            .record(callLatencyNanos * SECONDS_PER_NANO, attribute);
+      }
     }
   }
 
@@ -360,7 +384,9 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(
               METHOD_KEY, recordMethodName(fullMethodName, isSampledToLocalTracing));
 
-      module.resource.serverCallCountCounter().add(1, attribute);
+      if (module.resource.serverCallCountCounter() != null) {
+        module.resource.serverCallCountCounter().add(1, attribute);
+      }
     }
 
     @Override
@@ -408,12 +434,18 @@ final class OpenTelemetryMetricsModule {
           METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod),
           STATUS_KEY, status.getCode().toString());
 
-      module.resource.serverCallDurationCounter()
-          .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes);
-      module.resource.serverTotalSentCompressedMessageSizeCounter()
-          .record(outboundWireSize, attributes);
-      module.resource.serverTotalReceivedCompressedMessageSizeCounter()
-          .record(inboundWireSize, attributes);
+      if (module.resource.serverCallDurationCounter() != null) {
+        module.resource.serverCallDurationCounter()
+            .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes);
+      }
+      if (module.resource.serverTotalSentCompressedMessageSizeCounter() != null) {
+        module.resource.serverTotalSentCompressedMessageSizeCounter()
+            .record(outboundWireSize, attributes);
+      }
+      if (module.resource.serverTotalReceivedCompressedMessageSizeCounter() != null) {
+        module.resource.serverTotalReceivedCompressedMessageSizeCounter()
+            .record(inboundWireSize, attributes);
+      }
     }
   }
 
