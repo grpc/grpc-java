@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
@@ -53,8 +54,8 @@ final class OpenTelemetryMetricSink implements MetricSink {
 
   OpenTelemetryMetricSink(Meter meter, Map<String, Boolean> enableMetrics,
       boolean disableDefaultMetrics, List<String> optionalLabels) {
-    this.openTelemetryMeter = checkNotNull(meter);
-    this.enableMetrics = checkNotNull(enableMetrics);
+    this.openTelemetryMeter = checkNotNull(meter, "meter");
+    this.enableMetrics = ImmutableMap.copyOf(enableMetrics);
     this.disableDefaultMetrics = disableDefaultMetrics;
     this.optionalLabels = ImmutableSet.copyOf(optionalLabels);
   }
@@ -206,7 +207,7 @@ final class OpenTelemetryMetricSink implements MetricSink {
           logger.log(Level.FINE, "Unsupported metric instrument type : {0}", instrument);
           openTelemetryMeasure = null;
         }
-        newMeasures.add(index, new MeasuresData(instrument, bitSet, openTelemetryMeasure));
+        newMeasures.add(index, new MeasuresData(bitSet, openTelemetryMeasure));
       }
 
       measures = newMeasures;
@@ -214,15 +215,11 @@ final class OpenTelemetryMetricSink implements MetricSink {
   }
 
   private boolean shouldEnableMetric(MetricInstrument instrument) {
-    String name = instrument.getName();
-    Boolean explicitlyEnabled = enableMetrics.get(name);
+    Boolean explicitlyEnabled = enableMetrics.get(instrument.getName());
     if (explicitlyEnabled != null) {
       return explicitlyEnabled;
     }
     return instrument.isEnableByDefault() && !disableDefaultMetrics;
-    // boolean enabledForSink = enableMetrics.getOrDefault(name, false);
-    // boolean notDisabledDefault =  instrument.isEnableByDefault() && !disableDefaultMetrics;
-    // return enabledForSink || notDisabledDefault;
   }
 
 
@@ -246,12 +243,10 @@ final class OpenTelemetryMetricSink implements MetricSink {
 
 
   static final class MeasuresData {
-    final MetricInstrument instrument;
     final BitSet optionalLabelsIndices;
     final Object measure;
 
-    MeasuresData(MetricInstrument instrument, BitSet optionalLabelsIndices, Object measure) {
-      this.instrument = instrument;
+    MeasuresData(BitSet optionalLabelsIndices, Object measure) {
       this.optionalLabelsIndices = optionalLabelsIndices;
       this.measure = measure;
     }
