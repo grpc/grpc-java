@@ -69,7 +69,7 @@ final class MetricRecorderImpl implements MetricRecorder {
     for (MetricSink sink : metricSinks) {
       // TODO(dnvindhya): Move updating measures logic from sink to here
       int measuresSize = sink.getMeasuresSize();
-      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
+      if (measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.
@@ -100,7 +100,7 @@ final class MetricRecorderImpl implements MetricRecorder {
             + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       int measuresSize = sink.getMeasuresSize();
-      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
+      if (measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.
@@ -131,7 +131,7 @@ final class MetricRecorderImpl implements MetricRecorder {
             + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       int measuresSize = sink.getMeasuresSize();
-      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
+      if (measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.
@@ -162,7 +162,7 @@ final class MetricRecorderImpl implements MetricRecorder {
             + metricInstrument.getOptionalLabelKeys().size());
     for (MetricSink sink : metricSinks) {
       int measuresSize = sink.getMeasuresSize();
-      if (measuresSize != -1 && measuresSize <= metricInstrument.getIndex()) {
+      if (measuresSize <= metricInstrument.getIndex()) {
         // Measures may need updating in two cases:
         // 1. When the sink is initially created with an empty list of measures.
         // 2. When new metric instruments are registered, requiring the sink to accommodate them.

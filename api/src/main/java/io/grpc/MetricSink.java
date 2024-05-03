@@ -43,13 +43,11 @@ public interface MetricSink {
   /**
    * Returns size of metric measures used to record metric values. These measures are created
    * based on registered metrics (via MetricInstrumentRegistry) and are ordered according to their
-   * registration sequence. This can return -1 if there are no actual measures.
+   * registration sequence.
    *
    * @return Size of metric measures.
    */
-  default int getMeasuresSize() {
-    return -1;
-  }
+  int getMeasuresSize();
 
   /**
    * Adds a value for a double-precision counter associated with specified metric instrument.
@@ -101,5 +99,5 @@ public interface MetricSink {
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
   }
 
-  default void updateMeasures(List<MetricInstrument> instruments) {}
+  void updateMeasures(List<MetricInstrument> instruments);
 }
