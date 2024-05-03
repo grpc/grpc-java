@@ -19,6 +19,7 @@ package io.grpc.gcp.observability;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ClientInterceptor;
 import io.grpc.InternalConfigurator;
@@ -180,9 +181,12 @@ public final class GcpObservability implements AutoCloseable {
         List<ClientInterceptor> clientInterceptors,
         List<ServerInterceptor> serverInterceptors,
         List<ServerStreamTracer.Factory> tracerFactories) {
-      this.clientInterceptors = checkNotNull(clientInterceptors, "clientInterceptors");
-      this.serverInterceptors = checkNotNull(serverInterceptors, "serverInterceptors");
-      this.tracerFactories = checkNotNull(tracerFactories, "tracerFactories");
+      this.clientInterceptors = ImmutableList.copyOf(
+          checkNotNull(clientInterceptors, "clientInterceptors"));
+      this.serverInterceptors = ImmutableList.copyOf(
+          checkNotNull(serverInterceptors, "serverInterceptors"));
+      this.tracerFactories = ImmutableList.copyOf(
+          checkNotNull(tracerFactories, "tracerFactories"));
     }
 
     @Override
