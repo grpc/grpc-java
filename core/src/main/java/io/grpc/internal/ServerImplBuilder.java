@@ -25,6 +25,8 @@ import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
+import io.grpc.Configurator;
+import io.grpc.ConfiguratorRegistry;
 import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
@@ -113,6 +115,10 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   public ServerImplBuilder(ClientTransportServersBuilder clientTransportServersBuilder) {
     this.clientTransportServersBuilder = checkNotNull(clientTransportServersBuilder,
         "clientTransportServersBuilder");
+    // TODO(dnvindhya): Move configurator to all the individual builders
+    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
+      configurator.configureServerBuilder(this);
+    }
   }
 
   @Override
