@@ -38,6 +38,7 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
@@ -473,7 +474,7 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void getEffectiveInterceptors_default() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertEquals(3, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0).getClass().getName())
         .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
@@ -486,7 +487,7 @@ public class ManagedChannelImplBuilderTest {
   public void getEffectiveInterceptors_disableStats() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setStatsEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0).getClass().getName())
         .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
@@ -497,7 +498,7 @@ public class ManagedChannelImplBuilderTest {
   public void getEffectiveInterceptors_disableTracing() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0).getClass().getName())
         .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
@@ -509,7 +510,7 @@ public class ManagedChannelImplBuilderTest {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setStatsEnabled(false);
     builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertThat(effectiveInterceptors).containsExactly(DUMMY_USER_INTERCEPTOR);
   }
 
@@ -529,7 +530,8 @@ public class ManagedChannelImplBuilderTest {
               DUMMY_TARGET,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(DUMMY_PORT));
-      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      List<ClientInterceptor> effectiveInterceptors =
+          builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).hasSize(2);
       try {
         InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
@@ -563,7 +565,8 @@ public class ManagedChannelImplBuilderTest {
               DUMMY_TARGET,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(DUMMY_PORT));
-      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      List<ClientInterceptor> effectiveInterceptors =
+          builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors)
           .containsExactly(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1);
     }
@@ -587,9 +590,33 @@ public class ManagedChannelImplBuilderTest {
               DUMMY_TARGET,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(DUMMY_PORT));
-      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      List<ClientInterceptor> effectiveInterceptors =
+          builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).isEmpty();
     }
+  }
+
+  @Test
+  public void getEffectiveInterceptors_createsFromInterceptorFactories() throws Exception {
+    String target = "dns:///the-host";
+    builder.setStatsEnabled(false);
+    builder.setTracingEnabled(false);
+
+    builder.intercept(DUMMY_USER_INTERCEPTOR)
+        .interceptWithTarget(new InternalInterceptorFactory() {
+          @Override
+          public ClientInterceptor newInterceptor(String passedTarget) {
+            assertThat(passedTarget).isEqualTo(target);
+            return DUMMY_USER_INTERCEPTOR1;
+          }
+        })
+        .intercept(DUMMY_USER_INTERCEPTOR);
+
+    assertThat(builder.getEffectiveInterceptors(target))
+        .isEqualTo(Arrays.asList(
+            DUMMY_USER_INTERCEPTOR,
+            DUMMY_USER_INTERCEPTOR1,
+            DUMMY_USER_INTERCEPTOR));
   }
 
   @Test
@@ -743,5 +770,16 @@ public class ManagedChannelImplBuilderTest {
     builder.addMetricSink(mocksink);
 
     assertThat(builder.metricSinks).contains(mocksink);
+  }
+
+  @Test
+  public void uriPattern() {
+    Pattern uriPattern = ManagedChannelImplBuilder.URI_PATTERN;
+    assertTrue(uriPattern.matcher("a:/").matches());
+    assertTrue(uriPattern.matcher("Z019+-.:/!@ #~ ").matches());
+    assertFalse(uriPattern.matcher("a/:").matches()); // "/:" not matched
+    assertFalse(uriPattern.matcher("0a:/").matches()); // '0' not matched
+    assertFalse(uriPattern.matcher("a,:/").matches()); // ',' not matched
+    assertFalse(uriPattern.matcher(" a:/").matches()); // space not matched
   }
 }

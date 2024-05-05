@@ -93,9 +93,7 @@ import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelect
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
-import java.net.SocketAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -117,7 +115,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -128,12 +125,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     InternalInstrumented<ChannelStats> {
   @VisibleForTesting
   static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
-
-  // Matching this pattern means the target string is a URI target or at least intended to be one.
-  // A URI target must be an absolute hierarchical URI.
-  // From RFC 2396: scheme = alpha *( alpha | digit | "+" | "-" | "." )
-  @VisibleForTesting
-  static final Pattern URI_PATTERN = Pattern.compile("[a-zA-Z][a-zA-Z0-9+.-]*:/.*");
 
   static final long IDLE_TIMEOUT_MILLIS_DISABLE = -1;
 
@@ -595,6 +586,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   ManagedChannelImpl(
       ManagedChannelImplBuilder builder,
       ClientTransportFactory clientTransportFactory,
+      URI targetUri,
+      NameResolverProvider nameResolverProvider,
       BackoffPolicy.Provider backoffPolicyProvider,
       ObjectPool<? extends Executor> balancerRpcExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
@@ -625,10 +618,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.retryEnabled = builder.retryEnabled;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
     this.nameResolverRegistry = builder.nameResolverRegistry;
-    ResolvedNameResolver resolvedResolver = getNameResolverProvider(
-        target, nameResolverRegistry, transportFactory.getSupportedSocketAddressTypes());
-    this.targetUri = resolvedResolver.targetUri;
-    this.nameResolverProvider = resolvedResolver.provider;
+    this.targetUri = checkNotNull(targetUri, "targetUri");
+    this.nameResolverProvider = checkNotNull(nameResolverProvider, "nameResolverProvider");
     ScParser serviceConfigParser =
         new ScParser(
             retryEnabled,
@@ -720,69 +711,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
     this.metricRecorder = new MetricRecorderImpl(builder.metricSinks,
         MetricInstrumentRegistry.getDefaultRegistry());
-  }
-
-  @VisibleForTesting
-  static class ResolvedNameResolver {
-    public final URI targetUri;
-    public final NameResolverProvider provider;
-
-    public ResolvedNameResolver(URI targetUri, NameResolverProvider provider) {
-      this.targetUri = checkNotNull(targetUri, "targetUri");
-      this.provider = checkNotNull(provider, "provider");
-    }
-  }
-
-  @VisibleForTesting
-  static ResolvedNameResolver getNameResolverProvider(
-      String target, NameResolverRegistry nameResolverRegistry,
-      Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
-    // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
-    // "dns:///".
-    NameResolverProvider provider = null;
-    URI targetUri = null;
-    StringBuilder uriSyntaxErrors = new StringBuilder();
-    try {
-      targetUri = new URI(target);
-    } catch (URISyntaxException e) {
-      // Can happen with ip addresses like "[::1]:1234" or 127.0.0.1:1234.
-      uriSyntaxErrors.append(e.getMessage());
-    }
-    if (targetUri != null) {
-      // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
-      // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
-    }
-
-    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
-      // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
-      // scheme from the registry.
-      try {
-        targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
-      } catch (URISyntaxException e) {
-        // Should not be possible.
-        throw new IllegalArgumentException(e);
-      }
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
-    }
-
-    if (provider == null) {
-      throw new IllegalArgumentException(String.format(
-          "Could not find a NameResolverProvider for %s%s",
-          target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
-    }
-
-    if (channelTransportSocketAddressTypes != null) {
-      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
-          = provider.getProducedSocketAddressTypes();
-      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-        throw new IllegalArgumentException(String.format(
-            "Address types of NameResolver '%s' for '%s' not supported by transport",
-            targetUri.getScheme(), target));
-      }
-    }
-
-    return new ResolvedNameResolver(targetUri, provider);
   }
 
   @VisibleForTesting
