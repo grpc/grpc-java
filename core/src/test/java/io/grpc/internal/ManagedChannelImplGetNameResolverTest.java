@@ -30,7 +30,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for ManagedChannelImpl#getNameResolverProvider(). */
+/** Unit tests for ManagedChannelImplBuilder#getNameResolverProvider(). */
 @RunWith(JUnit4.class)
 public class ManagedChannelImplGetNameResolverTest {
   @Test
@@ -95,7 +95,7 @@ public class ManagedChannelImplGetNameResolverTest {
   public void validTargetNoProvider() {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
     try {
-      ManagedChannelImpl.getNameResolverProvider(
+      ManagedChannelImplBuilder.getNameResolverProvider(
           "foo.googleapis.com:8080", nameResolverRegistry,
           Collections.singleton(InetSocketAddress.class));
       fail("Should fail");
@@ -108,7 +108,7 @@ public class ManagedChannelImplGetNameResolverTest {
   public void validTargetProviderAddrTypesNotSupported() {
     NameResolverRegistry nameResolverRegistry = getTestRegistry("testscheme");
     try {
-      ManagedChannelImpl.getNameResolverProvider(
+      ManagedChannelImplBuilder.getNameResolverProvider(
           "testscheme:///foo.googleapis.com:8080", nameResolverRegistry,
           Collections.singleton(InProcessSocketAddress.class));
       fail("Should fail");
@@ -121,8 +121,9 @@ public class ManagedChannelImplGetNameResolverTest {
 
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
     NameResolverRegistry nameResolverRegistry = getTestRegistry(expectedUri.getScheme());
-    ManagedChannelImpl.ResolvedNameResolver resolved = ManagedChannelImpl.getNameResolverProvider(
-        target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved =
+        ManagedChannelImplBuilder.getNameResolverProvider(
+            target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
     assertThat(resolved.provider).isInstanceOf(FakeNameResolverProvider.class);
     assertThat(resolved.targetUri).isEqualTo(expectedUri);
     assertThat(resolved.targetUri.toString()).isEqualTo(expectedUriString);
@@ -132,8 +133,9 @@ public class ManagedChannelImplGetNameResolverTest {
     NameResolverRegistry nameResolverRegistry = getTestRegistry("dns");
 
     try {
-      ManagedChannelImpl.ResolvedNameResolver resolved = ManagedChannelImpl.getNameResolverProvider(
-          target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
+      ManagedChannelImplBuilder.ResolvedNameResolver resolved =
+          ManagedChannelImplBuilder.getNameResolverProvider(
+              target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
       FakeNameResolverProvider nameResolverProvider = (FakeNameResolverProvider) resolved.provider;
       fail("Should have failed, but got resolver provider " + nameResolverProvider);
     } catch (IllegalArgumentException e) {

@@ -310,8 +310,11 @@ public class ManagedChannelImplTest {
 
     when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
         InetSocketAddress.class));
+    NameResolverProvider nameResolverProvider =
+        channelBuilder.nameResolverRegistry.getProviderForScheme(expectedUri.getScheme());
     channel = new ManagedChannelImpl(
-        channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        channelBuilder, mockTransportFactory, expectedUri, nameResolverProvider,
+        new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
         timer.getTimeProvider());
 
@@ -499,7 +502,8 @@ public class ManagedChannelImplTest {
     when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
         InetSocketAddress.class));
     channel = new ManagedChannelImpl(
-        channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        channelBuilder, mockTransportFactory, expectedUri, nameResolverFactory,
+        new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
     Map<String, Object> rawServiceConfig =
@@ -563,7 +567,8 @@ public class ManagedChannelImplTest {
     when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
         InetSocketAddress.class));
     channel = new ManagedChannelImpl(
-        channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        channelBuilder, mockTransportFactory, expectedUri, nameResolverFactory,
+        new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
     nameResolverFactory.nextConfigOrError.set(
@@ -2179,16 +2184,6 @@ public class ManagedChannelImplTest {
       expectedRefreshCount++;
     }
     assertEquals(expectedRefreshCount, resolver.refreshCalled);
-  }
-
-  @Test
-  public void uriPattern() {
-    assertTrue(ManagedChannelImpl.URI_PATTERN.matcher("a:/").matches());
-    assertTrue(ManagedChannelImpl.URI_PATTERN.matcher("Z019+-.:/!@ #~ ").matches());
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher("a/:").matches()); // "/:" not matched
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher("0a:/").matches()); // '0' not matched
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher("a,:/").matches()); // ',' not matched
-    assertFalse(ManagedChannelImpl.URI_PATTERN.matcher(" a:/").matches()); // space not matched
   }
 
   /**
@@ -4429,7 +4424,7 @@ public class ManagedChannelImplTest {
     }
   }
 
-  private static final class FakeNameResolverFactory extends NameResolver.Factory {
+  private static final class FakeNameResolverFactory extends NameResolverProvider {
     final List<URI> expectedUris;
     final List<EquivalentAddressGroup> servers;
     final boolean resolvedAtStart;
@@ -4464,6 +4459,16 @@ public class ManagedChannelImplTest {
     @Override
     public String getDefaultScheme() {
       return "fake";
+    }
+
+    @Override
+    public int priority() {
+      return 9;
+    }
+
+    @Override
+    public boolean isAvailable() {
+      return true;
     }
 
     void allResolved() {
