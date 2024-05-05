@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TARGET_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -97,8 +98,8 @@ final class OpenTelemetryMetricsModule {
   /**
    * Returns the client interceptor that facilitates OpenTelemetry metrics reporting.
    */
-  ClientInterceptor getClientInterceptor() {
-    return new MetricsClientInterceptor();
+  ClientInterceptor getClientInterceptor(String target) {
+    return new MetricsClientInterceptor(target);
   }
 
   static String recordMethodName(String fullMethodName, boolean isGeneratedMethod) {
@@ -135,6 +136,7 @@ final class OpenTelemetryMetricsModule {
     final CallAttemptsTracerFactory attemptsState;
     final OpenTelemetryMetricsModule module;
     final StreamInfo info;
+    final String target;
     final String fullMethodName;
     volatile long outboundWireSize;
     volatile long inboundWireSize;
@@ -142,10 +144,11 @@ final class OpenTelemetryMetricsModule {
     Code statusCode;
 
     ClientTracer(CallAttemptsTracerFactory attemptsState, OpenTelemetryMetricsModule module,
-        StreamInfo info, String fullMethodName) {
+        StreamInfo info, String target, String fullMethodName) {
       this.attemptsState = attemptsState;
       this.module = module;
       this.info = info;
+      this.target = target;
       this.fullMethodName = fullMethodName;
       this.stopwatch = module.stopwatchSupplier.get().start();
     }
@@ -189,9 +192,9 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedAttempt() {
-      // TODO(dnvindhya) : add target as an attribute
       io.opentelemetry.api.common.Attributes attribute =
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
+              TARGET_KEY, target,
               STATUS_KEY, statusCode.toString());
 
       if (module.resource.clientAttemptDurationCounter() != null ) {
@@ -212,6 +215,7 @@ final class OpenTelemetryMetricsModule {
   @VisibleForTesting
   static final class CallAttemptsTracerFactory extends ClientStreamTracer.Factory {
     private final OpenTelemetryMetricsModule module;
+    private final String target;
     private final Stopwatch attemptStopwatch;
     private final Stopwatch callStopWatch;
     @GuardedBy("lock")
@@ -226,15 +230,17 @@ final class OpenTelemetryMetricsModule {
     @GuardedBy("lock")
     private boolean finishedCallToBeRecorded;
 
-    CallAttemptsTracerFactory(OpenTelemetryMetricsModule module, String fullMethodName) {
+    CallAttemptsTracerFactory(
+        OpenTelemetryMetricsModule module, String target, String fullMethodName) {
       this.module = checkNotNull(module, "module");
+      this.target = checkNotNull(target, "target");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.attemptStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
-      // TODO(dnvindhya) : add target as an attribute
-      io.opentelemetry.api.common.Attributes attribute =
-          io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
+      io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
+          METHOD_KEY, fullMethodName,
+          TARGET_KEY, target);
 
       // Record here in case mewClientStreamTracer() would never be called.
       if (module.resource.clientAttemptCountCounter() != null) {
@@ -257,9 +263,9 @@ final class OpenTelemetryMetricsModule {
       // CallAttemptsTracerFactory constructor. attemptsPerCall will be non-zero after the first
       // attempt, as first attempt cannot be a transparent retry.
       if (attemptsPerCall.get() > 0) {
-        // TODO(dnvindhya): Add target as an attribute
         io.opentelemetry.api.common.Attributes attribute =
-            io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName);
+            io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
+                TARGET_KEY, target);
         if (module.resource.clientAttemptCountCounter() != null) {
           module.resource.clientAttemptCountCounter().add(1, attribute);
         }
@@ -267,7 +273,7 @@ final class OpenTelemetryMetricsModule {
       if (!info.isTransparentRetry()) {
         attemptsPerCall.incrementAndGet();
       }
-      return new ClientTracer(this, module, info, fullMethodName);
+      return new ClientTracer(this, module, info, target, fullMethodName);
     }
 
     // Called whenever each attempt is ended.
@@ -309,15 +315,15 @@ final class OpenTelemetryMetricsModule {
 
     void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
-        ClientTracer tracer = new ClientTracer(this, module, null, fullMethodName);
+        ClientTracer tracer = new ClientTracer(this, module, null, target, fullMethodName);
         tracer.attemptNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
       }
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
-      // TODO(dnvindhya): record target as an attribute
       io.opentelemetry.api.common.Attributes attribute =
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
+              TARGET_KEY, target,
               STATUS_KEY, status.getCode().toString());
 
       if (module.resource.clientCallDurationCounter() != null) {
@@ -459,6 +465,12 @@ final class OpenTelemetryMetricsModule {
 
   @VisibleForTesting
   final class MetricsClientInterceptor implements ClientInterceptor {
+    private final String target;
+
+    MetricsClientInterceptor(String target) {
+      this.target = checkNotNull(target, "target");
+    }
+
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -466,7 +478,7 @@ final class OpenTelemetryMetricsModule {
       // which is true for all generated methods. Otherwise, programatically
       // created methods result in high cardinality metrics.
       final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
-          OpenTelemetryMetricsModule.this, recordMethodName(method.getFullMethodName(),
+          OpenTelemetryMetricsModule.this, target, recordMethodName(method.getFullMethodName(),
           method.isSampledToLocalTracing()));
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
