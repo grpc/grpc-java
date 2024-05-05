@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TARGET_KEY;
 import static io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions.assertThat;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
@@ -185,7 +186,7 @@ public class OpenTelemetryMetricsModuleTest {
     Channel interceptedChannel =
         ClientInterceptors.intercept(
             grpcServerRule.getChannel(), callOptionsCatureInterceptor,
-            module.getClientInterceptor());
+            module.getClientInterceptor("target:///"));
     ClientCall<String, String> call;
     call = interceptedChannel.newCall(method, CALL_OPTIONS);
 
@@ -211,16 +212,18 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void clientBasicMetrics() {
+    String target = "target:///";
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, method.getFullMethodName());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName());
     Metadata headers = new Metadata();
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName());
 
     assertThat(openTelemetryTesting.getMetrics())
@@ -262,6 +265,7 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName(),
         STATUS_KEY, Status.Code.OK.toString());
 
@@ -346,17 +350,19 @@ public class OpenTelemetryMetricsModuleTest {
   // This test is only unit-testing the metrics recording logic. The retry behavior is faked.
   @Test
   public void recordAttemptMetrics() {
+    String target = "dns:///example.com";
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module,
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
             method.getFullMethodName());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName());
 
     assertThat(openTelemetryTesting.getMetrics())
@@ -387,6 +393,7 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName(),
         STATUS_KEY, Code.UNAVAILABLE.toString());
 
@@ -467,6 +474,7 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes1
         = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName(),
         STATUS_KEY, Code.NOT_FOUND.toString());
 
@@ -653,6 +661,7 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributes2
         = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName(),
         STATUS_KEY, Code.OK.toString());
 
@@ -767,12 +776,13 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void clientStreamNeverCreatedStillRecordMetrics() {
+    String target = "dns:///foo.example.com";
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module =
         new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module,
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
             method.getFullMethodName());
     fakeClock.forwardTime(3000, MILLISECONDS);
     Status status = Status.DEADLINE_EXCEEDED.withDescription("5 seconds");
@@ -780,10 +790,12 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes attemptStartedAttributes
         = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName());
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
         METHOD_KEY, method.getFullMethodName(),
         STATUS_KEY,
         Code.DEADLINE_EXCEEDED.toString());

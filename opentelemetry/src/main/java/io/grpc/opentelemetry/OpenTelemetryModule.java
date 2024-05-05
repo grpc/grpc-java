@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.ExperimentalApi;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
@@ -146,7 +147,8 @@ public final class OpenTelemetryModule {
    */
   public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
     builder.addMetricSink(sink);
-    builder.intercept(openTelemetryMetricsModule.getClientInterceptor());
+    InternalManagedChannelBuilder.interceptWithTarget(
+        builder, openTelemetryMetricsModule::getClientInterceptor);
   }
 
   /**
