@@ -22,8 +22,10 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
+import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
 import io.grpc.MetricInstrument;
+import io.grpc.MetricSink;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.metrics.DoubleCounter;
@@ -296,6 +298,79 @@ public class OpenTelemetryMetricSinkTest {
         Collections.emptyList());
 
     assertThat(openTelemetryTesting.getMetrics()).isEmpty();
+  }
+
+  @Test
+  public void registerBatchCallback_allDisabled() {
+    // set up sink with disabled metric
+    Map<String, Boolean> enabledMetrics = new HashMap<>();
+
+    LongGaugeMetricInstrument longGaugeInstrumentDisabled =
+        new LongGaugeMetricInstrument(0, "disk", "Amount of disk used", "By",
+            Collections.emptyList(), Collections.emptyList(), false);
+
+    // Create sink
+    sink = new OpenTelemetryMetricSink(testMeter, enabledMetrics, false, Collections.emptyList());
+
+    // Invoke updateMeasures
+    sink.updateMeasures(Arrays.asList(longGaugeInstrumentDisabled));
+
+    MetricSink.Registration registration = sink.registerBatchCallback(() -> {
+      sink.recordLongGauge(
+          longGaugeInstrumentDisabled, 999, Collections.emptyList(), Collections.emptyList());
+    }, longGaugeInstrumentDisabled);
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder();
+    registration.close();
+  }
+
+  @Test
+  public void registerBatchCallback_bothEnabledAndDisabled() {
+    // set up sink with disabled metric
+    Map<String, Boolean> enabledMetrics = new HashMap<>();
+    enabledMetrics.put("memory", true);
+
+    LongGaugeMetricInstrument longGaugeInstrumentEnabled =
+        new LongGaugeMetricInstrument(0, "memory", "Amount of memory used", "By",
+            Collections.emptyList(), Collections.emptyList(), false);
+    LongGaugeMetricInstrument longGaugeInstrumentDisabled =
+        new LongGaugeMetricInstrument(1, "disk", "Amount of disk used", "By",
+            Collections.emptyList(), Collections.emptyList(), false);
+
+    // Create sink
+    sink = new OpenTelemetryMetricSink(testMeter, enabledMetrics, false, Collections.emptyList());
+
+    // Invoke updateMeasures
+    sink.updateMeasures(Arrays.asList(longGaugeInstrumentEnabled, longGaugeInstrumentDisabled));
+
+    MetricSink.Registration registration = sink.registerBatchCallback(() -> {
+      sink.recordLongGauge(
+          longGaugeInstrumentEnabled, 99, Collections.emptyList(), Collections.emptyList());
+      sink.recordLongGauge(
+          longGaugeInstrumentDisabled, 999, Collections.emptyList(), Collections.emptyList());
+    }, longGaugeInstrumentEnabled, longGaugeInstrumentDisabled);
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName("memory")
+                    .hasDescription("Amount of memory used")
+                    .hasUnit("By")
+                    .hasLongGaugeSatisfying(
+                        gauge ->
+                            gauge.hasPointsSatisfying(
+                                point ->
+                                    point
+                                        .hasValue(99))));
+
+    // Gauge goes away after close
+    registration.close();
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder();
   }
 
   @Test

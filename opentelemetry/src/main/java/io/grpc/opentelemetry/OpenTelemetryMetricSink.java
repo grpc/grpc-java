@@ -21,19 +21,24 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.grpc.CallbackMetricInstrument;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
+import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricSink;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
+import io.opentelemetry.api.metrics.BatchCallback;
 import io.opentelemetry.api.metrics.DoubleCounter;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.api.metrics.ObservableLongMeasurement;
+import io.opentelemetry.api.metrics.ObservableMeasurement;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
@@ -143,6 +148,48 @@ final class OpenTelemetryMetricSink implements MetricSink {
   }
 
   @Override
+  public void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    MeasuresData instrumentData = measures.get(metricInstrument.getIndex());
+    if (instrumentData == null) {
+      // Disabled metric
+      return;
+    }
+    Attributes attributes = createAttributes(metricInstrument.getRequiredLabelKeys(),
+        metricInstrument.getOptionalLabelKeys(), requiredLabelValues, optionalLabelValues,
+        instrumentData.getOptionalLabelsBitSet());
+    ObservableLongMeasurement gauge = (ObservableLongMeasurement) instrumentData.getMeasure();
+    gauge.record(value, attributes);
+  }
+
+  @Override
+  public Registration registerBatchCallback(Runnable callback,
+      CallbackMetricInstrument... metricInstruments) {
+    List<ObservableMeasurement> measurements = new ArrayList<>(metricInstruments.length);
+    for (CallbackMetricInstrument metricInstrument: metricInstruments) {
+      MeasuresData instrumentData = measures.get(metricInstrument.getIndex());
+      if (instrumentData == null) {
+        // Disabled metric
+        continue;
+      }
+      if (!(instrumentData.getMeasure() instanceof ObservableMeasurement)) {
+        logger.log(Level.FINE, "Unsupported metric instrument type : {0} {1}",
+            new Object[] {metricInstrument, instrumentData.getMeasure().getClass()});
+        continue;
+      }
+      measurements.add((ObservableMeasurement) instrumentData.getMeasure());
+    }
+    if (measurements.isEmpty()) {
+      return () -> { };
+    }
+    ObservableMeasurement first = measurements.get(0);
+    measurements.remove(0);
+    BatchCallback closeable = openTelemetryMeter.batchCallback(
+        callback, first, measurements.toArray(new ObservableMeasurement[0]));
+    return closeable::close;
+  }
+
+  @Override
   public void updateMeasures(List<MetricInstrument> instruments) {
     synchronized (lock) {
       if (measures.size() >= instruments.size()) {
@@ -203,6 +250,12 @@ final class OpenTelemetryMetricSink implements MetricSink {
               .setDescription(description)
               .ofLongs()
               .build();
+        } else if (instrument instanceof LongGaugeMetricInstrument) {
+          openTelemetryMeasure = openTelemetryMeter.gaugeBuilder(name)
+              .setUnit(unit)
+              .setDescription(description)
+              .ofLongs()
+              .buildObserver();
         } else {
           logger.log(Level.FINE, "Unsupported metric instrument type : {0}", instrument);
           openTelemetryMeasure = null;
@@ -240,7 +293,6 @@ final class OpenTelemetryMetricSink implements MetricSink {
     }
     return builder.build();
   }
-
 
   static final class MeasuresData {
     final BitSet optionalLabelsIndices;

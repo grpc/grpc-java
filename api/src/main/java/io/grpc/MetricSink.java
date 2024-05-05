@@ -99,5 +99,30 @@ public interface MetricSink {
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
   }
 
+  /**
+   * Record a long gauge value.
+   *
+   * @param value The value to record.
+   * @param requiredLabelValues A list of required label values for the metric.
+   * @param optionalLabelValues A list of additional, optional label values for the metric.
+   */
+  default void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
+      List<String> requiredLabelValues, List<String> optionalLabelValues){
+  }
+
+  /**
+   * Registers a callback to produce metric values for only the listed instruments. The returned
+   * registration must be closed when no longer needed, which will remove the callback.
+   *
+   * @param callback The callback to call to record.
+   * @param metricInstruments The metric instruments the callback will record against.
+   */
+  default Registration registerBatchCallback(Runnable callback,
+      CallbackMetricInstrument... metricInstruments) {
+    return () -> {};
+  }
+
+  interface Registration extends MetricRecorder.Registration {}
+
   void updateMeasures(List<MetricInstrument> instruments);
 }
