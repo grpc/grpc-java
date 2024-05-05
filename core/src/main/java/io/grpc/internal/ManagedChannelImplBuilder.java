@@ -26,7 +26,10 @@ import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
+import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
@@ -36,6 +39,7 @@ import io.grpc.InternalChannelz;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
@@ -57,6 +61,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 
 /**
@@ -108,6 +113,12 @@ public final class ManagedChannelImplBuilder
 
   private static final long DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES = 1L << 24;  // 16M
   private static final long DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES = 1L << 20; // 1M
+
+  // Matching this pattern means the target string is a URI target or at least intended to be one.
+  // A URI target must be an absolute hierarchical URI.
+  // From RFC 2396: scheme = alpha *( alpha | digit | "+" | "-" | "." )
+  @VisibleForTesting
+  static final Pattern URI_PATTERN = Pattern.compile("[a-zA-Z][a-zA-Z0-9+.-]*:/.*");
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
 
@@ -382,6 +393,14 @@ public final class ManagedChannelImplBuilder
   @Override
   public ManagedChannelImplBuilder intercept(ClientInterceptor... interceptors) {
     return intercept(Arrays.asList(interceptors));
+  }
+
+  @Override
+  protected ManagedChannelImplBuilder interceptWithTarget(InterceptorFactory factory) {
+    // Add a placeholder instance to the interceptor list, and replace it with a real instance
+    // during build().
+    this.interceptors.add(new InterceptorFactoryWrapper(factory));
+    return this;
   }
 
   @Override
@@ -675,13 +694,19 @@ public final class ManagedChannelImplBuilder
 
   @Override
   public ManagedChannel build() {
+    ClientTransportFactory clientTransportFactory =
+        clientTransportFactoryBuilder.buildClientTransportFactory();
+    ResolvedNameResolver resolvedResolver = getNameResolverProvider(
+        target, nameResolverRegistry, clientTransportFactory.getSupportedSocketAddressTypes());
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
-        clientTransportFactoryBuilder.buildClientTransportFactory(),
+        clientTransportFactory,
+        resolvedResolver.targetUri,
+        resolvedResolver.provider,
         new ExponentialBackoffPolicy.Provider(),
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
-        getEffectiveInterceptors(),
+        getEffectiveInterceptors(resolvedResolver.targetUri.toString()),
         TimeProvider.SYSTEM_TIME_PROVIDER));
   }
 
@@ -689,12 +714,25 @@ public final class ManagedChannelImplBuilder
   // what should be the desired behavior for retry + stats/tracing.
   // TODO(zdapeng): FIX IT
   @VisibleForTesting
-  List<ClientInterceptor> getEffectiveInterceptors() {
+  List<ClientInterceptor> getEffectiveInterceptors(String computedTarget) {
+    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
+    for (int i = 0; i < effectiveInterceptors.size(); i++) {
+      if (!(effectiveInterceptors.get(i) instanceof InterceptorFactoryWrapper)) {
+        continue;
+      }
+      InterceptorFactory factory =
+          ((InterceptorFactoryWrapper) effectiveInterceptors.get(i)).factory;
+      ClientInterceptor interceptor = factory.newInterceptor(computedTarget);
+      if (interceptor == null) {
+        throw new NullPointerException("Factory returned null interceptor: " + factory);
+      }
+      effectiveInterceptors.set(i, interceptor);
+    }
+
     boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();
     if (disableImplicitCensus) {
-      return this.interceptors;
+      return effectiveInterceptors;
     }
-    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
     if (statsEnabled) {
       ClientInterceptor statsInterceptor = null;
 
@@ -754,6 +792,69 @@ public final class ManagedChannelImplBuilder
     return channelBuilderDefaultPortProvider.getDefaultPort();
   }
 
+  @VisibleForTesting
+  static class ResolvedNameResolver {
+    public final URI targetUri;
+    public final NameResolverProvider provider;
+
+    public ResolvedNameResolver(URI targetUri, NameResolverProvider provider) {
+      this.targetUri = checkNotNull(targetUri, "targetUri");
+      this.provider = checkNotNull(provider, "provider");
+    }
+  }
+
+  @VisibleForTesting
+  static ResolvedNameResolver getNameResolverProvider(
+      String target, NameResolverRegistry nameResolverRegistry,
+      Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
+    // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
+    // "dns:///".
+    NameResolverProvider provider = null;
+    URI targetUri = null;
+    StringBuilder uriSyntaxErrors = new StringBuilder();
+    try {
+      targetUri = new URI(target);
+    } catch (URISyntaxException e) {
+      // Can happen with ip addresses like "[::1]:1234" or 127.0.0.1:1234.
+      uriSyntaxErrors.append(e.getMessage());
+    }
+    if (targetUri != null) {
+      // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
+      // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+    }
+
+    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
+      // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
+      // scheme from the registry.
+      try {
+        targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
+      } catch (URISyntaxException e) {
+        // Should not be possible.
+        throw new IllegalArgumentException(e);
+      }
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+    }
+
+    if (provider == null) {
+      throw new IllegalArgumentException(String.format(
+          "Could not find a NameResolverProvider for %s%s",
+          target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+    }
+
+    if (channelTransportSocketAddressTypes != null) {
+      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
+          = provider.getProducedSocketAddressTypes();
+      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+        throw new IllegalArgumentException(String.format(
+            "Address types of NameResolver '%s' for '%s' not supported by transport",
+            targetUri.getScheme(), target));
+      }
+    }
+
+    return new ResolvedNameResolver(targetUri, provider);
+  }
+
   private static class DirectAddressNameResolverProvider extends NameResolverProvider {
     final SocketAddress address;
     final String authority;
@@ -806,6 +907,20 @@ public final class ManagedChannelImplBuilder
     @Override
     public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
       return producedSocketAddressTypes;
+    }
+  }
+
+  private static final class InterceptorFactoryWrapper implements ClientInterceptor {
+    final InterceptorFactory factory;
+
+    public InterceptorFactoryWrapper(InterceptorFactory factory) {
+      this.factory = checkNotNull(factory, "factory");
+    }
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      throw new AssertionError("Should have been replaced with real instance");
     }
   }
 

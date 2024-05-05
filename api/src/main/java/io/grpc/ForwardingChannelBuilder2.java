@@ -95,6 +95,12 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
+  protected T interceptWithTarget(InterceptorFactory factory) {
+    delegate().interceptWithTarget(factory);
+    return thisT();
+  }
+
+  @Override
   public T addTransportFilter(ClientTransportFilter transportFilter) {
     delegate().addTransportFilter(transportFilter);
     return thisT();

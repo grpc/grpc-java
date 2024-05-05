@@ -61,6 +61,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolverProvider;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
@@ -169,7 +170,9 @@ public class ManagedChannelImplIdlenessTest {
     when(mockTransportFactory.getSupportedSocketAddressTypes())
         .thenReturn(Collections.singleton(InetSocketAddress.class));
 
-    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("mockscheme:///target",
+    String target = "mockscheme:///target";
+    URI targetUri = URI.create(target);
+    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder(target,
         new UnsupportedClientTransportFactoryBuilder(), null);
 
     builder
@@ -178,8 +181,11 @@ public class ManagedChannelImplIdlenessTest {
         .idleTimeout(IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .userAgent(USER_AGENT);
     builder.executorPool = executorPool;
+    NameResolverProvider nameResolverProvider =
+        builder.nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
     channel = new ManagedChannelImpl(
-        builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        builder, mockTransportFactory, targetUri, nameResolverProvider,
+        new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(),
         TimeProvider.SYSTEM_TIME_PROVIDER);
