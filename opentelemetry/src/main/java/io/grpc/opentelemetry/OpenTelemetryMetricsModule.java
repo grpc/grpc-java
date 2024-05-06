@@ -194,7 +194,7 @@ final class OpenTelemetryMetricsModule {
           io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
               STATUS_KEY, statusCode.toString());
 
-      if (module.resource.clientAttemptCountCounter() != null ) {
+      if (module.resource.clientAttemptDurationCounter() != null ) {
         module.resource.clientAttemptDurationCounter()
             .record(attemptNanos * SECONDS_PER_NANO, attribute);
       }
