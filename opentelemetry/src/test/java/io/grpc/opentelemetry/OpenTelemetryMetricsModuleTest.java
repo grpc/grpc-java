@@ -17,6 +17,7 @@
 package io.grpc.opentelemetry;
 
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TARGET_KEY;
@@ -52,6 +53,7 @@ import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -158,8 +160,7 @@ public class OpenTelemetryMetricsModuleTest {
   public void testClientInterceptors() {
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     grpcServerRule.getServiceRegistry().addService(
         ServerServiceDefinition.builder("package1.service2").addMethod(
             method, new ServerCallHandler<String, String>() {
@@ -215,8 +216,7 @@ public class OpenTelemetryMetricsModuleTest {
     String target = "target:///";
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(module, target, method.getFullMethodName());
     Metadata headers = new Metadata();
@@ -242,6 +242,8 @@ public class OpenTelemetryMetricsModuleTest {
                                         point
                                             .hasAttributes(attributes)
                                             .hasValue(1))));
+
+    tracer.addOptionalLabel("grpc.lb.locality", "should-be-ignored");
 
     fakeClock.forwardTime(30, TimeUnit.MILLISECONDS);
     tracer.outboundHeaders();
@@ -353,8 +355,7 @@ public class OpenTelemetryMetricsModuleTest {
     String target = "dns:///example.com";
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
             method.getFullMethodName());
@@ -779,8 +780,7 @@ public class OpenTelemetryMetricsModuleTest {
     String target = "dns:///foo.example.com";
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module =
-        new OpenTelemetryMetricsModule(fakeClock.getStopwatchSupplier(), resource);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
             method.getFullMethodName());
@@ -880,11 +880,142 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   @Test
-  public void serverBasicMetrics() {
+  public void clientLocalityMetrics_present() {
+    String target = "target:///";
     OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource);
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"));
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName());
+
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer.addOptionalLabel("grpc.lb.foo", "unimportant");
+    tracer.addOptionalLabel("grpc.lb.locality", "should-be-overwritten");
+    tracer.addOptionalLabel("grpc.lb.locality", "the-moon");
+    tracer.addOptionalLabel("grpc.lb.foo", "thats-no-moon");
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    io.opentelemetry.api.common.Attributes clientAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Status.Code.OK.toString());
+
+    io.opentelemetry.api.common.Attributes clientAttributesWithLocality
+        = clientAttributes.toBuilder()
+        .put(LOCALITY_KEY, "the-moon")
+        .build();
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasLongSumSatisfying(
+                        longSum -> longSum.hasPointsSatisfying(
+                            point -> point.hasAttributes(attributes))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithLocality))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithLocality))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithLocality))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_CALL_DURATION)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributes))));
+  }
+
+  @Test
+  public void clientLocalityMetrics_missing() {
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"));
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName());
+
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    io.opentelemetry.api.common.Attributes clientAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Status.Code.OK.toString());
+
+    io.opentelemetry.api.common.Attributes clientAttributesWithLocality
+        = clientAttributes.toBuilder()
+        .put(LOCALITY_KEY, "unknown")
+        .build();
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasLongSumSatisfying(
+                        longSum -> longSum.hasPointsSatisfying(
+                            point -> point.hasAttributes(attributes))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithLocality))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithLocality))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithLocality))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_CALL_DURATION)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributes))));
+  }
+
+  @Test
+  public void serverBasicMetrics() {
+    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
     ServerStreamTracer tracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
@@ -992,6 +1123,12 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasSum(34L + 154)
                                             .hasAttributes(serverAttributes))));
 
+  }
+
+  private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
+      OpenTelemetryMetricsResource resource) {
+    return new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList());
   }
 
   static class CallInfo<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
