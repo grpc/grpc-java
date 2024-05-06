@@ -17,16 +17,21 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.CallbackMetricInstrument;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
+import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricSink;
+import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 
 /**
@@ -169,6 +174,64 @@ final class MetricRecorderImpl implements MetricRecorder {
         sink.updateMeasures(registry.getMetricInstruments());
       }
       sink.recordLongHistogram(metricInstrument, value, requiredLabelValues, optionalLabelValues);
+    }
+  }
+
+  @Override
+  public Registration registerBatchCallback(BatchCallback callback,
+      CallbackMetricInstrument... metricInstruments) {
+    long largestMetricInstrumentIndex = -1;
+    BitSet allowedInstruments = new BitSet();
+    for (CallbackMetricInstrument metricInstrument : metricInstruments) {
+      largestMetricInstrumentIndex =
+          Math.max(largestMetricInstrumentIndex, metricInstrument.getIndex());
+      allowedInstruments.set(metricInstrument.getIndex());
+    }
+    List<MetricSink.Registration> registrations = new ArrayList<>();
+    for (MetricSink sink : metricSinks) {
+      int measuresSize = sink.getMeasuresSize();
+      if (measuresSize <= largestMetricInstrumentIndex) {
+        // Measures may need updating in two cases:
+        // 1. When the sink is initially created with an empty list of measures.
+        // 2. When new metric instruments are registered, requiring the sink to accommodate them.
+        sink.updateMeasures(registry.getMetricInstruments());
+      }
+      BatchRecorder singleSinkRecorder = new BatchRecorderImpl(sink, allowedInstruments);
+      registrations.add(sink.registerBatchCallback(
+          () -> callback.accept(singleSinkRecorder), metricInstruments));
+    }
+    return () -> {
+      for (MetricSink.Registration registration : registrations) {
+        registration.close();
+      }
+    };
+  }
+
+  /** Recorder for instrument values produced by a batch callback. */
+  static class BatchRecorderImpl implements BatchRecorder {
+    private final MetricSink sink;
+    private final BitSet allowedInstruments;
+
+    BatchRecorderImpl(MetricSink sink, BitSet allowedInstruments) {
+      this.sink = checkNotNull(sink, "sink");
+      this.allowedInstruments = checkNotNull(allowedInstruments, "allowedInstruments");
+    }
+
+    @Override
+    public void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
+        List<String> requiredLabelValues, List<String> optionalLabelValues) {
+      checkArgument(allowedInstruments.get(metricInstrument.getIndex()),
+          "Instrument was not listed when registering callback: %s", metricInstrument);
+      checkArgument(requiredLabelValues != null
+              && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+          "Incorrect number of required labels provided. Expected: %s",
+          metricInstrument.getRequiredLabelKeys().size());
+      checkArgument(optionalLabelValues != null
+              && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+          "Incorrect number of optional labels provided. Expected: %s",
+          metricInstrument.getOptionalLabelKeys().size());
+      // Registering the callback checked that the instruments were be present in sink.
+      sink.recordLongGauge(metricInstrument, value, requiredLabelValues, optionalLabelValues);
     }
   }
 }

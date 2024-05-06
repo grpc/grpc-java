@@ -67,4 +67,43 @@ public interface MetricRecorder {
    */
   default void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+
+  /**
+   * Registers a callback to produce metric values for only the listed instruments. The returned
+   * registration must be closed when no longer needed, which will remove the callback.
+   *
+   * @param callback The callback to call to record.
+   * @param metricInstruments The metric instruments the callback will record against.
+   */
+  default Registration registerBatchCallback(BatchCallback callback,
+      CallbackMetricInstrument... metricInstruments) {
+    return () -> { };
+  }
+
+  /** Callback to record gauge values. */
+  interface BatchCallback {
+    /** Records instrument values into {@code recorder}. */
+    void accept(BatchRecorder recorder);
+  }
+
+  /** Recorder for instrument values produced by a batch callback. */
+  interface BatchRecorder {
+    /**
+     * Record a long gauge value.
+     *
+     * @param value The value to record.
+     * @param requiredLabelValues A list of required label values for the metric.
+     * @param optionalLabelValues A list of additional, optional label values for the metric.
+     */
+    void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
+        List<String> requiredLabelValues, List<String> optionalLabelValues);
+  }
+
+  /** A handle to a registration, that allows unregistration. */
+  interface Registration extends AutoCloseable {
+    // Redefined to not throw an exception.
+    /** Unregister. */
+    @Override
+    void close();
+  }
 }
