@@ -119,7 +119,7 @@ public interface MetricSink {
    */
   default Registration registerBatchCallback(Runnable callback,
       CallbackMetricInstrument... metricInstruments) {
-    return () -> {};
+    return () -> { };
   }
 
   interface Registration extends MetricRecorder.Registration {}

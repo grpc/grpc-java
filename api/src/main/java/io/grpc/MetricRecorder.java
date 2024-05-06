@@ -77,7 +77,7 @@ public interface MetricRecorder {
    */
   default Registration registerBatchCallback(BatchCallback callback,
       CallbackMetricInstrument... metricInstruments) {
-    return () -> {};
+    return () -> { };
   }
 
   /** Callback to record gauge values. */
