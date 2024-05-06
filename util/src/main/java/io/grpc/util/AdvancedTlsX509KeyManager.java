@@ -113,7 +113,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * Schedules a {@code ScheduledExecutorService} to read private key and certificate chains from
    * the local file paths periodically, and update the cached identity credentials if they are both
    * updated. Please make sure to close the returned Closeable before calling this method again.
-   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once.
+   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. The
+   * minimum refresh period of 1 minute is enforced.
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain

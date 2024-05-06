@@ -140,7 +140,6 @@ public class AdvancedTlsX509KeyManagerTest {
     TestHandler handler = new TestHandler();
     log.addHandler(handler);
     log.setUseParentHandlers(false);
-    log.addHandler(new ConsoleHandler());
     serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, -1,
             TimeUnit.SECONDS, executor);
     log.removeHandler(handler);
