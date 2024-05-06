@@ -17,6 +17,7 @@
 package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TARGET_KEY;
@@ -40,6 +41,8 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
+import io.opentelemetry.api.common.AttributesBuilder;
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
@@ -63,6 +66,7 @@ import javax.annotation.concurrent.GuardedBy;
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
+  private static final String LOCALITY_LABEL_NAME = "grpc.lb.locality";
   public static final ImmutableSet<String> DEFAULT_PER_CALL_METRICS_SET =
       ImmutableSet.of(
           "grpc.client.attempt.started",
@@ -81,11 +85,13 @@ final class OpenTelemetryMetricsModule {
 
   private final OpenTelemetryMetricsResource resource;
   private final Supplier<Stopwatch> stopwatchSupplier;
+  private final boolean localityEnabled;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
-      OpenTelemetryMetricsResource resource) {
+      OpenTelemetryMetricsResource resource, Collection<String> optionalLabels) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+    this.localityEnabled = optionalLabels.contains(LOCALITY_LABEL_NAME);
   }
 
   /**
@@ -140,6 +146,7 @@ final class OpenTelemetryMetricsModule {
     final String fullMethodName;
     volatile long outboundWireSize;
     volatile long inboundWireSize;
+    volatile String locality;
     long attemptNanos;
     Code statusCode;
 
@@ -174,6 +181,13 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
+    public void addOptionalLabel(String key, String value) {
+      if (LOCALITY_LABEL_NAME.equals(key)) {
+        locality = value;
+      }
+    }
+
+    @Override
     public void streamClosed(Status status) {
       stopwatch.stop();
       attemptNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -192,10 +206,18 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedAttempt() {
-      io.opentelemetry.api.common.Attributes attribute =
-          io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
-              TARGET_KEY, target,
-              STATUS_KEY, statusCode.toString());
+      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+          .put(METHOD_KEY, fullMethodName)
+          .put(TARGET_KEY, target)
+          .put(STATUS_KEY, statusCode.toString());
+      if (module.localityEnabled) {
+        String savedLocality = locality;
+        if (savedLocality == null) {
+          savedLocality = "unknown";
+        }
+        builder.put(LOCALITY_KEY, savedLocality);
+      }
+      io.opentelemetry.api.common.Attributes attribute = builder.build();
 
       if (module.resource.clientAttemptDurationCounter() != null ) {
         module.resource.clientAttemptDurationCounter()
@@ -315,7 +337,8 @@ final class OpenTelemetryMetricsModule {
 
     void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
-        ClientTracer tracer = new ClientTracer(this, module, null, target, fullMethodName);
+        ClientTracer tracer =
+            new ClientTracer(this, module, null, target, fullMethodName);
         tracer.attemptNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
@@ -478,8 +501,8 @@ final class OpenTelemetryMetricsModule {
       // which is true for all generated methods. Otherwise, programatically
       // created methods result in high cardinality metrics.
       final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
-          OpenTelemetryMetricsModule.this, target, recordMethodName(method.getFullMethodName(),
-          method.isSampledToLocalTracing()));
+          OpenTelemetryMetricsModule.this, target,
+          recordMethodName(method.getFullMethodName(), method.isSampledToLocalTracing()));
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
