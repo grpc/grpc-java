@@ -112,7 +112,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   /**
    * Schedules a {@code ScheduledExecutorService} to read private key and certificate chains from
    * the local file paths periodically, and update the cached identity credentials if they are both
-   * updated. Please make sure to close the returned Closebale before calling this method again.
+   * updated. Please make sure to close the returned Closeable before calling this method again.
+   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once.
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
@@ -130,8 +131,9 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
           "Files were unmodified before their initial update. Probably a bug.");
     }
     if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD) {
-      log.log(Level.INFO, "Provided refresh period of {} {} is too small. Default value of {} "
-          + "minute(s) will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD});
+      log.log(Level.INFO, "Provided refresh period of {0} {1} is too small. Default value of "
+          + "{2} minute(s) will be used.", new Object[] {period, unit.name(),
+          MINIMUM_REFRESH_PERIOD});
       period = MINIMUM_REFRESH_PERIOD;
       unit = TimeUnit.MINUTES;
     }
