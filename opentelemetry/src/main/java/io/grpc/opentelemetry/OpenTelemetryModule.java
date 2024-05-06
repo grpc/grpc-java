@@ -84,8 +84,9 @@ public final class OpenTelemetryModule {
     this.enableMetrics = ImmutableMap.copyOf(builder.enableMetrics);
     this.disableDefault = builder.disableAll;
     this.resource = createMetricInstruments(meter, enableMetrics, disableDefault);
-    this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(STOPWATCH_SUPPLIER, resource);
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
+    this.openTelemetryMetricsModule =
+        new OpenTelemetryMetricsModule(STOPWATCH_SUPPLIER, resource, optionalLabels);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
 

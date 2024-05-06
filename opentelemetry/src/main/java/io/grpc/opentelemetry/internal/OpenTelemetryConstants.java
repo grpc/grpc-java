@@ -28,6 +28,9 @@ public final class OpenTelemetryConstants {
 
   public static final AttributeKey<String> TARGET_KEY = AttributeKey.stringKey("grpc.target");
 
+  public static final AttributeKey<String> LOCALITY_KEY =
+      AttributeKey.stringKey("grpc.lb.locality");
+
   private OpenTelemetryConstants() {
   }
 }
