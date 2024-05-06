@@ -16,16 +16,8 @@
 
 package io.grpc;
 
-import java.util.List;
-
 /**
- * Represents a long-valued gauge metric instrument.
+ * Tagging interface for MetricInstruments that can be used with batch callbacks.
  */
 @Internal
-public final class LongGaugeMetricInstrument extends PartialMetricInstrument
-    implements CallbackMetricInstrument {
-  public LongGaugeMetricInstrument(int index, String name, String description, String unit,
-      List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
-    super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
-  }
-}
+public interface CallbackMetricInstrument extends MetricInstrument {}

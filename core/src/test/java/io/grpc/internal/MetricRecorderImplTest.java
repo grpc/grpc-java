@@ -16,6 +16,8 @@
 
 package io.grpc.internal;
 
+import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -28,6 +30,7 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
+import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricInstrumentRegistryAccessor;
@@ -40,6 +43,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Unit test for {@link MetricRecorderImpl}.
@@ -72,6 +76,9 @@ public class MetricRecorderImplTest {
   private final LongHistogramMetricInstrument longHistogramInstrument =
       registry.registerLongHistogram("histogram2", DESCRIPTION, UNIT,
           Collections.emptyList(), REQUIRED_LABEL_KEYS, OPTIONAL_LABEL_KEYS, ENABLED);
+  private final LongGaugeMetricInstrument longGaugeInstrument =
+      registry.registerLongGauge("gauge0", DESCRIPTION, UNIT, REQUIRED_LABEL_KEYS,
+          OPTIONAL_LABEL_KEYS, ENABLED);
   private MetricRecorder recorder;
 
   @Before
@@ -114,6 +121,34 @@ public class MetricRecorderImplTest {
   }
 
   @Test
+  public void recordCallback() {
+    MetricSink.Registration mockRegistration = mock(MetricSink.Registration.class);
+    when(mockSink.getMeasuresSize()).thenReturn(5);
+    when(mockSink.registerBatchCallback(any(Runnable.class), eq(longGaugeInstrument)))
+        .thenReturn(mockRegistration);
+
+    MetricRecorder.Registration registration = recorder.registerBatchCallback((recorder) -> {
+      recorder.recordLongGauge(
+          longGaugeInstrument, 99, REQUIRED_LABEL_VALUES, OPTIONAL_LABEL_VALUES);
+    }, longGaugeInstrument);
+
+    ArgumentCaptor<Runnable> callbackCaptor = ArgumentCaptor.forClass(Runnable.class);
+    verify(mockSink, times(2))
+        .registerBatchCallback(callbackCaptor.capture(), eq(longGaugeInstrument));
+
+    callbackCaptor.getValue().run();
+    // Only once, for the one sink that called the callback.
+    verify(mockSink).recordLongGauge(
+        longGaugeInstrument, 99, REQUIRED_LABEL_VALUES, OPTIONAL_LABEL_VALUES);
+
+    verify(mockRegistration, never()).close();
+    registration.close();
+    verify(mockRegistration, times(2)).close();
+
+    verify(mockSink, never()).updateMeasures(registry.getMetricInstruments());
+  }
+
+  @Test
   public void newRegisteredMetricUpdateMeasures() {
     // Sink is initialized with zero measures, should trigger updateMeasures() on sinks
     when(mockSink.getMeasuresSize()).thenReturn(0);
@@ -145,6 +180,16 @@ public class MetricRecorderImplTest {
     verify(mockSink, times(8)).updateMeasures(registry.getMetricInstruments());
     verify(mockSink, times(2)).recordLongHistogram(eq(longHistogramInstrument), eq(99L),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
+
+    // Callback
+    when(mockSink.registerBatchCallback(any(Runnable.class), eq(longGaugeInstrument)))
+        .thenReturn(mock(MetricSink.Registration.class));
+    MetricRecorder.Registration registration = recorder.registerBatchCallback(
+        (recorder) -> { }, longGaugeInstrument);
+    verify(mockSink, times(10)).updateMeasures(registry.getMetricInstruments());
+    verify(mockSink, times(2))
+        .registerBatchCallback(any(Runnable.class), eq(longGaugeInstrument));
+    registration.close();
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -179,6 +224,26 @@ public class MetricRecorderImplTest {
         OPTIONAL_LABEL_VALUES);
   }
 
+  @Test
+  public void recordLongGaugeMismatchedRequiredLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(4);
+    when(mockSink.registerBatchCallback(any(Runnable.class), eq(longGaugeInstrument)))
+        .thenReturn(mock(MetricSink.Registration.class));
+
+    MetricRecorder.Registration registration = recorder.registerBatchCallback((recorder) -> {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> recorder.recordLongGauge(
+              longGaugeInstrument, 99, ImmutableList.of(), OPTIONAL_LABEL_VALUES));
+    }, longGaugeInstrument);
+
+    ArgumentCaptor<Runnable> callbackCaptor = ArgumentCaptor.forClass(Runnable.class);
+    verify(mockSink, times(2))
+        .registerBatchCallback(callbackCaptor.capture(), eq(longGaugeInstrument));
+    callbackCaptor.getValue().run();
+    registration.close();
+  }
+
   @Test(expected = IllegalArgumentException.class)
   public void addDoubleCounterMismatchedOptionalLabelValues() {
     when(mockSink.getMeasuresSize()).thenReturn(4);
@@ -209,5 +274,25 @@ public class MetricRecorderImplTest {
 
     recorder.recordLongHistogram(longHistogramInstrument, 99, REQUIRED_LABEL_VALUES,
         ImmutableList.of());
+  }
+
+  @Test
+  public void recordLongGaugeMismatchedOptionalLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(4);
+    when(mockSink.registerBatchCallback(any(Runnable.class), eq(longGaugeInstrument)))
+        .thenReturn(mock(MetricSink.Registration.class));
+
+    MetricRecorder.Registration registration = recorder.registerBatchCallback((recorder) -> {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> recorder.recordLongGauge(
+              longGaugeInstrument, 99, REQUIRED_LABEL_VALUES, ImmutableList.of()));
+    }, longGaugeInstrument);
+
+    ArgumentCaptor<Runnable> callbackCaptor = ArgumentCaptor.forClass(Runnable.class);
+    verify(mockSink, times(2))
+        .registerBatchCallback(callbackCaptor.capture(), eq(longGaugeInstrument));
+    callbackCaptor.getValue().run();
+    registration.close();
   }
 }
