@@ -30,12 +30,10 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
-import io.grpc.Configurator;
-import io.grpc.ConfiguratorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
-import io.grpc.InternalGlobalInterceptors;
+import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
@@ -287,6 +285,8 @@ public final class ManagedChannelImplBuilder
     } else {
       this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
     }
+    // TODO(dnvindhya): Move configurator to all the individual builders
+    InternalConfiguratorRegistry.configureChannelBuilder(this);
   }
 
   /**
@@ -345,9 +345,7 @@ public final class ManagedChannelImplBuilder
       this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
     }
     // TODO(dnvindhya): Move configurator to all the individual builders
-    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
-      configurator.configureChannelBuilder(this);
-    }
+    InternalConfiguratorRegistry.configureChannelBuilder(this);
   }
 
   @Override
@@ -692,16 +690,12 @@ public final class ManagedChannelImplBuilder
   // TODO(zdapeng): FIX IT
   @VisibleForTesting
   List<ClientInterceptor> getEffectiveInterceptors() {
-    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
-    boolean isGlobalInterceptorsSet = false;
-    // TODO(dnvindhya) : Convert to Configurator
-    List<ClientInterceptor> globalClientInterceptors =
-        InternalGlobalInterceptors.getClientInterceptors();
-    if (globalClientInterceptors != null) {
-      effectiveInterceptors.addAll(globalClientInterceptors);
-      isGlobalInterceptorsSet = true;
+    boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();
+    if (disableImplicitCensus) {
+      return this.interceptors;
     }
-    if (!isGlobalInterceptorsSet && statsEnabled) {
+    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
+    if (statsEnabled) {
       ClientInterceptor statsInterceptor = null;
 
       if (GET_CLIENT_INTERCEPTOR_METHOD != null) {
@@ -727,7 +721,7 @@ public final class ManagedChannelImplBuilder
         effectiveInterceptors.add(0, statsInterceptor);
       }
     }
-    if (!isGlobalInterceptorsSet && tracingEnabled) {
+    if (tracingEnabled) {
       ClientInterceptor tracingInterceptor = null;
       try {
         Class<?> censusTracingAccessor =

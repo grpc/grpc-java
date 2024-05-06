@@ -25,14 +25,12 @@ import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
-import io.grpc.Configurator;
-import io.grpc.ConfiguratorRegistry;
 import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
-import io.grpc.InternalGlobalInterceptors;
+import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCallExecutorSupplier;
@@ -116,9 +114,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
     this.clientTransportServersBuilder = checkNotNull(clientTransportServersBuilder,
         "clientTransportServersBuilder");
     // TODO(dnvindhya): Move configurator to all the individual builders
-    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
-      configurator.configureServerBuilder(this);
-    }
+    InternalConfiguratorRegistry.configureServerBuilder(this);
   }
 
   @Override
@@ -252,18 +248,12 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
 
   @VisibleForTesting
   List<? extends ServerStreamTracer.Factory> getTracerFactories() {
-    ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
-    boolean isGlobalInterceptorsTracersSet = false;
-    List<ServerInterceptor> globalServerInterceptors
-        = InternalGlobalInterceptors.getServerInterceptors();
-    List<ServerStreamTracer.Factory> globalServerStreamTracerFactories
-        = InternalGlobalInterceptors.getServerStreamTracerFactories();
-    if (globalServerInterceptors != null) {
-      tracerFactories.addAll(globalServerStreamTracerFactories);
-      interceptors.addAll(globalServerInterceptors);
-      isGlobalInterceptorsTracersSet = true;
+    boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();
+    if (disableImplicitCensus) {
+      return streamTracerFactories;
     }
-    if (!isGlobalInterceptorsTracersSet && statsEnabled) {
+    ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
+    if (statsEnabled) {
       ServerStreamTracer.Factory censusStatsTracerFactory = null;
       try {
         Class<?> censusStatsAccessor =
@@ -295,7 +285,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
         tracerFactories.add(censusStatsTracerFactory);
       }
     }
-    if (!isGlobalInterceptorsTracersSet && tracingEnabled) {
+    if (tracingEnabled) {
       ServerStreamTracer.Factory tracingStreamTracerFactory = null;
       try {
         Class<?> censusTracingAccessor =

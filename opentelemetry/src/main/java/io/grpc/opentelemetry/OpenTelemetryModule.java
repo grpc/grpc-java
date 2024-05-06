@@ -24,9 +24,9 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.Configurator;
-import io.grpc.ConfiguratorRegistry;
 import io.grpc.ExperimentalApi;
+import io.grpc.InternalConfigurator;
+import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
@@ -127,8 +127,8 @@ public final class OpenTelemetryModule {
    * gRPC channels and servers.
    */
   public void registerGlobal() {
-    ConfiguratorRegistry.getDefaultRegistry().setConfigurators(Collections.singletonList(
-        new Configurator() {
+    InternalConfiguratorRegistry.setConfigurators(Collections.singletonList(
+        new InternalConfigurator() {
           @Override
           public void configureChannelBuilder(ManagedChannelBuilder<?> channelBuilder) {
             OpenTelemetryModule.this.configureChannelBuilder(channelBuilder);

@@ -20,8 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import io.grpc.InternalGlobalInterceptors;
+import io.grpc.InternalConfigurator;
+import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.Metadata;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -60,7 +62,8 @@ public class ServerImplBuilderTest {
       new StaticTestingClassLoader(
           getClass().getClassLoader(),
           Pattern.compile(
-              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
+              "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
+                  + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
                   + "io\\.grpc\\.internal\\.[^.]+"));
 
   private ServerImplBuilder builder;
@@ -143,11 +146,10 @@ public class ServerImplBuilderTest {
       assertThat(builder.getTracerFactories()).hasSize(2);
       assertThat(builder.interceptors).hasSize(0);
       try {
-        InternalGlobalInterceptors.setInterceptorsTracers(
-            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
         fail("exception expected");
       } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Set cannot be called after any get call");
+        assertThat(e).hasMessageThat().contains("Configurators are already set");
       }
     }
   }
@@ -161,10 +163,14 @@ public class ServerImplBuilderTest {
   public static final class StaticTestingClassLoaderCallsSet implements Runnable {
     @Override
     public void run() {
-      InternalGlobalInterceptors.setInterceptorsTracers(
-          Collections.emptyList(),
-          Arrays.asList(DUMMY_TEST_INTERCEPTOR),
-          Arrays.asList(DUMMY_USER_TRACER));
+      InternalConfiguratorRegistry.setConfigurators(
+          Arrays.asList(new InternalConfigurator() {
+            @Override
+            public void configureServerBuilder(ServerBuilder<?> builder) {
+              builder.intercept(DUMMY_TEST_INTERCEPTOR);
+              builder.addStreamTracerFactory(DUMMY_USER_TRACER);
+            }
+          }));
       ServerImplBuilder builder =
           new ServerImplBuilder(
               streamTracerFactories -> {
@@ -187,8 +193,7 @@ public class ServerImplBuilderTest {
 
     @Override
     public void run() {
-      InternalGlobalInterceptors.setInterceptorsTracers(
-          Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
       ServerImplBuilder builder =
           new ServerImplBuilder(
               streamTracerFactories -> {
