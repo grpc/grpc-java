@@ -36,8 +36,10 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
-import io.grpc.InternalGlobalInterceptors;
+import io.grpc.InternalConfigurator;
+import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
@@ -110,7 +112,8 @@ public class ManagedChannelImplBuilderTest {
       new StaticTestingClassLoader(
           getClass().getClassLoader(),
           Pattern.compile(
-              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
+              "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
+                  + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
                   + "io\\.grpc\\.internal\\.[^.]+"));
 
   @Before
@@ -511,7 +514,7 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void getEffectiveInterceptors_callsGetGlobalInterceptors() throws Exception {
+  public void getEffectiveInterceptors_callsGetConfiguratorRegistry() throws Exception {
     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsGet.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
@@ -529,19 +532,16 @@ public class ManagedChannelImplBuilderTest {
       List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
       assertThat(effectiveInterceptors).hasSize(2);
       try {
-        InternalGlobalInterceptors.setInterceptorsTracers(
-            Arrays.asList(DUMMY_USER_INTERCEPTOR),
-            Collections.emptyList(),
-            Collections.emptyList());
+        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
         fail("exception expected");
       } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Set cannot be called after any get call");
+        assertThat(e).hasMessageThat().contains("Configurators are already set");
       }
     }
   }
 
   @Test
-  public void getEffectiveInterceptors_callsSetGlobalInterceptors() throws Exception {
+  public void getEffectiveInterceptors_callsSetConfiguratorRegistry() throws Exception {
     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsSet.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
@@ -551,10 +551,13 @@ public class ManagedChannelImplBuilderTest {
 
     @Override
     public void run() {
-      InternalGlobalInterceptors.setInterceptorsTracers(
-          Arrays.asList(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1),
-          Collections.emptyList(),
-          Collections.emptyList());
+      InternalConfiguratorRegistry.setConfigurators(
+          Arrays.asList(new InternalConfigurator() {
+            @Override
+            public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+              builder.intercept(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1);
+            }
+          }));
       ManagedChannelImplBuilder builder =
           new ManagedChannelImplBuilder(
               DUMMY_TARGET,
@@ -567,7 +570,7 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void getEffectiveInterceptors_setEmptyGlobalInterceptors() throws Exception {
+  public void getEffectiveInterceptors_setEmptyConfiguratorRegistry() throws Exception {
     Class<?> runnable =
         classLoader.loadClass(StaticTestingClassLoaderCallsSetEmpty.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
@@ -578,8 +581,7 @@ public class ManagedChannelImplBuilderTest {
 
     @Override
     public void run() {
-      InternalGlobalInterceptors.setInterceptorsTracers(
-          Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
       ManagedChannelImplBuilder builder =
           new ManagedChannelImplBuilder(
               DUMMY_TARGET,

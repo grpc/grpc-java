@@ -19,6 +19,7 @@ package io.grpc;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A registry for {@link Configurator} instances.
@@ -26,10 +27,14 @@ import java.util.List;
  * <p>This class is responsible for maintaining a list of configurators and providing access to
  * them. The default registry can be obtained using {@link #getDefaultRegistry()}.
  */
-@Internal
-public final class ConfiguratorRegistry {
+final class ConfiguratorRegistry {
   private static ConfiguratorRegistry instance;
-  private static boolean isConfiguratorsSet;
+
+  @GuardedBy("this")
+  private boolean wasConfiguratorsSet;
+  @GuardedBy("this")
+  private boolean configFrozen;
+  @GuardedBy("this")
   private List<Configurator> configurators = Collections.emptyList();
 
   ConfiguratorRegistry() {}
@@ -50,18 +55,24 @@ public final class ConfiguratorRegistry {
    * @param configurators the configurators to set
    * @throws IllegalStateException if this method is called more than once
    */
-  public synchronized void setConfigurators(List<Configurator> configurators) {
-    if (isConfiguratorsSet) {
+  public synchronized void setConfigurators(List<? extends Configurator> configurators) {
+    if (configFrozen) {
       throw new IllegalStateException("Configurators are already set");
     }
-    configurators = Collections.unmodifiableList(new ArrayList<>(configurators));
-    isConfiguratorsSet = true;
+    this.configurators = Collections.unmodifiableList(new ArrayList<>(configurators));
+    configFrozen = true;
+    wasConfiguratorsSet = true;
   }
 
   /**
    * Returns a list of the configurators in this registry.
    */
   public synchronized List<Configurator> getConfigurators() {
+    configFrozen = true;
     return configurators;
+  }
+
+  public synchronized boolean wasSetConfiguratorsCalled() {
+    return wasConfiguratorsSet;
   }
 }

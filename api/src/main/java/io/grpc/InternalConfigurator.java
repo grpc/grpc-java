@@ -17,20 +17,7 @@
 package io.grpc;
 
 /**
- * Provides hooks for modifying gRPC channels and servers during their construction.
+ * Internal access to Configurator API.
  */
-interface Configurator {
-  /**
-   * Allows implementations to modify the channel builder.
-   *
-   * @param channelBuilder the channel builder being constructed
-   */
-  default void configureChannelBuilder(ManagedChannelBuilder<?> channelBuilder) {}
-
-  /**
-   * Allows implementations to modify the server builder.
-   *
-   * @param serverBuilder the server builder being constructed
-   */
-  default void configureServerBuilder(ServerBuilder<?> serverBuilder) {}
-}
+@Internal
+public interface InternalConfigurator extends Configurator {}
