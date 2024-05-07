@@ -687,7 +687,7 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  public ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
+  protected ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
     metricSinks.add(checkNotNull(metricSink, "metric sink"));
     return this;
   }
