@@ -82,6 +82,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final AtomicInteger sequence;
   private final long infTime;
   private final Ticker ticker;
+  private String locality = "";
 
   // The metric instruments are only registered once and shared by all instances of this LB.
   static {
@@ -147,6 +148,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       handleNameResolutionError(unavailableStatus);
       return unavailableStatus;
     }
+    String locality = resolvedAddresses.getAttributes().get(WeightedTargetLoadBalancer.CHILD_NAME);
+    if (locality != null) {
+      this.locality = locality;
+    } else {
+      this.locality = "";
+    }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     AcceptResolvedAddrRetVal acceptRetVal;
@@ -179,7 +186,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   @Override
   public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
-        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper());
+        config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper(),
+        locality);
   }
 
   @VisibleForTesting
@@ -373,10 +381,12 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     private final AtomicInteger sequence;
     private final int hashCode;
     private final LoadBalancer.Helper helper;
+    private final String locality;
     private volatile StaticStrideScheduler scheduler;
 
     WeightedRoundRobinPicker(List<ChildLbState> children, boolean enableOobLoadReport,
-        float errorUtilizationPenalty, AtomicInteger sequence, LoadBalancer.Helper helper) {
+        float errorUtilizationPenalty, AtomicInteger sequence, LoadBalancer.Helper helper,
+        String locality) {
       checkNotNull(children, "children");
       Preconditions.checkArgument(!children.isEmpty(), "empty child list");
       this.children = children;
@@ -391,6 +401,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       this.errorUtilizationPenalty = errorUtilizationPenalty;
       this.sequence = checkNotNull(sequence, "sequence");
       this.helper = helper;
+      this.locality = checkNotNull(locality, "locality");
 
       // For equality we treat children as a set; use hash code as defined by Set
       int sum = 0;
@@ -434,7 +445,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         helper.getMetricRecorder()
             .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight,
                 ImmutableList.of(helper.getChannelTarget()),
-                ImmutableList.of(""));
+                ImmutableList.of(locality));
         newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
       }
       if (staleEndpoints.get() > 0) {
@@ -442,13 +453,13 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         helper.getMetricRecorder()
             .addLongCounter(ENDPOINT_WEIGHT_STALE_COUNTER, staleEndpoints.get(),
                 ImmutableList.of(helper.getChannelTarget()),
-                ImmutableList.of(""));
+                ImmutableList.of(locality));
       }
       if (notYetUsableEndpoints.get() > 0) {
         // TODO: add locality label once available
         helper.getMetricRecorder()
             .addLongCounter(ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER, notYetUsableEndpoints.get(),
-                ImmutableList.of(helper.getChannelTarget()), ImmutableList.of(""));
+                ImmutableList.of(helper.getChannelTarget()), ImmutableList.of(locality));
       }
 
       this.scheduler = new StaticStrideScheduler(newWeights, sequence);
@@ -456,7 +467,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
         // TODO: locality label once available
         helper.getMetricRecorder()
             .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(helper.getChannelTarget()),
-                ImmutableList.of(""));
+                ImmutableList.of(locality));
       }
     }
 
