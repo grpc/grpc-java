@@ -29,7 +29,7 @@ import javax.annotation.Nullable;
 
 /**
  * ALTS version of {@code ManagedChannelBuilder}. This class sets up a secure and authenticated
- * commmunication between two cloud VMs using ALTS.
+ * communication between two cloud VMs using ALTS.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
 public final class AltsChannelBuilder extends ForwardingChannelBuilder2<AltsChannelBuilder> {

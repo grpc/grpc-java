@@ -197,7 +197,7 @@ public final class ServerInterceptors {
    * to allow for interceptors to handle messages as multiple different ReqT/RespT types within
    * the chain if the added cost of serialization is not a concern.
    *
-   * @param serviceDef         the sevice definition to add request and response marshallers to.
+   * @param serviceDef         the service definition to add request and response marshallers to.
    * @param requestMarshaller  request marshaller
    * @param responseMarshaller response marshaller
    * @param <ReqT>             the request payload type

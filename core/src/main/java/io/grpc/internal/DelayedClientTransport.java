@@ -90,7 +90,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
   /**
    * Creates a new delayed transport.
    *
-   * @param defaultAppExecutor pending streams will create real streams and run bufferred operations
+   * @param defaultAppExecutor pending streams will create real streams and run buffered operations
    *        in an application executor, which will be this executor, unless there is on provided in
    *        {@link CallOptions}.
    * @param syncContext all listener callbacks of the delayed transport will be run from this
