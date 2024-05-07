@@ -44,6 +44,11 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
     return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
   }
 
+  @VisibleForTesting
+  public static boolean isEnableNewPickFirst() {
+    return enableNewPickFirst;
+  }
+
   @Override
   public boolean isAvailable() {
     return true;
