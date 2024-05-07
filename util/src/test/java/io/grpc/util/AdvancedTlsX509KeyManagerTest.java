@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.internal.testing.TestUtils;
@@ -38,7 +37,6 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.ConsoleHandler;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -156,6 +154,7 @@ public class AdvancedTlsX509KeyManagerTest {
   private static class TestHandler extends Handler {
     private final List<LogRecord> records = new ArrayList<>();
 
+    @Override
     public void publish(LogRecord record) {
       records.add(record);
     }
