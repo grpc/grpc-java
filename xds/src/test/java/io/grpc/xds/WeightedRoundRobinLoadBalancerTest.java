@@ -37,6 +37,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.Duration;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
@@ -52,14 +53,26 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LongCounterMetricInstrument;
+import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
+import io.grpc.MetricSink;
+import io.grpc.NoopMetricSink;
+import io.grpc.ServerCall;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.TestUtils;
+import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
+import io.grpc.stub.ClientCalls;
+import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
@@ -100,6 +113,8 @@ import org.mockito.stubbing.Answer;
 public class WeightedRoundRobinLoadBalancerTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
+  @Rule
+  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   private final TestHelper testHelperInstance;
   private final Helper helper;
@@ -1232,6 +1247,50 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     // All metric events should be accounted for.
     verifyNoMoreInteractions(mockMetricRecorder);
+  }
+
+  @Test
+  public void metricWithRealChannel() throws Exception {
+    String serverName = "wrr-metrics";
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName(serverName)
+        .addService(ServerServiceDefinition.builder(
+            TestMethodDescriptors.voidMethod().getServiceName())
+          .addMethod(TestMethodDescriptors.voidMethod(), (call, headers) -> {
+            call.sendHeaders(new Metadata());
+            call.sendMessage(null);
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<Void>() {};
+          })
+          .build())
+        .directExecutor()
+        .build()
+        .start());
+    MetricSink metrics = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+    Channel channel = grpcCleanupRule.register(
+        InProcessChannelBuilder.forName(serverName)
+        .defaultServiceConfig(Collections.singletonMap(
+            "loadBalancingConfig", Arrays.asList(Collections.singletonMap(
+                "weighted_round_robin", Collections.emptyMap()))))
+        .addMetricSink(metrics)
+        .directExecutor()
+        .build());
+
+    // Ping-pong to wait for channel to fully start
+    StreamRecorder<Void> recorder = StreamRecorder.create();
+    StreamObserver<Void> requestObserver = ClientCalls.asyncClientStreamingCall(
+        channel.newCall(TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT), recorder);
+    requestObserver.onCompleted();
+    assertThat(recorder.awaitCompletion(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(recorder.getError()).isNull();
+
+    // Make sure at least one metric works. The other tests will make sure other metrics and the
+    // edge cases are working.
+    verify(metrics).addLongCounter(
+        argThat((instr) -> instr.getName().equals("grpc.lb.wrr.rr_fallback")),
+        eq(1L),
+        eq(Arrays.asList("directaddress:///wrr-metrics")),
+        eq(Arrays.asList("")));
   }
 
   // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
