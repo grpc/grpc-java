@@ -44,6 +44,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -1268,11 +1269,13 @@ public class WeightedRoundRobinLoadBalancerTest {
         .start());
     MetricSink metrics = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
     Channel channel = grpcCleanupRule.register(
-        InProcessChannelBuilder.forName(serverName)
-        .defaultServiceConfig(Collections.singletonMap(
-            "loadBalancingConfig", Arrays.asList(Collections.singletonMap(
-                "weighted_round_robin", Collections.emptyMap()))))
-        .addMetricSink(metrics)
+        InternalManagedChannelBuilder.addMetricSink(
+            InProcessChannelBuilder.forName(serverName)
+            .defaultServiceConfig(Collections.singletonMap(
+                "loadBalancingConfig", Arrays.asList(Collections.singletonMap(
+                    "weighted_round_robin", Collections.emptyMap()))))
+            .directExecutor(),
+        metrics)
         .directExecutor()
         .build());
 

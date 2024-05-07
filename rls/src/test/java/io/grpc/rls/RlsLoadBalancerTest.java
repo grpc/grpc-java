@@ -42,6 +42,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder2;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
@@ -305,10 +306,11 @@ public class RlsLoadBalancerTest {
         .start());
     MetricSink metrics = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
     ManagedChannel channel = grpcCleanupRule.register(
-        InProcessChannelBuilder.forName("fake-bigtable.googleapis.com")
-        .defaultServiceConfig(parseJson(getServiceConfigJsonStr()))
-        .addMetricSink(metrics)
-        .directExecutor()
+        InternalManagedChannelBuilder.addMetricSink(
+            InProcessChannelBuilder.forName("fake-bigtable.googleapis.com")
+            .defaultServiceConfig(parseJson(getServiceConfigJsonStr()))
+            .directExecutor(),
+        metrics)
         .build());
 
     StreamRecorder<Void> recorder = StreamRecorder.create();

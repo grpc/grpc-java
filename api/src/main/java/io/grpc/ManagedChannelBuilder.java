@@ -628,8 +628,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.64.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
-  public T addMetricSink(MetricSink metricSink) {
+  @Internal
+  protected T addMetricSink(MetricSink metricSink) {
     throw new UnsupportedOperationException();
   }
 

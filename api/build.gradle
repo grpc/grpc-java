@@ -55,7 +55,11 @@ dependencies {
 tasks.named("javadoc").configure {
     source sourceSets.context.allSource
     // We want io.grpc.Internal, but not io.grpc.Internal*
+    exclude 'io/grpc/*MetricInstrument.java'
+    exclude 'io/grpc/*MetricInstrumentRegistry.java'
     exclude 'io/grpc/Internal?*.java'
+    exclude 'io/grpc/MetricRecorder.java'
+    exclude 'io/grpc/MetricSink.java'
 }
 
 tasks.named("sourcesJar").configure {
