@@ -145,6 +145,7 @@ public class WeightedRoundRobinLoadBalancerTest {
       });
 
   private String channelTarget = "channel-target";
+  private String locality = "locality";
 
   public WeightedRoundRobinLoadBalancerTest() {
     testHelperInstance = new TestHelper();
@@ -1135,9 +1136,11 @@ public class WeightedRoundRobinLoadBalancerTest {
   @Test
   public void metrics() {
     // Give WRR some valid addresses to work with.
+    Attributes attributesWithLocality = Attributes.newBuilder()
+        .set(WeightedTargetLoadBalancer.CHILD_NAME, locality).build();
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
-        .setAttributes(affinity).build()));
+        .setAttributes(attributesWithLocality).build()));
 
     // Flip the three subchannels to READY state to initiate the WRR logic
     Iterator<Subchannel> it = subchannels.values().iterator();
@@ -1240,7 +1243,7 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
             return longCounterInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList("")));
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
   }
 
   // Verifies that the MetricRecorder has been called to record a given double histogram value the
@@ -1252,7 +1255,7 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(DoubleHistogramMetricInstrument doubleHistogramInstrument) {
             return doubleHistogramInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList("")));
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
   }
 
   private int getNumFilteredPendingTasks() {
