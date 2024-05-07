@@ -19,12 +19,18 @@ package io.grpc;
 /**
  * Internal accessors for {@link ManagedChannelBuilder}.
  */
+@Internal
 public final class InternalManagedChannelBuilder {
   private InternalManagedChannelBuilder() {}
 
   public static <T extends ManagedChannelBuilder<T>> T interceptWithTarget(
       ManagedChannelBuilder<T> builder, InternalInterceptorFactory factory) {
     return builder.interceptWithTarget(factory);
+  }
+
+  public static <T extends ManagedChannelBuilder<T>> T addMetricSink(
+      ManagedChannelBuilder<T> builder, MetricSink metricSink) {
+    return builder.addMetricSink(metricSink);
   }
 
   public interface InternalInterceptorFactory extends ManagedChannelBuilder.InterceptorFactory {}
