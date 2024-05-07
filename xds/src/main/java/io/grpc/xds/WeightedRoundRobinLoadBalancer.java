@@ -151,6 +151,8 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     String locality = resolvedAddresses.getAttributes().get(WeightedTargetLoadBalancer.CHILD_NAME);
     if (locality != null) {
       this.locality = locality;
+    } else {
+      this.locality = "";
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
