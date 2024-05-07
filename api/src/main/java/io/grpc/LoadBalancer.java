@@ -1255,7 +1255,7 @@ public abstract class LoadBalancer {
      *
      * @since 1.64.0
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
+    @Internal
     public MetricRecorder getMetricRecorder() {
       return new MetricRecorder() {};
     }

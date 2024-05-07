@@ -145,7 +145,7 @@ public final class GrpcOpenTelemetry {
    * Configures the given {@link ManagedChannelBuilder} with OpenTelemetry metrics instrumentation.
    */
   public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-    builder.addMetricSink(sink);
+    InternalManagedChannelBuilder.addMetricSink(builder, sink);
     InternalManagedChannelBuilder.interceptWithTarget(
         builder, openTelemetryMetricsModule::getClientInterceptor);
   }

@@ -23,7 +23,7 @@ import java.util.Set;
 /**
  * An internal interface representing a receiver or aggregator of gRPC metrics data.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
+@Internal
 public interface MetricSink {
 
   /**
