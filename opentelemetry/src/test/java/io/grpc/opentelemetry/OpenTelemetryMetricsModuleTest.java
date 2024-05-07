@@ -158,7 +158,7 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void testClientInterceptors() {
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     grpcServerRule.getServiceRegistry().addService(
@@ -214,7 +214,7 @@ public class OpenTelemetryMetricsModuleTest {
   @Test
   public void clientBasicMetrics() {
     String target = "target:///";
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -353,7 +353,7 @@ public class OpenTelemetryMetricsModuleTest {
   @Test
   public void recordAttemptMetrics() {
     String target = "dns:///example.com";
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -778,7 +778,7 @@ public class OpenTelemetryMetricsModuleTest {
   @Test
   public void clientStreamNeverCreatedStillRecordMetrics() {
     String target = "dns:///foo.example.com";
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
@@ -882,7 +882,7 @@ public class OpenTelemetryMetricsModuleTest {
   @Test
   public void clientLocalityMetrics_present() {
     String target = "target:///";
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"));
@@ -950,7 +950,7 @@ public class OpenTelemetryMetricsModuleTest {
   @Test
   public void clientLocalityMetrics_missing() {
     String target = "target:///";
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"));
@@ -1013,7 +1013,7 @@ public class OpenTelemetryMetricsModuleTest {
 
   @Test
   public void serverBasicMetrics() {
-    OpenTelemetryMetricsResource resource = OpenTelemetryModule.createMetricInstruments(testMeter,
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();

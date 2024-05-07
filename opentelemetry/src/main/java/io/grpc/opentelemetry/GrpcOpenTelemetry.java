@@ -45,13 +45,12 @@ import java.util.Map;
 /**
  *  The entrypoint for OpenTelemetry metrics functionality in gRPC.
  *
- *  <p>OpenTelemetryModule uses {@link io.opentelemetry.api.OpenTelemetry} APIs for instrumentation.
+ *  <p>GrpcOpenTelemetry uses {@link io.opentelemetry.api.OpenTelemetry} APIs for instrumentation.
  *  When no SDK is explicitly added no telemetry data will be collected. See
  *  {@link io.opentelemetry.sdk.OpenTelemetrySdk} for information on how to construct the SDK.
  *
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/10591")
-public final class OpenTelemetryModule {
+public final class GrpcOpenTelemetry {
 
   private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
     @Override
@@ -74,7 +73,7 @@ public final class OpenTelemetryModule {
     return new Builder();
   }
 
-  private OpenTelemetryModule(Builder builder) {
+  private GrpcOpenTelemetry(Builder builder) {
     this.openTelemetrySdk = checkNotNull(builder.openTelemetrySdk, "openTelemetrySdk");
     this.meterProvider = checkNotNull(openTelemetrySdk.getMeterProvider(), "meterProvider");
     this.meter = this.meterProvider
@@ -125,7 +124,7 @@ public final class OpenTelemetryModule {
   }
 
   /**
-   * Registers OpenTelemetryModule globally, applying its configuration to all subsequently created
+   * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
    */
   public void registerGlobal() {
@@ -133,12 +132,12 @@ public final class OpenTelemetryModule {
         new InternalConfigurator() {
           @Override
           public void configureChannelBuilder(ManagedChannelBuilder<?> channelBuilder) {
-            OpenTelemetryModule.this.configureChannelBuilder(channelBuilder);
+            GrpcOpenTelemetry.this.configureChannelBuilder(channelBuilder);
           }
 
           @Override
           public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
-            OpenTelemetryModule.this.configureServerBuilder(serverBuilder);
+            GrpcOpenTelemetry.this.configureServerBuilder(serverBuilder);
           }
         }));
   }
@@ -268,7 +267,7 @@ public final class OpenTelemetryModule {
 
 
   /**
-   * Builder for configuring {@link OpenTelemetryModule}.
+   * Builder for configuring {@link GrpcOpenTelemetry}.
    */
   public static class Builder {
     private OpenTelemetry openTelemetrySdk = OpenTelemetry.noop();
@@ -328,11 +327,11 @@ public final class OpenTelemetryModule {
     }
 
     /**
-     * Returns a new {@link OpenTelemetryModule} built with the configuration of this {@link
+     * Returns a new {@link GrpcOpenTelemetry} built with the configuration of this {@link
      * Builder}.
      */
-    public OpenTelemetryModule build() {
-      return new OpenTelemetryModule(this);
+    public GrpcOpenTelemetry build() {
+      return new GrpcOpenTelemetry(this);
     }
   }
 }
