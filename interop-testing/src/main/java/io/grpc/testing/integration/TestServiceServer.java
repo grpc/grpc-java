@@ -22,6 +22,7 @@ import io.grpc.BindableService;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
@@ -30,6 +31,10 @@ import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.net.UnknownHostException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -73,6 +78,7 @@ public class TestServiceServer {
   private ScheduledExecutorService executor;
   private Server server;
   private int localHandshakerPort = -1;
+  private AddressType addressType = AddressType.IPV4_IPV6;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -103,6 +109,10 @@ public class TestServiceServer {
         useAlts = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
+      } else if ("address_type".equals(key)) {
+        if (!value.isEmpty()) {
+          addressType = AddressType.valueOf(value.toUpperCase());
+        }
       } else if ("grpc_version".equals(key)) {
         if (!"2".equals(value)) {
           System.err.println("Only grpc version 2 is supported");
@@ -130,6 +140,8 @@ public class TestServiceServer {
               + "\n  --local_handshaker_port=PORT"
               + "\n                        Use local ALTS handshaker service on the specified port "
               + "\n                        for testing. Only effective when --use_alts=true."
+              + "\n  --address_type=IPV4|IPV6|IPV4_IPV6"
+              + "\n                        What type of addresses to listen on. Default IPV4_IPV6"
       );
       System.exit(1);
     }
@@ -156,7 +168,25 @@ public class TestServiceServer {
     MetricRecorder metricRecorder = MetricRecorder.newInstance();
     BindableService orcaOobService =
         OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
-    server = Grpc.newServerBuilderForPort(port, serverCreds)
+    ServerBuilder<?> serverBuilder;
+    switch (addressType) {
+      case IPV4_IPV6:
+        serverBuilder = Grpc.newServerBuilderForPort(port, serverCreds);
+        break;
+      case IPV4:
+        serverBuilder =
+            io.grpc.netty.NettyServerBuilder.forAddress(getV4Address(port), serverCreds)
+                .addListenAddress(new InetSocketAddress("127.0.0.1", port));
+        break;
+      case IPV6:
+        serverBuilder =
+            io.grpc.netty.NettyServerBuilder.forAddress(getV6Address(port), serverCreds)
+                .addListenAddress(new InetSocketAddress("::1", port));
+        break;
+      default:
+        throw new AssertionError("Unknown address type: " + addressType);
+    }
+    server = serverBuilder
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .addService(
             ServerInterceptors.intercept(
@@ -165,6 +195,26 @@ public class TestServiceServer {
         .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
         .build()
         .start();
+  }
+
+  private SocketAddress getV6Address(int port) throws UnknownHostException {
+    InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
+    for (InetAddress address : addresses) {
+      if (address.getAddress().length != 4) {
+        return new java.net.InetSocketAddress(address, port);
+      }
+    }
+    return null; // should never happen
+  }
+
+  private SocketAddress getV4Address(int port) throws UnknownHostException {
+    InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
+    for (InetAddress address : addresses) {
+      if (address.getAddress().length == 4) {
+        return new java.net.InetSocketAddress(address, port);
+      }
+    }
+    return null; // should never happen
   }
 
   @VisibleForTesting
@@ -186,5 +236,12 @@ public class TestServiceServer {
     if (server != null) {
       server.awaitTermination();
     }
+  }
+
+  @VisibleForTesting
+  enum AddressType {
+    IPV4,
+    IPV6,
+    IPV4_IPV6
   }
 }
