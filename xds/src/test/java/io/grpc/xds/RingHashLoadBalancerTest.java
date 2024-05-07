@@ -446,7 +446,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();  // buffer request
     int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
-    verify(getSubChannel(servers.get(1)), times(expectedTimes)).requestConnection();  // kicked off connection to server2
+    // verify kicked off connection to server2
+    verify(getSubChannel(servers.get(1)), times(expectedTimes)).requestConnection();
     assertThat(subchannels.size()).isEqualTo(2);  // no excessive connection
 
     deliverSubchannelState(getSubChannel(servers.get(1)), CSI_CONNECTING);
