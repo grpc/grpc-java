@@ -974,7 +974,7 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributesWithLocality
         = clientAttributes.toBuilder()
-        .put(LOCALITY_KEY, "unknown")
+        .put(LOCALITY_KEY, "")
         .build();
 
     assertThat(openTelemetryTesting.getMetrics())
