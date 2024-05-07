@@ -213,7 +213,7 @@ final class OpenTelemetryMetricsModule {
       if (module.localityEnabled) {
         String savedLocality = locality;
         if (savedLocality == null) {
-          savedLocality = "unknown";
+          savedLocality = "";
         }
         builder.put(LOCALITY_KEY, savedLocality);
       }
