@@ -28,7 +28,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Converter;
 import com.google.common.collect.ImmutableList;
@@ -59,6 +59,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricRecorder;
+import io.grpc.MetricRecorder.Registration;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NoopMetricSink;
@@ -128,6 +129,8 @@ public class RlsLoadBalancerTest {
       });
   @Mock
   private MetricRecorder mockMetricRecorder;
+  @Mock
+  private Registration mockGaugeRegistration;
   private final FakeHelper helperDelegate = new FakeHelper();
   private final Helper helper =
       mock(Helper.class, AdditionalAnswers.delegatesTo(helperDelegate));
@@ -186,6 +189,8 @@ public class RlsLoadBalancerTest {
 
     searchSubchannelArgs = newPickSubchannelArgs(fakeSearchMethod);
     rescueSubchannelArgs = newPickSubchannelArgs(fakeRescueMethod);
+
+    when(mockMetricRecorder.registerBatchCallback(any(), any())).thenReturn(mockGaugeRegistration);
   }
 
   @After
@@ -226,7 +231,6 @@ public class RlsLoadBalancerTest {
     assertThat(serverStatus.getDescription()).contains("RLS server returned: ");
     assertThat(serverStatus.getDescription()).endsWith("ABORTED: base desc");
     assertThat(serverStatus.getDescription()).contains("RLS server conv.test");
-    verifyNoMoreInteractions(mockMetricRecorder);
   }
 
   @Test
@@ -290,8 +294,6 @@ public class RlsLoadBalancerTest {
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
     verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "fail");
-
-    verifyNoMoreInteractions(mockMetricRecorder);
   }
 
   @Test
@@ -351,7 +353,6 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
     verifyFailedPicksCounterAdd(1, 1);
-    verifyNoMoreInteractions(mockMetricRecorder);
   }
 
   @Test
@@ -377,7 +378,6 @@ public class RlsLoadBalancerTest {
     int times = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
     verifyLongCounterAdd("grpc.lb.rls.default_target_picks", times, 1,
         "defaultTarget", "complete");
-    verifyNoMoreInteractions(mockMetricRecorder);
 
     Subchannel subchannel = picker.pickSubchannel(searchSubchannelArgs).getSubchannel();
     assertThat(subchannelIsReady(subchannel)).isTrue();
@@ -422,8 +422,6 @@ public class RlsLoadBalancerTest {
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(res.getSubchannel()).isNull();
     verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "fail");
-
-    verifyNoMoreInteractions(mockMetricRecorder);
   }
 
   @Test
@@ -499,7 +497,6 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper, atLeast(0)).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
     verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "fail");
-    verifyNoMoreInteractions(mockMetricRecorder);
   }
 
   @Test
@@ -542,7 +539,6 @@ public class RlsLoadBalancerTest {
     res = failedPicker.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     assertThat(res.getStatus().isOk()).isFalse();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
-    verifyNoMoreInteractions(mockMetricRecorder);
   }
 
   private PickResult markReadyAndGetPickResult(InOrder inOrder,
