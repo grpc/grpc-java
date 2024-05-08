@@ -87,7 +87,7 @@ public class AdvancedTlsX509KeyManagerTest {
   }
 
   @Test
-  public void CredentialSettingTest() throws Exception {
+  public void credentialSetting() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
@@ -105,32 +105,32 @@ public class AdvancedTlsX509KeyManagerTest {
   }
 
   @Test
-  public void CredentialSettingParameterValidityTest() throws Exception {
+  public void credentialSettingParameterValidity() throws Exception {
     // Checking edge cases of public API parameter setting.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    NullPointerException npe = assertThrows(NullPointerException.class, () -> serverKeyManager.
-        updateIdentityCredentials(null, serverCert0));
+    NullPointerException npe = assertThrows(NullPointerException.class, () -> serverKeyManager
+        .updateIdentityCredentials(null, serverCert0));
     assertEquals("key", npe.getMessage());
 
-    npe = assertThrows(NullPointerException.class, () -> serverKeyManager.
-        updateIdentityCredentials(serverKey0, null));
+    npe = assertThrows(NullPointerException.class, () -> serverKeyManager
+        .updateIdentityCredentials(serverKey0, null));
     assertEquals("certs", npe.getMessage());
 
-    npe = assertThrows(NullPointerException.class, () -> serverKeyManager.
-        updateIdentityCredentialsFromFile(null, serverCert0File));
+    npe = assertThrows(NullPointerException.class, () -> serverKeyManager
+        .updateIdentityCredentialsFromFile(null, serverCert0File));
     assertEquals("keyFile", npe.getMessage());
 
-    npe = assertThrows(NullPointerException.class, () -> serverKeyManager.
-        updateIdentityCredentialsFromFile(serverKey0File, null));
+    npe = assertThrows(NullPointerException.class, () -> serverKeyManager
+        .updateIdentityCredentialsFromFile(serverKey0File, null));
     assertEquals("certFile", npe.getMessage());
 
-    npe = assertThrows(NullPointerException.class, () -> serverKeyManager.
-        updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1, null,
+    npe = assertThrows(NullPointerException.class, () -> serverKeyManager
+        .updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1, null,
             executor));
     assertEquals("unit", npe.getMessage());
 
-    npe = assertThrows(NullPointerException.class, () -> serverKeyManager.
-        updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1,
+    npe = assertThrows(NullPointerException.class, () -> serverKeyManager
+        .updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1,
             TimeUnit.MINUTES, null));
     assertEquals("executor", npe.getMessage());
 
