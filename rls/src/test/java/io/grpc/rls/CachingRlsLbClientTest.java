@@ -27,7 +27,6 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -672,10 +671,10 @@ public class CachingRlsLbClientTest {
     gaugeBatchCallback.accept(mockBatchRecorder);
     inOrder.verify(mockBatchRecorder).recordLongGauge(
         argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")), eq(0L),
-        isA(List.class), isA(List.class));
+        any(), any());
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")),
-            eq(0L), isA(List.class), isA(List.class));
+            eq(0L), any(), any());
 
     RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(
         ImmutableMap.of("server", "bigtable.googleapis.com", "service-key", "foo", "method-key",
@@ -693,10 +692,10 @@ public class CachingRlsLbClientTest {
     gaugeBatchCallback.accept(mockBatchRecorder);
     inOrder.verify(mockBatchRecorder).recordLongGauge(
         argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")), eq(1L),
-        isA(List.class), isA(List.class));
+        any(), any());
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")),
-            eq(260L), isA(List.class), isA(List.class));
+            eq(260L), any(), any());
 
     inOrder.verifyNoMoreInteractions();
 
