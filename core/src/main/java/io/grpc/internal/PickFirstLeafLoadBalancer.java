@@ -59,8 +59,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
-  public static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
-      "GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS";
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private Index addressIndex;
@@ -71,7 +69,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
   private final boolean enableHappyEyeballs =
-      GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, true);
+      PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
