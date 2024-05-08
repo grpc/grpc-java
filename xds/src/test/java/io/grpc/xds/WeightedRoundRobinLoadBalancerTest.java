@@ -64,7 +64,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.TestUtils;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.services.InternalCallMetricRecorder;
@@ -595,7 +595,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   private boolean isEnabledHappyEyeballs() {
-    return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS", true);
+    return PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   }
 
   @Test
