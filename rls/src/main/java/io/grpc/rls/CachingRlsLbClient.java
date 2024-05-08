@@ -37,10 +37,14 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LongCounterMetricInstrument;
+import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricRecorder.BatchCallback;
+import io.grpc.MetricRecorder.BatchRecorder;
+import io.grpc.MetricRecorder.Registration;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -65,6 +69,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -94,6 +99,11 @@ final class CachingRlsLbClient {
   private static final LongCounterMetricInstrument DEFAULT_TARGET_PICKS_COUNTER;
   private static final LongCounterMetricInstrument TARGET_PICKS_COUNTER;
   private static final LongCounterMetricInstrument FAILED_PICKS_COUNTER;
+  private static final LongGaugeMetricInstrument CACHE_ENTRIES_GAUGE;
+  private static final LongGaugeMetricInstrument CACHE_SIZE_GAUGE;
+  private final Registration cacheEntriesGaugeRegistration;
+  private final Registration cacheSizeGaugeRegistration;
+  private final String metricsInstanceUuid = UUID.randomUUID().toString();
 
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
@@ -137,6 +147,14 @@ final class CachingRlsLbClient {
     FAILED_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.failed_picks",
         "Number of LB picks failed due to either a failed RLS request or the RLS channel being "
             + "throttled", "pick", Arrays.asList("grpc.target", "grpc.lb.rls.server_target"),
+        Collections.emptyList(), true);
+    CACHE_ENTRIES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_entries",
+        "Number of entries in the RLS cache", "entry",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_id"),
+        Collections.emptyList(), true);
+    CACHE_SIZE_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_size",
+        "The current size of the RLS cache", "byte",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_id"),
         Collections.emptyList(), true);
   }
 
@@ -202,6 +220,34 @@ final class CachingRlsLbClient {
             lbPolicyConfig.getLoadBalancingPolicy(), childLbResolvedAddressFactory,
             childLbHelperProvider,
             new BackoffRefreshListener());
+
+    cacheEntriesGaugeRegistration = helper.getMetricRecorder()
+        .registerBatchCallback(new BatchCallback() {
+          @Override
+          public void accept(BatchRecorder recorder) {
+            int estimatedSize;
+            synchronized (lock) {
+              estimatedSize = linkedHashLruCache.estimatedSize();
+            }
+            recorder.recordLongGauge(CACHE_ENTRIES_GAUGE, estimatedSize,
+                Arrays.asList(helper.getChannelTarget(), rlsConfig.lookupService(),
+                    metricsInstanceUuid), Collections.emptyList());
+          }
+        }, CACHE_ENTRIES_GAUGE);
+    cacheSizeGaugeRegistration = helper.getMetricRecorder()
+        .registerBatchCallback(new BatchCallback() {
+          @Override
+          public void accept(BatchRecorder recorder) {
+            long estimatedSizeBytes;
+            synchronized (lock) {
+              estimatedSizeBytes = linkedHashLruCache.estimatedSizeBytes();
+            }
+            recorder.recordLongGauge(CACHE_SIZE_GAUGE, estimatedSizeBytes,
+                Arrays.asList(helper.getChannelTarget(), rlsConfig.lookupService(),
+                    metricsInstanceUuid), Collections.emptyList());
+          }
+        }, CACHE_SIZE_GAUGE);
+
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
@@ -306,6 +352,8 @@ final class CachingRlsLbClient {
       pendingCallCache.clear();
       rlsChannel.shutdownNow();
       rlsPicker.close();
+      cacheEntriesGaugeRegistration.close();
+      cacheSizeGaugeRegistration.close();
     }
   }
 

@@ -24,11 +24,14 @@ import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Converter;
 import com.google.common.collect.ImmutableList;
@@ -47,10 +50,14 @@ import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
+import io.grpc.MetricRecorder.BatchCallback;
+import io.grpc.MetricRecorder.BatchRecorder;
+import io.grpc.MetricRecorder.Registration;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -95,12 +102,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.AdditionalAnswers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
+import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -124,6 +134,17 @@ public class CachingRlsLbClientTest {
   private SocketAddress socketAddress;
   @Mock
   private MetricRecorder mockMetricRecorder;
+  @Mock
+  private BatchRecorder mockBatchRecorder;
+  @Mock
+  private Registration mockCacheEntriesRegistration;
+  @Mock
+  private Registration mockCacheSizeRegistration;
+  @Captor
+  private ArgumentCaptor<BatchCallback> cacheEntriesBatchCallbackCaptor;
+  @Captor
+  private ArgumentCaptor<BatchCallback> cacheSizeBatchCallbackCaptor;
+
 
   private final SynchronizationContext syncContext =
       new SynchronizationContext(new UncaughtExceptionHandler() {
@@ -166,6 +187,18 @@ public class CachingRlsLbClientTest {
             .setThrottler(fakeThrottler)
             .setTicker(fakeClock.getTicker())
             .build();
+  }
+
+  @Before
+  public void setUpMockMetricRecorder() {
+    when(mockMetricRecorder.registerBatchCallback(isA(BatchCallback.class),
+        argThat((LongGaugeMetricInstrument metricInstruments) -> {
+          return metricInstruments.getName().equals("grpc.lb.rls.cache_entries");
+        }))).thenReturn(mockCacheEntriesRegistration);
+    when(mockMetricRecorder.registerBatchCallback(isA(BatchCallback.class),
+        argThat((LongGaugeMetricInstrument metricInstruments) -> {
+          return metricInstruments.getName().equals("grpc.lb.rls.cache_size");
+        }))).thenReturn(mockCacheSizeRegistration);
   }
 
   @After
@@ -636,6 +669,61 @@ public class CachingRlsLbClientTest {
     policyWrapper.getHelper().updateBalancingState(newState, policyWrapper.getPicker());
   }
 
+  @Test
+  public void metricGauges() throws ExecutionException, InterruptedException, TimeoutException {
+    setUpRlsLbClient();
+
+    verify(mockMetricRecorder).registerBatchCallback(cacheEntriesBatchCallbackCaptor.capture(),
+        argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")));
+    BatchCallback cacheEntriesBatchCallback = cacheEntriesBatchCallbackCaptor.getValue();
+    verify(mockMetricRecorder).registerBatchCallback(cacheSizeBatchCallbackCaptor.capture(),
+        argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")));
+    BatchCallback cacheSizeBatchCallback = cacheSizeBatchCallbackCaptor.getValue();
+
+    // Verify the correct cache entries gauge value if requested at this point.
+    InOrder inOrder = inOrder(mockBatchRecorder);
+    cacheEntriesBatchCallback.accept(mockBatchRecorder);
+    inOrder.verify(mockBatchRecorder).recordLongGauge(
+        argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")), eq(0L),
+        isA(List.class), isA(List.class));
+
+    // Verify the correct cache size gauge value if requested at this point.
+    cacheSizeBatchCallback.accept(mockBatchRecorder);
+    inOrder.verify(mockBatchRecorder)
+        .recordLongGauge(argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")),
+            eq(0L), isA(List.class), isA(List.class));
+
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(
+        ImmutableMap.of("server", "bigtable.googleapis.com", "service-key", "foo", "method-key",
+            "bar"));
+    rlsServerImpl.setLookupTable(ImmutableMap.of(routeLookupRequest,
+        RouteLookupResponse.create(ImmutableList.of("target"), "header")));
+
+    // Make a request that will populate the cache with an entry
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isTrue();
+
+    // Gauge values should reflect the new cache entry.
+    cacheEntriesBatchCallback.accept(mockBatchRecorder);
+    inOrder.verify(mockBatchRecorder).recordLongGauge(
+        argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")), eq(1L),
+        isA(List.class), isA(List.class));
+
+    cacheSizeBatchCallback.accept(mockBatchRecorder);
+    inOrder.verify(mockBatchRecorder)
+        .recordLongGauge(argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")),
+            eq(260L), isA(List.class), isA(List.class));
+
+    inOrder.verifyNoMoreInteractions();
+
+    // Shutdown
+    rlsLbClient.close();
+    verify(mockCacheEntriesRegistration).close();
+    verify(mockCacheSizeRegistration).close();
+  }
+
   private static RouteLookupConfig getRouteLookupConfig() {
     return RouteLookupConfig.builder()
         .grpcKeybuilders(ImmutableList.of(
@@ -665,6 +753,21 @@ public class CachingRlsLbClientTest {
             return TimeUnit.NANOSECONDS.convert(delay, unit);
           }
         };
+  }
+
+  private static class LongGaugeInstrumentArgumentMatcher implements
+      ArgumentMatcher<LongGaugeMetricInstrument> {
+
+    private final String instrumentName;
+
+    public LongGaugeInstrumentArgumentMatcher(String instrumentName) {
+      this.instrumentName = instrumentName;
+    }
+
+    @Override
+    public boolean matches(LongGaugeMetricInstrument instrument) {
+      return instrument.getName().equals(instrumentName);
+    }
   }
 
   private static final class FakeBackoffProvider implements BackoffPolicy.Provider {
