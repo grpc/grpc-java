@@ -31,7 +31,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class OpenTelemetryModuleTest {
+public class GrpcOpenTelemetryTest {
   private final InMemoryMetricReader inMemoryMetricReader = InMemoryMetricReader.create();
   private final SdkMeterProvider meterProvider =
       SdkMeterProvider.builder().registerMetricReader(inMemoryMetricReader).build();
@@ -42,7 +42,7 @@ public class OpenTelemetryModuleTest {
     OpenTelemetrySdk sdk =
         OpenTelemetrySdk.builder().setMeterProvider(meterProvider).build();
 
-    OpenTelemetryModule openTelemetryModule = OpenTelemetryModule.newBuilder()
+    GrpcOpenTelemetry openTelemetryModule = GrpcOpenTelemetry.newBuilder()
         .sdk(sdk)
         .addOptionalLabel("version")
         .build();
@@ -58,7 +58,7 @@ public class OpenTelemetryModuleTest {
 
   @Test
   public void builderDefaults() {
-    OpenTelemetryModule module = OpenTelemetryModule.newBuilder().build();
+    GrpcOpenTelemetry module = GrpcOpenTelemetry.newBuilder().build();
 
     assertThat(module.getOpenTelemetryInstance()).isNotNull();
     assertThat(module.getOpenTelemetryInstance()).isSameInstanceAs(noopOpenTelemetry);
@@ -77,11 +77,11 @@ public class OpenTelemetryModuleTest {
 
   @Test
   public void enableDisableMetrics() {
-    OpenTelemetryModule.Builder builder = OpenTelemetryModule.newBuilder();
+    GrpcOpenTelemetry.Builder builder = GrpcOpenTelemetry.newBuilder();
     builder.enableMetrics(Arrays.asList("metric1", "metric4"));
     builder.disableMetrics(Arrays.asList("metric2", "metric3"));
 
-    OpenTelemetryModule module = builder.build();
+    GrpcOpenTelemetry module = builder.build();
 
     assertThat(module.getEnableMetrics().get("metric1")).isTrue();
     assertThat(module.getEnableMetrics().get("metric4")).isTrue();
@@ -91,12 +91,12 @@ public class OpenTelemetryModuleTest {
 
   @Test
   public void disableAllMetrics() {
-    OpenTelemetryModule.Builder builder = OpenTelemetryModule.newBuilder();
+    GrpcOpenTelemetry.Builder builder = GrpcOpenTelemetry.newBuilder();
     builder.enableMetrics(Arrays.asList("metric1", "metric4"));
     builder.disableMetrics(Arrays.asList("metric2", "metric3"));
     builder.disableAllMetrics();
 
-    OpenTelemetryModule module = builder.build();
+    GrpcOpenTelemetry module = builder.build();
 
     assertThat(module.getEnableMetrics()).isEmpty();
   }
