@@ -48,7 +48,7 @@ import javax.net.ssl.X509ExtendedKeyManager;
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
   // Minimum allowed period for refreshing files with credential information.
-  public static final int MINIMUM_REFRESH_PERIOD = 1 ;
+  private static final int MINIMUM_REFRESH_PERIOD = 1 ;
   // The credential information to be sent to peers to prove our identity.
   private volatile KeyInfo keyInfo;
 
