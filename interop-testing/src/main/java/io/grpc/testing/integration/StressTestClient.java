@@ -120,6 +120,7 @@ public class StressTestClient {
   private final Map<String, Metrics.GaugeResponse> gauges =
       new ConcurrentHashMap<>();
   private final AtomicLong totalCallCount = new AtomicLong(0);
+  private final AtomicLong totalFailureCount = new AtomicLong(0);
 
   private volatile boolean shutdown;
 
@@ -308,7 +309,9 @@ public class StressTestClient {
     }
 
     try {
-      metricsServer.shutdownNow();
+      if (metricsServer != null) {
+        metricsServer.shutdownNow();
+      }
     } catch (Throwable t) {
       log.log(Level.WARNING, "Error shutting down metrics service!", t);
     }
@@ -417,6 +420,11 @@ public class StressTestClient {
     return totalCallCount.get();
   }
 
+  @VisibleForTesting
+  long getTotalFailureCount() {
+    return totalFailureCount.get();
+  }
+
   private static String serverAddressesToString(List<InetSocketAddress> addresses) {
     List<String> tmp = new ArrayList<>();
     for (InetSocketAddress address : addresses) {
@@ -488,6 +496,8 @@ public class StressTestClient {
         try {
           runTestCase(tester, testCaseSelector.nextTestCase());
         } catch (Exception e) {
+          log.warning("runTestCase failed: " + e.getMessage());
+          totalFailureCount.incrementAndGet();
           throw new RuntimeException(e);
         }
 

@@ -17,6 +17,9 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.collect.Sets.newHashSet;
+import static io.grpc.testing.integration.TestServiceServer.AddressType.IPV4;
+import static io.grpc.testing.integration.TestServiceServer.AddressType.IPV4_IPV6;
+import static io.grpc.testing.integration.TestServiceServer.AddressType.IPV6;
 import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -109,57 +112,111 @@ public class StressTestClientTest {
   }
 
   @Test
+  public void gaugesShouldBeExported_ipv4() throws Exception {
+    checkGaugesShouldBeExported(IPV4);
+  }
+
+  @Test
+  public void gaugesShouldBeExported_ipv6() throws Exception {
+    checkGaugesShouldBeExported(IPV6);
+  }
+
+  @Test
+  public void gaugesShouldBeExported_ipv4_ipv6() throws Exception {
+    checkGaugesShouldBeExported(IPV4_IPV6);
+  }
+
+  @Test
   public void gaugesShouldBeExported() throws Exception {
+    checkGaugesShouldBeExported(null);
+  }
+
+  private void checkGaugesShouldBeExported(TestServiceServer.AddressType addressType)
+      throws Exception {
 
     TestServiceServer server = new TestServiceServer();
-    server.parseArgs(new String[]{"--port=" + 0, "--use_tls=true"});
+    int port = 8082;
+    String[] args =
+        addressType != null
+        ? new String[]{"--port=" + port, "--use_tls=true", "--address_type=" + addressType}
+        : new String[] {"--port=" + port, "--use_tls=true"};
+    server.parseArgs(args);
     server.start();
 
-    StressTestClient client = new StressTestClient();
-    client.parseArgs(new String[] {"--test_cases=empty_unary:1",
-        "--server_addresses=localhost:" + server.getPort(), "--metrics_port=" + 0,
-        "--server_host_override=foo.test.google.fr",
-        "--use_tls=true",
-        "--use_test_ca=true",
-        "--num_stubs_per_channel=2"});
-    client.startMetricsService();
-    client.runStressTest();
-
-    // Connect to the metrics service
-    ManagedChannel ch = Grpc.newChannelBuilder(
-          "localhost:" + client.getMetricServerPort(), InsecureChannelCredentials.create())
-        .build();
-
-    MetricsServiceGrpc.MetricsServiceBlockingStub stub = MetricsServiceGrpc.newBlockingStub(ch);
-
-    // Wait until gauges have been exported
-    Set<String> gaugeNames = newHashSet("/stress_test/server_0/channel_0/stub_0/qps",
-        "/stress_test/server_0/channel_0/stub_1/qps");
-
-    List<GaugeResponse> allGauges =
-        ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
-    while (allGauges.size() < gaugeNames.size()) {
-      Thread.sleep(100);
-      allGauges = ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
+    String serverHost = "localhost";
+    if (addressType != null) {
+      switch (addressType) {
+        case IPV4:
+          serverHost = "127.0.0.1";
+          break;
+        case IPV6:
+          serverHost = "[::1]";
+          break;
+        case IPV4_IPV6:
+          serverHost = "localhost";
+          break;
+        default:
+          serverHost = "localhost";
+      }
     }
 
-    for (GaugeResponse gauge : allGauges) {
-      String gaugeName = gauge.getName();
+    StressTestClient client = null;
+    ManagedChannel ch = null;
+    try {
+      // Connect to the metrics service
+      client = new StressTestClient();
+      client.parseArgs(new String[] {"--test_cases=empty_unary:1",
+          "--server_addresses=" + serverHost + ":" + server.getPort(), "--metrics_port=" + 8079,
+          "--server_host_override=foo.test.google.fr",
+          "--use_tls=true",
+          "--use_test_ca=true",
+          "--num_stubs_per_channel=2"});
+      client.startMetricsService();
+      client.runStressTest();
 
-      assertTrue("gaugeName: " + gaugeName, gaugeNames.contains(gaugeName));
-      assertTrue("qps: " + gauge.getLongValue(), gauge.getLongValue() > 0);
-      gaugeNames.remove(gauge.getName());
+      ch = Grpc.newChannelBuilder(
+            "localhost:" + client.getMetricServerPort(), InsecureChannelCredentials.create())
+          .build();
 
-      GaugeResponse gauge1 =
-          stub.getGauge(Metrics.GaugeRequest.newBuilder().setName(gaugeName).build());
-      assertEquals(gaugeName, gauge1.getName());
-      assertTrue("qps: " + gauge1.getLongValue(), gauge1.getLongValue() > 0);
+      MetricsServiceGrpc.MetricsServiceBlockingStub stub = MetricsServiceGrpc.newBlockingStub(ch);
+
+      // Wait until gauges have been exported
+      Set<String> gaugeNames = newHashSet("/stress_test/server_0/channel_0/stub_0/qps",
+          "/stress_test/server_0/channel_0/stub_1/qps");
+
+      List<GaugeResponse> allGauges =
+          ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
+      while (allGauges.size() < gaugeNames.size() && client.getTotalFailureCount() == 0) {
+        Thread.sleep(100);
+        allGauges = ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
+      }
+
+      for (GaugeResponse gauge : allGauges) {
+        String gaugeName = gauge.getName();
+
+        assertTrue("gaugeName: " + gaugeName, gaugeNames.contains(gaugeName));
+        assertTrue("qps: " + gauge.getLongValue(), gauge.getLongValue() > 0);
+        gaugeNames.remove(gauge.getName());
+
+        GaugeResponse gauge1 =
+            stub.getGauge(Metrics.GaugeRequest.newBuilder().setName(gaugeName).build());
+        assertEquals(gaugeName, gauge1.getName());
+        assertTrue("qps: " + gauge1.getLongValue(), gauge1.getLongValue() > 0);
+      }
+
+      assertEquals("Failures communicating with server",0, client.getTotalFailureCount());
+      assertTrue("gauges: " + gaugeNames, gaugeNames.isEmpty());
+    } finally {
+      if (client != null) {
+        client.shutdown();
+      }
+      if (ch != null) {
+        ch.shutdownNow();
+      }
+      server.stop();
+
     }
 
-    assertTrue("gauges: " + gaugeNames, gaugeNames.isEmpty());
-
-    client.shutdown();
-    server.stop();
   }
 
 }
