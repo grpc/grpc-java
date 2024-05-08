@@ -23,6 +23,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -107,7 +108,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.AdditionalAnswers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
@@ -137,13 +137,9 @@ public class CachingRlsLbClientTest {
   @Mock
   private BatchRecorder mockBatchRecorder;
   @Mock
-  private Registration mockCacheEntriesRegistration;
-  @Mock
-  private Registration mockCacheSizeRegistration;
+  private Registration mockGaugeRegistration;
   @Captor
-  private ArgumentCaptor<BatchCallback> cacheEntriesBatchCallbackCaptor;
-  @Captor
-  private ArgumentCaptor<BatchCallback> cacheSizeBatchCallbackCaptor;
+  private ArgumentCaptor<BatchCallback> gaugeBatchCallbackCaptor;
 
 
   private final SynchronizationContext syncContext =
@@ -166,7 +162,7 @@ public class CachingRlsLbClientTest {
   private final ChildLoadBalancingPolicy childLbPolicy =
       new ChildLoadBalancingPolicy("target", Collections.<String, Object>emptyMap(), lbProvider);
   private final Helper helper =
-      mock(Helper.class, AdditionalAnswers.delegatesTo(new FakeHelper()));
+      mock(Helper.class, delegatesTo(new FakeHelper()));
   private final FakeThrottler fakeThrottler = new FakeThrottler();
   private final LbPolicyConfiguration lbPolicyConfiguration =
       new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, null, childLbPolicy);
@@ -191,14 +187,7 @@ public class CachingRlsLbClientTest {
 
   @Before
   public void setUpMockMetricRecorder() {
-    when(mockMetricRecorder.registerBatchCallback(isA(BatchCallback.class),
-        argThat((LongGaugeMetricInstrument metricInstruments) -> {
-          return metricInstruments.getName().equals("grpc.lb.rls.cache_entries");
-        }))).thenReturn(mockCacheEntriesRegistration);
-    when(mockMetricRecorder.registerBatchCallback(isA(BatchCallback.class),
-        argThat((LongGaugeMetricInstrument metricInstruments) -> {
-          return metricInstruments.getName().equals("grpc.lb.rls.cache_size");
-        }))).thenReturn(mockCacheSizeRegistration);
+    when(mockMetricRecorder.registerBatchCallback(any(), any())).thenReturn(mockGaugeRegistration);
   }
 
   @After
@@ -673,22 +662,17 @@ public class CachingRlsLbClientTest {
   public void metricGauges() throws ExecutionException, InterruptedException, TimeoutException {
     setUpRlsLbClient();
 
-    verify(mockMetricRecorder).registerBatchCallback(cacheEntriesBatchCallbackCaptor.capture(),
-        argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")));
-    BatchCallback cacheEntriesBatchCallback = cacheEntriesBatchCallbackCaptor.getValue();
-    verify(mockMetricRecorder).registerBatchCallback(cacheSizeBatchCallbackCaptor.capture(),
-        argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")));
-    BatchCallback cacheSizeBatchCallback = cacheSizeBatchCallbackCaptor.getValue();
+    verify(mockMetricRecorder).registerBatchCallback(gaugeBatchCallbackCaptor.capture(),
+        any());
 
-    // Verify the correct cache entries gauge value if requested at this point.
+    BatchCallback gaugeBatchCallback = gaugeBatchCallbackCaptor.getValue();
+
+    // Verify the correct cache gauge values when requested at this point.
     InOrder inOrder = inOrder(mockBatchRecorder);
-    cacheEntriesBatchCallback.accept(mockBatchRecorder);
+    gaugeBatchCallback.accept(mockBatchRecorder);
     inOrder.verify(mockBatchRecorder).recordLongGauge(
         argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")), eq(0L),
         isA(List.class), isA(List.class));
-
-    // Verify the correct cache size gauge value if requested at this point.
-    cacheSizeBatchCallback.accept(mockBatchRecorder);
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")),
             eq(0L), isA(List.class), isA(List.class));
@@ -706,12 +690,10 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // Gauge values should reflect the new cache entry.
-    cacheEntriesBatchCallback.accept(mockBatchRecorder);
+    gaugeBatchCallback.accept(mockBatchRecorder);
     inOrder.verify(mockBatchRecorder).recordLongGauge(
         argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")), eq(1L),
         isA(List.class), isA(List.class));
-
-    cacheSizeBatchCallback.accept(mockBatchRecorder);
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_size")),
             eq(260L), isA(List.class), isA(List.class));
@@ -720,8 +702,7 @@ public class CachingRlsLbClientTest {
 
     // Shutdown
     rlsLbClient.close();
-    verify(mockCacheEntriesRegistration).close();
-    verify(mockCacheSizeRegistration).close();
+    verify(mockGaugeRegistration).close();
   }
 
   private static RouteLookupConfig getRouteLookupConfig() {

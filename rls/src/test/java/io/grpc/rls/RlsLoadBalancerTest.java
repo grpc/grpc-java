@@ -23,7 +23,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -53,7 +52,6 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
-import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
@@ -61,7 +59,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricRecorder;
-import io.grpc.MetricRecorder.BatchCallback;
 import io.grpc.MetricRecorder.Registration;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver.ConfigOrError;
@@ -133,9 +130,7 @@ public class RlsLoadBalancerTest {
   @Mock
   private MetricRecorder mockMetricRecorder;
   @Mock
-  private Registration mockCacheEntriesRegistration;
-  @Mock
-  private Registration mockCacheSizeRegistration;
+  private Registration mockGaugeRegistration;
   private final FakeHelper helperDelegate = new FakeHelper();
   private final Helper helper =
       mock(Helper.class, AdditionalAnswers.delegatesTo(helperDelegate));
@@ -193,16 +188,9 @@ public class RlsLoadBalancerTest {
     };
 
     searchSubchannelArgs = newPickSubchannelArgs(fakeSearchMethod);
-
-    when(mockMetricRecorder.registerBatchCallback(isA(BatchCallback.class),
-        argThat((LongGaugeMetricInstrument metricInstruments) -> {
-          return metricInstruments.getName().equals("grpc.lb.rls.cache_entries");
-        }))).thenReturn(mockCacheEntriesRegistration);
-    when(mockMetricRecorder.registerBatchCallback(isA(BatchCallback.class),
-        argThat((LongGaugeMetricInstrument metricInstruments) -> {
-          return metricInstruments.getName().equals("grpc.lb.rls.cache_size");
-        }))).thenReturn(mockCacheSizeRegistration);
     rescueSubchannelArgs = newPickSubchannelArgs(fakeRescueMethod);
+
+    when(mockMetricRecorder.registerBatchCallback(any(), any())).thenReturn(mockGaugeRegistration);
   }
 
   @After
