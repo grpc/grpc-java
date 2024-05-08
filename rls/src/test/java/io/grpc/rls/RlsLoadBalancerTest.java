@@ -57,7 +57,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.RlsLoadBalancer.CachingRlsLbClientBuilderProvider;
@@ -233,7 +232,6 @@ public class RlsLoadBalancerTest {
     res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
     assertThat(res.getSubchannel()).isSameInstanceAs(searchSubchannel);
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
 
     // rescue should be pending status although the overall channel state is READY
     res = picker.pickSubchannel(rescueSubchannelArgs);
