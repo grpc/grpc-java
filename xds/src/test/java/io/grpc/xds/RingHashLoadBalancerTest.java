@@ -150,8 +150,7 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
-    verify(subchannel, times(expectedTimes)).requestConnection();
+    verify(subchannel).requestConnection();
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     deliverSubchannelState(subchannel, CSI_CONNECTING);
@@ -189,8 +188,7 @@ public class RingHashLoadBalancerTest {
     assertThat(childLbState.getLb().delegateType()).isEqualTo(expectedLbType);
     Subchannel subchannel = subchannels.get(Collections.singletonList(childLbState.getEag()));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
-    inOrder.verify(subchannel, times(expectedTimes)).requestConnection();
+    inOrder.verify(subchannel).requestConnection();
     deliverSubchannelState(subchannel, CSI_READY);
     inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
@@ -447,9 +445,8 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();  // buffer request
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
     // verify kicked off connection to server2
-    verify(getSubChannel(servers.get(1)), times(expectedTimes)).requestConnection();
+    verify(getSubChannel(servers.get(1))).requestConnection();
     assertThat(subchannels.size()).isEqualTo(2);  // no excessive connection
 
     deliverSubchannelState(getSubChannel(servers.get(1)), CSI_CONNECTING);
