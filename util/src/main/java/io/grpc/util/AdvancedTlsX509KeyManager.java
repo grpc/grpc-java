@@ -132,9 +132,9 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
           "Files were unmodified before their initial update. Probably a bug.");
     }
     if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD) {
-      log.log(Level.INFO, "Provided refresh period of {0} {1} is too small. Default value of "
-          + "{2} minute(s) will be used.", new Object[] {period, unit.name(),
-          MINIMUM_REFRESH_PERIOD});
+      log.log(Level.INFO,
+          "Provided refresh period of {0} {1} is too small. Default value of {2} minute(s) "
+          + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD});
       period = MINIMUM_REFRESH_PERIOD;
       unit = TimeUnit.MINUTES;
     }
