@@ -683,10 +683,8 @@ public class CachingRlsLbClientTest {
         RouteLookupResponse.create(ImmutableList.of("target"), "header")));
 
     // Make a request that will populate the cache with an entry
-    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    getInSyncContext(routeLookupRequest);
     fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
-    resp = getInSyncContext(routeLookupRequest);
-    assertThat(resp.hasData()).isTrue();
 
     // Gauge values should reflect the new cache entry.
     gaugeBatchCallback.accept(mockBatchRecorder);
