@@ -445,7 +445,8 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();  // buffer request
-    verify(getSubChannel(servers.get(1))).requestConnection();  // kicked off connection to server2
+    // verify kicked off connection to server2
+    verify(getSubChannel(servers.get(1))).requestConnection();
     assertThat(subchannels.size()).isEqualTo(2);  // no excessive connection
 
     deliverSubchannelState(getSubChannel(servers.get(1)), CSI_CONNECTING);
