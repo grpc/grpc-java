@@ -46,7 +46,7 @@ import java.util.Map;
  *
  *  <p>GrpcOpenTelemetry uses {@link io.opentelemetry.api.OpenTelemetry} APIs for instrumentation.
  *  When no SDK is explicitly added no telemetry data will be collected. See
- *  {@link io.opentelemetry.sdk.OpenTelemetrySdk} for information on how to construct the SDK.
+ *  {@code io.opentelemetry.sdk.OpenTelemetrySdk} for information on how to construct the SDK.
  *
  */
 public final class GrpcOpenTelemetry {
@@ -279,7 +279,7 @@ public final class GrpcOpenTelemetry {
     /**
      * Sets the {@link io.opentelemetry.api.OpenTelemetry} entrypoint to use. This can be used to
      * configure OpenTelemetry by returning the instance created by a
-     * {@link io.opentelemetry.sdk.OpenTelemetrySdkBuilder}.
+     * {@code io.opentelemetry.sdk.OpenTelemetrySdkBuilder}.
      */
     public Builder sdk(OpenTelemetry sdk) {
       this.openTelemetrySdk = sdk;
