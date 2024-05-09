@@ -20,6 +20,9 @@ dependencies {
             "org.assertj:assertj-core:3.24.2"
 
     annotationProcessor libraries.auto.value
+
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 tasks.named("jar").configure {
