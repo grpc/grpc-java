@@ -155,11 +155,11 @@ final class CachingRlsLbClient {
         Collections.emptyList(), false);
     CACHE_ENTRIES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_entries",
         "EXPERIMENTAL. Number of entries in the RLS cache", "{entry}",
-        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_id"),
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_uuid"),
         Collections.emptyList(), false);
     CACHE_SIZE_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_size",
         "EXPERIMENTAL. The current size of the RLS cache", "By",
-        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_id"),
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_uuid"),
         Collections.emptyList(), false);
   }
 
