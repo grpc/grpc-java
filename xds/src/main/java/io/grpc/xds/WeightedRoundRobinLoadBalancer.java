@@ -89,24 +89,26 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     MetricInstrumentRegistry metricInstrumentRegistry
         = MetricInstrumentRegistry.getDefaultRegistry();
     RR_FALLBACK_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.wrr.rr_fallback",
-        "Number of scheduler updates in which there were not enough endpoints with valid "
-            + "weight, which caused the WRR policy to fall back to RR behavior", "update",
-        Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"), true);
+        "EXPERIMENTAL. Number of scheduler updates in which there were not enough endpoints "
+            + "with valid weight, which caused the WRR policy to fall back to RR behavior",
+        "{update}", Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"),
+        false);
     ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER = metricInstrumentRegistry.registerLongCounter(
-        "grpc.lb.wrr.endpoint_weight_not_yet_usable",
-        "Number of endpoints from each scheduler update that don't yet have usable weight "
-            + "information", "endpoint", Lists.newArrayList("grpc.target"),
-        Lists.newArrayList("grpc.lb.locality"), true);
+        "grpc.lb.wrr.endpoint_weight_not_yet_usable", "EXPERIMENTAL. Number of endpoints "
+            + "from each scheduler update that don't yet have usable weight information",
+        "{endpoint}", Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"),
+        false);
     ENDPOINT_WEIGHT_STALE_COUNTER = metricInstrumentRegistry.registerLongCounter(
         "grpc.lb.wrr.endpoint_weight_stale",
-        "Number of endpoints from each scheduler update whose latest weight is older than the "
-            + "expiration period", "endpoint", Lists.newArrayList("grpc.target"),
-        Lists.newArrayList("grpc.lb.locality"), true);
+        "EXPERIMENTAL. Number of endpoints from each scheduler update whose latest weight is "
+            + "older than the expiration period", "{endpoint}", Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality"), false);
     ENDPOINT_WEIGHTS_HISTOGRAM = metricInstrumentRegistry.registerDoubleHistogram(
-        "grpc.lb.wrr.endpoint_weights", "The histogram buckets will be endpoint weight ranges.",
-        "weight", Lists.newArrayList(), Lists.newArrayList("grpc.target"),
+        "grpc.lb.wrr.endpoint_weights",
+        "EXPERIMENTAL. The histogram buckets will be endpoint weight ranges.",
+        "{weight}", Lists.newArrayList(), Lists.newArrayList("grpc.target"),
         Lists.newArrayList("grpc.lb.locality"),
-        true);
+        false);
   }
 
   public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
