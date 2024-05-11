@@ -242,6 +242,12 @@ final class CachingRlsLbClient {
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
+  void init() {
+    synchronized (lock) {
+      refCountedChildPolicyWrapperFactory.init();
+    }
+  }
+
   /**
    * Convert the status to UNAVAILABLE and enhance the error message.
    * @param status status as provided by server
@@ -379,7 +385,7 @@ final class CachingRlsLbClient {
       } catch (Exception e) {
         createBackOffEntry(entry.request, Status.fromThrowable(e), entry.backoffPolicy);
         // Cache updated. updateBalancingState() to reattempt picks
-        helper.propagateRlsError();
+        helper.triggerPendingRpcProcessing();
       }
     }
   }
@@ -451,19 +457,8 @@ final class CachingRlsLbClient {
       super.updateBalancingState(newState, newPicker);
     }
 
-    void propagateRlsError() {
-      getSynchronizationContext().execute(new Runnable() {
-        @Override
-        public void run() {
-          if (picker != null) {
-            // Refresh the channel state and let pending RPCs reprocess the picker.
-            updateBalancingState(state, picker);
-          }
-        }
-      });
-    }
-
     void triggerPendingRpcProcessing() {
+      checkState(state != null, "updateBalancingState hasn't yet been called");
       helper.getSynchronizationContext().execute(
           () -> super.updateBalancingState(state, picker));
     }
@@ -836,7 +831,7 @@ final class CachingRlsLbClient {
 
     CachingRlsLbClient build() {
       CachingRlsLbClient client = new CachingRlsLbClient(this);
-      helper.updateBalancingState(ConnectivityState.CONNECTING, client.rlsPicker);
+      client.init();
       return client;
     }
   }
