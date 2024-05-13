@@ -579,7 +579,7 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
     @GuardedBy("this")
     protected void handlePrefix(int flags, Parcel parcel) throws StatusException {
       Metadata headers = MetadataHelper.readMetadata(parcel, attributes);
-      statsTraceContext.clientInboundHeaders();
+      statsTraceContext.clientInboundHeaders(headers);
       listener.headersRead(headers);
     }
 

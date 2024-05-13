@@ -571,7 +571,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             return;
           }
 
-          clientStream.statsTraceCtx.clientInboundHeaders();
+          clientStream.statsTraceCtx.clientInboundHeaders(headers);
           syncContext.executeLater(() -> clientStreamListener.headersRead(headers));
         }
         syncContext.drain();

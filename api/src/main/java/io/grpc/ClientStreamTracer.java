@@ -70,10 +70,23 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
-   * Trailing metadata has been received from the server.
+   * Headers has been received from the server. This method does not pass ownership to {@code
+   * headers}, so implementations must not access the metadata after returning. Modifications to the
+   * metadata within this method will be seen by interceptors and the application.
    *
-   * @param trailers the mutable trailing metadata.  Modifications to it will be seen by
-   *                 interceptors and the application.
+   * @param headers the received header metadata
+   */
+  public void inboundHeaders(Metadata headers) {
+    inboundHeaders();
+  }
+
+  /**
+   * Trailing metadata has been received from the server. This method does not pass ownership to
+   * {@code trailers}, so implementations must not access the metadata after returning.
+   * Modifications to the metadata within this method will be seen by interceptors and the
+   * application.
+   *
+   * @param trailers the received trailing metadata
    * @since 1.17.0
    */
   public void inboundTrailers(Metadata trailers) {
