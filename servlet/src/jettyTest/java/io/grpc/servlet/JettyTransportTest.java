@@ -22,6 +22,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
@@ -36,8 +37,18 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+
+import org.eclipse.jetty.http2.HTTP2Connection;
+import org.eclipse.jetty.http2.HTTP2Session;
+import org.eclipse.jetty.http2.api.Session;
+import org.eclipse.jetty.http2.api.server.ServerSessionListener;
+import org.eclipse.jetty.http2.frames.SettingsFrame;
 import org.eclipse.jetty.http2.parser.RateControl;
 import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
+import org.eclipse.jetty.http2.server.HTTP2ServerConnection;
+import org.eclipse.jetty.io.Connection;
+import org.eclipse.jetty.io.EndPoint;
+import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -81,7 +92,21 @@ public class JettyTransportTest extends AbstractTransportTest {
         httpConfiguration.setDelayDispatchUntilContent(false);
 
         HTTP2CServerConnectionFactory factory =
-                new HTTP2CServerConnectionFactory(httpConfiguration);
+                new HTTP2CServerConnectionFactory(httpConfiguration) {
+                  @Override
+                  protected ServerSessionListener newSessionListener(Connector connector, EndPoint endPoint) {
+                    return new HTTPServerSessionListener(connector, endPoint) {
+                      @Override
+                      public void onSettings(Session session, SettingsFrame frame) {
+                        HTTP2Session s = (HTTP2Session) session;
+                        // Override client's requested SETTINGS so clientChecksInboundMetadataSize_header and
+                        // clientChecksInboundMetadataSize_trailer will correctly pass, forcing the server to
+                        // send bigger headers than it normally would.
+                        s.getGenerator().getHpackEncoder().setMaxHeaderListSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE * 2);
+                      }
+                    };
+                  }
+                };
         factory.setRateControlFactory(new RateControl.Factory() {
         });
         sc.addConnectionFactory(factory);
