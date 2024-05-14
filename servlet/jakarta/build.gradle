@@ -108,27 +108,9 @@ def undertowTest = tasks.register('undertowTest', Test) {
     classpath = sourceSets.undertowTest.runtimeClasspath
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
 }
-def tomcat10Test = tasks.register('tomcat10Test', Test) {
-    classpath = sourceSets.tomcatTest.runtimeClasspath
-    testClassesDirs = sourceSets.tomcatTest.output.classesDirs
-
-    // Provide a temporary directory for tomcat to be deleted after test finishes
-    def tomcatTempDir = "$buildDir/tomcat_catalina_base"
-    systemProperty 'catalina.base', tomcatTempDir
-    doLast {
-        file(tomcatTempDir).deleteDir()
-    }
-
-    // tomcat-embed-core 10 presently performs illegal reflective access on
-    // java.io.ObjectStreamClass$Caches.localDescs and sun.rmi.transport.Target.ccl,
-    // see https://lists.apache.org/thread/s0xr7tk2kfkkxfjps9n7dhh4cypfdhyy
-    if (JavaVersion.current().isJava9Compatible()) {
-        jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
-    }
-}
 
 tasks.named("check").configure {
-    dependsOn undertowTest, tomcat10Test
+    dependsOn undertowTest
 }
 
 // Only run these tests if java 11+ is being used
@@ -138,7 +120,26 @@ if (JavaVersion.current().isJava11Compatible()) {
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
     }
 
+    def tomcat10Test = tasks.register('tomcat10Test', Test) {
+        classpath = sourceSets.tomcatTest.runtimeClasspath
+        testClassesDirs = sourceSets.tomcatTest.output.classesDirs
+
+        // Provide a temporary directory for tomcat to be deleted after test finishes
+        def tomcatTempDir = "$buildDir/tomcat_catalina_base"
+        systemProperty 'catalina.base', tomcatTempDir
+        doLast {
+            file(tomcatTempDir).deleteDir()
+        }
+
+        // tomcat-embed-core 10 presently performs illegal reflective access on
+        // java.io.ObjectStreamClass$Caches.localDescs and sun.rmi.transport.Target.ccl,
+        // see https://lists.apache.org/thread/s0xr7tk2kfkkxfjps9n7dhh4cypfdhyy
+        if (JavaVersion.current().isJava9Compatible()) {
+            jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
+        }
+    }
+
     tasks.named("check").configure {
-        dependsOn jetty11Test
+        dependsOn jetty11Test, tomcat10Test
     }
 }
