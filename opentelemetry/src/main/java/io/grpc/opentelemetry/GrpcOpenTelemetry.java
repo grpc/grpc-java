@@ -24,6 +24,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.ExperimentalApi;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.InternalManagedChannelBuilder;
@@ -126,6 +127,7 @@ public final class GrpcOpenTelemetry {
    * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10591")
   public void registerGlobal() {
     InternalConfiguratorRegistry.setConfigurators(Collections.singletonList(
         new InternalConfigurator() {
