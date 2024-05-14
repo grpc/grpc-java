@@ -41,3 +41,7 @@ tasks.named("compileJava").configure {
             ".*/build/generated/sources/annotationProcessor/java/.*",
             "|")
 }
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/opentelemetry/internal/**'
+}
