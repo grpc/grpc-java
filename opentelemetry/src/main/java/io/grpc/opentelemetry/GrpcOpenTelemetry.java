@@ -126,6 +126,7 @@ public final class GrpcOpenTelemetry {
    * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10591")
   public void registerGlobal() {
     InternalConfiguratorRegistry.setConfigurators(Collections.singletonList(
         new InternalConfigurator() {
