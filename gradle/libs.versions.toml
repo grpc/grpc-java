@@ -86,11 +86,11 @@ re2j = "com.google.re2j:re2j:1.7"
 robolectric = "org.robolectric:robolectric:4.11.1"
 signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
-tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.0.14"
-tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.56"
+tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.23"
+tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.89"
 truth = "com.google.truth:truth:1.1.5"
-undertow-servlet = "io.undertow:undertow-servlet:2.2.14.Final"
-undertow-servlet-jakartaee9 = "io.undertow:undertow-servlet-jakartaee9:2.2.13.Final"
+undertow-servlet = "io.undertow:undertow-servlet:2.2.32.Final"
+undertow-servlet-jakartaee9 = "io.undertow:undertow-servlet:2.3.13.Final"
 
 # Do not update: Pinned to the last version supporting Java 8.
 # See https://checkstyle.sourceforge.io/releasenotes.html#Release_10.1
