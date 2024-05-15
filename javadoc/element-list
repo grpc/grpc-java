@@ -8,6 +8,7 @@ io.grpc.inprocess
 io.grpc.lb.v1
 io.grpc.netty
 io.grpc.okhttp
+io.grpc.opentelemetry
 io.grpc.protobuf
 io.grpc.protobuf.lite
 io.grpc.protobuf.services
