@@ -351,6 +351,26 @@ public abstract class AbstractTransportTest {
   }
 
   @Test
+  public void clientShutdownBeforeStartRunnable() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    InOrder inOrder = inOrder(mockClientTransportListener);
+    Runnable runnable = client.start(mockClientTransportListener);
+    // Shutdown before calling 'runnable'
+    Status shutdownReason = Status.UNAVAILABLE.withDescription("shutdown called");
+    client.shutdown(shutdownReason);
+    runIfNotNull(runnable);
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
+    inOrder.verify(mockClientTransportListener).transportShutdown(same(shutdownReason));
+    // transportReady() could have been called before transportShutdown, but must not have been
+    // called after.
+    inOrder.verify(mockClientTransportListener, never()).transportReady();
+    inOrder.verify(mockClientTransportListener).transportTerminated();
+    inOrder.verify(mockClientTransportListener, never()).transportReady();
+    verify(mockClientTransportListener, never()).transportInUse(anyBoolean());
+  }
+
+  @Test
   public void clientStartAndStopOnceConnected() throws Exception {
     server.start(serverListener);
     client = newClientTransport(server);
