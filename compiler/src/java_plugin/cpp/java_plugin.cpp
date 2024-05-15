@@ -72,6 +72,8 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
            generated_annotation = java_grpc_generator::GeneratedAnnotation::OMIT;
          } else if (options[i].second == "javax") {
            generated_annotation = java_grpc_generator::GeneratedAnnotation::JAVAX;
+         } else if (options[i].second == "jakarta") {
+           generated_annotation = java_grpc_generator::GeneratedAnnotation::JAKARTA;
          }
       }
     }

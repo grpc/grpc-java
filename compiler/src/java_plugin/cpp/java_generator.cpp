@@ -1135,13 +1135,16 @@ static void PrintService(const ServiceDescriptor* service,
         *vars,
         "@javax.annotation.Generated(\n"
         "    value = \"by gRPC proto compiler$grpc_version$\",\n"
-        "    comments = \"Source: $file_name$\")\n"
-        "@$GrpcGenerated$\n");
-  } else { // GeneratedAnnotation::OMIT
+        "    comments = \"Source: $file_name$\")\n");
+  } else if generated_annotation == GeneratedAnnotation::JAKARTA) {
     p->Print(
         *vars,
-        "@$GrpcGenerated$\n");
+        "@jakarta.annotation.Generated(\n"
+        "    value = \"by gRPC proto compiler$grpc_version$\",\n"
+        "    comments = \"Source: $file_name$\")\n");
   }
+  // Always include @GrpcGenerated
+  p->Print(*vars, "@$GrpcGenerated$\n");
 
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");

@@ -58,7 +58,7 @@ enum ProtoFlavor {
 };
 
 enum GeneratedAnnotation {
-  OMIT, JAVAX
+  OMIT, JAVAX, JAKARTA
 };
 
 // Returns the package name of the gRPC services defined in the given file.
