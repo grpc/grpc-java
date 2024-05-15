@@ -12,16 +12,16 @@ sourceSets {
             include '**/Undertow*.java'
         }
     }
-    tomcatTest {
-        java {
-            include '**/Tomcat*.java'
-        }
-    }
     // Only run these tests if java 11+ is being used
     if (JavaVersion.current().isJava11Compatible()) {
         jettyTest {
             java {
                 include '**/Jetty*.java'
+            }
+        }
+        tomcatTest {
+            java {
+                include '**/Tomcat*.java'
             }
         }
     }
@@ -130,13 +130,9 @@ if (JavaVersion.current().isJava11Compatible()) {
         doLast {
             file(tomcatTempDir).deleteDir()
         }
-
-        // tomcat-embed-core 10 presently performs illegal reflective access on
-        // java.io.ObjectStreamClass$Caches.localDescs and sun.rmi.transport.Target.ccl,
-        // see https://lists.apache.org/thread/s0xr7tk2kfkkxfjps9n7dhh4cypfdhyy
-        if (JavaVersion.current().isJava9Compatible()) {
-            jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
-        }
+    }
+    tasks.named('compileTomcatTestJava') { JavaCompile task ->
+        task.options.release.set 11
     }
 
     tasks.named("check").configure {
