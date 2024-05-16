@@ -48,7 +48,7 @@ import javax.net.ssl.X509ExtendedKeyManager;
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
   // Minimum allowed period for refreshing files with credential information.
-  private static final int MINIMUM_REFRESH_PERIOD = 1 ;
+  private static final int MINIMUM_REFRESH_PERIOD_IN_MINUTES = 1 ;
   // The credential information to be sent to peers to prove our identity.
   private volatile KeyInfo keyInfo;
 
@@ -131,11 +131,12 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
       throw new GeneralSecurityException(
           "Files were unmodified before their initial update. Probably a bug.");
     }
-    if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD) {
+    if (checkNotNull(unit, "unit").toMinutes(period) <
+        MINIMUM_REFRESH_PERIOD_IN_MINUTES) {
       log.log(Level.FINE,
           "Provided refresh period of {0} {1} is too small. Default value of {2} minute(s) "
-          + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD});
-      period = MINIMUM_REFRESH_PERIOD;
+          + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
+      period = MINIMUM_REFRESH_PERIOD_IN_MINUTES;
       unit = TimeUnit.MINUTES;
     }
     final ScheduledFuture<?> future =
