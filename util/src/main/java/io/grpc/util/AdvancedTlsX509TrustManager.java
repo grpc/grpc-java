@@ -220,7 +220,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
   /**
    * Schedules a {@code ScheduledExecutorService} to read trust certificates from a local file path
-   * periodically, and update the cached trust certs if there is an update. Please make sure to
+   * periodically, and updates the cached trust certs if there is an update. Please make sure to
    * close the returned Closeable before calling this method again. Before scheduling the task, the
    * method synchronously executes {@code  readAndUpdate} once. The minimum refresh period of 1
    * minute is enforced.
@@ -286,7 +286,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   /**
-   * Reads the trust certificates specified in the path location, and update the key store if the
+   * Reads the trust certificates specified in the path location, and updates the key store if the
    * modified time has changed since last read.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
