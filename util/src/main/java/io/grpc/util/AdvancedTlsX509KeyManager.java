@@ -39,8 +39,7 @@ import javax.net.ssl.X509ExtendedKeyManager;
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
  * advanced TLS features, such as private key and certificate chain reloading.
  * We expect only one of {@link AdvancedTlsX509KeyManager#updateIdentityCredentials},
- * {@link AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile
- * (File, File, long, TimeUnit, ScheduledExecutorService)},
+ * {@link AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile(File, File)},
  * {@link AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile
  * (File, File, long, TimeUnit, ScheduledExecutorService)} methods to be called after instantiation
  * of this class.
