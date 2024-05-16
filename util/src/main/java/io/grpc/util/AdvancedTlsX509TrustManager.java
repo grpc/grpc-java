@@ -16,6 +16,8 @@
 
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
@@ -43,13 +45,22 @@ import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 /**
  * AdvancedTlsX509TrustManager is an {@code X509ExtendedTrustManager} that allows users to configure
  * advanced TLS features, such as root certificate reloading, peer cert custom verification, etc.
+ * We expect only one of {@link AdvancedTlsX509TrustManager#useSystemDefaultTrustCerts()},
+ * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
+ * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit,
+ * ScheduledExecutorService)},
+ * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File)} methods to be called
+ * after instantiation of this class.
  * For Android users: this class is only supported in API level 24 and above.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 @IgnoreJRERequirement
 public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509TrustManager.class.getName());
 
+  // Minimum allowed period for refreshing files with credential information.
+  private static final int MINIMUM_REFRESH_PERIOD = 1;
+  private static final String NOT_ENOUGH_INFO_MESSAGE =
+      "Not enough information to validate peer. SSLEngine or Socket required.";
   private final Verification verification;
   private final SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier;
 
@@ -57,7 +68,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private volatile X509ExtendedTrustManager delegateManager = null;
 
   private AdvancedTlsX509TrustManager(Verification verification,
-      SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier) throws CertificateException {
+      SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier) {
     this.verification = verification;
     this.socketAndEnginePeerVerifier = socketAndEnginePeerVerifier;
   }
@@ -65,8 +76,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    throw new CertificateException(
-        "Not enough information to validate peer. SSLEngine or Socket required.");
+    throw new CertificateException(NOT_ENOUGH_INFO_MESSAGE);
   }
 
   @Override
@@ -90,8 +100,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    throw new CertificateException(
-        "Not enough information to validate peer. SSLEngine or Socket required.");
+    throw new CertificateException(NOT_ENOUGH_INFO_MESSAGE);
   }
 
   @Override
@@ -117,7 +126,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       NoSuchAlgorithmException {
     // Passing a null value of KeyStore would make {@code TrustManagerFactory} attempt to use
     // system-default trust CA certs.
-    this.delegateManager = createDelegateTrustManager(null);
+    createDelegateTrustManager(null);
   }
 
   /**
@@ -127,6 +136,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    */
   public void updateTrustCredentials(X509Certificate[] trustCerts) throws IOException,
       GeneralSecurityException {
+    checkNotNull(trustCerts, "trustCerts");
     KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
     keyStore.load(null, null);
     int i = 1;
@@ -135,8 +145,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       keyStore.setCertificateEntry(alias, cert);
       i++;
     }
-    X509ExtendedTrustManager newDelegateManager = createDelegateTrustManager(keyStore);
-    this.delegateManager = newDelegateManager;
+    this.delegateManager = createDelegateTrustManager(keyStore);
   }
 
   private static X509ExtendedTrustManager createDelegateTrustManager(KeyStore keyStore)
@@ -148,9 +157,9 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     TrustManager[] tms = tmf.getTrustManagers();
     // Iterate over the returned trust managers, looking for an instance of X509TrustManager.
     // If found, use that as the delegate trust manager.
-    for (int j = 0; j < tms.length; j++) {
-      if (tms[j] instanceof X509ExtendedTrustManager) {
-        delegateManager = (X509ExtendedTrustManager) tms[j];
+    for (TrustManager tm : tms) {
+      if (tm instanceof X509ExtendedTrustManager) {
+        delegateManager = (X509ExtendedTrustManager) tm;
         break;
       }
     }
@@ -169,8 +178,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
           "Want certificate verification but got null or empty certificates");
     }
     if (sslEngine == null && socket == null) {
-      throw new CertificateException(
-          "Not enough information to validate peer. SSLEngine or Socket required.");
+      throw new CertificateException(NOT_ENOUGH_INFO_MESSAGE);
     }
     if (this.verification != Verification.INSECURELY_SKIP_ALL_VERIFICATION) {
       X509ExtendedTrustManager currentDelegateManager = this.delegateManager;
@@ -211,12 +219,15 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
   /**
    * Schedules a {@code ScheduledExecutorService} to read trust certificates from a local file path
-   * periodically, and update the cached trust certs if there is an update.
+   * periodically, and update the cached trust certs if there is an update. Please make sure to
+   * close the returned Closeable before calling this method again. Before scheduling the task, the
+   * method synchronously executes {@code  readAndUpdate} once. The minimum refresh period of 1
+   * minute is enforced.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    * @param period the period between successive read-and-update executions
    * @param unit the time unit of the initialDelay and period parameters
-   * @param executor the execute service we use to read and update the credentials
+   * @param executor the executor service we use to read and update the credentials
    * @return an object that caller should close when the file refreshes are not needed
    */
   public Closeable updateTrustCredentialsFromFile(File trustCertFile, long period, TimeUnit unit,
@@ -226,14 +237,17 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       throw new GeneralSecurityException(
           "Files were unmodified before their initial update. Probably a bug.");
     }
+    if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD) {
+      log.log(Level.INFO,
+          "Provided refresh period of {0} {1} is too small. Default value of {2} minute(s) "
+              + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD});
+      period = MINIMUM_REFRESH_PERIOD;
+      unit = TimeUnit.MINUTES;
+    }
     final ScheduledFuture<?> future =
-        executor.scheduleWithFixedDelay(
+        checkNotNull(executor, "executor").scheduleWithFixedDelay(
             new LoadFilePathExecution(trustCertFile), period, period, unit);
-    return new Closeable() {
-      @Override public void close() {
-        future.cancel(false);
-      }
-    };
+    return () -> future.cancel(false);
   }
 
   private class LoadFilePathExecution implements Runnable {
@@ -250,7 +264,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       try {
         this.currentTime = readAndUpdate(this.file, this.currentTime);
       } catch (IOException | GeneralSecurityException e) {
-        log.log(Level.SEVERE, "Failed refreshing trust CAs from file. Using previous CAs", e);
+        log.log(Level.SEVERE, e, () -> String.format("Failed refreshing trust CAs from file. Using "
+            + "previous CAs (file lastModified = %s)", file.lastModified()));
       }
     }
   }
@@ -279,7 +294,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    */
   private long readAndUpdate(File trustCertFile, long oldTime)
       throws IOException, GeneralSecurityException {
-    long newTime = trustCertFile.lastModified();
+    long newTime = checkNotNull(trustCertFile, "trustCertFile").lastModified();
     if (newTime == oldTime) {
       return oldTime;
     }
@@ -321,7 +336,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     CERTIFICATE_ONLY_VERIFICATION,
     // Setting is very DANGEROUS. Please try to avoid this in a real production environment, unless
     // you are a super advanced user intended to re-implement the whole verification logic on your
-    // own. A secure verification might include:
+    // own. A secure verification might include (see {@code SslSocketAndEnginePeerVerifier}):
     // 1. proper verification on the peer certificate chain
     // 2. proper checks on the identity of the peer certificate
     INSECURELY_SKIP_ALL_VERIFICATION,
