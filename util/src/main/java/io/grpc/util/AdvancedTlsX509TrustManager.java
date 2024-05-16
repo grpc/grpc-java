@@ -44,14 +44,14 @@ import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 /**
  * AdvancedTlsX509TrustManager is an {@code X509ExtendedTrustManager} that allows users to configure
  * advanced TLS features, such as root certificate reloading, peer cert custom verification, etc.
- *
+ * <p>
  * We expect only one of {@link AdvancedTlsX509TrustManager#useSystemDefaultTrustCerts()},
  * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
  * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit,
  * ScheduledExecutorService)},
  * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File)} methods to be called
  * after instantiation of this class.
- *
+ * <p>
  * For Android users: this class is only supported in API level 24 and above.
  */
 @IgnoreJRERequirement
