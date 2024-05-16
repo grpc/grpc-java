@@ -18,7 +18,6 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
