@@ -100,10 +100,9 @@ public final class BinderTransportTest extends AbstractTransportTest {
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     AndroidComponentAddress addr = (AndroidComponentAddress) server.getListenSocketAddress();
     BinderClientTransportFactory.Builder builder = new BinderClientTransportFactory.Builder()
-        .setScheduledExecutorPool(executorServicePool)
-        .setOffloadExecutorPool(offloadExecutorPool)
         .setSourceContext(appContext)
-        .setMainThreadExecutor(ContextCompat.getMainExecutor(appContext));
+        .setScheduledExecutorPool(executorServicePool)
+        .setOffloadExecutorPool(offloadExecutorPool);
 
     ClientTransportOptions options = new ClientTransportOptions();
     options.setEagAttributes(eagAttrs());

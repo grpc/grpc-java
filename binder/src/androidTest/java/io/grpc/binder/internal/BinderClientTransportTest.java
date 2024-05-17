@@ -145,7 +145,6 @@ public final class BinderClientTransportTest {
   private class BinderClientTransportBuilder {
     final BinderClientTransportFactory.Builder factoryBuilder = new BinderClientTransportFactory.Builder()
         .setSourceContext(appContext)
-        .setMainThreadExecutor(ContextCompat.getMainExecutor(appContext))
         .setScheduledExecutorPool(executorServicePool)
         .setOffloadExecutorPool(executorServicePool);
 
@@ -175,7 +174,6 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testShutdownBeforeStreamStart_b153326034() throws Exception {
-    transport = new BinderClientTransportBuilder().build();
     transport = new BinderClientTransportBuilder().build();
     startAndAwaitReady(transport, transportListener);
     ClientStream stream = transport.newStream(
