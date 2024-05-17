@@ -38,11 +38,6 @@ import javax.net.ssl.X509ExtendedKeyManager;
 /**
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
  * advanced TLS features, such as private key and certificate chain reloading.
- * We expect only one of {@link AdvancedTlsX509KeyManager#updateIdentityCredentials},
- * {@link AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile(File, File)},
- * {@link AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile
- * (File, File, long, TimeUnit, ScheduledExecutorService)} methods to be called after instantiation
- * of this class.
  */
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
@@ -111,7 +106,9 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   /**
    * Schedules a {@code ScheduledExecutorService} to read private key and certificate chains from
    * the local file paths periodically, and update the cached identity credentials if they are both
-   * updated. Please make sure to close the returned Closeable before calling this method again.
+   * updated. You must close the returned Closeable before calling this method again or other update
+   * methods ({@link AdvancedTlsX509KeyManager#updateIdentityCredentials}, {@link
+   * AdvancedTlsX509KeyManager#updateIdentityCredentialsFromFile(File, File)}).
    * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. The
    * minimum refresh period of 1 minute is enforced.
    *
