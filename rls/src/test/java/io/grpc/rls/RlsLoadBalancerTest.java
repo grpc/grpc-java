@@ -134,7 +134,8 @@ public class RlsLoadBalancerTest {
   private final FakeHelper helperDelegate = new FakeHelper();
   private final Helper helper =
       mock(Helper.class, AdditionalAnswers.delegatesTo(helperDelegate));
-  private final FakeRlsServerImpl fakeRlsServerImpl = new FakeRlsServerImpl();
+  private final FakeRlsServerImpl fakeRlsServerImpl = new FakeRlsServerImpl(
+      fakeClock.getScheduledExecutorService());
   private final Deque<FakeSubchannel> subchannels = new LinkedList<>();
   private final FakeThrottler fakeThrottler = new FakeThrottler();
   private final String channelTarget = "channelTarget";
@@ -297,6 +298,38 @@ public class RlsLoadBalancerTest {
   }
 
   @Test
+  public void fallbackWithDelay_succeeds() throws Exception {
+    fakeRlsServerImpl.setResponseDelay(100, TimeUnit.MILLISECONDS);
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName("fake-bigtable.googleapis.com")
+        .addService(ServerServiceDefinition.builder("com.google")
+          .addMethod(fakeSearchMethod, (call, headers) -> {
+            call.sendHeaders(new Metadata());
+            call.sendMessage(null);
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<Void>() {};
+          })
+          .build())
+        .addService(fakeRlsServerImpl)
+        .directExecutor()
+        .build()
+        .start());
+    ManagedChannel channel = grpcCleanupRule.register(
+        InProcessChannelBuilder.forName("fake-bigtable.googleapis.com")
+        .defaultServiceConfig(parseJson(getServiceConfigJsonStr()))
+        .directExecutor()
+        .build());
+
+    StreamRecorder<Void> recorder = StreamRecorder.create();
+    StreamObserver<Void> requestObserver = ClientCalls.asyncClientStreamingCall(
+        channel.newCall(fakeSearchMethod, CallOptions.DEFAULT), recorder);
+    requestObserver.onCompleted();
+    fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
+    assertThat(recorder.awaitCompletion(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(recorder.getError()).isNull();
+  }
+
+  @Test
   public void metricsWithRealChannel() throws Exception {
     grpcCleanupRule.register(
         InProcessServerBuilder.forName("fake-bigtable.googleapis.com")
@@ -308,6 +341,7 @@ public class RlsLoadBalancerTest {
             return new ServerCall.Listener<Void>() {};
           })
           .build())
+        .addService(fakeRlsServerImpl)
         .directExecutor()
         .build()
         .start());
@@ -761,17 +795,41 @@ public class RlsLoadBalancerTest {
     private static final Converter<RouteLookupResponse, io.grpc.lookup.v1.RouteLookupResponse>
         RESPONSE_CONVERTER = new RouteLookupResponseConverter().reverse();
 
+    private final ScheduledExecutorService scheduler;
+    private long delay;
+    private TimeUnit delayUnit;
+
+    public FakeRlsServerImpl(ScheduledExecutorService scheduler) {
+      this.scheduler = scheduler;
+    }
+
     private Map<RouteLookupRequest, RouteLookupResponse> lookupTable = ImmutableMap.of();
 
     private void setLookupTable(Map<RouteLookupRequest, RouteLookupResponse> lookupTable) {
       this.lookupTable = checkNotNull(lookupTable, "lookupTable");
     }
 
+    void setResponseDelay(long delay, TimeUnit unit) {
+      this.delay = delay;
+      this.delayUnit = unit;
+    }
+
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void routeLookup(io.grpc.lookup.v1.RouteLookupRequest request,
         StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
       RouteLookupResponse response =
           lookupTable.get(REQUEST_CONVERTER.convert(request));
+      Runnable sendResponse = () -> sendResponse(response, responseObserver);
+      if (delay != 0) {
+        scheduler.schedule(sendResponse, delay, delayUnit);
+      } else {
+        sendResponse.run();
+      }
+    }
+
+    private void sendResponse(RouteLookupResponse response,
+        StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
       if (response == null) {
         responseObserver.onError(new RuntimeException("not found"));
       } else {

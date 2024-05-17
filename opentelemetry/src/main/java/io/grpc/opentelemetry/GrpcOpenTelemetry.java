@@ -24,6 +24,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.ExperimentalApi;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.InternalManagedChannelBuilder;
@@ -46,7 +47,7 @@ import java.util.Map;
  *
  *  <p>GrpcOpenTelemetry uses {@link io.opentelemetry.api.OpenTelemetry} APIs for instrumentation.
  *  When no SDK is explicitly added no telemetry data will be collected. See
- *  {@link io.opentelemetry.sdk.OpenTelemetrySdk} for information on how to construct the SDK.
+ *  {@code io.opentelemetry.sdk.OpenTelemetrySdk} for information on how to construct the SDK.
  *
  */
 public final class GrpcOpenTelemetry {
@@ -126,6 +127,7 @@ public final class GrpcOpenTelemetry {
    * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10591")
   public void registerGlobal() {
     InternalConfiguratorRegistry.setConfigurators(Collections.singletonList(
         new InternalConfigurator() {
@@ -279,7 +281,7 @@ public final class GrpcOpenTelemetry {
     /**
      * Sets the {@link io.opentelemetry.api.OpenTelemetry} entrypoint to use. This can be used to
      * configure OpenTelemetry by returning the instance created by a
-     * {@link io.opentelemetry.sdk.OpenTelemetrySdkBuilder}.
+     * {@code io.opentelemetry.sdk.OpenTelemetrySdkBuilder}.
      */
     public Builder sdk(OpenTelemetry sdk) {
       this.openTelemetrySdk = sdk;
