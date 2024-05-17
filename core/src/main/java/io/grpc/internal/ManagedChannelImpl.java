@@ -471,57 +471,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final class ChannelStreamProvider implements ClientStreamProvider {
     volatile Throttle throttle;
 
-    private ClientTransport getTransport(PickSubchannelArgs args) {
-      SubchannelPicker pickerCopy = subchannelPicker;
-      if (shutdown.get()) {
-        // If channel is shut down, delayedTransport is also shut down which will fail the stream
-        // properly.
-        return delayedTransport;
-      }
-      if (pickerCopy == null) {
-        final class ExitIdleModeForTransport implements Runnable {
-          @Override
-          public void run() {
-            exitIdleMode();
-          }
-        }
-
-        syncContext.execute(new ExitIdleModeForTransport());
-        return delayedTransport;
-      }
-      // There is no need to reschedule the idle timer here.
-      //
-      // pickerCopy != null, which means idle timer has not expired when this method starts.
-      // Even if idle timer expires right after we grab pickerCopy, and it shuts down LoadBalancer
-      // which calls Subchannel.shutdown(), the InternalSubchannel will be actually shutdown after
-      // SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, which gives the caller time to start RPC on it.
-      //
-      // In most cases the idle timer is scheduled to fire after the transport has created the
-      // stream, which would have reported in-use state to the channel that would have cancelled
-      // the idle timer.
-      PickResult pickResult = pickerCopy.pickSubchannel(args);
-      ClientTransport transport = GrpcUtil.getTransportFromPickResult(
-          pickResult, args.getCallOptions().isWaitForReady());
-      if (transport != null) {
-        return transport;
-      }
-      return delayedTransport;
-    }
-
     @Override
     public ClientStream newStream(
         final MethodDescriptor<?, ?> method,
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
+      // There is no need to reschedule the idle timer here. If the channel isn't shut down, either
+      // the delayed transport or a real transport will go in-use and cancel the idle timer.
       if (!retryEnabled) {
         ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
             callOptions, headers, 0, /* isTransparentRetry= */ false);
-        ClientTransport transport = getTransport(new PickSubchannelArgsImpl(
-            method, headers, callOptions, new PickDetailsConsumerImpl(tracers)));
         Context origContext = context.attach();
         try {
-          return transport.newStream(method, headers, callOptions, tracers);
+          return delayedTransport.newStream(method, headers, callOptions, tracers);
         } finally {
           context.detach(origContext);
         }
@@ -562,11 +525,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
             ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
                 newOptions, newHeaders, previousAttempts, isTransparentRetry);
-            ClientTransport transport = getTransport(new PickSubchannelArgsImpl(
-                method, newHeaders, newOptions, new PickDetailsConsumerImpl(tracers)));
             Context origContext = context.attach();
             try {
-              return transport.newStream(method, newHeaders, newOptions, tracers);
+              return delayedTransport.newStream(method, newHeaders, newOptions, tracers);
             } finally {
               context.detach(origContext);
             }

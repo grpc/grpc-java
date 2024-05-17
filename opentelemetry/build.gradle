@@ -1,5 +1,8 @@
 plugins {
     id "java-library"
+    id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: OpenTelemetry'
@@ -17,6 +20,9 @@ dependencies {
             "org.assertj:assertj-core:3.24.2"
 
     annotationProcessor libraries.auto.value
+
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 tasks.named("jar").configure {
@@ -34,4 +40,8 @@ tasks.named("compileJava").configure {
             it.options.errorprone.excludedPaths,
             ".*/build/generated/sources/annotationProcessor/java/.*",
             "|")
+}
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/opentelemetry/internal/**'
 }

@@ -117,7 +117,7 @@ def grpc_java_repositories(bzlmod = False):
         )
     if not bzlmod and not native.existing_rule("com_google_protobuf"):
         com_google_protobuf()
-    if not bzlmod and not native.existing_rule("com_google_protobuf_javalite"):
+    if not native.existing_rule("com_google_protobuf_javalite"):
         com_google_protobuf_javalite()
     if not bzlmod and not native.existing_rule("com_google_googleapis"):
         http_archive(

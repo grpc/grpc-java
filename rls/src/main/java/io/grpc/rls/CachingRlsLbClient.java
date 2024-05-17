@@ -136,25 +136,31 @@ final class CachingRlsLbClient {
     MetricInstrumentRegistry metricInstrumentRegistry
         = MetricInstrumentRegistry.getDefaultRegistry();
     DEFAULT_TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter(
-        "grpc.lb.rls.default_target_picks", "Number of LB picks sent to the default target", "pick",
+        "grpc.lb.rls.default_target_picks",
+        "EXPERIMENTAL. Number of LB picks sent to the default target", "{pick}",
         Arrays.asList("grpc.target", "grpc.lb.rls.server_target",
-            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Collections.emptyList(), true);
+            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Collections.emptyList(),
+        false);
     TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.target_picks",
-        "Number of LB picks sent to each RLS target", "pick",
-        Arrays.asList("grpc.target", "grpc.lb.rls.server_target",
-            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Collections.emptyList(), true);
+        "EXPERIMENTAL. Number of LB picks sent to each RLS target. Note that if the default "
+            + "target is also returned by the RLS server, RPCs sent to that target from the cache "
+            + "will be counted in this metric, not in grpc.rls.default_target_picks.", "{pick}",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.data_plane_target",
+            "grpc.lb.pick_result"), Collections.emptyList(),
+        false);
     FAILED_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.failed_picks",
-        "Number of LB picks failed due to either a failed RLS request or the RLS channel being "
-            + "throttled", "pick", Arrays.asList("grpc.target", "grpc.lb.rls.server_target"),
-        Collections.emptyList(), true);
+        "EXPERIMENTAL. Number of LB picks failed due to either a failed RLS request or the "
+            + "RLS channel being throttled", "{pick}",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target"),
+        Collections.emptyList(), false);
     CACHE_ENTRIES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_entries",
-        "Number of entries in the RLS cache", "entry",
-        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_id"),
-        Collections.emptyList(), true);
+        "EXPERIMENTAL. Number of entries in the RLS cache", "{entry}",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_uuid"),
+        Collections.emptyList(), false);
     CACHE_SIZE_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_size",
-        "The current size of the RLS cache", "byte",
-        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_id"),
-        Collections.emptyList(), true);
+        "EXPERIMENTAL. The current size of the RLS cache", "By",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_uuid"),
+        Collections.emptyList(), false);
   }
 
   private CachingRlsLbClient(Builder builder) {
@@ -240,6 +246,12 @@ final class CachingRlsLbClient {
         }, CACHE_ENTRIES_GAUGE, CACHE_SIZE_GAUGE);
 
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
+  }
+
+  void init() {
+    synchronized (lock) {
+      refCountedChildPolicyWrapperFactory.init();
+    }
   }
 
   /**
@@ -379,7 +391,7 @@ final class CachingRlsLbClient {
       } catch (Exception e) {
         createBackOffEntry(entry.request, Status.fromThrowable(e), entry.backoffPolicy);
         // Cache updated. updateBalancingState() to reattempt picks
-        helper.propagateRlsError();
+        helper.triggerPendingRpcProcessing();
       }
     }
   }
@@ -451,19 +463,8 @@ final class CachingRlsLbClient {
       super.updateBalancingState(newState, newPicker);
     }
 
-    void propagateRlsError() {
-      getSynchronizationContext().execute(new Runnable() {
-        @Override
-        public void run() {
-          if (picker != null) {
-            // Refresh the channel state and let pending RPCs reprocess the picker.
-            updateBalancingState(state, picker);
-          }
-        }
-      });
-    }
-
     void triggerPendingRpcProcessing() {
+      checkState(state != null, "updateBalancingState hasn't yet been called");
       helper.getSynchronizationContext().execute(
           () -> super.updateBalancingState(state, picker));
     }
@@ -836,7 +837,7 @@ final class CachingRlsLbClient {
 
     CachingRlsLbClient build() {
       CachingRlsLbClient client = new CachingRlsLbClient(this);
-      helper.updateBalancingState(ConnectivityState.CONNECTING, client.rlsPicker);
+      client.init();
       return client;
     }
   }

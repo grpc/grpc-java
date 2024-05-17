@@ -225,6 +225,10 @@ final class LbPolicyConfiguration {
       this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
     }
 
+    void init() {
+      childLbHelperProvider.init();
+    }
+
     ChildPolicyWrapper createOrGet(String target) {
       // TODO(creamsoup) check if the target is valid or not
       RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);
