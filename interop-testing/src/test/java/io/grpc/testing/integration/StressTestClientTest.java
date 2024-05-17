@@ -17,9 +17,9 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.collect.Sets.newHashSet;
-import static io.grpc.testing.integration.TestServiceServer.AddressType.IPV4;
-import static io.grpc.testing.integration.TestServiceServer.AddressType.IPV4_IPV6;
-import static io.grpc.testing.integration.TestServiceServer.AddressType.IPV6;
+import static io.grpc.testing.integration.Util.AddressType.IPV4;
+import static io.grpc.testing.integration.Util.AddressType.IPV4_IPV6;
+import static io.grpc.testing.integration.Util.AddressType.IPV6;
 import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -131,7 +131,7 @@ public class StressTestClientTest {
     checkGaugesShouldBeExported(null);
   }
 
-  private void checkGaugesShouldBeExported(TestServiceServer.AddressType addressType)
+  private void checkGaugesShouldBeExported(Util.AddressType addressType)
       throws Exception {
 
     TestServiceServer server = new TestServiceServer();

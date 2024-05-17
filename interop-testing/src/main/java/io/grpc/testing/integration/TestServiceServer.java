@@ -31,10 +31,7 @@ import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -78,7 +75,7 @@ public class TestServiceServer {
   private ScheduledExecutorService executor;
   private Server server;
   private int localHandshakerPort = -1;
-  private AddressType addressType = AddressType.IPV4_IPV6;
+  private Util.AddressType addressType = Util.AddressType.IPV4_IPV6;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -111,7 +108,7 @@ public class TestServiceServer {
         localHandshakerPort = Integer.parseInt(value);
       } else if ("address_type".equals(key)) {
         if (!value.isEmpty()) {
-          addressType = AddressType.valueOf(value.toUpperCase());
+          addressType = Util.AddressType.valueOf(value.toUpperCase());
         }
       } else if ("grpc_version".equals(key)) {
         if (!"2".equals(value)) {
@@ -175,12 +172,12 @@ public class TestServiceServer {
         break;
       case IPV4:
         serverBuilder =
-            io.grpc.netty.NettyServerBuilder.forAddress(getV4Address(port), serverCreds)
+            io.grpc.netty.NettyServerBuilder.forAddress(Util.getV4Address(port), serverCreds)
                 .addListenAddress(new InetSocketAddress("127.0.0.1", port));
         break;
       case IPV6:
         serverBuilder =
-            io.grpc.netty.NettyServerBuilder.forAddress(getV6Address(port), serverCreds)
+            io.grpc.netty.NettyServerBuilder.forAddress(Util.getV6Address(port), serverCreds)
                 .addListenAddress(new InetSocketAddress("::1", port));
         break;
       default:
@@ -195,26 +192,6 @@ public class TestServiceServer {
         .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
         .build()
         .start();
-  }
-
-  private SocketAddress getV6Address(int port) throws UnknownHostException {
-    InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
-    for (InetAddress address : addresses) {
-      if (address.getAddress().length != 4) {
-        return new java.net.InetSocketAddress(address, port);
-      }
-    }
-    return null; // should never happen
-  }
-
-  private SocketAddress getV4Address(int port) throws UnknownHostException {
-    InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
-    for (InetAddress address : addresses) {
-      if (address.getAddress().length == 4) {
-        return new java.net.InetSocketAddress(address, port);
-      }
-    }
-    return null; // should never happen
   }
 
   @VisibleForTesting
@@ -238,10 +215,4 @@ public class TestServiceServer {
     }
   }
 
-  @VisibleForTesting
-  enum AddressType {
-    IPV4,
-    IPV6,
-    IPV4_IPV6
-  }
 }

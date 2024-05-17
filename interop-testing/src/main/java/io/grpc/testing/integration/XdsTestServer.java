@@ -16,6 +16,10 @@
 
 package io.grpc.testing.integration;
 
+import static io.grpc.testing.integration.Util.AddressType.IPV4_IPV6;
+import static io.grpc.testing.integration.Util.getV4Address;
+import static io.grpc.testing.integration.Util.getV6Address;
+
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -25,8 +29,10 @@ import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
@@ -43,6 +49,7 @@ import io.grpc.xds.XdsServerBuilder;
 import io.grpc.xds.XdsServerCredentials;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
@@ -81,6 +88,7 @@ public final class XdsTestServer {
   private Server server;
   private Server maintenanceServer;
   private String host;
+  private Util.AddressType addressType = Util.AddressType.IPV4_IPV6;
   private CsmObservability csmObservability;
 
   /**
@@ -138,6 +146,10 @@ public final class XdsTestServer {
         enableCsmObservability = Boolean.valueOf(value);
       } else if ("server_id".equals(key)) {
         serverId = value;
+      } else if ("address_type".equals(key)) {
+        if (!value.isEmpty()) {
+          addressType = Util.AddressType.valueOf(value.toUpperCase());
+        }
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -216,8 +228,28 @@ public final class XdsTestServer {
               .build();
       server.start();
     } else {
+      ServerBuilder<?> serverBuilder;
+      ServerCredentials insecureServerCreds = InsecureServerCredentials.create();
+      switch (addressType) {
+        case IPV4_IPV6:
+          serverBuilder = Grpc.newServerBuilderForPort(port, insecureServerCreds);
+          break;
+        case IPV4:
+          serverBuilder =
+              io.grpc.netty.NettyServerBuilder.forAddress(getV4Address(port), insecureServerCreds)
+                  .addListenAddress(new InetSocketAddress("127.0.0.1", port));
+          break;
+        case IPV6:
+          serverBuilder =
+              io.grpc.netty.NettyServerBuilder.forAddress(getV6Address(port), insecureServerCreds)
+                  .addListenAddress(new InetSocketAddress("::1", port));
+          break;
+        default:
+          throw new AssertionError("Unknown address type: " + addressType);
+      }
+
       server =
-          Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+          serverBuilder
               .addService(
                   ServerInterceptors.intercept(
                       new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))

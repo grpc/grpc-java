@@ -49,10 +49,10 @@ public class TestServiceClientTest {
 
   @Test
   public void addressType_parse_v6() throws Exception {
-    addressType_test(TestServiceServer.AddressType.IPV6);
+    addressType_test(Util.AddressType.IPV6);
   }
 
-  private void addressType_test(TestServiceServer.AddressType addressType) throws Exception {
+  private void addressType_test(Util.AddressType addressType) throws Exception {
     int port = 8082;
     TestServiceServer server = new TestServiceServer();
 
@@ -83,7 +83,7 @@ public class TestServiceClientTest {
 
   }
 
-  private String getServerHost(TestServiceServer.AddressType addressType) {
+  private String getServerHost(Util.AddressType addressType) {
     if (addressType == null) {
       return "localhost";
     }
