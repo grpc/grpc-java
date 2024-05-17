@@ -26,18 +26,15 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
 import java.io.File;
-import java.io.IOException;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Handler;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import org.junit.After;
@@ -49,11 +46,11 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link AdvancedTlsX509KeyManager}. */
 @RunWith(JUnit4.class)
 public class AdvancedTlsX509KeyManagerTest {
-  public static final String SERVER_0_KEY_FILE = "server0.key";
-  public static final String SERVER_0_PEM_FILE = "server0.pem";
-  public static final String CLIENT_0_KEY_FILE = "client.key";
-  public static final String CLIENT_0_PEM_FILE = "client.pem";
-  public static final String ALIAS = "default";
+  private static final String SERVER_0_KEY_FILE = "server0.key";
+  private static final String SERVER_0_PEM_FILE = "server0.pem";
+  private static final String CLIENT_0_KEY_FILE = "client.key";
+  private static final String CLIENT_0_PEM_FILE = "client.pem";
+  private static final String ALIAS = "default";
 
   private ScheduledExecutorService executor;
 
@@ -69,7 +66,7 @@ public class AdvancedTlsX509KeyManagerTest {
 
   @Before
   public void setUp()
-      throws NoSuchAlgorithmException, IOException, CertificateException, InvalidKeySpecException {
+      throws Exception {
     executor = Executors.newSingleThreadScheduledExecutor();
     serverKey0File = TestUtils.loadCert(SERVER_0_KEY_FILE);
     serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
@@ -138,6 +135,7 @@ public class AdvancedTlsX509KeyManagerTest {
     TestHandler handler = new TestHandler();
     log.addHandler(handler);
     log.setUseParentHandlers(false);
+    log.setLevel(Level.FINE);
     serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, -1,
             TimeUnit.SECONDS, executor);
     log.removeHandler(handler);
