@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import android.content.Context;
 import android.os.UserHandle;
+import androidx.core.content.ContextCompat;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.Internal;
@@ -14,8 +15,10 @@ import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import java.net.SocketAddress;
 import java.util.Collection;
 import java.util.Collections;
@@ -47,7 +50,8 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   private BinderClientTransportFactory(Builder builder) {
     sourceContext = checkNotNull(builder.sourceContext);
     channelCredentials = checkNotNull(builder.channelCredentials);
-    mainThreadExecutor = checkNotNull(builder.mainThreadExecutor);
+    mainThreadExecutor = builder.mainThreadExecutor != null ?
+        builder.mainThreadExecutor : ContextCompat.getMainExecutor(sourceContext);
     scheduledExecutorPool = checkNotNull(builder.scheduledExecutorPool);
     offloadExecutorPool = checkNotNull(builder.offloadExecutorPool);
     securityPolicy = checkNotNull(builder.securityPolicy);
@@ -92,14 +96,18 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   }
 
   /**
-   * Yes its a factory factory essentially ...
+   * Allows fluent construction of ClientTransportFactory.
    */
-  public static class Builder implements ClientTransportFactoryBuilder {
+  public static final class Builder implements ClientTransportFactoryBuilder {
+    // Required.
     Context sourceContext;
-    BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault();
-    Executor mainThreadExecutor;
-    ObjectPool<ScheduledExecutorService> scheduledExecutorPool;
     ObjectPool<? extends Executor> offloadExecutorPool;
+
+    // Optional.
+    BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault();
+    Executor mainThreadExecutor;  // Default filled-in at build time once sourceContext is decided.
+    ObjectPool<ScheduledExecutorService> scheduledExecutorPool =
+        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
     SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
     @Nullable
     UserHandle targetUserHandle;
@@ -117,30 +125,30 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
       return this;
     }
 
+    public Builder setOffloadExecutorPool(
+        ObjectPool<? extends Executor> offloadExecutorPool) {
+      this.offloadExecutorPool = checkNotNull(offloadExecutorPool, "offloadExecutorPool");
+      return this;
+    }
+
     public Builder setChannelCredentials(BinderChannelCredentials channelCredentials) {
-      this.channelCredentials = checkNotNull(channelCredentials);
+      this.channelCredentials = checkNotNull(channelCredentials, "channelCredentials");
       return this;
     }
 
     public Builder setMainThreadExecutor(Executor mainThreadExecutor) {
-      this.mainThreadExecutor = checkNotNull(mainThreadExecutor);
+      this.mainThreadExecutor = checkNotNull(mainThreadExecutor, "mainThreadExecutor");
       return this;
     }
 
     public Builder setScheduledExecutorPool(
         ObjectPool<ScheduledExecutorService> scheduledExecutorPool) {
-      this.scheduledExecutorPool = checkNotNull(scheduledExecutorPool);
-      return this;
-    }
-
-    public Builder setOffloadExecutorPool(
-        ObjectPool<? extends Executor> offloadExecutorPool) {
-      this.offloadExecutorPool = checkNotNull(offloadExecutorPool);
+      this.scheduledExecutorPool = checkNotNull(scheduledExecutorPool, "scheduledExecutorPool");
       return this;
     }
 
     public Builder setSecurityPolicy(SecurityPolicy securityPolicy) {
-      this.securityPolicy = checkNotNull(securityPolicy);
+      this.securityPolicy = checkNotNull(securityPolicy, "securityPolicy");
       return this;
     }
 
@@ -150,17 +158,22 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     }
 
     public Builder setBindServiceFlags(BindServiceFlags bindServiceFlags) {
-      this.bindServiceFlags = checkNotNull(bindServiceFlags);
+      this.bindServiceFlags = checkNotNull(bindServiceFlags, "bindServiceFlags");
       return this;
     }
 
     public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
-      this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy);
+      this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
       return this;
     }
 
+    /**
+     * Decorates both the "endpoint" and "server" binders, for fault injection.
+     *
+     * <p>Optional. If absent, these objects will go undecorated.
+     */
     public Builder setBinderDecorator(OneWayBinderProxy.Decorator binderDecorator) {
-      this.binderDecorator = checkNotNull(binderDecorator);
+      this.binderDecorator = checkNotNull(binderDecorator, "binderDecorator");
       return this;
     }
   }

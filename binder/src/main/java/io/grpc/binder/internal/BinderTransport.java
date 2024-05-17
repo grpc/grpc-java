@@ -571,10 +571,12 @@ public abstract class BinderTransport
     /**
      * Constructs a new transport instance.
      *
-     * @param binderDecorator used to decorate both the "endpoint" and "server" binders, for fault
-     *     injection.
+     * @param factory parameters common to all a Channel's transports
+     * @param targetAddress the fully resolved and load-balanced server address
+     * @param options other parameters that can vary as transports come and go within a Channel
      */
-    public BinderClientTransport(BinderClientTransportFactory factory,
+    public BinderClientTransport(
+        BinderClientTransportFactory factory,
         AndroidComponentAddress targetAddress,
         ClientTransportOptions options) {
       super(
@@ -811,16 +813,6 @@ public abstract class BinderTransport
                   : SecurityLevel.INTEGRITY) // TODO: Have the SecrityPolicy decide this.
           .build();
     }
-
-    // static class Builder extends BinderTransport.Builder {
-    //   ObjectPool<? extends Executor> offloadExecutorPool;
-    //   SecurityPolicy securityPolicy;
-    //
-    //   @Override
-    //   BinderTransport build() {
-    //     return new BinderClientTransport(this);
-    //   }
-    // }
   }
 
   /** Concrete server-side transport implementation. */
@@ -949,33 +941,5 @@ public abstract class BinderTransport
     // Otherwise, this exception from transact is unexpected.
     return Status.INTERNAL.withCause(e);
   }
-
-  // abstract static class Builder {
-  //   Attributes attributes;
-  //   ObjectPool<ScheduledExecutorService> executorServicePool;
-  //   InternalLogId logId;
-  //   OneWayBinderProxy.Decorator binderDecorator;
-  //
-  //   abstract BinderTransport build();
-  //
-  //   abstract Builder clone();
-  //
-  //   void setAttributes(Attributes attributes) {
-  //     this.attributes = attributes;
-  //   }
-  //
-  //   void setExecutorServicePool(
-  //       ObjectPool<ScheduledExecutorService> executorServicePool) {
-  //     this.executorServicePool = executorServicePool;
-  //   }
-  //
-  //   void setLogId(InternalLogId logId) {
-  //     this.logId = logId;
-  //   }
-  //
-  //   void setBinderDecorator(Decorator binderDecorator) {
-  //     this.binderDecorator = binderDecorator;
-  //   }
-  // }
 }
 

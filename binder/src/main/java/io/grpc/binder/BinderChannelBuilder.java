@@ -22,19 +22,14 @@ import static com.google.common.base.Preconditions.checkState;
 import android.content.Context;
 import android.os.UserHandle;
 import androidx.annotation.RequiresApi;
-import androidx.core.content.ContextCompat;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.binder.internal.BinderClientTransportFactory;
-import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedChannelImplBuilder;
-import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
-import io.grpc.internal.SharedResourcePool;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -182,34 +177,24 @@ public final class BinderChannelBuilder
       BinderChannelCredentials channelCredentials) {
     transportFactoryBuilder = new BinderClientTransportFactory.Builder()
         .setSourceContext(sourceContext)
-        .setChannelCredentials(channelCredentials)
-        .setMainThreadExecutor(ContextCompat.getMainExecutor(checkNotNull(sourceContext, "sourceContext")))
-        .setScheduledExecutorPool(SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE));
-
-    final class BinderChannelTransportFactoryBuilder
-        implements ClientTransportFactoryBuilder {
-      @Override
-      public ClientTransportFactory buildClientTransportFactory() {
-        return transportFactoryBuilder
-            .setOffloadExecutorPool(managedChannelImplBuilder.getOffloadExecutorPool())
-            .buildClientTransportFactory();
-      }
-    }
+        .setChannelCredentials(channelCredentials);
 
     if (directAddress != null) {
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(
               directAddress,
               directAddress.getAuthority(),
-              new BinderChannelTransportFactoryBuilder(),
+              transportFactoryBuilder,
               null);
     } else {
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(
               target,
-              new BinderChannelTransportFactoryBuilder(),
+              transportFactoryBuilder,
               null);
     }
+    transportFactoryBuilder.setOffloadExecutorPool(
+        managedChannelImplBuilder.getOffloadExecutorPool());
     idleTimeout(60, TimeUnit.SECONDS);
   }
 
@@ -306,6 +291,15 @@ public final class BinderChannelBuilder
   public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
     checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
     super.idleTimeout(value, unit);
+    return this;
+  }
+
+  @Override
+  public BinderChannelBuilder offloadExecutor(Executor executor) {
+    super.offloadExecutor(executor);
+    // Keep our transport factory in sync with managedChannelImplBuilder's offload executor.
+    transportFactoryBuilder.setOffloadExecutorPool(
+        managedChannelImplBuilder.getOffloadExecutorPool());
     return this;
   }
 }
