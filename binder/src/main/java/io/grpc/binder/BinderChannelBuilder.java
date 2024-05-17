@@ -288,18 +288,18 @@ public final class BinderChannelBuilder
   }
 
   @Override
-  public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
-    checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
-    super.idleTimeout(value, unit);
-    return this;
-  }
-
-  @Override
   public BinderChannelBuilder offloadExecutor(Executor executor) {
     super.offloadExecutor(executor);
     // Keep our transport factory in sync with managedChannelImplBuilder's offload executor.
     transportFactoryBuilder.setOffloadExecutorPool(
         managedChannelImplBuilder.getOffloadExecutorPool());
+    return this;
+  }
+
+  @Override
+  public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
+    checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
+    super.idleTimeout(value, unit);
     return this;
   }
 }
