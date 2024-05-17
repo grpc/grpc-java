@@ -143,31 +143,26 @@ public final class BinderClientTransportTest {
   }
 
   private class BinderClientTransportBuilder {
-    private final BinderClientTransportFactory.Builder factoryBuilder = new BinderClientTransportFactory.Builder();
-
-    public BinderClientTransportBuilder() {
-      factoryBuilder.sourceContext = appContext;
-      factoryBuilder.mainThreadExecutor = ContextCompat.getMainExecutor(appContext);
-      factoryBuilder.scheduledExecutorPool = executorServicePool;
-      factoryBuilder.offloadExecutorPool = executorServicePool;
-    }
+    final BinderClientTransportFactory.Builder factoryBuilder = new BinderClientTransportFactory.Builder()
+        .setSourceContext(appContext)
+        .setMainThreadExecutor(ContextCompat.getMainExecutor(appContext))
+        .setScheduledExecutorPool(executorServicePool)
+        .setOffloadExecutorPool(executorServicePool);
 
     public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
-      factoryBuilder.securityPolicy = securityPolicy;
+      factoryBuilder.setSecurityPolicy(securityPolicy);
       return this;
     }
 
     public BinderClientTransportBuilder setBinderDecorator(
         OneWayBinderProxy.Decorator binderDecorator) {
-      factoryBuilder.binderDecorator = binderDecorator;
+      factoryBuilder.setBinderDecorator(binderDecorator);
       return this;
     }
 
     public BinderTransport.BinderClientTransport build() {
-      return new BinderTransport.BinderClientTransport(
-          factoryBuilder.buildClientTransportFactory(),
-          serverAddress,
-          new ClientTransportOptions());
+      return factoryBuilder.buildClientTransportFactory()
+          .newClientTransport(serverAddress, new ClientTransportOptions(), null);
     }
   }
 

@@ -14,7 +14,6 @@ import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.internal.ClientTransportFactory;
-import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ObjectPool;
 import java.net.SocketAddress;
@@ -29,8 +28,6 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class BinderClientTransportFactory implements ClientTransportFactory {
-  // Fixed properties of the Channel.
-
   final Context sourceContext;
   final BinderChannelCredentials channelCredentials;
   final Executor mainThreadExecutor;
@@ -48,23 +45,23 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   private boolean closed;
 
   private BinderClientTransportFactory(Builder builder) {
-    this.sourceContext = checkNotNull(builder.sourceContext);
-    this.channelCredentials = checkNotNull(builder.channelCredentials);
-    this.mainThreadExecutor = checkNotNull(builder.mainThreadExecutor);
-    this.scheduledExecutorPool = checkNotNull(builder.scheduledExecutorPool);
-    this.offloadExecutorPool = checkNotNull(builder.offloadExecutorPool);
-    this.securityPolicy = checkNotNull(builder.securityPolicy);
-    this.targetUserHandle = builder.targetUserHandle;
-    this.bindServiceFlags = checkNotNull(builder.bindServiceFlags);
-    this.inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
-    this.binderDecorator = checkNotNull(builder.binderDecorator);
+    sourceContext = checkNotNull(builder.sourceContext);
+    channelCredentials = checkNotNull(builder.channelCredentials);
+    mainThreadExecutor = checkNotNull(builder.mainThreadExecutor);
+    scheduledExecutorPool = checkNotNull(builder.scheduledExecutorPool);
+    offloadExecutorPool = checkNotNull(builder.offloadExecutorPool);
+    securityPolicy = checkNotNull(builder.securityPolicy);
+    targetUserHandle = builder.targetUserHandle;
+    bindServiceFlags = checkNotNull(builder.bindServiceFlags);
+    inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
+    binderDecorator = checkNotNull(builder.binderDecorator);
 
     executorService = scheduledExecutorPool.getObject();
     offloadExecutor = offloadExecutorPool.getObject();
   }
 
   @Override
-  public ConnectionClientTransport newClientTransport(
+  public BinderTransport.BinderClientTransport newClientTransport(
       SocketAddress addr, ClientTransportOptions options, ChannelLogger channelLogger) {
     if (closed) {
       throw new IllegalStateException("The transport factory is closed.");
