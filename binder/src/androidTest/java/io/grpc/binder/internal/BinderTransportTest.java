@@ -29,6 +29,8 @@ import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.internal.AbstractTransportTest;
+import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
@@ -97,19 +99,20 @@ public final class BinderTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     AndroidComponentAddress addr = (AndroidComponentAddress) server.getListenSocketAddress();
+    BinderClientTransportFactory.Builder builder = new BinderClientTransportFactory.Builder()
+        .setScheduledExecutorPool(executorServicePool)
+        .setOffloadExecutorPool(offloadExecutorPool)
+        .setSourceContext(appContext)
+        .setMainThreadExecutor(ContextCompat.getMainExecutor(appContext));
+
+    ClientTransportOptions options = new ClientTransportOptions();
+    options.setEagAttributes(eagAttrs());
+    options.setChannelLogger(transportLogger());
+
     return new BinderTransport.BinderClientTransport(
-        appContext,
-        BinderChannelCredentials.forDefault(),
+        builder.buildClientTransportFactory(),
         addr,
-        null,
-        BindServiceFlags.DEFAULTS,
-        ContextCompat.getMainExecutor(appContext),
-        executorServicePool,
-        offloadExecutorPool,
-        SecurityPolicies.internalOnly(),
-        InboundParcelablePolicy.DEFAULT,
-        OneWayBinderProxy.IDENTITY_DECORATOR,
-        eagAttrs());
+        options);
   }
 
   @Test
