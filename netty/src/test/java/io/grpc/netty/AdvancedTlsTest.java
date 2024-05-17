@@ -282,11 +282,11 @@ public class AdvancedTlsTest {
             new SslSocketAndEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
+                  Socket socket) { }
 
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
+                  SSLEngine engine) { }
             })
         .build();
     serverTrustManager.updateTrustCredentials(caCert);
@@ -307,11 +307,11 @@ public class AdvancedTlsTest {
             new SslSocketAndEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
+                  Socket socket) { }
 
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
+                  SSLEngine engine) { }
             })
         .build();
     clientTrustManager.updateTrustCredentials(caCert);
@@ -416,7 +416,7 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void onFileReloadingKeyManagerBadInitialContentTest() throws Exception {
+  public void onFileReloadingKeyManagerBadInitialContentTest() {
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
     // We swap the order of key and certificates to intentionally create an exception.
     assertThrows(GeneralSecurityException.class,
@@ -436,7 +436,7 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void keyManagerAliasesTest() throws Exception {
+  public void keyManagerAliasesTest() {
     AdvancedTlsX509KeyManager km = new AdvancedTlsX509KeyManager();
     assertArrayEquals(
         new String[] {"default"}, km.getClientAliases("", null));
