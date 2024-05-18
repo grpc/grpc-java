@@ -16,6 +16,7 @@
 
 package io.grpc.binder;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -297,5 +298,25 @@ public final class BinderChannelBuilder
     transportFactoryBuilder.setOffloadExecutorPool(
         managedChannelImplBuilder.getOffloadExecutorPool());
     return super.build();
+  }
+
+  /**
+   * Limits how long it can take to establish a single connection behind this channel.
+   *
+   * <p>Connection establishment may include creating an Android binding, waiting for the server to
+   * start and return from onBind(), exchanging handshake transactions according to the wire
+   * protocol and evaluating a {@link SecurityPolicy}.
+   *
+   * <p>The default value is intentionally unspecified and subject to change.
+   */
+  public BinderChannelBuilder connectTimeout(long value, TimeUnit unit) {
+    checkArgument(value > 0, "timeout is %s, but must be positive", value);
+    // We convert to the largest unit to avoid overflow.
+    if (unit.toDays(value) >= 30) {
+      transportFactoryBuilder.setConnectTimeoutMillis(-1);
+    } else {
+      transportFactoryBuilder.setConnectTimeoutMillis(unit.toMillis(value));
+    }
+    return this;
   }
 }

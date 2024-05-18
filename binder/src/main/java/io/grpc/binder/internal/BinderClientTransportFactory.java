@@ -57,6 +57,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final BindServiceFlags bindServiceFlags;
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
+  final long connectTimeoutMillis;
 
   ScheduledExecutorService executorService;
   Executor offloadExecutor;
@@ -74,6 +75,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     bindServiceFlags = checkNotNull(builder.bindServiceFlags);
     inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
     binderDecorator = checkNotNull(builder.binderDecorator);
+    connectTimeoutMillis = builder.connectTimeoutMillis;
 
     executorService = scheduledExecutorPool.getObject();
     offloadExecutor = offloadExecutorPool.getObject();
@@ -129,6 +131,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
+    long connectTimeoutMillis = -1;  // TODO(jdcormie): Set an actual default here in a separate PR.
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
@@ -189,6 +192,16 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      */
     public Builder setBinderDecorator(OneWayBinderProxy.Decorator binderDecorator) {
       this.binderDecorator = checkNotNull(binderDecorator, "binderDecorator");
+      return this;
+    }
+
+    /**
+     * Limits how long it can take to for new transports to become ready after starting.
+     *
+     * <p>Optional. Use a non-positive value to wait indefinitely.
+     */
+    public Builder setConnectTimeoutMillis(long connectTimeoutMillis) {
+      this.connectTimeoutMillis = connectTimeoutMillis;
       return this;
     }
   }

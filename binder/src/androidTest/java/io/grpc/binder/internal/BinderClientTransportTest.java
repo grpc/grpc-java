@@ -25,6 +25,7 @@ import android.os.RemoteException;
 import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Empty;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -43,6 +44,7 @@ import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.SecurityPolicy;
+import io.grpc.binder.internal.OneWayBinderProxies.BlackHoleOneWayBinderProxy;
 import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
 import io.grpc.binder.internal.OneWayBinderProxies.ThrowingOneWayBinderProxy;
 import io.grpc.internal.ClientStream;
@@ -59,9 +61,12 @@ import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import org.junit.After;
@@ -100,8 +105,11 @@ public final class BinderClientTransportTest {
 
   AndroidComponentAddress serverAddress;
   BinderTransport.BinderClientTransport transport;
+  BlockingSecurityPolicy blockingSecurityPolicy = new BlockingSecurityPolicy();
 
   private final ObjectPool<ScheduledExecutorService> executorServicePool =
+      new FixedObjectPool<>(Executors.newScheduledThreadPool(1));
+  private final ObjectPool<ScheduledExecutorService> offloadServicePool =
       new FixedObjectPool<>(Executors.newScheduledThreadPool(1));
   private final TestTransportListener transportListener = new TestTransportListener();
   private final TestStreamListener streamListener = new TestStreamListener();
@@ -146,7 +154,7 @@ public final class BinderClientTransportTest {
     final BinderClientTransportFactory.Builder factoryBuilder = new BinderClientTransportFactory.Builder()
         .setSourceContext(appContext)
         .setScheduledExecutorPool(executorServicePool)
-        .setOffloadExecutorPool(executorServicePool);
+        .setOffloadExecutorPool(offloadServicePool);
 
     public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
       factoryBuilder.setSecurityPolicy(securityPolicy);
@@ -159,6 +167,11 @@ public final class BinderClientTransportTest {
       return this;
     }
 
+    public BinderClientTransportBuilder setConnectTimeoutMillis(int timeoutMillis) {
+      factoryBuilder.setConnectTimeoutMillis(timeoutMillis);
+      return this;
+    }
+
     public BinderTransport.BinderClientTransport build() {
       return factoryBuilder.buildClientTransportFactory()
           .newClientTransport(serverAddress, new ClientTransportOptions(), null);
@@ -167,9 +180,11 @@ public final class BinderClientTransportTest {
 
   @After
   public void tearDown() throws Exception {
+    blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.ABORTED);
     transport.shutdownNow(Status.OK);
     HostServices.awaitServiceShutdown();
     executorServicePool.getObject().shutdownNow();
+    offloadServicePool.getObject().shutdownNow();
   }
 
   @Test
@@ -261,10 +276,9 @@ public final class BinderClientTransportTest {
   }
 
   @Test
-  public void testNewStreamBeforeTransportReadyFails() throws InterruptedException {
+  public void testNewStreamBeforeTransportReadyFails() throws Exception {
     // Use a special SecurityPolicy that lets us act before the transport is setup/ready.
-    BlockingSecurityPolicy bsp = new BlockingSecurityPolicy();
-    transport = new BinderClientTransportBuilder().setSecurityPolicy(bsp).build();
+    transport = new BinderClientTransportBuilder().setSecurityPolicy(blockingSecurityPolicy).build();
     transport.start(transportListener).run();
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
@@ -272,12 +286,12 @@ public final class BinderClientTransportTest {
     assertThat(streamListener.awaitClose().getCode()).isEqualTo(Code.INTERNAL);
 
     // Unblock the SETUP_TRANSPORT handshake and make sure it becomes ready in the usual way.
-    bsp.provideNextCheckAuthorizationResult(Status.OK);
+    blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.OK);
     transportListener.awaitReady();
   }
 
   @Test
-  public void testTxnFailureDuringSetup() throws InterruptedException {
+  public void testTxnFailureDuringSetup() throws Exception {
     BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
     transport = new BinderClientTransportBuilder()
         .setBinderDecorator(decorator)
@@ -304,7 +318,7 @@ public final class BinderClientTransportTest {
   }
 
   @Test
-  public void testTxnFailurePostSetup() throws InterruptedException {
+  public void testTxnFailurePostSetup() throws Exception {
     BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
     transport = new BinderClientTransportBuilder()
         .setBinderDecorator(decorator)
@@ -332,59 +346,84 @@ public final class BinderClientTransportTest {
     assertThat(streamStatus.getCause()).isSameInstanceAs(doe);
   }
 
+  @Test
+  public void testBlackHoleEndpointConnectTimeout() throws Exception {
+    BlockingBinderDecorator<BlackHoleOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
+    transport = new BinderClientTransportBuilder()
+        .setBinderDecorator(decorator)
+        .setConnectTimeoutMillis(1_000)
+        .build();
+    transport.start(transportListener).run();
+    BlackHoleOneWayBinderProxy endpointBinder = new BlackHoleOneWayBinderProxy(
+        decorator.takeNextRequest());
+    endpointBinder.dropAllTransactions(true);
+    decorator.putNextResult(endpointBinder);
+    Status transportStatus = transportListener.awaitShutdown();
+    assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    assertThat(transportStatus.getDescription()).contains("1000");
+    transportListener.awaitTermination();
+  }
+
+  @Test
+  public void testBlackHoleSecurityPolicyConnectTimeout() throws Exception {
+    transport = new BinderClientTransportBuilder()
+        .setSecurityPolicy(blockingSecurityPolicy)
+        .setConnectTimeoutMillis(1_000)
+        .build();
+    transport.start(transportListener).run();
+    Status transportStatus = transportListener.awaitShutdown();
+    assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    assertThat(transportStatus.getDescription()).contains("1000");
+    transportListener.awaitTermination();
+    blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.OK);
+  }
+
   private static void startAndAwaitReady(
-      BinderTransport.BinderClientTransport transport, TestTransportListener transportListener) {
+      BinderTransport.BinderClientTransport transport, TestTransportListener transportListener)
+      throws Exception {
     transport.start(transportListener).run();
     transportListener.awaitReady();
   }
 
   private static final class TestTransportListener implements ManagedClientTransport.Listener {
-    @GuardedBy("this")
-    private boolean ready;
+    private static final long TIMEOUT_SECONDS = 5;
 
     public boolean inUse;
-    @Nullable public Status shutdownStatus;
-    public boolean terminated;
+    private final SettableFuture<Boolean> isReady = SettableFuture.create();
+    private final SettableFuture<Status> shutdownStatus = SettableFuture.create();
+    private final SettableFuture<Boolean> isTerminated = SettableFuture.create();
 
     @Override
-    public synchronized void transportShutdown(Status shutdownStatus) {
-      this.shutdownStatus = shutdownStatus;
-      notifyAll();
-    }
-
-    public synchronized Status awaitShutdown() throws InterruptedException {
-      while (shutdownStatus == null) {
-        wait();
-      }
-      return shutdownStatus;
-    }
-
-    @Override
-    public synchronized void transportTerminated() {
-      terminated = true;
-      notifyAll();
-    }
-
-    public synchronized void awaitTermination() throws InterruptedException {
-      while (!terminated) {
-        wait();
+    public void transportShutdown(Status shutdownStatus) {
+      if (!this.shutdownStatus.set(shutdownStatus)) {
+        throw new IllegalStateException("transportShutdown() already called");
       }
     }
 
-    @Override
-    public synchronized void transportReady() {
-      ready = true;
-      notifyAll();
+    public Status awaitShutdown() throws Exception {
+      return shutdownStatus.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
-    public synchronized void awaitReady() {
-      while (!ready) {
-        try {
-          wait();
-        } catch (InterruptedException inte) {
-          throw new AssertionError("Interrupted waiting for ready");
-        }
+    @Override
+    public void transportTerminated() {
+      if (!isTerminated.set(true)) {
+        throw new IllegalStateException("isTerminated() already called");
       }
+    }
+
+    public void awaitTermination() throws Exception {
+      isTerminated.get(5, TimeUnit.SECONDS);
+    }
+
+    @Override
+    public void transportReady() {
+      if (!isReady.set(true)) {
+        throw new IllegalStateException("isTerminated() already called");
+      }
+    }
+
+    public void awaitReady() throws Exception {
+      isReady.get(5, TimeUnit.SECONDS);
     }
 
     @Override
