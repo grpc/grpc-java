@@ -22,8 +22,8 @@ import static org.junit.Assert.fail;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
-import io.grpc.inprocess.InProcessSocketAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collections;
 import org.junit.Test;
@@ -110,7 +110,7 @@ public class ManagedChannelImplGetNameResolverTest {
     try {
       ManagedChannelImplBuilder.getNameResolverProvider(
           "testscheme:///foo.googleapis.com:8080", nameResolverRegistry,
-          Collections.singleton(InProcessSocketAddress.class));
+          Collections.singleton(SpecialSocketAddress.class));
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().isEqualTo(
@@ -196,4 +196,6 @@ public class ManagedChannelImplGetNameResolverTest {
 
     @Override public void shutdown() {}
   }
+
+  private static class SpecialSocketAddress extends SocketAddress {}
 }
