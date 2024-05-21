@@ -53,6 +53,7 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -148,7 +149,7 @@ public final class XdsTestServer {
         serverId = value;
       } else if ("address_type".equals(key)) {
         if (!value.isEmpty()) {
-          addressType = Util.AddressType.valueOf(value.toUpperCase());
+          addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
         }
       } else {
         System.err.println("Unknown argument: " + key);
@@ -247,6 +248,8 @@ public final class XdsTestServer {
         default:
           throw new AssertionError("Unknown address type: " + addressType);
       }
+
+      logger.info("Starting server on port " + port + " with address type " + addressType);
 
       server =
           serverBuilder

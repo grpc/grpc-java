@@ -27,12 +27,12 @@ import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
-import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
 import java.net.InetSocketAddress;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -75,7 +75,6 @@ public class TestServiceServer {
 
   private ScheduledExecutorService executor;
   private Server server;
-  private Server healthService = null;
   private int localHandshakerPort = -1;
   private Util.AddressType addressType = Util.AddressType.IPV4_IPV6;
 
@@ -110,7 +109,7 @@ public class TestServiceServer {
         localHandshakerPort = Integer.parseInt(value);
       } else if ("address_type".equals(key)) {
         if (!value.isEmpty()) {
-          addressType = Util.AddressType.valueOf(value.toUpperCase());
+          addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
         }
       } else if ("grpc_version".equals(key)) {
         if (!"2".equals(value)) {
@@ -194,13 +193,6 @@ public class TestServiceServer {
         .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
         .build()
         .start();
-
-    HealthStatusManager health = new HealthStatusManager();
-
-    healthService = Grpc.newServerBuilderForPort(port + 2, serverCreds)
-        .addService(health.getHealthService())
-        .build()
-        .start();
   }
 
   @VisibleForTesting
@@ -209,7 +201,6 @@ public class TestServiceServer {
     if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for server shutdown");
     }
-    healthService.shutdownNow();
     MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
   }
 
@@ -222,9 +213,6 @@ public class TestServiceServer {
   private void blockUntilShutdown() throws InterruptedException {
     if (server != null) {
       server.awaitTermination();
-    }
-    if (healthService != null) {
-      healthService.shutdownNow();
     }
   }
 
