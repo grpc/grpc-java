@@ -33,7 +33,6 @@ public class TestServiceClientTest {
 
   @Test
   public void addressType_try_null() throws Exception {
-//    addressType_test(null);
     TestServiceServer server = new TestServiceServer();
     server.parseArgs(new String[] {"--port=8082", "--use_tls=true"});
     try {

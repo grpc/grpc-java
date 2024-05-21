@@ -27,6 +27,7 @@ import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
+import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
@@ -74,6 +75,7 @@ public class TestServiceServer {
 
   private ScheduledExecutorService executor;
   private Server server;
+  private Server healthService = null;
   private int localHandshakerPort = -1;
   private Util.AddressType addressType = Util.AddressType.IPV4_IPV6;
 
@@ -192,6 +194,13 @@ public class TestServiceServer {
         .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
         .build()
         .start();
+
+    HealthStatusManager health = new HealthStatusManager();
+
+    healthService = Grpc.newServerBuilderForPort(port + 2, serverCreds)
+        .addService(health.getHealthService())
+        .build()
+        .start();
   }
 
   @VisibleForTesting
@@ -200,6 +209,7 @@ public class TestServiceServer {
     if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for server shutdown");
     }
+    healthService.shutdownNow();
     MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
   }
 
@@ -212,6 +222,9 @@ public class TestServiceServer {
   private void blockUntilShutdown() throws InterruptedException {
     if (server != null) {
       server.awaitTermination();
+    }
+    if (healthService != null) {
+      healthService.shutdownNow();
     }
   }
 
