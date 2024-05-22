@@ -366,7 +366,7 @@ public class ManagedChannelImplBuilderTest {
     when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
         .thenReturn(mockClientTransportFactory);
     when(mockClientTransportFactory.getSupportedSocketAddressTypes())
-        .thenReturn(Collections.singleton(SpecialSocketAddress.class));
+        .thenReturn(Collections.singleton(CustomSocketAddress.class));
 
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
@@ -782,5 +782,5 @@ public class ManagedChannelImplBuilderTest {
     assertFalse(uriPattern.matcher(" a:/").matches()); // space not matched
   }
 
-  private static class SpecialSocketAddress extends SocketAddress {}
+  private static class CustomSocketAddress extends SocketAddress {}
 }

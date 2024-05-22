@@ -110,7 +110,7 @@ public class ManagedChannelImplGetNameResolverTest {
     try {
       ManagedChannelImplBuilder.getNameResolverProvider(
           "testscheme:///foo.googleapis.com:8080", nameResolverRegistry,
-          Collections.singleton(SpecialSocketAddress.class));
+          Collections.singleton(CustomSocketAddress.class));
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().isEqualTo(
@@ -197,5 +197,5 @@ public class ManagedChannelImplGetNameResolverTest {
     @Override public void shutdown() {}
   }
 
-  private static class SpecialSocketAddress extends SocketAddress {}
+  private static class CustomSocketAddress extends SocketAddress {}
 }
