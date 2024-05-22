@@ -46,7 +46,6 @@ import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.StaticTestingClassLoader;
-import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
@@ -367,7 +366,7 @@ public class ManagedChannelImplBuilderTest {
     when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
         .thenReturn(mockClientTransportFactory);
     when(mockClientTransportFactory.getSupportedSocketAddressTypes())
-        .thenReturn(Collections.singleton(InProcessSocketAddress.class));
+        .thenReturn(Collections.singleton(CustomSocketAddress.class));
 
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
@@ -782,4 +781,6 @@ public class ManagedChannelImplBuilderTest {
     assertFalse(uriPattern.matcher("a,:/").matches()); // ',' not matched
     assertFalse(uriPattern.matcher(" a:/").matches()); // space not matched
   }
+
+  private static class CustomSocketAddress extends SocketAddress {}
 }
