@@ -38,13 +38,13 @@ import io.grpc.reflection.testing.ReflectionTestDepthThreeProto;
 import io.grpc.reflection.testing.ReflectionTestDepthTwoAlternateProto;
 import io.grpc.reflection.testing.ReflectionTestDepthTwoProto;
 import io.grpc.reflection.testing.ReflectionTestProto;
-import io.grpc.reflection.v1alpha.ExtensionNumberResponse;
-import io.grpc.reflection.v1alpha.ExtensionRequest;
-import io.grpc.reflection.v1alpha.FileDescriptorResponse;
-import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
-import io.grpc.reflection.v1alpha.ServerReflectionRequest;
-import io.grpc.reflection.v1alpha.ServerReflectionResponse;
-import io.grpc.reflection.v1alpha.ServiceResponse;
+import io.grpc.reflection.v1.ExtensionNumberResponse;
+import io.grpc.reflection.v1.ExtensionRequest;
+import io.grpc.reflection.v1.FileDescriptorResponse;
+import io.grpc.reflection.v1.ServerReflectionGrpc;
+import io.grpc.reflection.v1.ServerReflectionRequest;
+import io.grpc.reflection.v1.ServerReflectionResponse;
+import io.grpc.reflection.v1.ServiceResponse;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
 import io.grpc.stub.StreamObserver;
@@ -63,9 +63,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Tests for {@link ProtoReflectionService}. */
+/** Tests for {@link ProtoReflectionServiceV1}. */
 @RunWith(JUnit4.class)
-public class ProtoReflectionServiceTest {
+public class ProtoReflectionServiceV1Test {
   @Rule
   public GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
@@ -80,7 +80,7 @@ public class ProtoReflectionServiceTest {
 
   @Before
   public void setUp() throws Exception {
-    reflectionService = ProtoReflectionService.newInstance();
+    reflectionService = ProtoReflectionServiceV1.newInstance();
     Server server =
         InProcessServerBuilder.forName("proto-reflection-test")
             .directExecutor()
@@ -102,7 +102,7 @@ public class ProtoReflectionServiceTest {
         new HashSet<>(
             Arrays.asList(
                 ServiceResponse.newBuilder()
-                    .setName("grpc.reflection.v1alpha.ServerReflection")
+                    .setName("grpc.reflection.v1.ServerReflection")
                     .build(),
                 ServiceResponse.newBuilder()
                     .setName("grpc.reflection.testing.ReflectableService")
@@ -114,7 +114,7 @@ public class ProtoReflectionServiceTest {
         new HashSet<>(
             Arrays.asList(
                 ServiceResponse.newBuilder()
-                    .setName("grpc.reflection.v1alpha.ServerReflection")
+                    .setName("grpc.reflection.v1.ServerReflection")
                     .build(),
                 ServiceResponse.newBuilder()
                     .setName("grpc.reflection.testing.ReflectableService")
@@ -128,7 +128,7 @@ public class ProtoReflectionServiceTest {
         new HashSet<>(
             Arrays.asList(
                 ServiceResponse.newBuilder()
-                    .setName("grpc.reflection.v1alpha.ServerReflection")
+                    .setName("grpc.reflection.v1.ServerReflection")
                     .build(),
                 ServiceResponse.newBuilder()
                     .setName("grpc.reflection.testing.ReflectableService")
@@ -145,7 +145,7 @@ public class ProtoReflectionServiceTest {
         new HashSet<>(
             Arrays.asList(
                 ServiceResponse.newBuilder()
-                    .setName("grpc.reflection.v1alpha.ServerReflection")
+                    .setName("grpc.reflection.v1.ServerReflection")
                     .build(),
                 ServiceResponse.newBuilder()
                     .setName("grpc.reflection.testing.ReflectableService")
@@ -548,7 +548,7 @@ public class ProtoReflectionServiceTest {
     assertEquals(new HashSet<>(
         Arrays.asList(
             ServiceResponse.newBuilder()
-                .setName("grpc.reflection.v1alpha.ServerReflection")
+                .setName("grpc.reflection.v1.ServerReflection")
                 .build(),
             ServiceResponse.newBuilder()
                 .setName("grpc.reflection.testing.AnotherReflectableService")
