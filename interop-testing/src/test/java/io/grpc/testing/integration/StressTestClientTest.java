@@ -204,7 +204,7 @@ public class StressTestClientTest {
         assertTrue("qps: " + gauge1.getLongValue(), gauge1.getLongValue() > 0);
       }
 
-      assertEquals("Failures communicating with server",0, client.getTotalFailureCount());
+      assertEquals("Failures communicating with server", 0, client.getTotalFailureCount());
       assertTrue("gauges: " + gaugeNames, gaugeNames.isEmpty());
     } finally {
       if (client != null) {
