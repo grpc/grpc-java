@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
-import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
+import static io.grpc.internal.PickFirstLoadBalancerProvider.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
 import static org.junit.Assert.fail;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;

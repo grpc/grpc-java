@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
@@ -49,8 +50,6 @@ import javax.annotation.Nullable;
 class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
-  static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
-      "GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS";
 
   private static final XdsEndpointResource instance = new XdsEndpointResource();
 
@@ -101,7 +100,8 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   private static boolean isEnabledXdsDualStack() {
-    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
+    return GrpcUtil.getFlag(PickFirstLoadBalancerProvider.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS,
+        false);
   }
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
