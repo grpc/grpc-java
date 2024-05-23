@@ -85,7 +85,7 @@ public class Util {
     InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
     for (InetAddress address : addresses) {
       if (address.getAddress().length == 4) {
-        return new java.net.InetSocketAddress(address, port);
+        return new java.net.InetSocketAddress(address.getHostAddress(), port);
       }
     }
     return null; // should never happen

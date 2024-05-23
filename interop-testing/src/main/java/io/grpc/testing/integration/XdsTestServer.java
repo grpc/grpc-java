@@ -50,6 +50,7 @@ import io.grpc.xds.XdsServerCredentials;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
@@ -118,6 +119,8 @@ public final class XdsTestServer {
   }
 
   private void parseArgs(String[] args) {
+    logger.warning("Server is starting with arguments: " + String.join(" ", args));
+
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -186,7 +189,10 @@ public final class XdsTestServer {
               + s.enableCsmObservability
               + "\n  --server_id=STRING  server ID for response."
               + "\n                      Default: "
-              + s.serverId);
+              + s.serverId
+              + "\n  --address_type=STRING  type of IP address to bind to (IPV4|IPV6|IPV4_IPV6)."
+              + "\n                      Default: "
+              + s.addressType);
       System.exit(1);
     }
   }
@@ -236,13 +242,17 @@ public final class XdsTestServer {
           serverBuilder = Grpc.newServerBuilderForPort(port, insecureServerCreds);
           break;
         case IPV4:
+          SocketAddress v4Address = getV4Address(port);
+          logger.warning("v4Address: " + v4Address);
           serverBuilder =
-              io.grpc.netty.NettyServerBuilder.forAddress(getV4Address(port), insecureServerCreds)
+              io.grpc.netty.NettyServerBuilder.forAddress(v4Address, insecureServerCreds)
                   .addListenAddress(new InetSocketAddress("127.0.0.1", port));
           break;
         case IPV6:
+          SocketAddress v6Address = getV6Address(port);
+          logger.warning("v6Address: " + v6Address);
           serverBuilder =
-              io.grpc.netty.NettyServerBuilder.forAddress(getV6Address(port), insecureServerCreds)
+              io.grpc.netty.NettyServerBuilder.forAddress(v6Address, insecureServerCreds)
                   .addListenAddress(new InetSocketAddress("::1", port));
           break;
         default:
