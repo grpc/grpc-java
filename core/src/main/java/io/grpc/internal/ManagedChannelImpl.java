@@ -889,12 +889,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         return newClientCall(method, callOptions);
       }
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          exitIdleMode();
-        }
-      });
       if (configSelector.get() != INITIAL_PENDING_SELECTOR) {
         // This is an optimization for the case (typically with InProcessTransport) when name
         // resolution result is immediately available at this point. Otherwise, some users'
@@ -927,6 +921,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
             if (pendingCalls == null) {
               pendingCalls = new LinkedHashSet<>();
               inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, true);
+              // It's possible to be in idle mode while inUseStateAggregator is in-use, if one of
+              // the subchannels is in use. But we should never be in idle mode when pendingCalls is
+              // in use.
+              exitIdleMode();
             }
             pendingCalls.add(pendingCall);
           } else {
@@ -2081,6 +2079,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void transportInUse(final boolean inUse) {
       inUseStateAggregator.updateObjectInUse(delayedTransport, inUse);
+      if (inUse) {
+        // It's possible to be in idle mode while inUseStateAggregator is in-use, if one of the
+        // subchannels is in use. But we should never be in idle mode when delayed transport is in
+        // use.
+        exitIdleMode();
+      }
     }
 
     @Override
