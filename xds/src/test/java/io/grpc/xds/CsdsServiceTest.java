@@ -169,6 +169,9 @@ public class CsdsServiceTest {
       grpcServerRule.getServiceRegistry()
           .addService(new CsdsService(new FakeXdsClientPoolFactory(throwingXdsClient)));
 
+      // Hack to prevent the interrupted exception from propagating through to the client stub.
+      grpcServerRule.getChannel().getState(true);
+
       try {
         ClientStatusResponse response = csdsStub.fetchClientStatus(REQUEST);
         fail("Should've failed, got response: " + response);
