@@ -28,7 +28,6 @@ import android.os.Parcel;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
-import android.os.UserHandle;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ticker;
 import com.google.common.base.Verify;
@@ -47,11 +46,10 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.BindServiceFlags;
-import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.internal.ClientStream;
+import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcAttributes;
@@ -573,41 +571,34 @@ public abstract class BinderTransport
     /**
      * Constructs a new transport instance.
      *
-     * @param binderDecorator used to decorate both the "endpoint" and "server" binders, for fault
-     *     injection.
+     * @param factory parameters common to all a Channel's transports
+     * @param targetAddress the fully resolved and load-balanced server address
+     * @param options other parameters that can vary as transports come and go within a Channel
      */
     public BinderClientTransport(
-        Context sourceContext,
-        BinderChannelCredentials channelCredentials,
+        BinderClientTransportFactory factory,
         AndroidComponentAddress targetAddress,
-        @Nullable UserHandle targetUserHandle,
-        BindServiceFlags bindServiceFlags,
-        Executor mainThreadExecutor,
-        ObjectPool<ScheduledExecutorService> executorServicePool,
-        ObjectPool<? extends Executor> offloadExecutorPool,
-        SecurityPolicy securityPolicy,
-        InboundParcelablePolicy inboundParcelablePolicy,
-        OneWayBinderProxy.Decorator binderDecorator,
-        Attributes eagAttrs) {
+        ClientTransportOptions options) {
       super(
-          executorServicePool,
-          buildClientAttributes(eagAttrs, sourceContext, targetAddress, inboundParcelablePolicy),
-          binderDecorator,
-          buildLogId(sourceContext, targetAddress));
-      this.offloadExecutorPool = offloadExecutorPool;
-      this.securityPolicy = securityPolicy;
+          factory.scheduledExecutorPool,
+          buildClientAttributes(options.getEagAttributes(),
+              factory.sourceContext, targetAddress, factory.inboundParcelablePolicy),
+          factory.binderDecorator,
+          buildLogId(factory.sourceContext, targetAddress));
+      this.offloadExecutorPool = factory.offloadExecutorPool;
+      this.securityPolicy = factory.securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
       serviceBinding =
           new ServiceBinding(
-              mainThreadExecutor,
-              sourceContext,
-              channelCredentials,
+              factory.mainThreadExecutor,
+              factory.sourceContext,
+              factory.channelCredentials,
               targetAddress.asBindIntent(),
-              targetUserHandle,
-              bindServiceFlags.toInteger(),
+              factory.targetUserHandle,
+              factory.bindServiceFlags.toInteger(),
               this);
     }
 

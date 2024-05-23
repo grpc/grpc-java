@@ -47,6 +47,7 @@ import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
 import io.grpc.binder.internal.OneWayBinderProxies.ThrowingOneWayBinderProxy;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
@@ -142,34 +143,25 @@ public final class BinderClientTransportTest {
   }
 
   private class BinderClientTransportBuilder {
-    private SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
-    private OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
+    final BinderClientTransportFactory.Builder factoryBuilder = new BinderClientTransportFactory.Builder()
+        .setSourceContext(appContext)
+        .setScheduledExecutorPool(executorServicePool)
+        .setOffloadExecutorPool(executorServicePool);
 
     public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
-      this.securityPolicy = securityPolicy;
+      factoryBuilder.setSecurityPolicy(securityPolicy);
       return this;
     }
 
     public BinderClientTransportBuilder setBinderDecorator(
         OneWayBinderProxy.Decorator binderDecorator) {
-      this.binderDecorator = binderDecorator;
+      factoryBuilder.setBinderDecorator(binderDecorator);
       return this;
     }
 
     public BinderTransport.BinderClientTransport build() {
-      return new BinderTransport.BinderClientTransport(
-          appContext,
-          BinderChannelCredentials.forDefault(),
-          serverAddress,
-          null,
-          BindServiceFlags.DEFAULTS,
-          ContextCompat.getMainExecutor(appContext),
-          executorServicePool,
-          executorServicePool,
-          securityPolicy,
-          InboundParcelablePolicy.DEFAULT,
-          binderDecorator,
-          Attributes.EMPTY);
+      return factoryBuilder.buildClientTransportFactory()
+          .newClientTransport(serverAddress, new ClientTransportOptions(), null);
     }
   }
 
