@@ -139,7 +139,7 @@ public class StressTestClientTest {
     String[] args =
         addressType != null
         ? new String[]{"--port=" + port, "--use_tls=true", "--address_type=" + addressType}
-        : new String[] {"--port=" + port, "--use_tls=true"};
+        : new String[] {"--port=" + 0, "--use_tls=true"};
     server.parseArgs(args);
     server.start();
 
