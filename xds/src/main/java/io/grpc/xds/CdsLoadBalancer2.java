@@ -176,13 +176,15 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                     clusterState.result.lrsServerInfo(),
                     clusterState.result.maxConcurrentRequests(),
                     clusterState.result.upstreamTlsContext(),
+                    clusterState.result.filterMetadata(),
                     clusterState.result.outlierDetection());
               } else {  // logical DNS
                 instance = DiscoveryMechanism.forLogicalDns(
                     clusterState.name, clusterState.result.dnsHostName(),
                     clusterState.result.lrsServerInfo(),
                     clusterState.result.maxConcurrentRequests(),
-                    clusterState.result.upstreamTlsContext());
+                    clusterState.result.upstreamTlsContext(),
+                    clusterState.result.filterMetadata());
               }
               instances.add(instance);
             }

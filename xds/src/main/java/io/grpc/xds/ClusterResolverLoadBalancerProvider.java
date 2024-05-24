@@ -19,6 +19,8 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Struct;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -129,6 +131,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       final String dnsHostName;
       @Nullable
       final OutlierDetection outlierDetection;
+      final Map<String, Struct> filterMetadata;
 
       enum Type {
         EDS,
@@ -138,7 +141,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       private DiscoveryMechanism(String cluster, Type type, @Nullable String edsServiceName,
           @Nullable String dnsHostName, @Nullable ServerInfo lrsServerInfo,
           @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-          @Nullable OutlierDetection outlierDetection) {
+          Map<String, Struct> filterMetadata, @Nullable OutlierDetection outlierDetection) {
         this.cluster = checkNotNull(cluster, "cluster");
         this.type = checkNotNull(type, "type");
         this.edsServiceName = edsServiceName;
@@ -146,28 +149,29 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         this.lrsServerInfo = lrsServerInfo;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.tlsContext = tlsContext;
+        this.filterMetadata = ImmutableMap.copyOf(checkNotNull(filterMetadata, "filterMetadata"));
         this.outlierDetection = outlierDetection;
       }
 
       static DiscoveryMechanism forEds(String cluster, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext,
+          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
           OutlierDetection outlierDetection) {
         return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, null, lrsServerInfo,
-            maxConcurrentRequests, tlsContext, outlierDetection);
+            maxConcurrentRequests, tlsContext, filterMetadata, outlierDetection);
       }
 
       static DiscoveryMechanism forLogicalDns(String cluster, String dnsHostName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext) {
+          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata) {
         return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, dnsHostName,
-            lrsServerInfo, maxConcurrentRequests, tlsContext, null);
+            lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null);
       }
 
       @Override
       public int hashCode() {
         return Objects.hash(cluster, type, lrsServerInfo, maxConcurrentRequests, tlsContext,
-            edsServiceName, dnsHostName);
+            edsServiceName, dnsHostName, filterMetadata, outlierDetection);
       }
 
       @Override
@@ -185,7 +189,9 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
             && Objects.equals(dnsHostName, that.dnsHostName)
             && Objects.equals(lrsServerInfo, that.lrsServerInfo)
             && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
-            && Objects.equals(tlsContext, that.tlsContext);
+            && Objects.equals(tlsContext, that.tlsContext)
+            && Objects.equals(filterMetadata, that.filterMetadata)
+            && Objects.equals(outlierDetection, that.outlierDetection);
       }
 
       @Override
@@ -198,7 +204,10 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
                 .add("dnsHostName", dnsHostName)
                 .add("lrsServerInfo", lrsServerInfo)
                 // Exclude tlsContext as its string representation is cumbersome.
-                .add("maxConcurrentRequests", maxConcurrentRequests);
+                .add("maxConcurrentRequests", maxConcurrentRequests)
+                .add("filterMetadata", filterMetadata)
+                // Exclude outlierDetection as its string representation is long.
+                ;
         return toStringHelper.toString();
       }
     }
