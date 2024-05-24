@@ -205,7 +205,9 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
                 .add("lrsServerInfo", lrsServerInfo)
                 // Exclude tlsContext as its string representation is cumbersome.
                 .add("maxConcurrentRequests", maxConcurrentRequests)
-                .add("filterMetadata", filterMetadata);
+                .add("filterMetadata", filterMetadata)
+                // Exclude outlierDetection as its string representation is long.
+                ;
         return toStringHelper.toString();
       }
     }
