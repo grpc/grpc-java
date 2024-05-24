@@ -1,5 +1,7 @@
 package io.grpc.protobuf.services;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import io.grpc.protobuf.services.util.ReflectionServiceProtoAdapter;
@@ -18,7 +20,7 @@ import io.grpc.stub.StreamObserver;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
 public class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
-  private final ProtoReflectionServiceV1 protoReflectionServiceV1 = (ProtoReflectionServiceV1) ProtoReflectionServiceV1.newInstance();
+  private ProtoReflectionServiceV1 protoReflectionServiceV1 = (ProtoReflectionServiceV1) ProtoReflectionServiceV1.newInstance();
   /**
    * Creates a instance of {@link ProtoReflectionServiceV1}.
    */
@@ -26,6 +28,12 @@ public class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectio
     return new ProtoReflectionService();
   }
 
+  private ProtoReflectionService() {}
+
+  @VisibleForTesting
+  void setProtoReflectionServiceV1(ProtoReflectionServiceV1 protoReflectionServiceV1) {
+    this.protoReflectionServiceV1 = protoReflectionServiceV1;
+  }
   @Override
   public StreamObserver<ServerReflectionRequest> serverReflectionInfo(
       final StreamObserver<ServerReflectionResponse> responseObserver) {
@@ -34,8 +42,13 @@ public class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectio
           @Override
           public void onNext(
               io.grpc.reflection.v1.ServerReflectionResponse serverReflectionResponse) {
-            responseObserver.onNext(
-                ReflectionServiceProtoAdapter.toV1AlphaResponse(serverReflectionResponse));
+            try {
+              responseObserver.onNext(
+                  ReflectionServiceProtoAdapter.toV1AlphaResponse(serverReflectionResponse));
+            } catch (InvalidProtocolBufferException e) {
+              // Should never happen as long as v1 and v1alpha protos have the same fields and ordering.
+              throw new RuntimeException(e);
+            }
           }
 
           @Override
@@ -51,7 +64,12 @@ public class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectio
     return new StreamObserver<ServerReflectionRequest>() {
       @Override
       public void onNext(ServerReflectionRequest serverReflectionRequest) {
-        v1RequestObserver.onNext(ReflectionServiceProtoAdapter.toV1Request(serverReflectionRequest));
+        try {
+          v1RequestObserver.onNext(ReflectionServiceProtoAdapter.toV1Request(serverReflectionRequest));
+        } catch (InvalidProtocolBufferException e) {
+          // Should never happen as long as v1 and v1alpha protos have the same fields and ordering.
+          throw new RuntimeException(e);
+        }
       }
 
       @Override
