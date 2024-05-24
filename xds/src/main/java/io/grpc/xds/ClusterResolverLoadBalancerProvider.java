@@ -171,7 +171,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       @Override
       public int hashCode() {
         return Objects.hash(cluster, type, lrsServerInfo, maxConcurrentRequests, tlsContext,
-            edsServiceName, dnsHostName, outlierDetection, filterMetadata);
+            edsServiceName, dnsHostName, filterMetadata, outlierDetection);
       }
 
       @Override
