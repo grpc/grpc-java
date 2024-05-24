@@ -1,14 +1,15 @@
 package io.grpc.protobuf.services;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.InvalidProtocolBufferException;
+import static io.grpc.MethodDescriptor.generateFullMethodName;
+import static io.grpc.reflection.v1alpha.ServerReflectionGrpc.SERVICE_NAME;
+
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
-import io.grpc.protobuf.services.util.ReflectionServiceProtoAdapter;
-import io.grpc.reflection.v1alpha.ServerReflectionRequest;
-import io.grpc.reflection.v1alpha.ServerReflectionResponse;
-import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
-import io.grpc.stub.StreamObserver;
+import io.grpc.MethodDescriptor;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.ServiceDescriptor;
+import io.grpc.reflection.v1.ServerReflectionGrpc;
+import io.grpc.reflection.v1.ServerReflectionGrpc.ServerReflectionBaseDescriptorSupplier;
 
 /**
  * Provides a reflection service for Protobuf services (including the reflection service itself).
@@ -19,68 +20,64 @@ import io.grpc.stub.StreamObserver;
  * extension.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-public class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
-  private ProtoReflectionServiceV1 protoReflectionServiceV1 = (ProtoReflectionServiceV1) ProtoReflectionServiceV1.newInstance();
-  /**
-   * Creates a instance of {@link ProtoReflectionServiceV1}.
-   */
-  public static BindableService newInstance() {
-    return new ProtoReflectionService();
-  }
+public class ProtoReflectionService implements BindableService {
 
-  private ProtoReflectionService() {}
-
-  @VisibleForTesting
-  void setProtoReflectionServiceV1(ProtoReflectionServiceV1 protoReflectionServiceV1) {
-    this.protoReflectionServiceV1 = protoReflectionServiceV1;
-  }
+  private static final String METHOD_NAME = "ServerReflectionInfo";
   @Override
-  public StreamObserver<ServerReflectionRequest> serverReflectionInfo(
-      final StreamObserver<ServerReflectionResponse> responseObserver) {
-    StreamObserver<io.grpc.reflection.v1.ServerReflectionRequest> v1RequestObserver = protoReflectionServiceV1.serverReflectionInfo(
-        new StreamObserver<io.grpc.reflection.v1.ServerReflectionResponse>() {
-          @Override
-          public void onNext(
-              io.grpc.reflection.v1.ServerReflectionResponse serverReflectionResponse) {
-            try {
-              responseObserver.onNext(
-                  ReflectionServiceProtoAdapter.toV1AlphaResponse(serverReflectionResponse));
-            } catch (InvalidProtocolBufferException e) {
-              // Should never happen as long as v1 and v1alpha protos have the same fields and ordering.
-              throw new RuntimeException(e);
-            }
-          }
+  public ServerServiceDefinition bindService() {
+    ServerServiceDefinition serverServiceDefinitionV1 = ProtoReflectionServiceV1.newInstance()
+        .bindService();
+    MethodDescriptor<?, ?> methodDescriptorV1 = serverServiceDefinitionV1.getServiceDescriptor()
+        .getMethods().iterator().next(); // Because there is only 1 method in the service.
+    MethodDescriptor<?, ?> methodDescriptorV1Alpha = methodDescriptorV1.toBuilder()
+        .setFullMethodName(generateFullMethodName(SERVICE_NAME, METHOD_NAME))
+        .setSchemaDescriptor(
+            new ServerReflectionMethodDescriptorSupplier(METHOD_NAME))
+        .build();
+    ServiceDescriptor serviceDescriptorV1Alpha = ServiceDescriptor.newBuilder(SERVICE_NAME)
+        .setSchemaDescriptor(new ServerReflectionFileDescriptorSupplier())
+        .addMethod(methodDescriptorV1Alpha)
+        .build();
+    return ServerServiceDefinition.builder(serviceDescriptorV1Alpha)
+        .addMethod(methodDescriptorV1Alpha,
+            serverServiceDefinitionV1.getMethod(
+                generateFullMethodName(ServerReflectionGrpc.SERVICE_NAME, METHOD_NAME))
+                    .getServerCallHandler())
+        .build();
+  }
 
-          @Override
-          public void onError(Throwable t) {
-            responseObserver.onError(t);
-          }
+  private static abstract class ServerReflectionBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
+    ServerReflectionBaseDescriptorSupplier() {}
 
-          @Override
-          public void onCompleted() {
-            responseObserver.onCompleted();
-          }
-        });
-    return new StreamObserver<ServerReflectionRequest>() {
-      @Override
-      public void onNext(ServerReflectionRequest serverReflectionRequest) {
-        try {
-          v1RequestObserver.onNext(ReflectionServiceProtoAdapter.toV1Request(serverReflectionRequest));
-        } catch (InvalidProtocolBufferException e) {
-          // Should never happen as long as v1 and v1alpha protos have the same fields and ordering.
-          throw new RuntimeException(e);
-        }
-      }
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
+      return io.grpc.reflection.v1.ServerReflectionProto.getDescriptor();
+    }
 
-      @Override
-      public void onError(Throwable t) {
-        v1RequestObserver.onError(t);
-      }
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
+      return getFileDescriptor().findServiceByName("ServerReflection");
+    }
+  }
 
-      @Override
-      public void onCompleted() {
-        v1RequestObserver.onCompleted();
-      }
-    };
+  private static final class ServerReflectionFileDescriptorSupplier
+      extends ServerReflectionBaseDescriptorSupplier {
+    ServerReflectionFileDescriptorSupplier() {}
+  }
+
+  private static final class ServerReflectionMethodDescriptorSupplier
+      extends ServerReflectionBaseDescriptorSupplier
+      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
+    private final java.lang.String methodName;
+
+    ServerReflectionMethodDescriptorSupplier(java.lang.String methodName) {
+      this.methodName = methodName;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {
+      return getServiceDescriptor().findMethodByName(methodName);
+    }
   }
 }
