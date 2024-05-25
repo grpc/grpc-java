@@ -24,7 +24,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BindServiceFlags;
 import io.grpc.binder.BinderChannelCredentials;
-import io.grpc.binder.BinderInternal;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;

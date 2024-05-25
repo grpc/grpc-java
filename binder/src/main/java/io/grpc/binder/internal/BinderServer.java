@@ -32,8 +32,6 @@ import io.grpc.binder.BinderInternal;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.ServerSecurityPolicy;
-import io.grpc.binder.internal.BinderTransportSecurity.ServerPolicyChecker;
-import io.grpc.binder.internal.BinderTransportSecurity.ShutdownListener;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
@@ -212,7 +210,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
     /**
      * Represents resources that should be cleaned up once the server shuts down.
      */
-    public Builder setShutdownListener(ShutdownListener shutdownListener) {
+    public Builder setShutdownListener(BinderTransportSecurity.ShutdownListener shutdownListener) {
       this.shutdownListener = shutdownListener;
       return this;
     }

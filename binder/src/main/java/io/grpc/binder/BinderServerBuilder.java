@@ -29,17 +29,12 @@ import io.grpc.ServerBuilder;
 import io.grpc.binder.internal.BinderServer;
 import io.grpc.binder.internal.BinderTransportSecurity;
 import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.SharedResourcePool;
 
-import java.io.Closeable;
 import java.io.File;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-
-import javax.annotation.Nullable;
 
 /**
  * Builder for a server that services requests from an Android Service.
