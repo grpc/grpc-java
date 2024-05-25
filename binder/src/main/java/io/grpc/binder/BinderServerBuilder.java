@@ -34,7 +34,6 @@ import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 
-import java.io.Closeable;
 import java.io.File;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -77,7 +76,7 @@ public final class BinderServerBuilder
   private ServerSecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private boolean isBuilt;
-  @Nullable private BinderTransportSecurity.ShutdownListener shutdownListener = null;
+  @Nullable private BinderTransportSecurity.TerminationListener terminationListener = null;
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
@@ -92,8 +91,8 @@ public final class BinderServerBuilder
           streamTracerFactories,
           BinderInternal.createPolicyChecker(securityPolicy),
           inboundParcelablePolicy,
-          // 'shutdownListener' should have been set by build()
-          checkNotNull(shutdownListener));
+          // 'terminationListener' should have been set by build()
+          checkNotNull(terminationListener));
       BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
@@ -182,7 +181,7 @@ public final class BinderServerBuilder
     ObjectPool<? extends Executor> executorPool = serverImplBuilder.getExecutorPool();
     Executor executor = executorPool.getObject();
     BinderTransportSecurity.installAuthInterceptor(this, executor);
-    shutdownListener = () -> executorPool.returnObject(executor);
+    terminationListener = () -> executorPool.returnObject(executor);
     return super.build();
   }
 }

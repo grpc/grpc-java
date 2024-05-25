@@ -32,6 +32,7 @@ import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
+import io.grpc.internal.ServerTransportListener;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
@@ -57,7 +58,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private final LeakSafeOneWayBinder hostServiceBinder;
   private final BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker;
   private final InboundParcelablePolicy inboundParcelablePolicy;
-  private final BinderTransportSecurity.ShutdownListener transportSecurityShutdownListener;
+  private final ActiveTransportTracker activeTransportTracker;
 
   @GuardedBy("this")
   private ServerListener listener;
@@ -69,8 +70,8 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private boolean shutdown;
 
   /**
-   * @param transportSecurityShutdownListener represents resources that should be cleaned up once
-   *                                          the server shuts down.
+   * @param transportSecurityTerminationListener represents resources that should be cleaned up once
+   *                                             the server shuts down.
    */
   public BinderServer(
       AndroidComponentAddress listenAddress,
@@ -78,14 +79,14 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker,
       InboundParcelablePolicy inboundParcelablePolicy,
-      BinderTransportSecurity.ShutdownListener transportSecurityShutdownListener) {
+      BinderTransportSecurity.TerminationListener transportSecurityTerminationListener) {
     this.listenAddress = listenAddress;
     this.executorServicePool = executorServicePool;
     this.streamTracerFactories =
         ImmutableList.copyOf(checkNotNull(streamTracerFactories, "streamTracerFactories"));
     this.serverPolicyChecker = checkNotNull(serverPolicyChecker, "serverPolicyChecker");
     this.inboundParcelablePolicy = inboundParcelablePolicy;
-    this.transportSecurityShutdownListener = transportSecurityShutdownListener;
+    this.activeTransportTracker = new ActiveTransportTracker(transportSecurityTerminationListener);
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -129,7 +130,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       hostServiceBinder.detach();
       listener.serverShutdown();
       executorService = executorServicePool.returnObject(executorService);
-      transportSecurityShutdownListener.onServerShutdown();
+      activeTransportTracker.scheduleTerminationNotification();
     }
   }
 
@@ -162,7 +163,10 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
                   executorServicePool, attrsBuilder.build(), streamTracerFactories,
                   OneWayBinderProxy.IDENTITY_DECORATOR,
                   callbackBinder);
-          transport.setServerTransportListener(listener.transportCreated(transport));
+          ServerTransportListener transportListener = listener.transportCreated(transport);
+          ServerTransportListener trackedTransportListener =
+              activeTransportTracker.track(transportListener, transport);
+          transport.setServerTransportListener(trackedTransportListener);
           return true;
         }
       }

@@ -240,10 +240,11 @@ public final class BinderTransportSecurity {
   }
 
   /**
-   * A listener invoked when the {@link io.grpc.binder.internal.BinderServer} shuts down, allowing
-   * resources to be potentially cleaned up.
+   * A listener invoked when the {@link io.grpc.binder.internal.BinderServer} terminates, allowing
+   * resources to be potentially cleaned up. This will only be invoked once the server has begun
+   * shutdown AND all active transports have terminated.
    */
-  public interface ShutdownListener {
-    void onServerShutdown();
+  public interface TerminationListener {
+    void onServerTerminated();
   }
 }
