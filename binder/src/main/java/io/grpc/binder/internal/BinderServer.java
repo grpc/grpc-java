@@ -180,34 +180,64 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       return new BinderServer(this);
     }
 
+    /**
+     * Sets the executor to be used for managing channel timers.
+     *
+     * <p>Optional. A process-wide default executor will be used if unset.
+     */
     public Builder setExecutorServicePool(
         ObjectPool<ScheduledExecutorService> executorServicePool) {
       this.executorServicePool = executorServicePool;
       return this;
     }
 
+    /**
+     * Sets the source for {@link ServerStreamTracer}s that will be installed on all new streams.
+     *
+     * <p>Required.
+     */
     public Builder setStreamTracerFactories(List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
       this.streamTracerFactories = streamTracerFactories;
       return this;
     }
 
+    /**
+     * Sets the "listen" address for this server.
+     *
+     * <p>This is somewhat of a grpc-java formality. Binder servers don't really listen, rather,
+     * Android creates and destroys them according to client needs.
+     *
+     * <p>Required.
+     */
     public Builder setListenAddress(AndroidComponentAddress listenAddress) {
       this.listenAddress = listenAddress;
       return this;
     }
 
+    /**
+     * Sets the {@link ServerSecurityPolicy} to be used for built servers.
+     *
+     * Optional, {@link SecurityPolicies#serverInternalOnly()} is the default.
+     */
     public Builder setServerSecurityPolicy(ServerSecurityPolicy serverSecurityPolicy) {
       this.serverSecurityPolicy = serverSecurityPolicy;
       return this;
     }
 
+    /**
+     * Sets the {@link InboundParcelablePolicy} to be used for built servers.
+     *
+     * Optional, {@link InboundParcelablePolicy#DEFAULT} is the default.
+     */
     public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
       this.inboundParcelablePolicy = inboundParcelablePolicy;
       return this;
     }
 
     /**
-     * Represents resources that should be cleaned up once the server shuts down.
+     * Installs a callback that will be invoked when this server is {@link #shutdown()}
+     *
+     * <p>Optional.
      */
     public Builder setShutdownListener(BinderTransportSecurity.ShutdownListener shutdownListener) {
       this.shutdownListener = shutdownListener;
