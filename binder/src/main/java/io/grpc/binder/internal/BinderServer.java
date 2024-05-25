@@ -75,13 +75,12 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
 
   private BinderServer(Builder builder) {
     this.listenAddress = checkNotNull(builder.listenAddress);
-    this.executorServicePool = checkNotNull(builder.executorServicePool);
+    this.executorServicePool = builder.executorServicePool;
     this.streamTracerFactories =
         ImmutableList.copyOf(checkNotNull(builder.streamTracerFactories, "streamTracerFactories"));
-    this.serverPolicyChecker = BinderInternal.createPolicyChecker(checkNotNull(builder.serverSecurityPolicy, "serverPolicyChecker"));
-    this.inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy, "inboundParcelablePolicy");
-    this.transportSecurityShutdownListener =
-        checkNotNull(builder.shutdownListener, "shutdownListener");
+    this.serverPolicyChecker = BinderInternal.createPolicyChecker(builder.serverSecurityPolicy);
+    this.inboundParcelablePolicy = builder.inboundParcelablePolicy;
+    this.transportSecurityShutdownListener = builder.shutdownListener;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -168,8 +167,8 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
 
   /** Fluent builder of {@link BinderServer} instances. */
   public static class Builder {
-    AndroidComponentAddress listenAddress;
-    List<? extends ServerStreamTracer.Factory> streamTracerFactories;
+    @Nullable AndroidComponentAddress listenAddress;
+    @Nullable List<? extends ServerStreamTracer.Factory> streamTracerFactories;
 
     ObjectPool<ScheduledExecutorService> executorServicePool =
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
@@ -211,7 +210,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
      */
     public Builder setExecutorServicePool(
         ObjectPool<ScheduledExecutorService> executorServicePool) {
-      this.executorServicePool = executorServicePool;
+      this.executorServicePool = checkNotNull(executorServicePool, "executorServicePool");
       return this;
     }
 
