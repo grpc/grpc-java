@@ -168,37 +168,17 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
 
   /** Fluent builder of {@link BinderServer} instances. */
   public static class Builder {
+    AndroidComponentAddress listenAddress;
+    List<? extends ServerStreamTracer.Factory> streamTracerFactories;
+
     ObjectPool<ScheduledExecutorService> executorServicePool =
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
-    List<? extends ServerStreamTracer.Factory> streamTracerFactories;
-    AndroidComponentAddress listenAddress;
     ServerSecurityPolicy serverSecurityPolicy = SecurityPolicies.serverInternalOnly();
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     BinderTransportSecurity.ShutdownListener shutdownListener = () -> {};
 
     public BinderServer build() {
       return new BinderServer(this);
-    }
-
-    /**
-     * Sets the executor to be used for managing channel timers.
-     *
-     * <p>Optional. A process-wide default executor will be used if unset.
-     */
-    public Builder setExecutorServicePool(
-        ObjectPool<ScheduledExecutorService> executorServicePool) {
-      this.executorServicePool = executorServicePool;
-      return this;
-    }
-
-    /**
-     * Sets the source for {@link ServerStreamTracer}s that will be installed on all new streams.
-     *
-     * <p>Required.
-     */
-    public Builder setStreamTracerFactories(List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-      this.streamTracerFactories = streamTracerFactories;
-      return this;
     }
 
     /**
@@ -215,12 +195,33 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
     }
 
     /**
+     * Sets the source for {@link ServerStreamTracer}s that will be installed on all new streams.
+     *
+     * <p>Required.
+     */
+    public Builder setStreamTracerFactories(List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      this.streamTracerFactories = streamTracerFactories;
+      return this;
+    }
+
+    /**
+     * Sets the executor to be used for scheduling channel timers.
+     *
+     * <p>Optional. A process-wide default executor will be used if unset.
+     */
+    public Builder setExecutorServicePool(
+        ObjectPool<ScheduledExecutorService> executorServicePool) {
+      this.executorServicePool = executorServicePool;
+      return this;
+    }
+
+    /**
      * Sets the {@link ServerSecurityPolicy} to be used for built servers.
      *
      * Optional, {@link SecurityPolicies#serverInternalOnly()} is the default.
      */
     public Builder setServerSecurityPolicy(ServerSecurityPolicy serverSecurityPolicy) {
-      this.serverSecurityPolicy = serverSecurityPolicy;
+      this.serverSecurityPolicy = checkNotNull(serverSecurityPolicy, "serverSecurityPolicy");
       return this;
     }
 
@@ -230,7 +231,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
      * Optional, {@link InboundParcelablePolicy#DEFAULT} is the default.
      */
     public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
-      this.inboundParcelablePolicy = inboundParcelablePolicy;
+      this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
       return this;
     }
 
@@ -240,7 +241,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
      * <p>Optional.
      */
     public Builder setShutdownListener(BinderTransportSecurity.ShutdownListener shutdownListener) {
-      this.shutdownListener = shutdownListener;
+      this.shutdownListener = checkNotNull(shutdownListener, shutdownListener);
       return this;
     }
   }
