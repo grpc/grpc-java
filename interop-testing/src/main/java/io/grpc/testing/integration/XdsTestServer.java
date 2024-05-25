@@ -119,8 +119,6 @@ public final class XdsTestServer {
   }
 
   private void parseArgs(String[] args) {
-    logger.warning("Server is starting with arguments: " + String.join(" ", args));
-
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -242,17 +240,13 @@ public final class XdsTestServer {
           serverBuilder = Grpc.newServerBuilderForPort(port, insecureServerCreds);
           break;
         case IPV4:
-          SocketAddress v4Address = getV4Address(port);
-          logger.warning("v4Address: " + v4Address);
           serverBuilder =
-              io.grpc.netty.NettyServerBuilder.forAddress(v4Address, insecureServerCreds)
+              io.grpc.netty.NettyServerBuilder.forAddress(getV4Address(port), insecureServerCreds)
                   .addListenAddress(new InetSocketAddress("127.0.0.1", port));
           break;
         case IPV6:
-          SocketAddress v6Address = getV6Address(port);
-          logger.warning("v6Address: " + v6Address);
           serverBuilder =
-              io.grpc.netty.NettyServerBuilder.forAddress(v6Address, insecureServerCreds)
+              io.grpc.netty.NettyServerBuilder.forAddress(getV6Address(port), insecureServerCreds)
                   .addListenAddress(new InetSocketAddress("::1", port));
           break;
         default:
