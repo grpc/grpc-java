@@ -28,10 +28,17 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
+import io.grpc.binder.BinderInternal;
 import io.grpc.binder.InboundParcelablePolicy;
+import io.grpc.binder.SecurityPolicies;
+import io.grpc.binder.ServerSecurityPolicy;
+import io.grpc.binder.internal.BinderTransportSecurity.ServerPolicyChecker;
+import io.grpc.binder.internal.BinderTransportSecurity.ShutdownListener;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
+import io.grpc.internal.SharedResourcePool;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
@@ -68,24 +75,15 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   @GuardedBy("this")
   private boolean shutdown;
 
-  /**
-   * @param transportSecurityShutdownListener represents resources that should be cleaned up once
-   *                                          the server shuts down.
-   */
-  public BinderServer(
-      AndroidComponentAddress listenAddress,
-      ObjectPool<ScheduledExecutorService> executorServicePool,
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker,
-      InboundParcelablePolicy inboundParcelablePolicy,
-      BinderTransportSecurity.ShutdownListener transportSecurityShutdownListener) {
-    this.listenAddress = listenAddress;
-    this.executorServicePool = executorServicePool;
+  private BinderServer(Builder builder) {
+    this.listenAddress = checkNotNull(builder.listenAddress);
+    this.executorServicePool = checkNotNull(builder.executorServicePool);
     this.streamTracerFactories =
-        ImmutableList.copyOf(checkNotNull(streamTracerFactories, "streamTracerFactories"));
-    this.serverPolicyChecker = checkNotNull(serverPolicyChecker, "serverPolicyChecker");
-    this.inboundParcelablePolicy = inboundParcelablePolicy;
-    this.transportSecurityShutdownListener = transportSecurityShutdownListener;
+        ImmutableList.copyOf(checkNotNull(builder.streamTracerFactories, "streamTracerFactories"));
+    this.serverPolicyChecker = BinderInternal.createPolicyChecker(checkNotNull(builder.serverSecurityPolicy, "serverPolicyChecker"));
+    this.inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy, "inboundParcelablePolicy");
+    this.transportSecurityShutdownListener =
+        checkNotNull(builder.shutdownListener, "shutdownListener");
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -168,5 +166,55 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       }
     }
     return false;
+  }
+
+  /** Fluent builder of {@link BinderServer} instances. */
+  public static class Builder {
+    ObjectPool<ScheduledExecutorService> executorServicePool =
+        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
+    List<? extends ServerStreamTracer.Factory> streamTracerFactories;
+    AndroidComponentAddress listenAddress;
+    ServerSecurityPolicy serverSecurityPolicy = SecurityPolicies.serverInternalOnly();
+    InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
+    BinderTransportSecurity.ShutdownListener shutdownListener = () -> {};
+
+    public BinderServer build() {
+      return new BinderServer(this);
+    }
+
+    public Builder setExecutorServicePool(
+        ObjectPool<ScheduledExecutorService> executorServicePool) {
+      this.executorServicePool = executorServicePool;
+      return this;
+    }
+
+    public Builder setStreamTracerFactories(List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      this.streamTracerFactories = streamTracerFactories;
+      return this;
+    }
+
+    public Builder setListenAddress(AndroidComponentAddress listenAddress) {
+      this.listenAddress = listenAddress;
+      return this;
+    }
+
+    public Builder setServerSecurityPolicy(
+        ServerSecurityPolicy serverSecurityPolicy) {
+      this.serverSecurityPolicy = serverSecurityPolicy;
+      return this;
+    }
+
+    public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
+      this.inboundParcelablePolicy = inboundParcelablePolicy;
+      return this;
+    }
+
+    /**
+     * Represents resources that should be cleaned up once the server shuts down.
+     */
+    public Builder setShutdownListener(ShutdownListener shutdownListener) {
+      this.shutdownListener = shutdownListener;
+      return this;
+    }
   }
 }
