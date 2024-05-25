@@ -98,6 +98,27 @@ public final class SecurityPolicies {
   }
 
   /**
+   * Creates a {@link SecurityPolicy} which checks if the given package is signed with the same
+   * certificate that the current Android platform was signed with.
+   *
+   * @param packageName the package name of the allowed package.
+   * @throws NullPointerException if any of the inputs are {@code null}.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11238")
+  public static SecurityPolicy hasSameSignatureAsPlatform(
+      PackageManager packageManager, String packageName) {
+    PackageInfo platformPackageInfo;
+    try {
+      platformPackageInfo =
+          packageManager.getPackageInfo("android", PackageManager.GET_SIGNING_CERTIFICATES);
+    } catch (PackageManager.NameNotFoundException e) {
+      throw new AssertionError(e);  // impossible; the platform package is always available.
+    }
+    Signature platformSignature = platformPackageInfo.signatures[0];
+    return hasSignature(packageManager, packageName, platformSignature);
+  }
+
+  /**
    * Creates {@link SecurityPolicy} which checks if the SHA-256 hash of the package signature
    * matches {@code requiredSignatureSha256Hash}.
    *
