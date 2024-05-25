@@ -196,8 +196,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       return this;
     }
 
-    public Builder setServerSecurityPolicy(
-        ServerSecurityPolicy serverSecurityPolicy) {
+    public Builder setServerSecurityPolicy(ServerSecurityPolicy serverSecurityPolicy) {
       this.serverSecurityPolicy = serverSecurityPolicy;
       return this;
     }
