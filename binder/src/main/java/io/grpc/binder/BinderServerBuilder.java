@@ -72,8 +72,8 @@ public final class BinderServerBuilder
   }
 
   private final ServerImplBuilder serverImplBuilder;
+  private final BinderServer.Builder internalBuilder = new BinderServer.Builder();
   private boolean isBuilt;
-  private BinderServer.Builder internalBuilder = new BinderServer.Builder();
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
