@@ -66,6 +66,23 @@ public abstract class CallCredentials {
   }
 
   /**
+   * Determine if the security level on the transport is higher than or equal to the minimum
+   * security level required by {@link CallCredentials} in order to transfer it.
+   *
+   * <p>It should be called in {@link applyRequestMetadata} before sending any
+   * individual RPC. The RPC should not be sent if the API returns false.
+   * More details can be found in https://github.com/grpc/proposal/pull/167.
+   *
+   * @param requestInfo request-related information
+   * @param minSecurity minimum security level required by {@link CallCredentials}
+   */
+  public static final boolean allowedSecurityLevel(
+      RequestInfo requestInfo, SecurityLevel minSecurity) {
+    SecurityLevel security = requestInfo.getSecurityLevel();
+    return security.compareTo(minSecurity) >= 0 ? true : false;
+  }
+
+  /**
    * The outlet of the produced headers. Not thread-safe.
    *
    * <p>Exactly one of its methods must be called to make the RPC proceed.
