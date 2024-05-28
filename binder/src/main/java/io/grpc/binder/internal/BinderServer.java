@@ -240,7 +240,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
      * <p>Optional.
      */
     public Builder setShutdownListener(BinderTransportSecurity.ShutdownListener shutdownListener) {
-      this.shutdownListener = checkNotNull(shutdownListener, shutdownListener);
+      this.shutdownListener = checkNotNull(shutdownListener, "shutdownListener");
       return this;
     }
   }
