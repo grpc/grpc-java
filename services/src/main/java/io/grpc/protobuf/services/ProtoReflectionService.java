@@ -1,15 +1,17 @@
 package io.grpc.protobuf.services;
 
+import static io.grpc.MethodDescriptor.create;
 import static io.grpc.MethodDescriptor.generateFullMethodName;
 import static io.grpc.reflection.v1alpha.ServerReflectionGrpc.SERVICE_NAME;
 
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.reflection.v1.ServerReflectionGrpc;
-import io.grpc.reflection.v1.ServerReflectionGrpc.ServerReflectionBaseDescriptorSupplier;
 
 /**
  * Provides a reflection service for Protobuf services (including the reflection service itself).
@@ -23,13 +25,24 @@ import io.grpc.reflection.v1.ServerReflectionGrpc.ServerReflectionBaseDescriptor
 public class ProtoReflectionService implements BindableService {
 
   private static final String METHOD_NAME = "ServerReflectionInfo";
+
+  private ProtoReflectionService() {}
+
+  public static ProtoReflectionService newInstance() {
+    return new ProtoReflectionService();
+  }
+
   @Override
   public ServerServiceDefinition bindService() {
+    return createServerServiceDefinition();
+  }
+
+  private <ReqT, RespT> ServerServiceDefinition createServerServiceDefinition() {
     ServerServiceDefinition serverServiceDefinitionV1 = ProtoReflectionServiceV1.newInstance()
         .bindService();
-    MethodDescriptor<?, ?> methodDescriptorV1 = serverServiceDefinitionV1.getServiceDescriptor()
-        .getMethods().iterator().next(); // Because there is only 1 method in the service.
-    MethodDescriptor<?, ?> methodDescriptorV1Alpha = methodDescriptorV1.toBuilder()
+    MethodDescriptor<ReqT, RespT> methodDescriptorV1 = (MethodDescriptor<ReqT, RespT>) serverServiceDefinitionV1.getServiceDescriptor()
+        .getMethods().iterator().next();
+    MethodDescriptor<ReqT, RespT> methodDescriptorV1Alpha = methodDescriptorV1.toBuilder()
         .setFullMethodName(generateFullMethodName(SERVICE_NAME, METHOD_NAME))
         .setSchemaDescriptor(
             new ServerReflectionMethodDescriptorSupplier(METHOD_NAME))
@@ -39,11 +52,14 @@ public class ProtoReflectionService implements BindableService {
         .addMethod(methodDescriptorV1Alpha)
         .build();
     return ServerServiceDefinition.builder(serviceDescriptorV1Alpha)
-        .addMethod(methodDescriptorV1Alpha,
-            serverServiceDefinitionV1.getMethod(
-                generateFullMethodName(ServerReflectionGrpc.SERVICE_NAME, METHOD_NAME))
-                    .getServerCallHandler())
+        .addMethod(methodDescriptorV1Alpha, createServerCallHandler(serverServiceDefinitionV1))
         .build();
+  }
+
+  private ServerCallHandler createServerCallHandler(ServerServiceDefinition serverServiceDefinition) {
+    return serverServiceDefinition.getMethod(
+            generateFullMethodName(ServerReflectionGrpc.SERVICE_NAME, METHOD_NAME))
+        .getServerCallHandler();
   }
 
   private static abstract class ServerReflectionBaseDescriptorSupplier
