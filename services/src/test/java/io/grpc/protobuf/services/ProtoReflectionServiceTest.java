@@ -546,13 +546,13 @@ public class ProtoReflectionServiceTest {
     List<ServiceResponse> response =
         responseObserver.firstValue().get().getListServicesResponse().getServiceList();
     assertEquals(new HashSet<>(
-            Arrays.asList(
-                ServiceResponse.newBuilder()
-                    .setName("grpc.reflection.v1alpha.ServerReflection")
-                    .build(),
-                ServiceResponse.newBuilder()
-                    .setName("grpc.reflection.testing.AnotherReflectableService")
-                    .build())),
+        Arrays.asList(
+            ServiceResponse.newBuilder()
+                .setName("grpc.reflection.v1alpha.ServerReflection")
+                .build(),
+            ServiceResponse.newBuilder()
+                .setName("grpc.reflection.testing.AnotherReflectableService")
+                .build())),
         new HashSet<>(response));
   }
 
