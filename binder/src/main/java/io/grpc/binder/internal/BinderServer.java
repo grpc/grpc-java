@@ -28,10 +28,15 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
+import io.grpc.binder.BinderInternal;
 import io.grpc.binder.InboundParcelablePolicy;
+import io.grpc.binder.SecurityPolicies;
+import io.grpc.binder.ServerSecurityPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
+import io.grpc.internal.SharedResourcePool;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
@@ -68,24 +73,14 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   @GuardedBy("this")
   private boolean shutdown;
 
-  /**
-   * @param transportSecurityShutdownListener represents resources that should be cleaned up once
-   *                                          the server shuts down.
-   */
-  public BinderServer(
-      AndroidComponentAddress listenAddress,
-      ObjectPool<ScheduledExecutorService> executorServicePool,
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker,
-      InboundParcelablePolicy inboundParcelablePolicy,
-      BinderTransportSecurity.ShutdownListener transportSecurityShutdownListener) {
-    this.listenAddress = listenAddress;
-    this.executorServicePool = executorServicePool;
+  private BinderServer(Builder builder) {
+    this.listenAddress = checkNotNull(builder.listenAddress);
+    this.executorServicePool = builder.executorServicePool;
     this.streamTracerFactories =
-        ImmutableList.copyOf(checkNotNull(streamTracerFactories, "streamTracerFactories"));
-    this.serverPolicyChecker = checkNotNull(serverPolicyChecker, "serverPolicyChecker");
-    this.inboundParcelablePolicy = inboundParcelablePolicy;
-    this.transportSecurityShutdownListener = transportSecurityShutdownListener;
+        ImmutableList.copyOf(checkNotNull(builder.streamTracerFactories, "streamTracerFactories"));
+    this.serverPolicyChecker = BinderInternal.createPolicyChecker(builder.serverSecurityPolicy);
+    this.inboundParcelablePolicy = builder.inboundParcelablePolicy;
+    this.transportSecurityShutdownListener = builder.shutdownListener;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -168,5 +163,85 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       }
     }
     return false;
+  }
+
+  /** Fluent builder of {@link BinderServer} instances. */
+  public static class Builder {
+    @Nullable AndroidComponentAddress listenAddress;
+    @Nullable List<? extends ServerStreamTracer.Factory> streamTracerFactories;
+
+    ObjectPool<ScheduledExecutorService> executorServicePool =
+        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
+    ServerSecurityPolicy serverSecurityPolicy = SecurityPolicies.serverInternalOnly();
+    InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
+    BinderTransportSecurity.ShutdownListener shutdownListener = () -> {};
+
+    public BinderServer build() {
+      return new BinderServer(this);
+    }
+
+    /**
+     * Sets the "listen" address for this server.
+     *
+     * <p>This is somewhat of a grpc-java formality. Binder servers don't really listen, rather,
+     * Android creates and destroys them according to client needs.
+     *
+     * <p>Required.
+     */
+    public Builder setListenAddress(AndroidComponentAddress listenAddress) {
+      this.listenAddress = listenAddress;
+      return this;
+    }
+
+    /**
+     * Sets the source for {@link ServerStreamTracer}s that will be installed on all new streams.
+     *
+     * <p>Required.
+     */
+    public Builder setStreamTracerFactories(List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      this.streamTracerFactories = streamTracerFactories;
+      return this;
+    }
+
+    /**
+     * Sets the executor to be used for scheduling channel timers.
+     *
+     * <p>Optional. A process-wide default executor will be used if unset.
+     */
+    public Builder setExecutorServicePool(
+        ObjectPool<ScheduledExecutorService> executorServicePool) {
+      this.executorServicePool = checkNotNull(executorServicePool, "executorServicePool");
+      return this;
+    }
+
+    /**
+     * Sets the {@link ServerSecurityPolicy} to be used for built servers.
+     *
+     * Optional, {@link SecurityPolicies#serverInternalOnly()} is the default.
+     */
+    public Builder setServerSecurityPolicy(ServerSecurityPolicy serverSecurityPolicy) {
+      this.serverSecurityPolicy = checkNotNull(serverSecurityPolicy, "serverSecurityPolicy");
+      return this;
+    }
+
+    /**
+     * Sets the {@link InboundParcelablePolicy} to be used for built servers.
+     *
+     * Optional, {@link InboundParcelablePolicy#DEFAULT} is the default.
+     */
+    public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
+      this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
+      return this;
+    }
+
+    /**
+     * Installs a callback that will be invoked when this server is {@link #shutdown()}
+     *
+     * <p>Optional.
+     */
+    public Builder setShutdownListener(BinderTransportSecurity.ShutdownListener shutdownListener) {
+      this.shutdownListener = checkNotNull(shutdownListener, "shutdownListener");
+      return this;
+    }
   }
 }

@@ -29,17 +29,12 @@ import io.grpc.ServerBuilder;
 import io.grpc.binder.internal.BinderServer;
 import io.grpc.binder.internal.BinderTransportSecurity;
 import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.SharedResourcePool;
 
-import java.io.Closeable;
 import java.io.File;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-
-import javax.annotation.Nullable;
 
 /**
  * Builder for a server that services requests from an Android Service.
@@ -72,28 +67,17 @@ public final class BinderServerBuilder
   }
 
   private final ServerImplBuilder serverImplBuilder;
-  private ObjectPool<ScheduledExecutorService> schedulerPool =
-      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
-  private ServerSecurityPolicy securityPolicy;
-  private InboundParcelablePolicy inboundParcelablePolicy;
+  private final BinderServer.Builder internalBuilder = new BinderServer.Builder();
   private boolean isBuilt;
-  @Nullable private BinderTransportSecurity.ShutdownListener shutdownListener = null;
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
       IBinderReceiver binderReceiver) {
-    securityPolicy = SecurityPolicies.serverInternalOnly();
-    inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
+    internalBuilder.setListenAddress(listenAddress);
 
     serverImplBuilder = new ServerImplBuilder(streamTracerFactories -> {
-      BinderServer server = new BinderServer(
-          listenAddress,
-          schedulerPool,
-          streamTracerFactories,
-          BinderInternal.createPolicyChecker(securityPolicy),
-          inboundParcelablePolicy,
-          // 'shutdownListener' should have been set by build()
-          checkNotNull(shutdownListener));
+      internalBuilder.setStreamTracerFactories(streamTracerFactories);
+      BinderServer server = internalBuilder.build();
       BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
       return server;
     });
@@ -132,8 +116,8 @@ public final class BinderServerBuilder
    */
   public BinderServerBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-     schedulerPool =
-          new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
+     internalBuilder.setExecutorServicePool(
+          new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService")));
     return this;
   }
 
@@ -146,7 +130,7 @@ public final class BinderServerBuilder
    * @return this
    */
   public BinderServerBuilder securityPolicy(ServerSecurityPolicy securityPolicy) {
-    this.securityPolicy = checkNotNull(securityPolicy, "securityPolicy");
+    internalBuilder.setServerSecurityPolicy(securityPolicy);
     return this;
   }
 
@@ -154,7 +138,7 @@ public final class BinderServerBuilder
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
-    this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
+    internalBuilder.setInboundParcelablePolicy(inboundParcelablePolicy);
     return this;
   }
 
@@ -173,7 +157,7 @@ public final class BinderServerBuilder
    *
    * @return the new Server
    */
-  @Override // For javadoc refinement only.
+  @Override
   public Server build() {
     // Since we install a final interceptor here, we need to ensure we're only built once.
     checkState(!isBuilt, "BinderServerBuilder can only be used to build one server instance.");
@@ -182,7 +166,7 @@ public final class BinderServerBuilder
     ObjectPool<? extends Executor> executorPool = serverImplBuilder.getExecutorPool();
     Executor executor = executorPool.getObject();
     BinderTransportSecurity.installAuthInterceptor(this, executor);
-    shutdownListener = () -> executorPool.returnObject(executor);
+    internalBuilder.setShutdownListener(() -> executorPool.returnObject(executor));
     return super.build();
   }
 }
