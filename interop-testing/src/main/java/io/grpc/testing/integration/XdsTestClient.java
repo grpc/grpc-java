@@ -40,6 +40,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.Status;
+import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.StreamObserver;
@@ -245,6 +246,7 @@ public final class XdsTestClient {
         Grpc.newServerBuilderForPort(statsPort, InsecureServerCredentials.create())
             .addService(new XdsStatsImpl())
             .addService(new ConfigureUpdateServiceImpl())
+            .addService(ProtoReflectionService.newInstance())
             .addService(ProtoReflectionServiceV1.newInstance())
             .addServices(AdminInterface.getStandardServices())
             .build();
