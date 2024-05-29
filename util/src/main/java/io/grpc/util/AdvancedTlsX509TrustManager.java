@@ -43,14 +43,7 @@ import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * AdvancedTlsX509TrustManager is an {@code X509ExtendedTrustManager} that allows users to configure
- * advanced TLS features, such as root certificate reloading, peer cert custom verification, etc.
- *
- * <p>We expect only one of {@link AdvancedTlsX509TrustManager#useSystemDefaultTrustCerts()},
- * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
- * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit,
- * ScheduledExecutorService)},
- * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File)} methods to be called
- * after instantiation of this class.
+ * advanced TLS features, such as root certificate reloading and peer cert custom verification.
  *
  * <p>For Android users: this class is only supported in API level 24 and above.
  */
@@ -59,7 +52,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private static final Logger log = Logger.getLogger(AdvancedTlsX509TrustManager.class.getName());
 
   // Minimum allowed period for refreshing files with credential information.
-  private static final int MINIMUM_REFRESH_PERIOD = 1;
+  private static final int MINIMUM_REFRESH_PERIOD_IN_MINUTES = 1;
   private static final String NOT_ENOUGH_INFO_MESSAGE =
       "Not enough information to validate peer. SSLEngine or Socket required.";
   private final Verification verification;
@@ -220,10 +213,13 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
   /**
    * Schedules a {@code ScheduledExecutorService} to read trust certificates from a local file path
-   * periodically, and updates the cached trust certs if there is an update. Please make sure to
-   * close the returned Closeable before calling this method again. Before scheduling the task, the
-   * method synchronously executes {@code  readAndUpdate} once. The minimum refresh period of 1
-   * minute is enforced.
+   * periodically, and updates the cached trust certs if there is an update. You must close the
+   * returned Closeable before calling this method again or other update methods
+   * ({@link AdvancedTlsX509TrustManager#useSystemDefaultTrustCerts()},
+   * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
+   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File)}).
+   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. The
+   * minimum refresh period of 1 minute is enforced.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    * @param period the period between successive read-and-update executions
@@ -238,11 +234,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       throw new GeneralSecurityException(
           "Files were unmodified before their initial update. Probably a bug.");
     }
-    if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD) {
-      log.log(Level.INFO,
+    if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD_IN_MINUTES) {
+      log.log(Level.FINE,
           "Provided refresh period of {0} {1} is too small. Default value of {2} minute(s) "
-              + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD});
-      period = MINIMUM_REFRESH_PERIOD;
+          + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
+      period = MINIMUM_REFRESH_PERIOD_IN_MINUTES;
       unit = TimeUnit.MINUTES;
     }
     final ScheduledFuture<?> future =
