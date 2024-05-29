@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
 import java.io.File;
@@ -60,7 +61,7 @@ public class AdvancedTlsX509TrustManagerTest {
 
   @Before
   public void setUp() throws IOException, GeneralSecurityException {
-    executor = Executors.newSingleThreadScheduledExecutor();
+    executor = new FakeClock().getScheduledExecutorService();
     caCertFile = TestUtils.loadCert(CA_PEM_FILE);
     caCert = CertificateUtils.getX509Certificates(TlsTesting.loadCert(CA_PEM_FILE));
     serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
