@@ -68,11 +68,6 @@ public class AdvancedTlsX509TrustManagerTest {
     serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
   }
 
-  @After
-  public void tearDown() {
-    MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
-  }
-
   @Test
   public void credentialSetting() throws Exception {
     // Overall happy path checking of public API.
