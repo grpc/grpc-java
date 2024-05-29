@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Handler;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import org.junit.After;
@@ -47,8 +48,8 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class AdvancedTlsX509TrustManagerTest {
 
-  public static final String CA_PEM_FILE = "ca.pem";
-  public static final String SERVER_0_PEM_FILE = "server0.pem";
+  private static final String CA_PEM_FILE = "ca.pem";
+  private static final String SERVER_0_PEM_FILE = "server0.pem";
   private File caCertFile;
   private File serverCert0File;
 
@@ -115,6 +116,7 @@ public class AdvancedTlsX509TrustManagerTest {
     TestHandler handler = new TestHandler();
     log.addHandler(handler);
     log.setUseParentHandlers(false);
+    log.setLevel(Level.FINE);
     trustManager.updateTrustCredentialsFromFile(serverCert0File, -1, TimeUnit.SECONDS,
         executor);
     log.removeHandler(handler);
