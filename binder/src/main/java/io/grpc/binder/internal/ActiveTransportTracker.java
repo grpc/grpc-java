@@ -44,32 +44,38 @@ final class ActiveTransportTracker implements ServerListener  {
   }
 
   private void untrack() {
+    Runnable maybeTerminationListener;
     synchronized (this) {
       activeTransportCount--;
-      maybeInvokeTerminationCallback();
+      maybeTerminationListener = getListenerIfTerminated();
+    }
+    // Prefer running the listener outside of the synchronization lock to release it sooner, since
+    // we don't know how the callback is implemented nor how long it will take. This should
+    // minimize the possibility of deadlocks.
+    if (maybeTerminationListener != null) {
+      maybeTerminationListener.run();
     }
   }
 
   @Override
   public void serverShutdown() {
     delegate.serverShutdown();
+    Runnable maybeTerminationListener;
     synchronized (this) {
       shutdown = true;
-      // We may be able to shutdown immediately if there are no active transports.
-      maybeInvokeTerminationCallback();
+      maybeTerminationListener = getListenerIfTerminated();
+    }
+    // We may be able to shutdown immediately if there are no active transports.
+    //
+    // Executed outside of the lock. See "untrack()" above.
+    if (maybeTerminationListener != null) {
+      maybeTerminationListener.run();
     }
   }
 
-  /** Invokes the termination listener iff a shutdown has been requested (via
-   * {@link #serverShutdown()} and there are no active transports. */
-  private void maybeInvokeTerminationCallback() {
-    boolean readyToNotifyTermination;
-    synchronized (this) {
-      readyToNotifyTermination = shutdown && activeTransportCount == 0;
-    }
-    if (readyToNotifyTermination) {
-      terminationListener.run();
-    }
+  @GuardedBy("this")
+  private Runnable getListenerIfTerminated() {
+    return (shutdown && activeTransportCount == 0) ? terminationListener : null;
   }
 
   /**
