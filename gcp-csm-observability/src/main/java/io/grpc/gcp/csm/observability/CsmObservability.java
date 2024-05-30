@@ -90,7 +90,7 @@ public final class CsmObservability implements Closeable {
   /**
    * Builder for configuring {@link CsmObservability}.
    */
-  @ExperimentalApi("TODO")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11249")
   public static final class Builder {
     private final GrpcOpenTelemetry.Builder delegate = GrpcOpenTelemetry.newBuilder();
     private final MetadataExchanger exchanger;
