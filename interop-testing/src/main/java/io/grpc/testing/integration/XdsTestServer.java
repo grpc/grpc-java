@@ -202,6 +202,7 @@ public final class XdsTestServer {
                       new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
+              .addService(ProtoReflectionService.newInstance())
               .addService(ProtoReflectionServiceV1.newInstance())
               .addServices(AdminInterface.getStandardServices())
               .build();
