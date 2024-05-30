@@ -22,7 +22,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
 import java.io.File;
@@ -30,14 +30,12 @@ import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -65,9 +63,8 @@ public class AdvancedTlsX509KeyManagerTest {
   private X509Certificate[] clientCert0;
 
   @Before
-  public void setUp()
-      throws Exception {
-    executor = Executors.newSingleThreadScheduledExecutor();
+  public void setUp() throws Exception {
+    executor = new FakeClock().getScheduledExecutorService();
     serverKey0File = TestUtils.loadCert(SERVER_0_KEY_FILE);
     serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
     clientKey0File = TestUtils.loadCert(CLIENT_0_KEY_FILE);
@@ -76,11 +73,6 @@ public class AdvancedTlsX509KeyManagerTest {
     serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
     clientKey0 = CertificateUtils.getPrivateKey(TlsTesting.loadCert(CLIENT_0_KEY_FILE));
     clientCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(CLIENT_0_PEM_FILE));
-  }
-
-  @After
-  public void tearDown() {
-    MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
   }
 
   @Test
