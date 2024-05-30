@@ -23,8 +23,10 @@ final class ActiveTransportTracker implements ServerListener  {
   private int activeTransportCount = 0;
 
   /**
+   * @param delegate the original server listener that this object decorates. Usually passed to
+   *   {@link BinderServer#start(ServerListener)}.
    * @param terminationListener invoked only once the server has started shutdown
-   * ({@link #serverShutdown()} AND the last active transport is terminated.
+   *   ({@link #serverShutdown()} AND the last active transport is terminated.
    */
   ActiveTransportTracker(ServerListener delegate, Runnable terminationListener) {
     this.delegate = delegate;
@@ -33,11 +35,10 @@ final class ActiveTransportTracker implements ServerListener  {
 
   @Override
   public ServerTransportListener transportCreated(ServerTransport transport) {
-    checkState(
-        !shutdown,
-        "Attempting to track a new BinderServerTransport, but the server shutdown has already" +
-            " started");
-    activeTransportCount++;
+    synchronized (this) {
+      checkState(!shutdown, "Illegal transportCreated() after serverShutdown()");
+      activeTransportCount++;
+    }
     ServerTransportListener originalListener = delegate.transportCreated(transport);
     return new TrackedTransportListener(originalListener);
   }
@@ -45,25 +46,29 @@ final class ActiveTransportTracker implements ServerListener  {
   private void untrack() {
     synchronized (this) {
       activeTransportCount--;
-      if (shutdown && activeTransportCount == 0) {
-        terminationListener.run();
-      }
+      maybeInvokeTerminationCallback();
     }
   }
 
   @Override
   public void serverShutdown() {
+    delegate.serverShutdown();
     synchronized (this) {
       shutdown = true;
+      // We may be able to shutdown immediately if there are no active transports.
+      maybeInvokeTerminationCallback();
+    }
+  }
 
-      if (activeTransportCount == 0) {
-        // We can run immediately
+  /** Invokes the termination listener iff a shutdown has been requested (via
+   * {@link #serverShutdown()} and there are no active transports. */
+  private void maybeInvokeTerminationCallback() {
+    synchronized (this) {
+      if (shutdown && activeTransportCount == 0) {
         terminationListener.run();
       }
     }
-    delegate.serverShutdown();
   }
-
 
   /**
    * Wraps a {@link ServerTransportListener}, unregistering it from the parent tracker once the
