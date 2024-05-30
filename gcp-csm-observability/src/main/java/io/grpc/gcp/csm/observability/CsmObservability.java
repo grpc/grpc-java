@@ -36,7 +36,7 @@ import java.util.Collections;
  * When no SDK is explicitly added no telemetry data will be collected. See
  * {@code io.opentelemetry.sdk.OpenTelemetrySdk} for information on how to construct the SDK.
  */
-@ExperimentalApi("TODO")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/11249")
 public final class CsmObservability implements Closeable {
   private final GrpcOpenTelemetry delegate;
   private final MetadataExchanger exchanger;
@@ -90,7 +90,7 @@ public final class CsmObservability implements Closeable {
   /**
    * Builder for configuring {@link CsmObservability}.
    */
-  @ExperimentalApi("TODO")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11249")
   public static final class Builder {
     private final GrpcOpenTelemetry.Builder delegate = GrpcOpenTelemetry.newBuilder();
     private final MetadataExchanger exchanger;
