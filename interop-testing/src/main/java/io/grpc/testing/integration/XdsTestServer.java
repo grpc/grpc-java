@@ -30,6 +30,7 @@ import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.protobuf.services.HealthStatusManager;
+import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.StreamObserver;
@@ -180,6 +181,7 @@ public final class XdsTestServer {
           Grpc.newServerBuilderForPort(maintenancePort, InsecureServerCredentials.create())
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
+              .addService(ProtoReflectionService.newInstance())
               .addService(ProtoReflectionServiceV1.newInstance())
               .addServices(AdminInterface.getStandardServices())
               .build();
