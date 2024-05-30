@@ -16,6 +16,8 @@
 
 package io.grpc.binder;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import android.annotation.SuppressLint;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
@@ -26,12 +28,16 @@ import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Process;
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
@@ -40,6 +46,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
@@ -102,20 +109,48 @@ public final class SecurityPolicies {
    * certificate that the current Android platform was signed with.
    *
    * @param packageName the package name of the allowed package.
+   * @param backgroundExecutor an executor suitable for blocking disk I/O.
    * @throws NullPointerException if any of the inputs are {@code null}.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11238")
-  public static SecurityPolicy hasSameSignatureAsPlatform(
-      PackageManager packageManager, String packageName) {
-    PackageInfo platformPackageInfo;
-    try {
-      platformPackageInfo =
-          packageManager.getPackageInfo("android", PackageManager.GET_SIGNING_CERTIFICATES);
-    } catch (PackageManager.NameNotFoundException e) {
-      throw new AssertionError(e);  // impossible; the platform package is always available.
+  public static AsyncSecurityPolicy hasSameSignatureAsPlatform(
+      PackageManager packageManager, String packageName,
+      ListeningExecutorService backgroundExecutor) {
+    return new AsyncSecurityPolicy() {
+      @Override
+      public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+        return backgroundExecutor.submit(() -> {
+          PackageInfo platformPackageInfo;
+          try {
+            platformPackageInfo =
+                packageManager.getPackageInfo("android", packageManager.GET_SIGNING_CERTIFICATES);
+          } catch (PackageManager.NameNotFoundException e) {
+            throw new AssertionError(e);  // impossible; the platform package is always available.
+          }
+          ImmutableList<SecurityPolicy> policies =
+              createSignaturePolicies(packageManager, packageName, platformPackageInfo);
+          return anyOf(policies.toArray(new SecurityPolicy[0])).checkAuthorization(uid);
+        });
+      }
+    };
+  }
+
+  private static ImmutableList<SecurityPolicy> createSignaturePolicies(
+      PackageManager packageManager, String packageName, PackageInfo packageInfo) {
+    Signature[] signatures = packageInfo.signatures;
+    checkState(
+        signatures.length > 0, "There should be at least one platform signature");
+    ImmutableList.Builder<SecurityPolicy> policies =
+        ImmutableList.builderWithExpectedSize(signatures.length);
+    for (Signature signature : signatures) {
+      policies.add(new SecurityPolicy() {
+        @Override
+        public Status checkAuthorization(int uid) {
+          return hasSignature(packageManager, packageName, signature).checkAuthorization(uid);
+        }
+      });
     }
-    Signature platformSignature = platformPackageInfo.signatures[0];
-    return hasSignature(packageManager, packageName, platformSignature);
+    return policies.build();
   }
 
   /**
