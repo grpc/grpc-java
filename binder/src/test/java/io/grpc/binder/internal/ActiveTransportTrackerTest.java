@@ -18,7 +18,6 @@ package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertThrows;
 
 import android.os.Binder;
 import android.os.IBinder;
@@ -27,7 +26,9 @@ import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
+import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -45,13 +46,13 @@ public final class ActiveTransportTrackerTest {
       new FixedObjectPool<>(Executors.newSingleThreadScheduledExecutor());
   private final IBinder callbackBinder = new Binder();
 
-  private TestTerminationListener testShutdownListener;
+  private boolean serverShutdownNotified = false;
+  private final Runnable testShutdownListener = () -> serverShutdownNotified = true;
   private ActiveTransportTracker tracker;
 
   @Before
   public void setUp() {
-    testShutdownListener = new TestTerminationListener();
-    tracker = new ActiveTransportTracker(testShutdownListener);
+    tracker = new ActiveTransportTracker(new NoOpServerListener(), testShutdownListener);
   }
 
   @Test
@@ -59,48 +60,39 @@ public final class ActiveTransportTrackerTest {
     ServerTransportListener wrapperListener1 = registerNewTransport();
     ServerTransportListener wrapperListener2 = registerNewTransport();
 
-    tracker.scheduleTerminationNotification();
+    tracker.serverShutdown();
     // 2 active transports, notification scheduled
-    assertThat(testShutdownListener.serverShutdownNotified).isFalse();
+    assertThat(serverShutdownNotified).isFalse();
 
     wrapperListener1.transportTerminated();
     // 1 active transport remaining, notification still pending
-    assertThat(testShutdownListener.serverShutdownNotified).isFalse();
+    assertThat(serverShutdownNotified).isFalse();
 
     wrapperListener2.transportTerminated();
     // No more active transports, shutdown notified
-    assertThat(testShutdownListener.serverShutdownNotified).isTrue();
+    assertThat(serverShutdownNotified).isTrue();
   }
 
   @Test
   public void testServerShutdown_noActiveTransport_notifiesTerminationImmediately() {
-    checkState(!testShutdownListener.serverShutdownNotified);
+    checkState(!serverShutdownNotified);
 
-    tracker.scheduleTerminationNotification();
+    tracker.serverShutdown();
 
-    assertThat(testShutdownListener.serverShutdownNotified).isTrue();
+    assertThat(serverShutdownNotified).isTrue();
   }
 
   @Test
   public void testLastTransportTerminated_serverNotShutdownYet_doesNotNotify() {
     ServerTransportListener wrapperListener = registerNewTransport();
-    assertThat(testShutdownListener.serverShutdownNotified).isFalse();
+    assertThat(serverShutdownNotified).isFalse();
 
     wrapperListener.transportTerminated();
 
-    assertThat(testShutdownListener.serverShutdownNotified).isFalse();
-  }
-
-  @Test
-  public void testTrack_afterTerminationNoticeScheduled_throws() {
-    tracker.scheduleTerminationNotification();
-
-    assertThrows(IllegalStateException.class, this::registerNewTransport);
+    assertThat(serverShutdownNotified).isFalse();
   }
 
   private ServerTransportListener registerNewTransport() {
-    NoOpTransportListener transportListener = new NoOpTransportListener();
-
     BinderTransport.BinderServerTransport transport =
         new BinderTransport.BinderServerTransport(
           executorServicePool,
@@ -109,7 +101,7 @@ public final class ActiveTransportTrackerTest {
           NO_OP_BINDER_DECORATOR,
           callbackBinder);
 
-    return tracker.track(transportListener, transport);
+    return tracker.transportCreated(transport);
   }
 
   private static final class NoOpTransportListener implements ServerTransportListener {
@@ -125,13 +117,13 @@ public final class ActiveTransportTrackerTest {
     public void transportTerminated() {}
   }
 
-  private static final class TestTerminationListener
-      implements BinderTransportSecurity.TerminationListener {
-    boolean serverShutdownNotified = false;
+  private static final class NoOpServerListener implements ServerListener {
+    @Override
+    public ServerTransportListener transportCreated(ServerTransport transport) {
+      return new NoOpTransportListener();
+    }
 
     @Override
-    public void onServerTerminated() {
-      serverShutdownNotified = true;
-    }
+    public void serverShutdown() {}
   }
 }

@@ -1,84 +1,63 @@
 package io.grpc.binder.internal;
 
-import static com.google.common.base.Preconditions.checkState;
-
-import java.util.HashSet;
 import javax.annotation.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
+import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
+import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 
 /**
  * Tracks which {@link BinderTransport.BinderServerTransport} are currently active and allows
- * invoking a {@link BinderTransportSecurity.TerminationListener} only once all transports are
- * terminated.
+ * invoking a {@link Runnable} only once all transports are terminated.
  */
-final class ActiveTransportTracker {
+final class ActiveTransportTracker implements ServerListener  {
+  private final ServerListener delegate;
+  private final Runnable terminationListener;
   @GuardedBy("this")
-  private final HashSet<BinderTransport.BinderServerTransport> activeTransports = new HashSet<>();
-  private final BinderTransportSecurity.TerminationListener transportSecurityTerminationListener;
+  private boolean shutdown = false;
   @GuardedBy("this")
-  private boolean awaitingNoActiveTransports = false;
-  @GuardedBy("this")
-  private boolean terminationNotificationRequested = false;
+  private int activeTransportCount = 0;
 
   /**
-   * @param transportSecurityTerminationListener invoked only once scheduled via
-   * {@link #scheduleTerminationNotification()} AND the last active transport is terminated.
+   * @param terminationListener invoked only once the server has started shutdown
+   * ({@link #serverShutdown()} AND the last active transport is terminated.
    */
-  ActiveTransportTracker(
-      BinderTransportSecurity.TerminationListener transportSecurityTerminationListener) {
-    this.transportSecurityTerminationListener = transportSecurityTerminationListener;
+  ActiveTransportTracker(ServerListener delegate, Runnable terminationListener) {
+    this.delegate = delegate;
+    this.terminationListener = terminationListener;
   }
 
-  /**
-   * @throws IllegalStateException if {@link #scheduleTerminationNotification()} has already been
-   * called.
-   */
-  ServerTransportListener track(
-      ServerTransportListener listener,
-      BinderTransport.BinderServerTransport binderServerTransport) {
-    synchronized (this) {
-      checkState(
-          !terminationNotificationRequested,
-          "Attempting to track a new BinderServerTransport, but termination notice has already " +
-              "been scheduled.");
-      activeTransports.add(binderServerTransport);
-    }
-    return new TrackedTransportListener(listener, binderServerTransport);
+  @Override
+  public ServerTransportListener transportCreated(ServerTransport transport) {
+    activeTransportCount++;
+    ServerTransportListener originalListener = delegate.transportCreated(transport);
+    return new TrackedTransportListener(originalListener);
   }
 
-  private void untrack(BinderTransport.BinderServerTransport binderServerTransport) {
+  private void untrack() {
     synchronized (this) {
-      activeTransports.remove(binderServerTransport);
-      if (awaitingNoActiveTransports && activeTransports.isEmpty()) {
-        transportSecurityTerminationListener.onServerTerminated();
+      activeTransportCount--;
+      if (shutdown && activeTransportCount == 0) {
+        terminationListener.run();
       }
     }
   }
 
-  /**
-   * Schedules this tracker to notify the {@link BinderTransportSecurity.TerminationListener}
-   * provided in the constructor once all remaining active transports have terminated. The
-   * notification may happen immediately if there are no active transports.
-   *
-   * <p>There is no guarantee about which thread the TerminationListener will be called from.
-   */
-  void scheduleTerminationNotification() {
+  @Override
+  public void serverShutdown() {
     synchronized (this) {
-      terminationNotificationRequested = true;
+      shutdown = true;
 
-      // We can run immediately
-      if (activeTransports.isEmpty()) {
-        transportSecurityTerminationListener.onServerTerminated();
-        return;
+      if (activeTransportCount == 0) {
+        // We can run immediately
+        terminationListener.run();
       }
-
-      // Schedule for later, as soon as the last active transport is terminated.
-      awaitingNoActiveTransports = true;
     }
+    delegate.serverShutdown();
   }
+
 
   /**
    * Wraps a {@link ServerTransportListener}, unregistering it from the parent tracker once the
@@ -86,13 +65,9 @@ final class ActiveTransportTracker {
    */
   private final class TrackedTransportListener implements ServerTransportListener {
     private final ServerTransportListener delegate;
-    private final BinderTransport.BinderServerTransport binderServerTransport;
 
-    TrackedTransportListener(
-        ServerTransportListener delegate,
-        BinderTransport.BinderServerTransport binderServerTransport) {
+    TrackedTransportListener(ServerTransportListener delegate) {
       this.delegate = delegate;
-      this.binderServerTransport = binderServerTransport;
     }
 
     @Override
@@ -107,7 +82,7 @@ final class ActiveTransportTracker {
 
     @Override
     public void transportTerminated() {
-      untrack(binderServerTransport);
+      untrack();
       delegate.transportTerminated();
     }
   }

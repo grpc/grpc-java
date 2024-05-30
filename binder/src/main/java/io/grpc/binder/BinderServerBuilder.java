@@ -76,7 +76,7 @@ public final class BinderServerBuilder
   private ServerSecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
   private boolean isBuilt;
-  @Nullable private BinderTransportSecurity.TerminationListener terminationListener = null;
+  @Nullable private Runnable terminationListener = null;
 
   private BinderServerBuilder(
       AndroidComponentAddress listenAddress,
