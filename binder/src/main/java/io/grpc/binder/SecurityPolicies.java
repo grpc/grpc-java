@@ -28,7 +28,6 @@ import android.content.pm.Signature;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Process;
-import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
@@ -37,7 +36,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
@@ -46,7 +44,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.Executor;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
