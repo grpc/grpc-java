@@ -63,10 +63,12 @@ final class ActiveTransportTracker implements ServerListener  {
   /** Invokes the termination listener iff a shutdown has been requested (via
    * {@link #serverShutdown()} and there are no active transports. */
   private void maybeInvokeTerminationCallback() {
+    boolean readyToNotifyTermination;
     synchronized (this) {
-      if (shutdown && activeTransportCount == 0) {
-        terminationListener.run();
-      }
+      readyToNotifyTermination = shutdown && activeTransportCount == 0;
+    }
+    if (readyToNotifyTermination) {
+      terminationListener.run();
     }
   }
 
