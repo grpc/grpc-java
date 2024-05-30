@@ -95,7 +95,7 @@ public final class ActiveTransportTrackerTest {
   }
 
   @Test
-  public void testTrack_afterTerminationNoticeScheduled_throws() {
+  public void testTransportCreation_afterServerShutdown_throws() {
     tracker.serverShutdown();
 
     assertThrows(IllegalStateException.class, this::registerNewTransport);

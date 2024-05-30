@@ -35,8 +35,8 @@ final class ActiveTransportTracker implements ServerListener  {
   public ServerTransportListener transportCreated(ServerTransport transport) {
     checkState(
         !shutdown,
-        "Attempting to track a new BinderServerTransport, but termination notice has already " +
-            "been scheduled.");
+        "Attempting to track a new BinderServerTransport, but the server shutdown has already" +
+            " started");
     activeTransportCount++;
     ServerTransportListener originalListener = delegate.transportCreated(transport);
     return new TrackedTransportListener(originalListener);
