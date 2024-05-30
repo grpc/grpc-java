@@ -56,14 +56,10 @@ public class LinkedHashLruCacheTest {
     this.cache = new LinkedHashLruCache<Integer, Entry>(
         MAX_SIZE,
         evictionListener,
-        10,
-        TimeUnit.NANOSECONDS,
-        fakeClock.getScheduledExecutorService(),
-        fakeClock.getTicker(),
-        new Object()) {
+        fakeClock.getTicker()) {
       @Override
       protected boolean isExpired(Integer key, Entry value, long nowNanos) {
-        return value.expireTime <= nowNanos;
+        return value.expireTime - nowNanos <= 0;
       }
 
       @Override
@@ -107,9 +103,11 @@ public class LinkedHashLruCacheTest {
     cache.cache(1, survivor);
 
     fakeClock.forwardTime(10, TimeUnit.NANOSECONDS);
+    cache.cleanupExpiredEntries();
     verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.EXPIRED);
 
     fakeClock.forwardTime(10, TimeUnit.NANOSECONDS);
+    cache.cleanupExpiredEntries();
     verify(evictionListener).onEviction(1, survivor, EvictionType.EXPIRED);
   }
 
@@ -160,6 +158,7 @@ public class LinkedHashLruCacheTest {
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE);
 
     fakeClock.forwardTime(1, TimeUnit.MINUTES);
+    cache.cleanupExpiredEntries();
     assertThat(cache.read(MAX_SIZE)).isNull();
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE - 1);
     verify(evictionListener).onEviction(eq(MAX_SIZE), any(Entry.class), eq(EvictionType.EXPIRED));
