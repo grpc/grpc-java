@@ -19,6 +19,8 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.junit.Assert.assertThrows;
+
 import android.os.Binder;
 import android.os.IBinder;
 import com.google.common.collect.ImmutableList;
@@ -90,6 +92,13 @@ public final class ActiveTransportTrackerTest {
     wrapperListener.transportTerminated();
 
     assertThat(serverShutdownNotified).isFalse();
+  }
+
+  @Test
+  public void testTrack_afterTerminationNoticeScheduled_throws() {
+    tracker.serverShutdown();
+
+    assertThrows(IllegalStateException.class, this::registerNewTransport);
   }
 
   private ServerTransportListener registerNewTransport() {

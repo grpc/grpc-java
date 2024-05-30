@@ -1,5 +1,7 @@
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import javax.annotation.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
@@ -31,6 +33,10 @@ final class ActiveTransportTracker implements ServerListener  {
 
   @Override
   public ServerTransportListener transportCreated(ServerTransport transport) {
+    checkState(
+        !shutdown,
+        "Attempting to track a new BinderServerTransport, but termination notice has already " +
+            "been scheduled.");
     activeTransportCount++;
     ServerTransportListener originalListener = delegate.transportCreated(transport);
     return new TrackedTransportListener(originalListener);
