@@ -45,14 +45,11 @@ import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
 import java.io.Closeable;
 import java.io.File;
-import java.io.IOException;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -65,13 +62,13 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class AdvancedTlsTest {
-  public static final String SERVER_0_KEY_FILE = "server0.key";
-  public static final String SERVER_0_PEM_FILE = "server0.pem";
-  public static final String CLIENT_0_KEY_FILE = "client.key";
-  public static final String CLIENT_0_PEM_FILE = "client.pem";
-  public static final String CA_PEM_FILE = "ca.pem";
-  public static final String SERVER_BAD_KEY_FILE = "badserver.key";
-  public static final String SERVER_BAD_PEM_FILE = "badserver.pem";
+  private static final String SERVER_0_KEY_FILE = "server0.key";
+  private static final String SERVER_0_PEM_FILE = "server0.pem";
+  private static final String CLIENT_0_KEY_FILE = "client.key";
+  private static final String CLIENT_0_PEM_FILE = "client.pem";
+  private static final String CA_PEM_FILE = "ca.pem";
+  private static final String SERVER_BAD_KEY_FILE = "badserver.key";
+  private static final String SERVER_BAD_PEM_FILE = "badserver.pem";
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -92,7 +89,7 @@ public class AdvancedTlsTest {
 
   @Before
   public void setUp()
-      throws NoSuchAlgorithmException, IOException, CertificateException, InvalidKeySpecException {
+      throws Exception {
     executor = Executors.newSingleThreadScheduledExecutor();
     caCertFile = TestUtils.loadCert(CA_PEM_FILE);
     serverKey0File = TestUtils.loadCert(SERVER_0_KEY_FILE);
@@ -285,11 +282,11 @@ public class AdvancedTlsTest {
             new SslSocketAndEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
+                  Socket socket) { }
 
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
+                  SSLEngine engine) { }
             })
         .build();
     serverTrustManager.updateTrustCredentials(caCert);
@@ -310,11 +307,11 @@ public class AdvancedTlsTest {
             new SslSocketAndEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
+                  Socket socket) { }
 
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
+                  SSLEngine engine) { }
             })
         .build();
     clientTrustManager.updateTrustCredentials(caCert);
@@ -419,7 +416,7 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void onFileReloadingKeyManagerBadInitialContentTest() throws Exception {
+  public void onFileReloadingKeyManagerBadInitialContentTest() {
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
     // We swap the order of key and certificates to intentionally create an exception.
     assertThrows(GeneralSecurityException.class,
@@ -439,7 +436,7 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void keyManagerAliasesTest() throws Exception {
+  public void keyManagerAliasesTest() {
     AdvancedTlsX509KeyManager km = new AdvancedTlsX509KeyManager();
     assertArrayEquals(
         new String[] {"default"}, km.getClientAliases("", null));
