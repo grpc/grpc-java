@@ -42,9 +42,8 @@ import io.grpc.reflection.v1.ServerReflectionResponse;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
 public final class ProtoReflectionService implements BindableService {
 
-  private static final String METHOD_NAME = "ServerReflectionInfo";
-
-  private ProtoReflectionService() {}
+  private ProtoReflectionService() {
+  }
 
   public static BindableService newInstance() {
     return new ProtoReflectionService();
@@ -54,60 +53,34 @@ public final class ProtoReflectionService implements BindableService {
   public ServerServiceDefinition bindService() {
     ServerServiceDefinition serverServiceDefinitionV1 = ProtoReflectionServiceV1.newInstance()
         .bindService();
-    MethodDescriptor<ServerReflectionRequest, ServerReflectionResponse> methodDescriptorV1 = ServerReflectionGrpc.getServerReflectionInfoMethod();
+    MethodDescriptor<ServerReflectionRequest, ServerReflectionResponse> methodDescriptorV1 =
+        ServerReflectionGrpc.getServerReflectionInfoMethod();
     // Retain the v1 proto marshallers but change the method name and schema descriptor to v1alpha.
-    MethodDescriptor<ServerReflectionRequest, ServerReflectionResponse> methodDescriptorV1Alpha = methodDescriptorV1.toBuilder()
-        .setFullMethodName(io.grpc.reflection.v1alpha.ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName())
-        .setSchemaDescriptor(
-            new ServerReflectionMethodDescriptorSupplier(METHOD_NAME))
-        .build();
-    ServiceDescriptor serviceDescriptorV1Alpha = ServiceDescriptor.newBuilder(SERVICE_NAME)
-        .setSchemaDescriptor(new ServerReflectionFileDescriptorSupplier())
-        .addMethod(methodDescriptorV1Alpha)
-        .build();
+    MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest,
+        io.grpc.reflection.v1alpha.ServerReflectionResponse> methodDescriptorV1AlphaGenerated =
+        io.grpc.reflection.v1alpha.ServerReflectionGrpc.getServerReflectionInfoMethod();
+    MethodDescriptor<ServerReflectionRequest, ServerReflectionResponse> methodDescriptorV1Alpha =
+        methodDescriptorV1.toBuilder()
+            .setFullMethodName(methodDescriptorV1AlphaGenerated.getFullMethodName())
+            .setSchemaDescriptor(methodDescriptorV1AlphaGenerated.getSchemaDescriptor())
+            .build();
     // Retain the v1 server call handler but change the service name schema descriptor in the service descriptor to v1alpha.
+    ServiceDescriptor serviceDescriptorV1AlphaGenerated =
+        io.grpc.reflection.v1alpha.ServerReflectionGrpc.getServiceDescriptor();
+    ServiceDescriptor serviceDescriptorV1Alpha =
+        ServiceDescriptor.newBuilder(serviceDescriptorV1AlphaGenerated.getName())
+            .setSchemaDescriptor(serviceDescriptorV1AlphaGenerated.getSchemaDescriptor())
+            .addMethod(methodDescriptorV1Alpha)
+            .build();
     return ServerServiceDefinition.builder(serviceDescriptorV1Alpha)
         .addMethod(methodDescriptorV1Alpha, createServerCallHandler(serverServiceDefinitionV1))
         .build();
   }
 
-  private ServerCallHandler createServerCallHandler(ServerServiceDefinition serverServiceDefinition) {
-    return serverServiceDefinition.getMethod(ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName())
+  private ServerCallHandler createServerCallHandler(
+      ServerServiceDefinition serverServiceDefinition) {
+    return serverServiceDefinition.getMethod(
+            ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName())
         .getServerCallHandler();
-  }
-
-  private static abstract class ServerReflectionBaseDescriptorSupplier
-      implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
-    ServerReflectionBaseDescriptorSupplier() {}
-
-    @Override
-    public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
-      return io.grpc.reflection.v1.ServerReflectionProto.getDescriptor();
-    }
-
-    @Override
-    public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
-      return getFileDescriptor().findServiceByName("ServerReflection");
-    }
-  }
-
-  private static final class ServerReflectionFileDescriptorSupplier
-      extends ServerReflectionBaseDescriptorSupplier {
-    ServerReflectionFileDescriptorSupplier() {}
-  }
-
-  private static final class ServerReflectionMethodDescriptorSupplier
-      extends ServerReflectionBaseDescriptorSupplier
-      implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
-    private final java.lang.String methodName;
-
-    ServerReflectionMethodDescriptorSupplier(java.lang.String methodName) {
-      this.methodName = methodName;
-    }
-
-    @Override
-    public com.google.protobuf.Descriptors.MethodDescriptor getMethodDescriptor() {
-      return getServiceDescriptor().findMethodByName(methodName);
-    }
   }
 }
