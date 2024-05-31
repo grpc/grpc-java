@@ -135,6 +135,13 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
 
   @Override
   public synchronized boolean handleTransaction(int code, Parcel parcel) {
+    // It's possible that a transaction had started mid-server shutdown. In that case, should not
+    // proceed with the transport creation since classes like ActiveTransportListener are not
+    // expecting new transports.
+    if (shutdown) {
+      return false;
+    }
+
     if (code == BinderTransport.SETUP_TRANSPORT) {
       int version = parcel.readInt();
       // If the client-provided version is more recent, we accept the connection,
