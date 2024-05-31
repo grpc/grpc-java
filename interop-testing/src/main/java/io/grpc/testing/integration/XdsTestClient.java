@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -261,7 +262,13 @@ public final class XdsTestClient {
   private void run() {
     if (enableCsmObservability) {
       csmObservability = CsmObservability.newBuilder()
-          .sdk(AutoConfiguredOpenTelemetrySdk.initialize().getOpenTelemetrySdk())
+          .sdk(AutoConfiguredOpenTelemetrySdk.builder()
+              .addPropertiesSupplier(() -> ImmutableMap.of(
+                  "otel.logs.exporter", "none",
+                  "otel.metrics.exporter", "prometheus",
+                  "otel.traces.exporter", "none"))
+              .build()
+              .getOpenTelemetrySdk())
           .build();
       csmObservability.registerGlobal();
     }
