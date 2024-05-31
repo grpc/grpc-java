@@ -44,6 +44,8 @@ import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 /**
  * AdvancedTlsX509TrustManager is an {@code X509ExtendedTrustManager} that allows users to configure
  * advanced TLS features, such as root certificate reloading and peer cert custom verification.
+ * The default instantiation pattern is
+ * <code>new Builder().build().useSystemDefaultTrustCerts();<code/>
  *
  * <p>For Android users: this class is only supported in API level 24 and above.
  */
@@ -218,8 +220,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * ({@link AdvancedTlsX509TrustManager#useSystemDefaultTrustCerts()},
    * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
    * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File)}).
-   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. The
-   * minimum refresh period of 1 minute is enforced.
+   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. If
+   * the provided period is less than 1 minute, it is automatically adjusted to 1 minute.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    * @param period the period between successive read-and-update executions
@@ -305,6 +307,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     }
   }
 
+  // *
   // Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
   public interface Closeable extends java.io.Closeable {
     @Override
@@ -315,27 +318,35 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     return new Builder();
   }
 
-  // The verification mode when authenticating the peer certificate.
+  /**
+   * The verification mode when authenticating the peer certificate.
+   */
   public enum Verification {
-    // This is the DEFAULT and RECOMMENDED mode for most applications.
-    // Setting this on the client side will do the certificate and hostname verification, while
-    // setting this on the server side will only do the certificate verification.
+    /**
+     * This is the DEFAULT and RECOMMENDED mode for most applications.
+     * Setting this on the client side performs both certificate and hostname verification, while
+     * setting it on the server side only performs certificate verification.
+     */
     CERTIFICATE_AND_HOST_NAME_VERIFICATION,
-    // This SHOULD be chosen only when you know what the implication this will bring, and have a
-    // basic understanding about TLS.
-    // It SHOULD be accompanied with proper additional peer identity checks set through
-    // {@code PeerVerifier}(nit: why this @code not working?). Failing to do so will leave
-    // applications to MITM attack.
-    // Also note that this will only take effect if the underlying SDK implementation invokes
-    // checkClientTrusted/checkServerTrusted with the {@code SSLEngine} parameter while doing
-    // verification.
-    // Setting this on either side will only do the certificate verification.
+    /**
+     * This SHOULD be accompanied by proper additional peer identity checks set through
+     * {@link SslSocketAndEnginePeerVerifier}. Failing to do so will leave your applications
+     * vulnerable to MITM attacks.
+     * Keep in mind that this will only take effect if the underlying SDK implementation invokes
+     * checkClientTrusted/checkServerTrusted with the {@code SSLEngine} parameter while doing
+     * verification.
+     * Setting this on either side will only perform certificate verification.
+     */
     CERTIFICATE_ONLY_VERIFICATION,
-    // Setting is very DANGEROUS. Please try to avoid this in a real production environment, unless
-    // you are a super advanced user intended to re-implement the whole verification logic on your
-    // own. A secure verification might include (see {@code SslSocketAndEnginePeerVerifier}):
-    // 1. proper verification on the peer certificate chain
-    // 2. proper checks on the identity of the peer certificate
+    /**
+     * This SHOULD be used by advanced user intended to implement the entire verification logic
+     * themselves {@link SslSocketAndEnginePeerVerifier}) themselves. This includes: <br>
+     * 1. Proper verification of the peer certificate chain <br>
+     * 2. Proper checks of the identity of the peer certificate <br>
+     * Failing to do so will leave your application without any TLS-related protection. Keep in mind
+     * that any loaded trust certificates will be ignored when using this mode (see how {@code
+     * checkTrusted} is implemented).
+     */
     INSECURELY_SKIP_ALL_VERIFICATION,
   }
 
@@ -368,6 +379,17 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
         throws CertificateException;
   }
 
+  /** Builds a new {@link AdvancedTlsX509TrustManager}.
+   * By default, no trust certificates are loaded after the build. To load them, use one of the
+   * following methods:
+   * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
+   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit, ScheduledExecutorService)},
+   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit, ScheduledExecutorService)}
+   * By default, {@link Verification#CERTIFICATE_AND_HOST_NAME_VERIFICATION} mode for authenticating
+   * the peer certificate is used.
+   * If you set a {@link SslSocketAndEnginePeerVerifier}, its methods will be called in addition to
+   * verifying certificates - see how {@code checkTrusted} is implemented.
+   */
   public static final class Builder {
 
     private Verification verification = Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION;
