@@ -383,8 +383,10 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * By default, no trust certificates are loaded after the build. To load them, use one of the
    * following methods:
    * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
-   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit, ScheduledExecutorService)},
-   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit, ScheduledExecutorService)}
+   * {@link AdvancedTlsX509TrustManager#
+   * updateTrustCredentialsFromFile(File, long, TimeUnit, ScheduledExecutorService)},
+   * {@link AdvancedTlsX509TrustManager#
+   * updateTrustCredentialsFromFile(File, long, TimeUnit, ScheduledExecutorService)}
    * By default, {@link Verification#CERTIFICATE_AND_HOST_NAME_VERIFICATION} mode for authenticating
    * the peer certificate is used.
    * If you set a {@link SslSocketAndEnginePeerVerifier}, its methods will be called in addition to
