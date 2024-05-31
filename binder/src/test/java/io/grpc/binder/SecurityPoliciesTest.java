@@ -217,7 +217,8 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  public void testOneOfSignatures_succeedsIfPackageNameAndSignaturesMatch() throws Exception {
+  public void testOneOfSignatures_succeedsIfPackageNameAndSignaturesMatch()
+      throws Exception {
     PackageInfo info =
         newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
 
