@@ -2,31 +2,33 @@ package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkState;
 
-import javax.annotation.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Tracks which {@link BinderTransport.BinderServerTransport} are currently active and allows
  * invoking a {@link Runnable} only once all transports are terminated.
  */
-final class ActiveTransportTracker implements ServerListener  {
+final class ActiveTransportTracker implements ServerListener {
   private final ServerListener delegate;
   private final Runnable terminationListener;
+
   @GuardedBy("this")
   private boolean shutdown = false;
+
   @GuardedBy("this")
   private int activeTransportCount = 0;
 
   /**
    * @param delegate the original server listener that this object decorates. Usually passed to
-   *   {@link BinderServer#start(ServerListener)}.
-   * @param terminationListener invoked only once the server has started shutdown
-   *   ({@link #serverShutdown()} AND the last active transport is terminated.
+   *     {@link BinderServer#start(ServerListener)}.
+   * @param terminationListener invoked only once the server has started shutdown ({@link
+   *     #serverShutdown()} AND the last active transport is terminated.
    */
   ActiveTransportTracker(ServerListener delegate, Runnable terminationListener) {
     this.delegate = delegate;
@@ -101,8 +103,8 @@ final class ActiveTransportTracker implements ServerListener  {
 
     @Override
     public void transportTerminated() {
-      untrack();
       delegate.transportTerminated();
+      untrack();
     }
   }
 }

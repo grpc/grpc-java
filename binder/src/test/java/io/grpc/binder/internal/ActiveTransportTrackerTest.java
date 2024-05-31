@@ -16,31 +16,35 @@
 
 package io.grpc.binder.internal;
 
-import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.truth.Truth.assertThat;
-
 import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import android.os.Binder;
 import android.os.IBinder;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
-import io.grpc.Metadata;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
-import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 
 @RunWith(RobolectricTestRunner.class)
 public final class ActiveTransportTrackerTest {
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final OneWayBinderProxy.Decorator NO_OP_BINDER_DECORATOR = input -> input;
 
@@ -48,13 +52,16 @@ public final class ActiveTransportTrackerTest {
       new FixedObjectPool<>(Executors.newSingleThreadScheduledExecutor());
   private final IBinder callbackBinder = new Binder();
 
-  private boolean serverShutdownNotified = false;
-  private final Runnable testShutdownListener = () -> serverShutdownNotified = true;
   private ActiveTransportTracker tracker;
+
+  @Mock Runnable mockShutdownListener;
+  @Mock ServerListener mockServerListener;
+  @Mock ServerTransportListener mockServerTransportListener;
 
   @Before
   public void setUp() {
-    tracker = new ActiveTransportTracker(new NoOpServerListener(), testShutdownListener);
+    when(mockServerListener.transportCreated(any())).thenReturn(mockServerTransportListener);
+    tracker = new ActiveTransportTracker(mockServerListener, mockShutdownListener);
   }
 
   @Test
@@ -64,34 +71,34 @@ public final class ActiveTransportTrackerTest {
 
     tracker.serverShutdown();
     // 2 active transports, notification scheduled
-    assertThat(serverShutdownNotified).isFalse();
+    verifyNoInteractions(mockShutdownListener);
 
     wrapperListener1.transportTerminated();
     // 1 active transport remaining, notification still pending
-    assertThat(serverShutdownNotified).isFalse();
+    verifyNoInteractions(mockShutdownListener);
 
     wrapperListener2.transportTerminated();
     // No more active transports, shutdown notified
-    assertThat(serverShutdownNotified).isTrue();
+    verify(mockShutdownListener).run();
   }
 
   @Test
   public void testServerShutdown_noActiveTransport_notifiesTerminationImmediately() {
-    checkState(!serverShutdownNotified);
+    verifyNoInteractions(mockShutdownListener);
 
     tracker.serverShutdown();
 
-    assertThat(serverShutdownNotified).isTrue();
+    verify(mockShutdownListener).run();
   }
 
   @Test
   public void testLastTransportTerminated_serverNotShutdownYet_doesNotNotify() {
     ServerTransportListener wrapperListener = registerNewTransport();
-    assertThat(serverShutdownNotified).isFalse();
+    verifyNoInteractions(mockShutdownListener);
 
     wrapperListener.transportTerminated();
 
-    assertThat(serverShutdownNotified).isFalse();
+    verifyNoInteractions(mockShutdownListener);
   }
 
   @Test
@@ -101,38 +108,30 @@ public final class ActiveTransportTrackerTest {
     assertThrows(IllegalStateException.class, this::registerNewTransport);
   }
 
+  @Test
+  public void testServerListenerCallbacks_invokesDelegates() {
+    ServerTransport transport = newTransport();
+
+    ServerTransportListener listener = tracker.transportCreated(transport);
+    verify(mockServerListener).transportCreated(transport);
+
+    listener.transportTerminated();
+    verify(mockServerTransportListener).transportTerminated();
+
+    tracker.serverShutdown();
+    verify(mockServerListener).serverShutdown();
+  }
+
   private ServerTransportListener registerNewTransport() {
-    BinderTransport.BinderServerTransport transport =
-        new BinderTransport.BinderServerTransport(
-          executorServicePool,
-          Attributes.EMPTY,
-          /* streamTracerFactories= */ ImmutableList.of(),
-          NO_OP_BINDER_DECORATOR,
-          callbackBinder);
-
-    return tracker.transportCreated(transport);
+    return tracker.transportCreated(newTransport());
   }
 
-  private static final class NoOpTransportListener implements ServerTransportListener {
-    @Override
-    public void streamCreated(ServerStream stream, String method, Metadata headers) {}
-
-    @Override
-    public Attributes transportReady(Attributes attributes) {
-      return attributes;
-    }
-
-    @Override
-    public void transportTerminated() {}
-  }
-
-  private static final class NoOpServerListener implements ServerListener {
-    @Override
-    public ServerTransportListener transportCreated(ServerTransport transport) {
-      return new NoOpTransportListener();
-    }
-
-    @Override
-    public void serverShutdown() {}
+  private ServerTransport newTransport() {
+    return new BinderTransport.BinderServerTransport(
+        executorServicePool,
+        Attributes.EMPTY,
+        /* streamTracerFactories= */ ImmutableList.of(),
+        NO_OP_BINDER_DECORATOR,
+        callbackBinder);
   }
 }
