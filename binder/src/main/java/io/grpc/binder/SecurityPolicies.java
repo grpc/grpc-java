@@ -34,8 +34,8 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
@@ -44,6 +44,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
@@ -112,11 +113,11 @@ public final class SecurityPolicies {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11238")
   public static AsyncSecurityPolicy hasSameSignatureAsPlatform(
       PackageManager packageManager, String packageName,
-      ListeningExecutorService backgroundExecutor) {
+      Executor backgroundExecutor) {
     return new AsyncSecurityPolicy() {
       @Override
       public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-        return backgroundExecutor.submit(() -> {
+        return Futures.submit(() -> {
           PackageInfo platformPackageInfo;
           try {
             platformPackageInfo =
@@ -127,7 +128,7 @@ public final class SecurityPolicies {
           ImmutableList<SecurityPolicy> policies =
               createSignaturePolicies(packageManager, packageName, platformPackageInfo);
           return anyOf(policies.toArray(new SecurityPolicy[0])).checkAuthorization(uid);
-        });
+        }, backgroundExecutor);
       }
     };
   }
