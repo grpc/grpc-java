@@ -85,7 +85,7 @@ public final class SecurityPoliciesTest {
     shadowOf(packageManager).setPackagesForUid(uid, packageNames);
   }
 
-  private void setupPlatformSignature(Signature...signatures) {
+  private void setupPlatformSignature(Signature... signatures) {
     PackageInfo platformPackageInfo =
         newBuilder().setPackageName("android").setSignatures(signatures).build();
     installPackages(Process.SYSTEM_UID, platformPackageInfo);
@@ -167,9 +167,7 @@ public final class SecurityPoliciesTest {
 
     policy =
         SecurityPolicies.hasSameSignatureAsPlatform(
-            packageManager,
-            OTHER_UID_PACKAGE_NAME,
-            MoreExecutors.newDirectExecutorService());
+            packageManager, OTHER_UID_PACKAGE_NAME, MoreExecutors.newDirectExecutorService());
 
     assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
   }
@@ -186,9 +184,7 @@ public final class SecurityPoliciesTest {
 
     policy =
         SecurityPolicies.hasSameSignatureAsPlatform(
-            packageManager,
-            appContext.getPackageName(),
-            MoreExecutors.newDirectExecutorService());
+            packageManager, appContext.getPackageName(), MoreExecutors.newDirectExecutorService());
 
     assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
@@ -203,9 +199,7 @@ public final class SecurityPoliciesTest {
 
     policy =
         SecurityPolicies.hasSameSignatureAsPlatform(
-            packageManager,
-            OTHER_UID_PACKAGE_NAME,
-            MoreExecutors.newDirectExecutorService());
+            packageManager, OTHER_UID_PACKAGE_NAME, MoreExecutors.newDirectExecutorService());
 
     assertThat(policy.checkAuthorization(OTHER_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
@@ -216,17 +210,14 @@ public final class SecurityPoliciesTest {
     setupPlatformSignature(SIG1);
     policy =
         SecurityPolicies.hasSameSignatureAsPlatform(
-            packageManager,
-            appContext.getPackageName(),
-            MoreExecutors.newDirectExecutorService());
+            packageManager, appContext.getPackageName(), MoreExecutors.newDirectExecutorService());
 
     assertThat(policy.checkAuthorization(OTHER_UID_UNKNOWN).getCode())
         .isEqualTo(Status.UNAUTHENTICATED.getCode());
   }
 
   @Test
-  public void testOneOfSignatures_succeedsIfPackageNameAndSignaturesMatch()
-      throws Exception {
+  public void testOneOfSignatures_succeedsIfPackageNameAndSignaturesMatch() throws Exception {
     PackageInfo info =
         newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
 

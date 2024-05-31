@@ -112,23 +112,26 @@ public final class SecurityPolicies {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11238")
   public static AsyncSecurityPolicy hasSameSignatureAsPlatform(
-      PackageManager packageManager, String packageName,
-      Executor backgroundExecutor) {
+      PackageManager packageManager, String packageName, Executor backgroundExecutor) {
     return new AsyncSecurityPolicy() {
       @Override
       public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-        return Futures.submit(() -> {
-          PackageInfo platformPackageInfo;
-          try {
-            platformPackageInfo =
-                packageManager.getPackageInfo("android", packageManager.GET_SIGNING_CERTIFICATES);
-          } catch (PackageManager.NameNotFoundException e) {
-            throw new AssertionError(e);  // impossible; the platform package is always available.
-          }
-          ImmutableList<SecurityPolicy> policies =
-              createSignaturePolicies(packageManager, packageName, platformPackageInfo);
-          return anyOf(policies.toArray(new SecurityPolicy[0])).checkAuthorization(uid);
-        }, backgroundExecutor);
+        return Futures.submit(
+            () -> {
+              PackageInfo platformPackageInfo;
+              try {
+                platformPackageInfo =
+                    packageManager.getPackageInfo(
+                        "android", packageManager.GET_SIGNING_CERTIFICATES);
+              } catch (PackageManager.NameNotFoundException e) {
+                throw new AssertionError(
+                    e); // impossible; the platform package is always available.
+              }
+              ImmutableList<SecurityPolicy> policies =
+                  createSignaturePolicies(packageManager, packageName, platformPackageInfo);
+              return anyOf(policies.toArray(new SecurityPolicy[0])).checkAuthorization(uid);
+            },
+            backgroundExecutor);
       }
     };
   }
@@ -136,17 +139,17 @@ public final class SecurityPolicies {
   private static ImmutableList<SecurityPolicy> createSignaturePolicies(
       PackageManager packageManager, String packageName, PackageInfo packageInfo) {
     Signature[] signatures = packageInfo.signatures;
-    checkState(
-        signatures.length > 0, "There should be at least one platform signature");
+    checkState(signatures.length > 0, "There should be at least one platform signature");
     ImmutableList.Builder<SecurityPolicy> policies =
         ImmutableList.builderWithExpectedSize(signatures.length);
     for (Signature signature : signatures) {
-      policies.add(new SecurityPolicy() {
-        @Override
-        public Status checkAuthorization(int uid) {
-          return hasSignature(packageManager, packageName, signature).checkAuthorization(uid);
-        }
-      });
+      policies.add(
+          new SecurityPolicy() {
+            @Override
+            public Status checkAuthorization(int uid) {
+              return hasSignature(packageManager, packageName, signature).checkAuthorization(uid);
+            }
+          });
     }
     return policies.build();
   }
