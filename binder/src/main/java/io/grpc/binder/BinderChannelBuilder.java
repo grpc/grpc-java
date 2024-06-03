@@ -296,7 +296,7 @@ public final class BinderChannelBuilder
   /**
    * Limits how long it can take for Channels to establish a single connection to the server.
    *
-   * <p>Establishing a connection may include (but isn't limited to):
+   * <p>Establishing a gRPC/binder connection may include (but isn't limited to):
    * <ul>
    * <li>Creating an Android binding.
    * <li>Waiting for Android to create the server process.
@@ -305,9 +305,9 @@ public final class BinderChannelBuilder
    * <li>Evaluating a {@link SecurityPolicy} on both sides.
    * </ul>
    *
-   * <p>This setting doesn't change the need to set a deadline on every call. It merely ensures that
-   * gRPC features like load balancing and wait-for-ready work as expected despite edge cases that
-   * could otherwise stall a connection indefinitely.
+   * <p>This setting doesn't change the need for deadlines at the call level. It merely ensures that
+   * gRPC features like load balancing and wait-for-ready work as expected despite certain edge
+   * cases that could otherwise stall a Channel indefinitely.
    *
    * <p>The default timeout value is intentionally unspecified and subject to change.
    */
