@@ -107,7 +107,7 @@ public final class SecurityPolicies {
    * certificate that the current Android platform was signed with.
    *
    * @param packageName the package name of the allowed package.
-   * @param backgroundExecutor an executor suitable for blocking disk I/O.
+   * @param backgroundExecutor an executor suitable for blocking I/O.
    * @throws NullPointerException if any of the inputs are {@code null}.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11238")
