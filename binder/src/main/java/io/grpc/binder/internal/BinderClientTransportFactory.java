@@ -198,7 +198,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     /**
      * Limits how long it can take to for a new transport to become ready after being started.
      *
-     * <p>Optional. Use a non-positive value to wait indefinitely.
+     * <p>Optional. Use a negative value to wait indefinitely.
      */
     public Builder setReadyTimeoutMillis(long readyTimeoutMillis) {
       this.readyTimeoutMillis = readyTimeoutMillis;
