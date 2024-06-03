@@ -127,31 +127,15 @@ public final class SecurityPolicies {
                 throw new AssertionError(
                     e); // impossible; the platform package is always available.
               }
-              ImmutableList<SecurityPolicy> policies =
-                  createSignaturePolicies(packageManager, packageName, platformPackageInfo);
-              return anyOf(policies.toArray(new SecurityPolicy[0])).checkAuthorization(uid);
+              return oneOfSignatures(
+                      packageManager,
+                      packageName,
+                      ImmutableList.copyOf(platformPackageInfo.signatures))
+                  .checkAuthorization(uid);
             },
             backgroundExecutor);
       }
     };
-  }
-
-  private static ImmutableList<SecurityPolicy> createSignaturePolicies(
-      PackageManager packageManager, String packageName, PackageInfo packageInfo) {
-    Signature[] signatures = packageInfo.signatures;
-    checkState(signatures.length > 0, "There should be at least one platform signature");
-    ImmutableList.Builder<SecurityPolicy> policies =
-        ImmutableList.builderWithExpectedSize(signatures.length);
-    for (Signature signature : signatures) {
-      policies.add(
-          new SecurityPolicy() {
-            @Override
-            public Status checkAuthorization(int uid) {
-              return hasSignature(packageManager, packageName, signature).checkAuthorization(uid);
-            }
-          });
-    }
-    return policies.build();
   }
 
   /**
