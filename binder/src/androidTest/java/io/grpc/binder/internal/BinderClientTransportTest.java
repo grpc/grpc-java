@@ -62,6 +62,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -82,6 +83,8 @@ import org.junit.runner.RunWith;
  */
 @RunWith(AndroidJUnit4.class)
 public final class BinderClientTransportTest {
+  private static final long TIMEOUT_SECONDS = 5;
+
   private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
       new ClientStreamTracer() {}
   };
@@ -183,8 +186,16 @@ public final class BinderClientTransportTest {
     blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.ABORTED);
     transport.shutdownNow(Status.OK);
     HostServices.awaitServiceShutdown();
-    executorServicePool.getObject().shutdownNow();
-    offloadServicePool.getObject().shutdownNow();
+    shutdownAndTerminate(executorServicePool.getObject());
+    shutdownAndTerminate(offloadServicePool.getObject());
+  }
+
+  private static void shutdownAndTerminate(ExecutorService executorService)
+      throws InterruptedException {
+    executorService.shutdownNow();
+    if (!executorService.awaitTermination(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+      throw new AssertionError("executor failed to terminate promptly");
+    }
   }
 
   @Test
@@ -386,8 +397,6 @@ public final class BinderClientTransportTest {
   }
 
   private static final class TestTransportListener implements ManagedClientTransport.Listener {
-    private static final long TIMEOUT_SECONDS = 5;
-
     public boolean inUse;
     private final SettableFuture<Boolean> isReady = SettableFuture.create();
     private final SettableFuture<Status> shutdownStatus = SettableFuture.create();
