@@ -22,12 +22,10 @@ import android.content.Context;
 import android.os.DeadObjectException;
 import android.os.Parcel;
 import android.os.RemoteException;
-import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Empty;
-import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
@@ -37,12 +35,8 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.BindServiceFlags;
-import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.HostServices;
-import io.grpc.binder.InboundParcelablePolicy;
-import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.binder.internal.OneWayBinderProxies.BlackHoleOneWayBinderProxy;
 import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
@@ -61,13 +55,11 @@ import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import org.junit.After;
@@ -171,7 +163,7 @@ public final class BinderClientTransportTest {
     }
 
     public BinderClientTransportBuilder setConnectTimeoutMillis(int timeoutMillis) {
-      factoryBuilder.setConnectTimeoutMillis(timeoutMillis);
+      factoryBuilder.setReadyTimeoutMillis(timeoutMillis);
       return this;
     }
 

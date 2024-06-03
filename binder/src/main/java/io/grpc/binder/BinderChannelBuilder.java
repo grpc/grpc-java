@@ -310,9 +310,9 @@ public final class BinderChannelBuilder
     checkArgument(value > 0, "timeout is %s, but must be positive", value);
     // We convert to the largest unit to avoid overflow.
     if (unit.toDays(value) >= 30) {
-      transportFactoryBuilder.setConnectTimeoutMillis(-1);
+      transportFactoryBuilder.setReadyTimeoutMillis(-1);
     } else {
-      transportFactoryBuilder.setConnectTimeoutMillis(unit.toMillis(value));
+      transportFactoryBuilder.setReadyTimeoutMillis(unit.toMillis(value));
     }
     return this;
   }

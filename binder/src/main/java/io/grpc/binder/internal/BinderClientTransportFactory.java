@@ -57,7 +57,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final BindServiceFlags bindServiceFlags;
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
-  final long connectTimeoutMillis;
+  final long readyTimeoutMillis;
 
   ScheduledExecutorService executorService;
   Executor offloadExecutor;
@@ -75,7 +75,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     bindServiceFlags = checkNotNull(builder.bindServiceFlags);
     inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
     binderDecorator = checkNotNull(builder.binderDecorator);
-    connectTimeoutMillis = builder.connectTimeoutMillis;
+    readyTimeoutMillis = builder.readyTimeoutMillis;
 
     executorService = scheduledExecutorPool.getObject();
     offloadExecutor = offloadExecutorPool.getObject();
@@ -131,7 +131,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
-    long connectTimeoutMillis = -1;  // TODO(jdcormie) Set an non-infinite default in a separate PR.
+    long readyTimeoutMillis = -1;  // TODO(jdcormie) Set an non-infinite default in a separate PR.
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
@@ -196,12 +196,12 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     }
 
     /**
-     * Limits how long it can take to for new transports to become ready after starting.
+     * Limits how long it can take to for a new transport to become ready after being started.
      *
      * <p>Optional. Use a non-positive value to wait indefinitely.
      */
-    public Builder setConnectTimeoutMillis(long connectTimeoutMillis) {
-      this.connectTimeoutMillis = connectTimeoutMillis;
+    public Builder setReadyTimeoutMillis(long readyTimeoutMillis) {
+      this.readyTimeoutMillis = readyTimeoutMillis;
       return this;
     }
   }

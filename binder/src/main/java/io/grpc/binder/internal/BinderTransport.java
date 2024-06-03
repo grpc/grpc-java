@@ -71,7 +71,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
@@ -563,14 +562,14 @@ public abstract class BinderTransport
     private final Bindable serviceBinding;
     /** Number of ongoing calls which keep this transport "in-use". */
     private final AtomicInteger numInUseStreams;
-    private final long connectTimeoutMillis;
+    private final long readyTimeoutMillis;
     private final PingTracker pingTracker;
 
     @Nullable private ManagedClientTransport.Listener clientTransportListener;
 
     @GuardedBy("this")
     private int latestCallId = FIRST_CALL_ID;
-    private ScheduledFuture<?> connectTimeoutFuture; // != null iff timeout scheduled.
+    private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
 
     /**
      * Constructs a new transport instance.
@@ -592,7 +591,7 @@ public abstract class BinderTransport
       this.offloadExecutorPool = factory.offloadExecutorPool;
       this.securityPolicy = factory.securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
-      this.connectTimeoutMillis = factory.connectTimeoutMillis;
+      this.readyTimeoutMillis = factory.readyTimeoutMillis;
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
@@ -632,20 +631,20 @@ public abstract class BinderTransport
           if (inState(TransportState.NOT_STARTED)) {
             setState(TransportState.SETUP);
             serviceBinding.bind();
-            if (connectTimeoutMillis > 0) {
-              connectTimeoutFuture = getScheduledExecutorService().schedule(
-                  BinderClientTransport.this::onTimeoutExpired, connectTimeoutMillis, MILLISECONDS);
+            if (readyTimeoutMillis >= 0) {
+              readyTimeoutFuture = getScheduledExecutorService().schedule(
+                  BinderClientTransport.this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
             }
           }
         }
       };
     }
 
-    private synchronized void onTimeoutExpired() {
+    private synchronized void onReadyTimeout() {
       if (inState(TransportState.SETUP)) {
-        connectTimeoutFuture = null;
+        readyTimeoutFuture = null;
         shutdownInternal(Status.DEADLINE_EXCEEDED
-            .withDescription("Connect timeout " + connectTimeoutMillis + "ms lapsed"),
+            .withDescription("Connect timeout " + readyTimeoutMillis + "ms lapsed"),
             true);
       }
     }
@@ -730,9 +729,9 @@ public abstract class BinderTransport
       if (numInUseStreams.getAndSet(0) > 0) {
         clientTransportListener.transportInUse(false);
       }
-      if (connectTimeoutFuture != null) {
-        connectTimeoutFuture.cancel(false);
-        connectTimeoutFuture = null;
+      if (readyTimeoutFuture != null) {
+        readyTimeoutFuture.cancel(false);
+        readyTimeoutFuture = null;
       }
       serviceBinding.unbind();
       clientTransportListener.transportTerminated();
@@ -783,9 +782,9 @@ public abstract class BinderTransport
               setState(TransportState.READY);
               attributes = clientTransportListener.filterTransport(attributes);
               clientTransportListener.transportReady();
-              if (connectTimeoutFuture != null) {
-                connectTimeoutFuture.cancel(false);
-                connectTimeoutFuture = null;
+              if (readyTimeoutFuture != null) {
+                readyTimeoutFuture.cancel(false);
+                readyTimeoutFuture = null;
               }
             }
           }
