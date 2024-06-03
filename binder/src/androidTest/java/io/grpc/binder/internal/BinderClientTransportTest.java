@@ -413,7 +413,7 @@ public final class BinderClientTransportTest {
     }
 
     public void awaitTermination() throws Exception {
-      isTerminated.get(5, TimeUnit.SECONDS);
+      isTerminated.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override
@@ -424,7 +424,7 @@ public final class BinderClientTransportTest {
     }
 
     public void awaitReady() throws Exception {
-      isReady.get(5, TimeUnit.SECONDS);
+      isReady.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override
