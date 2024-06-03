@@ -298,11 +298,16 @@ public final class BinderChannelBuilder
    *
    * <p>Establishing a connection may include (but isn't limited to):
    * <ul>
-   * <li>creating an Android binding
-   * <li>waiting for the server process to start and return from Service#onBind()
-   * <li>exchanging handshake transactions according to the wire protocol
-   * <li>evaluating a {@link SecurityPolicy}.
+   * <li>Creating an Android binding.
+   * <li>Waiting for Android to create the server process.
+   * <li>Waiting for the remote Service to be created and handle onBind().
+   * <li>Exchanging handshake transactions according to the wire protocol.
+   * <li>Evaluating a {@link SecurityPolicy} on both sides.
    * </ul>
+   *
+   * <p>This setting doesn't change the need to set a deadline on every call. It merely ensures that
+   * gRPC features like load balancing and wait-for-ready work as expected despite edge cases that
+   * could otherwise stall a connection indefinitely.
    *
    * <p>The default timeout value is intentionally unspecified and subject to change.
    */
