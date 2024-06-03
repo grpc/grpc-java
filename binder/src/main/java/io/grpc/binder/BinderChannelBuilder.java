@@ -293,13 +293,6 @@ public final class BinderChannelBuilder
     return this;
   }
 
-  @Override
-  public ManagedChannel build() {
-    transportFactoryBuilder.setOffloadExecutorPool(
-        managedChannelImplBuilder.getOffloadExecutorPool());
-    return super.build();
-  }
-
   /**
    * Limits how long it can take to establish a single connection behind this channel.
    *
@@ -318,5 +311,12 @@ public final class BinderChannelBuilder
       transportFactoryBuilder.setConnectTimeoutMillis(unit.toMillis(value));
     }
     return this;
+  }
+
+  @Override
+  public ManagedChannel build() {
+    transportFactoryBuilder.setOffloadExecutorPool(
+        managedChannelImplBuilder.getOffloadExecutorPool());
+    return super.build();
   }
 }

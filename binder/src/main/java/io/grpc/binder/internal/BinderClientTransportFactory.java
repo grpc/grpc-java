@@ -131,7 +131,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
-    long connectTimeoutMillis = -1;  // TODO(jdcormie): Set an actual default here in a separate PR.
+    long connectTimeoutMillis = -1;  // TODO(jdcormie) Set an non-infinite default in a separate PR.
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
