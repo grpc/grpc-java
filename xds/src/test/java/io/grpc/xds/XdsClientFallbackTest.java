@@ -18,7 +18,9 @@ package io.grpc.xds;
 
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -27,8 +29,6 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.client.Bootstrapper;
-import io.grpc.xds.client.LoadReportClient;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import java.net.InetSocketAddress;
@@ -41,6 +41,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -51,36 +52,53 @@ public class XdsClientFallbackTest {
   public static final String MAIN_SERVER = "main-server";
   public static final String FALLBACK_SERVER = "fallback-server";
   private static final String DUMMY_TARGET = "TEST_TARGET";
+  public static final String RDS_NAME = "route-config.googleapis.com";
+  public static final HttpConnectionManager MAIN_HTTP_CONNECTION_MANAGER =
+      HttpConnectionManager.forRdsName(0, RDS_NAME, ImmutableList.of(
+      new Filter.NamedFilterConfig(MAIN_SERVER, RouterFilter.ROUTER_CONFIG)));
+  public static final HttpConnectionManager FALLBACK_HTTP_CONNECTION_MANAGER =
+      HttpConnectionManager.forRdsName(0, RDS_NAME, ImmutableList.of(
+          new Filter.NamedFilterConfig(FALLBACK_SERVER, RouterFilter.ROUTER_CONFIG)));
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
 
   private XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate> raalLdsWatcher =
       new XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate>() {
-    @Override
-    public void onChanged(XdsListenerResource.LdsUpdate update) {
-      log.info("LDS update: " + update);
-    }
+
         @Override
-    public void onError(Status error) {
-      log.fine("LDS update error: " + error);
-    }
+        public void onChanged(XdsListenerResource.LdsUpdate update) {
+          log.info("LDS update: " + update);
+        }
+        @Override
+        public void onError(Status error) {
+          log.info("LDS update error: " + error);
+        }
 
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      log.fine("LDS resource does not exist: " + resourceName);
-    }
-  };
+        @Override
+        public void onResourceDoesNotExist(String resourceName) {
+          log.info("LDS resource does not exist: " + resourceName);
+        }
+      };
 
-//  @Mock
-//  private XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate> ldsWatcher;
-    private XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate> ldsWatcher =
+  @SuppressWarnings("unchecked")
+  private XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate> ldsWatcher =
       mock(XdsClient.ResourceWatcher.class, delegatesTo(raalLdsWatcher));
+  @Mock
+  private XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate> ldsWatcher2;
+
+  @Mock
+  private XdsClient.ResourceWatcher<XdsRouteConfigureResource.RdsUpdate> rdsWatcher;
+
+  @Mock
+  private XdsClient.ResourceWatcher<XdsClusterResource.CdsUpdate> cdsWatcher;
 
   @Rule(order = 0)
-  public ControlPlaneRule mainTdServer = new ControlPlaneRule().setServerHostName(MAIN_SERVER);
+  public ControlPlaneRule mainTdServer =
+      new ControlPlaneRule(8090).setServerHostName(MAIN_SERVER);
 
   @Rule(order = 1)
-  public ControlPlaneRule fallbackServer = new ControlPlaneRule().setServerHostName(FALLBACK_SERVER);
+  public ControlPlaneRule fallbackServer =
+      new ControlPlaneRule(8095).setServerHostName(MAIN_SERVER);
 
 //  @Rule(order = 2)
 //  public DataPlaneRule mainDataPlane = new DataPlaneRule(mainTdServer);
@@ -96,22 +114,25 @@ public class XdsClientFallbackTest {
     setAdsConfig(fallbackServer, FALLBACK_SERVER);
 
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
-//    clientPoolProvider.setBackoffProviderClass(MinimalBackoffPolicyProvider.class);
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
+//    clientPoolProvider.setBackoffProviderClass(MinimalBackoffPolicyProvider.class);
     xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET);
-    xdsClient = xdsClientPool.getObject();
   }
 
-  public void setAdsConfig(ControlPlaneRule controlPlane, String serverName) {
+  public static void setAdsConfig(ControlPlaneRule controlPlane, String serverName) {
+
     controlPlane.setLdsConfig(ControlPlaneRule.buildServerListener(),
-        ControlPlaneRule.buildClientListener(serverName));
-    controlPlane.setRdsConfig(ControlPlaneRule.buildRouteConfiguration(serverName));
+        ControlPlaneRule.buildClientListener(MAIN_SERVER, serverName));
+
+    controlPlane.setRdsConfig(ControlPlaneRule.buildRouteConfiguration(MAIN_SERVER, serverName));
     controlPlane.setCdsConfig(ControlPlaneRule.buildCluster());
     InetSocketAddress edsInetSocketAddress =
         (InetSocketAddress) controlPlane.getServer().getListenSockets().get(0);
     controlPlane.setEdsConfig(
         ControlPlaneRule.buildClusterLoadAssignment(edsInetSocketAddress.getHostName(),
             edsInetSocketAddress.getPort()));
+    log.info(
+        String.format("Set ADS config for %s with address %s", serverName, edsInetSocketAddress));
   }
 
   @After
@@ -119,17 +140,123 @@ public class XdsClientFallbackTest {
     xdsClientPool.returnObject(xdsClient);
   }
 
+  private void restartServer(TdServerType type) {
+    switch (type) {
+      case MAIN:
+        mainTdServer.restartTdServer();
+        setAdsConfig(mainTdServer, MAIN_SERVER);
+        break;
+      case FALLBACK:
+        fallbackServer.restartTdServer();
+        setAdsConfig(fallbackServer, FALLBACK_SERVER);
+        break;
+    }
+  }
+
+  // This is basically a control test to make sure everything is set up correctly.
+  @Test
+  public void everything_okay() {
+//    restartServer(TdServerType.MAIN);
+//    restartServer(TdServerType.FALLBACK);
+    xdsClient = xdsClientPool.getObject();
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
+    verify(ldsWatcher, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(
+            MAIN_HTTP_CONNECTION_MANAGER));
+
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
+    verify(rdsWatcher, timeout(10000)).onChanged(any());
+  }
+
   @Test
   public void mainServerDown_fallbackServerUp()  throws Exception {
+    log.info("mainServerDown_fallbackServerUp");
+    log.fine("fine");
     mainTdServer.getServer().shutdownNow();
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), FALLBACK_SERVER, ldsWatcher);
-    Map<Bootstrapper.ServerInfo, LoadReportClient> serverLrsClientMap =
-        xdsClient.getServerLrsClientMap();
+//    restartServer(TdServerType.FALLBACK);
+    xdsClient = xdsClientPool.getObject();
+    log.info("Fallback port = " + fallbackServer.getServer().getPort());
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
     verify(ldsWatcher, timeout(10000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(
-            HttpConnectionManager.forRdsName(0, "route-config.googleapis.com", ImmutableList.of(
-                new Filter.NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)))));
+            FALLBACK_HTTP_CONNECTION_MANAGER));
+  }
+
+  @Test
+  public void both_down_restart_main()  throws Exception {
+    mainTdServer.getServer().shutdownNow();
+    fallbackServer.getServer().shutdownNow();
+    xdsClient = xdsClientPool.getObject();
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
+
+    Thread.sleep(5000);
+    verify(ldsWatcher, never()).onChanged(any());
+
+    restartServer(TdServerType.MAIN);
+
+    xdsClient.watchXdsResource(
+        XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
+
+    verify(ldsWatcher, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+  }
+
+  @Test
+  public void mainDown_fallbackUp_restart_main()  throws Exception {
+    mainTdServer.getServer().shutdownNow();
+    fallbackServer.restartTdServer();
+    xdsClient = xdsClientPool.getObject();
+    InOrder inOrder = inOrder(ldsWatcher);
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
+    inOrder.verify(ldsWatcher, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
+
+    restartServer(TdServerType.MAIN);
+
+    inOrder.verify(ldsWatcher, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+  }
+
+  // Since everything is loaded we shouldn't fallback
+  @Test
+  public void connect_then_mainServerDown_fallbackServerUp()  throws Exception {
+    restartServer(TdServerType.MAIN);
+    restartServer(TdServerType.FALLBACK);
+    xdsClient = xdsClientPool.getObject();
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
+
+    verify(ldsWatcher, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+
+    mainTdServer.getServer().shutdownNow();
+
+    // Shouldn't do fallback since all watchers are loaded
+    Thread.sleep(5000);
+    verify(ldsWatcher, never()).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+
+    // Should just get from cache
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher2);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
+    verify(ldsWatcher2, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher, never()).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+
+    // Asking for something not in cache should force a fallback
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "cluster0", cdsWatcher);
+    verify(rdsWatcher, timeout(10000)).onChanged(any());
+    verify(ldsWatcher, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher2, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+    verify(cdsWatcher, timeout(10000)).onChanged(any());
   }
 
   private Map<String, ?> defaultBootstrapOverride() {
@@ -163,11 +290,14 @@ public class XdsClientFallbackTest {
       return new BackoffPolicy() {
         @Override
         public long nextBackoffNanos() {
-          return TimeUnit.MILLISECONDS.toNanos(100);
+          return TimeUnit.MILLISECONDS.toNanos(1000);
         }
       };
     }
   }
 
-
+  private enum TdServerType {
+    MAIN,
+    FALLBACK
+  }
 }

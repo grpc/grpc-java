@@ -58,7 +58,7 @@ import javax.annotation.Nullable;
  * Common base type for XdsClient implementations, which encapsulates the layer abstraction of
  * the xDS RPC stream.
  */
-final class ControlPlaneClient {
+final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
 
   public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;
@@ -72,7 +72,6 @@ final class ControlPlaneClient {
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
   private final Node bootstrapNode;
-  private final XdsClient xdsClient;
 
   // Last successfully applied version_info for each resource type. Starts with empty string.
   // A version_info is used to update management server with client's most recent knowledge of
@@ -86,7 +85,8 @@ final class ControlPlaneClient {
   private BackoffPolicy retryBackoffPolicy;
   @Nullable
   private ScheduledHandle rpcRetryTimer;
-  private MessagePrettyPrinter messagePrinter;
+  private final MessagePrettyPrinter messagePrinter;
+  private final int order;
 
   /** An entity that manages ADS RPCs over a single channel. */
   ControlPlaneClient(
@@ -100,8 +100,9 @@ final class ControlPlaneClient {
       SynchronizationContext syncContext,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
-      XdsClient xdsClient,
-      MessagePrettyPrinter messagePrinter) {
+      XdsClient xdsClient, // Has been replaced by xdsResponseHandler
+      MessagePrettyPrinter messagePrinter,
+      int order) {
     this.serverInfo = checkNotNull(serverInfo, "serverInfo");
     this.xdsTransport = checkNotNull(xdsTransport, "xdsTransport");
     this.xdsResponseHandler = checkNotNull(xdsResponseHandler, "xdsResponseHandler");
@@ -110,12 +111,23 @@ final class ControlPlaneClient {
     this.timeService = checkNotNull(timeService, "timeService");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.xdsClient = checkNotNull(xdsClient, "xdsClient");
     this.messagePrinter = checkNotNull(messagePrinter, "messagePrinter");
+    this.order = order;
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     logId = InternalLogId.allocate("xds-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
+  }
+
+  @Override
+  public int compareTo(ControlPlaneClient other) {
+    checkNotNull(other, "other");
+
+    if (this == other || this.order == other.order) {
+      return 0;
+    }
+
+    return Integer.compare(this.order, other.order);
   }
 
   void shutdown() {
@@ -198,7 +210,7 @@ final class ControlPlaneClient {
    */
   // Must be synchronized.
   boolean isInBackoff() {
-    return rpcRetryTimer != null && rpcRetryTimer.isPending();
+    return rpcRetryTimer != null; // && rpcRetryTimer.isPending();
   }
 
   // Must be synchronized.
@@ -213,15 +225,18 @@ final class ControlPlaneClient {
   // Must be synchronized.
   void readyHandler() {
     if (!isReady()) {
+      if (rpcRetryTimer == null) {
+        scheduleRpcRetry();
+      }
       return;
     }
 
-    if (isInBackoff()) {
+    if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
       rpcRetryTimer = null;
     }
 
-    xdsClient.startSubscriberTimersIfNeeded(serverInfo);
+    xdsResponseHandler.handleStreamRestarted(serverInfo);
   }
 
   /**
@@ -236,27 +251,32 @@ final class ControlPlaneClient {
     stopwatch.reset().start();
   }
 
+  void sendDiscoveryRequests() {
+    // retry timer ran, so may have previously connected or done fallback
+    Set<XdsResourceType<?>> subscribedResourceTypes =
+        new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
+    for (XdsResourceType<?> type : subscribedResourceTypes) {
+      Collection<String> resources = type.updateInPlaceOnFallback()
+                                     ? resourceStore.getAllResources(type)
+                                     : resourceStore.getSubscribedResources(serverInfo, type);
+      if (resources != null && !resources.isEmpty()) {
+        adsStream.sendDiscoveryRequest(type, resources);
+      }
+
+    }
+  }
+
   @VisibleForTesting
   public final class RpcRetryTask implements Runnable {
     @Override
     public void run() {
-      if (shutdown) {
+      if (shutdown || isReady()) {
         return;
       }
-      startRpcStream();
-      Set<XdsResourceType<?>> subscribedResourceTypes =
-          new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
-      for (XdsResourceType<?> type : subscribedResourceTypes) {
-        Collection<String> resources = type.updateInPlaceOnFallback()
-            ? resourceStore.getAllResources(type)
-            : resourceStore.getSubscribedResources(serverInfo, type);
-        if (resources != null && !resources.isEmpty()) {
-          adsStream.sendDiscoveryRequest(type, resources);
-        }
-      }
-      xdsResponseHandler.handleStreamRestarted(serverInfo);
-    }
 
+      startRpcStream();
+      // everything else happens in the readyHandler
+    }
   }
 
   @VisibleForTesting
@@ -395,10 +415,7 @@ final class ControlPlaneClient {
       // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
       // to avoid TSAN races, since tests may wait until callbacks are called but then would run
       // concurrently with the stopwatch and schedule.
-      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
-      rpcRetryTimer = syncContext.schedule(
-          new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+      long delayNanos = scheduleRpcRetry();
 
       checkArgument(!error.isOk(), "unexpected OK status");
       String errorMsg = error.getDescription() != null
@@ -428,5 +445,13 @@ final class ControlPlaneClient {
         adsStream = null;
       }
     }
+  }
+
+  private long scheduleRpcRetry() {
+    long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+    long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
+    rpcRetryTimer =
+        syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+    return delayNanos;
   }
 }
