@@ -22,17 +22,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import android.os.Binder;
-import android.os.IBinder;
-import com.google.common.collect.ImmutableList;
-import io.grpc.Attributes;
-import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -46,17 +38,12 @@ import org.robolectric.RobolectricTestRunner;
 public final class ActiveTransportTrackerTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private static final OneWayBinderProxy.Decorator NO_OP_BINDER_DECORATOR = input -> input;
-
-  private final ObjectPool<ScheduledExecutorService> executorServicePool =
-      new FixedObjectPool<>(Executors.newSingleThreadScheduledExecutor());
-  private final IBinder callbackBinder = new Binder();
-
   private ActiveTransportTracker tracker;
 
   @Mock Runnable mockShutdownListener;
   @Mock ServerListener mockServerListener;
   @Mock ServerTransportListener mockServerTransportListener;
+  @Mock ServerTransport mockServerTransport;
 
   @Before
   public void setUp() {
@@ -110,10 +97,8 @@ public final class ActiveTransportTrackerTest {
 
   @Test
   public void testServerListenerCallbacks_invokesDelegates() {
-    ServerTransport transport = newTransport();
-
-    ServerTransportListener listener = tracker.transportCreated(transport);
-    verify(mockServerListener).transportCreated(transport);
+    ServerTransportListener listener = tracker.transportCreated(mockServerTransport);
+    verify(mockServerListener).transportCreated(mockServerTransport);
 
     listener.transportTerminated();
     verify(mockServerTransportListener).transportTerminated();
@@ -123,15 +108,6 @@ public final class ActiveTransportTrackerTest {
   }
 
   private ServerTransportListener registerNewTransport() {
-    return tracker.transportCreated(newTransport());
-  }
-
-  private ServerTransport newTransport() {
-    return new BinderTransport.BinderServerTransport(
-        executorServicePool,
-        Attributes.EMPTY,
-        /* streamTracerFactories= */ ImmutableList.of(),
-        NO_OP_BINDER_DECORATOR,
-        callbackBinder);
+    return tracker.transportCreated(mockServerTransport);
   }
 }
