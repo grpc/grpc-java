@@ -294,13 +294,17 @@ public final class BinderChannelBuilder
   }
 
   /**
-   * Limits how long it can take to establish a single connection behind this channel.
+   * Limits how long it can take for Channels to establish a single connection to the server.
    *
-   * <p>Connection establishment may include creating an Android binding, waiting for the server to
-   * start and return from onBind(), exchanging handshake transactions according to the wire
-   * protocol and evaluating a {@link SecurityPolicy}.
+   * <p>Establishing a connection may include (but isn't limited to):
+   * <ul>
+   * <li>creating an Android binding
+   * <li>waiting for the server process to start and return from Service#onBind()
+   * <li>exchanging handshake transactions according to the wire protocol
+   * <li>evaluating a {@link SecurityPolicy}.
+   * </ul>
    *
-   * <p>The default value is intentionally unspecified and subject to change.
+   * <p>The default timeout value is intentionally unspecified and subject to change.
    */
   public BinderChannelBuilder connectTimeout(long value, TimeUnit unit) {
     checkArgument(value > 0, "timeout is %s, but must be positive", value);

@@ -362,7 +362,7 @@ public final class BinderClientTransportTest {
     BlockingBinderDecorator<BlackHoleOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
     transport = new BinderClientTransportBuilder()
         .setBinderDecorator(decorator)
-        .setConnectTimeoutMillis(1_000)
+        .setConnectTimeoutMillis(1_234)
         .build();
     transport.start(transportListener).run();
     BlackHoleOneWayBinderProxy endpointBinder = new BlackHoleOneWayBinderProxy(
@@ -371,7 +371,7 @@ public final class BinderClientTransportTest {
     decorator.putNextResult(endpointBinder);
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
-    assertThat(transportStatus.getDescription()).contains("1000");
+    assertThat(transportStatus.getDescription()).contains("1234");
     transportListener.awaitTermination();
   }
 
@@ -379,12 +379,12 @@ public final class BinderClientTransportTest {
   public void testBlackHoleSecurityPolicyConnectTimeout() throws Exception {
     transport = new BinderClientTransportBuilder()
         .setSecurityPolicy(blockingSecurityPolicy)
-        .setConnectTimeoutMillis(1_000)
+        .setConnectTimeoutMillis(1_234)
         .build();
     transport.start(transportListener).run();
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
-    assertThat(transportStatus.getDescription()).contains("1000");
+    assertThat(transportStatus.getDescription()).contains("1234");
     transportListener.awaitTermination();
     blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.OK);
   }
