@@ -174,7 +174,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
     return false;
   }
 
-  static class GoAwayHandler implements LeakSafeOneWayBinder.TransactionHandler {
+  static final class GoAwayHandler implements LeakSafeOneWayBinder.TransactionHandler {
     static final GoAwayHandler INSTANCE = new GoAwayHandler();
 
     @Override
