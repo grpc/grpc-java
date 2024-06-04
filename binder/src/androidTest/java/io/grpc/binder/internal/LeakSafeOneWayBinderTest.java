@@ -30,7 +30,7 @@ import org.junit.runner.RunWith;
 public final class LeakSafeOneWayBinderTest {
 
   private LeakSafeOneWayBinder binder;
-  private FakeHandler handler = new FakeHandler();
+  private final FakeHandler handler = new FakeHandler();
 
   static class FakeHandler implements TransactionHandler {
     int transactionsHandled;
