@@ -17,7 +17,7 @@ dependencies {
             project(':grpc-core'),
             project(':grpc-opentelemetry'),
             project(':grpc-protobuf'),
-            project(':grpc-xds'),
+            project(path: ':grpc-xds', configuration: 'shadow'),
             libraries.guava.jre, // jre version pulled in via xds
             libraries.protobuf.java,
             libraries.opentelemetry.gcp.resources,
