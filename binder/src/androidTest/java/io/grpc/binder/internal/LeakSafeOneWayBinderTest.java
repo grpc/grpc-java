@@ -89,10 +89,10 @@ public final class LeakSafeOneWayBinderTest {
     Parcel p = Parcel.obtain();
     FakeHandler handler2 = new FakeHandler();
     binder.setHandler(handler2);
-    assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isFalse();
+    assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isTrue();
 
     assertThat(handler.transactionsHandled).isEqualTo(0);
-    assertThat(handler2.transactionsHandled).isEqualTo(0);
+    assertThat(handler2.transactionsHandled).isEqualTo(1);
 
     p.recycle();
   }
