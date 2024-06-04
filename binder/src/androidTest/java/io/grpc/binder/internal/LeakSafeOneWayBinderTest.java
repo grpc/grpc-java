@@ -91,7 +91,6 @@ public final class LeakSafeOneWayBinderTest {
     binder.setHandler(handler2);
     assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isFalse();
 
-    // The transaction shouldn't have been processed.
     assertThat(handler.transactionsHandled).isEqualTo(0);
     assertThat(handler2.transactionsHandled).isEqualTo(0);
 
