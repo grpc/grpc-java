@@ -280,8 +280,8 @@ final class MetadataExchanger implements InternalOpenTelemetryPlugin {
 
       @Override
       public void addLabels(AttributesBuilder to) {
-        put(to, "csm.service_name",      serviceName);
-        put(to, "csm.service_namespace", serviceNamespace);
+        put(to, "csm.service_name",           serviceName);
+        put(to, "csm.service_namespace_name", serviceNamespace);
         Struct exchange = receivedExchange;
         if (exchange == null) {
           exchange = Struct.getDefaultInstance();

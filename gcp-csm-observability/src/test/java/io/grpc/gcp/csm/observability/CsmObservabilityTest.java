@@ -114,7 +114,7 @@ public final class CsmObservabilityTest {
         .put(stringKey("csm.remote_workload_canonical_service"), "unknown")
         .put(stringKey("csm.remote_workload_type"),              "unknown")
         .put(stringKey("csm.service_name"),                      "unknown")
-        .put(stringKey("csm.service_namespace"),                 "unknown")
+        .put(stringKey("csm.service_namespace_name"),            "unknown")
         .put(stringKey("csm.workload_canonical_service"),        "unknown")
         .put(stringKey("csm.mesh_id"),                           "unknown")
         .build();
@@ -170,7 +170,7 @@ public final class CsmObservabilityTest {
         .put(stringKey("csm.remote_workload_canonical_service"), "unknown")
         .put(stringKey("csm.remote_workload_type"),              "unknown")
         .put(stringKey("csm.service_name"),                      "unknown")
-        .put(stringKey("csm.service_namespace"),                 "unknown")
+        .put(stringKey("csm.service_namespace_name"),            "unknown")
         .put(stringKey("csm.workload_canonical_service"),        "unknown")
         .put(stringKey("csm.mesh_id"),                           "unknown")
         .build();
@@ -335,7 +335,7 @@ public final class CsmObservabilityTest {
         .put(stringKey("csm.remote_workload_namespace_name"),    "namespace-1e43c")
         .put(stringKey("csm.remote_workload_name"),              "fast-server")
         .put(stringKey("csm.service_name"),                      "second-server-name")
-        .put(stringKey("csm.service_namespace"),                 "namespace-0001")
+        .put(stringKey("csm.service_namespace_name"),            "namespace-0001")
         .put(stringKey("csm.workload_canonical_service"),        "canon-service-is-a-client")
         .put(stringKey("csm.mesh_id"),                           "mymesh")
         .build();
@@ -427,7 +427,7 @@ public final class CsmObservabilityTest {
         .put(stringKey("csm.remote_workload_location"),          "us-east2-c")
         .put(stringKey("csm.remote_workload_name"),              "fast-server")
         .put(stringKey("csm.service_name"),                      "unknown")
-        .put(stringKey("csm.service_namespace"),                 "unknown")
+        .put(stringKey("csm.service_namespace_name"),            "unknown")
         .put(stringKey("csm.workload_canonical_service"),        "canon-service-is-a-client")
         .put(stringKey("csm.mesh_id"),                           "mymesh")
         .build();
@@ -517,7 +517,7 @@ public final class CsmObservabilityTest {
         .put(stringKey("csm.remote_workload_location"),          "us-east2-c")
         .put(stringKey("csm.remote_workload_name"),              "fast-server")
         .put(stringKey("csm.service_name"),                      "unknown")
-        .put(stringKey("csm.service_namespace"),                 "unknown")
+        .put(stringKey("csm.service_namespace_name"),            "unknown")
         .put(stringKey("csm.workload_canonical_service"),        "canon-service-is-a-client")
         .put(stringKey("csm.mesh_id"),                           "mymesh")
         .build();
