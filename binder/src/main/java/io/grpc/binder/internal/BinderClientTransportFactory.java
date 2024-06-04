@@ -198,7 +198,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     /**
      * Limits how long it can take to for a new transport to become ready after being started.
      *
-     * <p>This process includes:
+     * <p>This process currently includes:
      * <ul>
      * <li>Creating an Android binding.
      * <li>Waiting for Android to create the server process.

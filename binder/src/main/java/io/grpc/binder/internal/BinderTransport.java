@@ -569,6 +569,7 @@ public abstract class BinderTransport
 
     @GuardedBy("this")
     private int latestCallId = FIRST_CALL_ID;
+    @GuardedBy("this")
     private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
 
     /**
