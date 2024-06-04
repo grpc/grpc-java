@@ -123,12 +123,6 @@ public final class BinderTransportTest extends AbstractTransportTest {
   public void flowControlPushBack() throws Exception {}
 
   @Test
-  @Override
-  public void serverNotListening() throws Exception {
-    super.serverNotListening();
-  }
-
-  @Test
   @Ignore("This test isn't appropriate for BinderTransport.")
   @Override
   public void serverAlreadyListening() throws Exception {
