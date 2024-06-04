@@ -123,9 +123,10 @@ public final class BinderTransportTest extends AbstractTransportTest {
   public void flowControlPushBack() throws Exception {}
 
   @Test
-  @Ignore("Not yet implemented. See https://github.com/grpc/grpc-java/issues/8931")
   @Override
-  public void serverNotListening() throws Exception {}
+  public void serverNotListening() throws Exception {
+    super.serverNotListening();
+  }
 
   @Test
   @Ignore("This test isn't appropriate for BinderTransport.")
