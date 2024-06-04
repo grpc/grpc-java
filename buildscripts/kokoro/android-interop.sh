@@ -32,6 +32,9 @@ GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 ./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebugAndroidTest
 ./gradlew $GRADLE_FLAGS :grpc-binder:assembleDebugAndroidTest
 
+# To see currently-available virtual devices:
+#   gcloud firebase test android models list --filter=form=virtual
+
 # Run interop instrumentation tests on Firebase Test Lab
 gcloud firebase test android run \
   --type instrumentation \
@@ -46,9 +49,6 @@ gcloud firebase test android run \
   --device model=MediumPhone.arm,version=26,locale=en,orientation=portrait \
   --device model=Nexus6P,version=25,locale=en,orientation=portrait \
   --device model=Nexus6P,version=24,locale=en,orientation=portrait \
-  --device model=Nexus6P,version=23,locale=en,orientation=portrait \
-  --device model=Nexus6,version=22,locale=en,orientation=portrait \
-  --device model=Nexus6,version=21,locale=en,orientation=portrait
 
 # Run binderchannel instrumentation tests on Firebase Test Lab
 gcloud firebase test android run \
@@ -62,6 +62,3 @@ gcloud firebase test android run \
   --device model=MediumPhone.arm,version=26,locale=en,orientation=portrait \
   --device model=Nexus6P,version=25,locale=en,orientation=portrait \
   --device model=Nexus6P,version=24,locale=en,orientation=portrait \
-  --device model=Nexus6P,version=23,locale=en,orientation=portrait \
-  --device model=Nexus6,version=22,locale=en,orientation=portrait \
-  --device model=Nexus6,version=21,locale=en,orientation=portrait
