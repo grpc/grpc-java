@@ -16,7 +16,6 @@
 
 package io.grpc.binder;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -290,35 +289,6 @@ public final class BinderChannelBuilder
   public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
     checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
     super.idleTimeout(value, unit);
-    return this;
-  }
-
-  /**
-   * Limits how long it can take for Channels to establish a single connection to the server.
-   *
-   * <p>Establishing a gRPC/binder connection may include (but isn't limited to):
-   * <ul>
-   * <li>Creating an Android binding.
-   * <li>Waiting for Android to create the server process.
-   * <li>Waiting for the remote Service to be created and handle onBind().
-   * <li>Exchanging handshake transactions according to the wire protocol.
-   * <li>Evaluating a {@link SecurityPolicy} on both sides.
-   * </ul>
-   *
-   * <p>This setting doesn't change the need for deadlines at the call level. It merely ensures that
-   * gRPC features like load balancing and wait-for-ready work as expected despite certain edge
-   * cases that could otherwise stall a Channel indefinitely.
-   *
-   * <p>The default timeout value is intentionally unspecified and subject to change.
-   */
-  public BinderChannelBuilder connectTimeout(long value, TimeUnit unit) {
-    checkArgument(value > 0, "timeout is %s, but must be positive", value);
-    // We convert to the largest unit to avoid overflow.
-    if (unit.toDays(value) >= 30) {
-      transportFactoryBuilder.setReadyTimeoutMillis(-1);
-    } else {
-      transportFactoryBuilder.setReadyTimeoutMillis(unit.toMillis(value));
-    }
     return this;
   }
 

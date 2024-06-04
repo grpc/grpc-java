@@ -162,7 +162,7 @@ public final class BinderClientTransportTest {
       return this;
     }
 
-    public BinderClientTransportBuilder setConnectTimeoutMillis(int timeoutMillis) {
+    public BinderClientTransportBuilder setReadyTimeoutMillis(int timeoutMillis) {
       factoryBuilder.setReadyTimeoutMillis(timeoutMillis);
       return this;
     }
@@ -354,7 +354,7 @@ public final class BinderClientTransportTest {
     BlockingBinderDecorator<BlackHoleOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
     transport = new BinderClientTransportBuilder()
         .setBinderDecorator(decorator)
-        .setConnectTimeoutMillis(1_234)
+        .setReadyTimeoutMillis(1_234)
         .build();
     transport.start(transportListener).run();
     BlackHoleOneWayBinderProxy endpointBinder = new BlackHoleOneWayBinderProxy(
@@ -371,7 +371,7 @@ public final class BinderClientTransportTest {
   public void testBlackHoleSecurityPolicyConnectTimeout() throws Exception {
     transport = new BinderClientTransportBuilder()
         .setSecurityPolicy(blockingSecurityPolicy)
-        .setConnectTimeoutMillis(1_234)
+        .setReadyTimeoutMillis(1_234)
         .build();
     transport.start(transportListener).run();
     Status transportStatus = transportListener.awaitShutdown();

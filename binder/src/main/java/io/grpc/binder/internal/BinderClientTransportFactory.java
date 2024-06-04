@@ -198,6 +198,19 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     /**
      * Limits how long it can take to for a new transport to become ready after being started.
      *
+     * <p>This process includes:
+     * <ul>
+     * <li>Creating an Android binding.
+     * <li>Waiting for Android to create the server process.
+     * <li>Waiting for the remote Service to be created and handle onBind().
+     * <li>Exchanging handshake transactions according to the wire protocol.
+     * <li>Evaluating a {@link SecurityPolicy} on both sides.
+     * </ul>
+     *
+     * <p>This setting doesn't change the need for deadlines at the call level. It merely ensures
+     * that gRPC features like load balancing and wait-for-ready work as expected despite certain
+     * edge cases that could otherwise stall the transport indefinitely.
+     *
      * <p>Optional. Use a negative value to wait indefinitely.
      */
     public Builder setReadyTimeoutMillis(long readyTimeoutMillis) {
