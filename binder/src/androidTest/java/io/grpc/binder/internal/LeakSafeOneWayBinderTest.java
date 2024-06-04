@@ -103,8 +103,8 @@ public final class LeakSafeOneWayBinderTest {
     assertThat(binder.onTransact(123, p, null, FLAG_ONEWAY)).isTrue();
     assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isTrue();
     assertThat(handler.transactionsHandled).isEqualTo(2);
-    assertThat(lastCode).isEqualTo(456);
-    assertThat(lastParcel).isSameInstanceAs(p);
+    assertThat(handler.lastCode).isEqualTo(456);
+    assertThat(handler.lastParcel).isSameInstanceAs(p);
     p.recycle();
   }
 
