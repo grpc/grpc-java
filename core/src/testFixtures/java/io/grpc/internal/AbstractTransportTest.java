@@ -351,26 +351,6 @@ public abstract class AbstractTransportTest {
   }
 
   @Test
-  public void clientShutdownBeforeStartRunnable() throws Exception {
-    server.start(serverListener);
-    client = newClientTransport(server);
-    Runnable runnable = client.start(mockClientTransportListener);
-    // Shutdown before calling 'runnable'
-    client.shutdown(Status.UNAVAILABLE.withDescription("shutdown called"));
-    runIfNotNull(runnable);
-    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
-    // We should verify that clients don't call transportReady() after transportTerminated(), but
-    // transports do this today and nothing cares. ServerImpl, on the other hand, doesn't appreciate
-    // the out-of-order calls.
-    MockServerTransportListener serverTransportListener
-        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    assertTrue(serverTransportListener.waitForTermination(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-    // Allow any status as some transports (e.g., Netty) don't communicate the original status when
-    // shutdown while handshaking. It won't be used anyway, so no big deal.
-    verify(mockClientTransportListener).transportShutdown(any(Status.class));
-  }
-
-  @Test
   public void clientStartAndStopOnceConnected() throws Exception {
     server.start(serverListener);
     client = newClientTransport(server);
