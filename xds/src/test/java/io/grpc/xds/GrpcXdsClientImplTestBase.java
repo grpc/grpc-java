@@ -2777,7 +2777,8 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(EDS, "A.1", resourcesV1.get("A.1"), VERSION_1, TIME_INCREMENT);
     verify(edsResourceWatcher, times(1)).onChanged(any());
 
-    // trigger an EDS resource unsubscription. This would probably be caused by CDS PUSH(let's say event e1) in the real world.
+    // trigger an EDS resource unsubscription.
+    // This would probably be caused by CDS PUSH(let's say event e1) in the real world.
     // Then there can be a potential data race between
     // 1) the EDS unsubscription caused by CDS PUSH e1 (client-side) and,
     // 2) the immediate EDS PUSH from XdsServer (server-side) after CDS PUSH e1 (event e2).
