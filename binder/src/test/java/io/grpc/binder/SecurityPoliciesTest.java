@@ -30,6 +30,8 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
+import android.os.Build;
 import android.os.Process;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
@@ -43,6 +45,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.shadows.ShadowSigningInfo;
 import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
@@ -159,6 +162,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
   public void testHasSameSignatureAsPlatform_succeedsIfSignaturesMatch() {
     setupPlatformSignature(SIG2, SIG1);
     PackageInfo info =
@@ -173,6 +177,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
   public void testHasSameSignatureAsPlatform_failsIfPackageNameDoesNotMatch() {
     setupPlatformSignature(SIG1);
     PackageInfo info =
@@ -191,6 +196,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
   public void testHasSameSignatureAsPlatform_failsIfSignatureDoesNotMatch() {
     setupPlatformSignature(SIG1);
     PackageInfo info =
@@ -206,6 +212,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
   public void testHasSameSignatureAsPlatform_failsIfUidUnknown() {
     setupPlatformSignature(SIG1);
     policy =
@@ -565,6 +572,13 @@ public final class SecurityPoliciesTest {
 
       if (this.signatures != null) {
         packageInfo.signatures = this.signatures;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+          SigningInfo signingInfo = new SigningInfo();
+          ShadowSigningInfo shadowSigningInfo = shadowOf(signingInfo);
+          shadowSigningInfo.setSignatures(this.signatures);
+          packageInfo.signingInfo = signingInfo;
+        }
       }
 
       if (!this.permissions.isEmpty()) {

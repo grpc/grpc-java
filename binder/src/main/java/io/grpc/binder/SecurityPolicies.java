@@ -16,6 +16,7 @@
 
 package io.grpc.binder;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import android.annotation.SuppressLint;
@@ -25,6 +26,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Process;
@@ -118,24 +120,36 @@ public final class SecurityPolicies {
       public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
         return Futures.submit(
             () -> {
-              PackageInfo platformPackageInfo;
-              try {
-                platformPackageInfo =
-                    packageManager.getPackageInfo(
-                        "android", packageManager.GET_SIGNING_CERTIFICATES);
-              } catch (PackageManager.NameNotFoundException e) {
-                throw new AssertionError(
-                    e); // impossible; the platform package is always available.
-              }
+              Signature[] platformSignatures = getPlatformSignatures(packageManager);
+
               return oneOfSignatures(
                       packageManager,
                       packageName,
-                      ImmutableList.copyOf(platformPackageInfo.signatures))
+                      ImmutableList.copyOf(platformSignatures))
                   .checkAuthorization(uid);
             },
             backgroundExecutor);
       }
     };
+  }
+
+  private static Signature[] getPlatformSignatures(PackageManager packageManager) {
+    try {
+      PackageInfo packageInfo;
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        packageInfo =
+            packageManager.getPackageInfo("android", PackageManager.GET_SIGNING_CERTIFICATES);
+        SigningInfo signingInfo = checkNotNull(packageInfo.signingInfo);
+        return signingInfo.hasMultipleSigners()
+            ? signingInfo.getApkContentsSigners()
+            : signingInfo.getSigningCertificateHistory();
+      } else {
+        packageInfo = packageManager.getPackageInfo("android", PackageManager.GET_SIGNATURES);
+        return checkNotNull(packageInfo.signatures);
+      }
+    } catch (NameNotFoundException nnfe) {
+      throw new AssertionError(nnfe); // impossible: the "android" package is always present
+    }
   }
 
   /**
