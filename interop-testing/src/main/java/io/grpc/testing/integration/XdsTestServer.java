@@ -16,7 +16,6 @@
 
 package io.grpc.testing.integration;
 
-import static io.grpc.testing.integration.Util.AddressType.IPV4_IPV6;
 import static io.grpc.testing.integration.Util.getV4Address;
 import static io.grpc.testing.integration.Util.getV6Address;
 
@@ -50,7 +49,6 @@ import io.grpc.xds.XdsServerCredentials;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
