@@ -58,7 +58,7 @@ import javax.annotation.Nullable;
  * Common base type for XdsClient implementations, which encapsulates the layer abstraction of
  * the xDS RPC stream.
  */
-final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
+final class ControlPlaneClient {
 
   public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;
@@ -86,7 +86,6 @@ final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
   private final MessagePrettyPrinter messagePrinter;
-  private final int order;
 
   /** An entity that manages ADS RPCs over a single channel. */
   ControlPlaneClient(
@@ -101,8 +100,7 @@ final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
       XdsClient xdsClient, // Has been replaced by xdsResponseHandler
-      MessagePrettyPrinter messagePrinter,
-      int order) {
+      MessagePrettyPrinter messagePrinter) {
     this.serverInfo = checkNotNull(serverInfo, "serverInfo");
     this.xdsTransport = checkNotNull(xdsTransport, "xdsTransport");
     this.xdsResponseHandler = checkNotNull(xdsResponseHandler, "xdsResponseHandler");
@@ -112,22 +110,10 @@ final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.messagePrinter = checkNotNull(messagePrinter, "messagePrinter");
-    this.order = order;
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     logId = InternalLogId.allocate("xds-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
-  }
-
-  @Override
-  public int compareTo(ControlPlaneClient other) {
-    checkNotNull(other, "other");
-
-    if (this == other || this.order == other.order) {
-      return 0;
-    }
-
-    return Integer.compare(this.order, other.order);
   }
 
   void shutdown() {
@@ -160,14 +146,15 @@ final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
    * Updates the resource subscription for the given resource type.
    */
   // Must be synchronized.
-  void adjustResourceSubscription(XdsResourceType<?> resourceType) {
+  void adjustResourceSubscription(XdsResourceType<?> resourceType, String authority) {
     if (isInBackoff()) {
       return;
     }
     if (adsStream == null) {
       startRpcStream();
     }
-    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
+    Collection<String> resources =
+        resourceStore.getSubscribedResources(serverInfo, resourceType, authority);
     if (resources != null) {
       adsStream.sendDiscoveryRequest(resourceType, resources);
     }
@@ -236,7 +223,7 @@ final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
       rpcRetryTimer = null;
     }
 
-    xdsResponseHandler.handleStreamRestarted(serverInfo);
+    xdsResponseHandler.handleStreamReady(serverInfo);
   }
 
   /**
@@ -251,14 +238,15 @@ final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
     stopwatch.reset().start();
   }
 
-  void sendDiscoveryRequests() {
+  void sendDiscoveryRequests(String authority) {
     // retry timer ran, so may have previously connected or done fallback
     Set<XdsResourceType<?>> subscribedResourceTypes =
         new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
     for (XdsResourceType<?> type : subscribedResourceTypes) {
-      Collection<String> resources = type.updateInPlaceOnFallback()
-                                     ? resourceStore.getAllResources(type)
-                                     : resourceStore.getSubscribedResources(serverInfo, type);
+      Collection<String> resources =
+          type.updateInPlaceOnFallback()
+          ? resourceStore.getAllResources(type, authority)
+          : resourceStore.getSubscribedResources(serverInfo, type, authority);
       if (resources != null && !resources.isEmpty()) {
         adsStream.sendDiscoveryRequest(type, resources);
       }
@@ -275,7 +263,9 @@ final class ControlPlaneClient implements Comparable<ControlPlaneClient> {
       }
 
       startRpcStream();
-      // everything else happens in the readyHandler
+      xdsResponseHandler.handleStreamRestarted(serverInfo);
+
+      // handling CPC management is triggered in readyHandler
     }
   }
 

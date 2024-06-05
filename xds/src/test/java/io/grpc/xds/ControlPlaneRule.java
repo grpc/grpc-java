@@ -227,6 +227,7 @@ public class ControlPlaneRule extends TestWatcher {
   static RouteConfiguration buildRouteConfiguration(String authority) {
     return buildRouteConfiguration(authority, RDS_NAME);
   }
+
   static RouteConfiguration buildRouteConfiguration(String authority, String rdsName) {
     VirtualHost.Builder vhBuilder = VirtualHost.newBuilder()
         .setName(rdsName)

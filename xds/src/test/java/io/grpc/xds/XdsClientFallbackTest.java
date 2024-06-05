@@ -55,7 +55,7 @@ public class XdsClientFallbackTest {
   public static final String RDS_NAME = "route-config.googleapis.com";
   public static final HttpConnectionManager MAIN_HTTP_CONNECTION_MANAGER =
       HttpConnectionManager.forRdsName(0, RDS_NAME, ImmutableList.of(
-      new Filter.NamedFilterConfig(MAIN_SERVER, RouterFilter.ROUTER_CONFIG)));
+          new Filter.NamedFilterConfig(MAIN_SERVER, RouterFilter.ROUTER_CONFIG)));
   public static final HttpConnectionManager FALLBACK_HTTP_CONNECTION_MANAGER =
       HttpConnectionManager.forRdsName(0, RDS_NAME, ImmutableList.of(
           new Filter.NamedFilterConfig(FALLBACK_SERVER, RouterFilter.ROUTER_CONFIG)));
@@ -71,7 +71,7 @@ public class XdsClientFallbackTest {
         }
         @Override
         public void onError(Status error) {
-          log.info("LDS update error: " + error);
+          log.info("LDS update error: " + error.getDescription());
         }
 
         @Override
@@ -99,12 +99,6 @@ public class XdsClientFallbackTest {
   @Rule(order = 1)
   public ControlPlaneRule fallbackServer =
       new ControlPlaneRule(8095).setServerHostName(MAIN_SERVER);
-
-//  @Rule(order = 2)
-//  public DataPlaneRule mainDataPlane = new DataPlaneRule(mainTdServer);
-//  @Rule(order = 3)
-//  public DataPlaneRule fallbackDataPlane = new DataPlaneRule(fallbackServer);
-
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -150,14 +144,16 @@ public class XdsClientFallbackTest {
         fallbackServer.restartTdServer();
         setAdsConfig(fallbackServer, FALLBACK_SERVER);
         break;
+      default:
+        throw new IllegalArgumentException("Unknown server type: " + type);
     }
   }
 
   // This is basically a control test to make sure everything is set up correctly.
   @Test
   public void everything_okay() {
-//    restartServer(TdServerType.MAIN);
-//    restartServer(TdServerType.FALLBACK);
+    restartServer(TdServerType.MAIN);
+    restartServer(TdServerType.FALLBACK);
     xdsClient = xdsClientPool.getObject();
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
     verify(ldsWatcher, timeout(10000)).onChanged(
@@ -170,10 +166,8 @@ public class XdsClientFallbackTest {
 
   @Test
   public void mainServerDown_fallbackServerUp()  throws Exception {
-    log.info("mainServerDown_fallbackServerUp");
-    log.fine("fine");
     mainTdServer.getServer().shutdownNow();
-//    restartServer(TdServerType.FALLBACK);
+    restartServer(TdServerType.FALLBACK);
     xdsClient = xdsClientPool.getObject();
     log.info("Fallback port = " + fallbackServer.getServer().getPort());
 

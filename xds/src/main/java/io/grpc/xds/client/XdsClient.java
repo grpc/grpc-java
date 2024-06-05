@@ -412,6 +412,14 @@ public abstract class XdsClient {
     /** Called when the ADS stream has been recreated. */
     // Must be synchronized.
     void handleStreamRestarted(ServerInfo serverInfo);
+
+    /** Called when the ADS stream has established communication with the xds server.
+     * Is expected do manage the ControlPlanClients and cache updates associated with
+     * Moving to or from a fallback server.
+     *
+     * Must be synchronized.
+     */
+    void handleStreamReady(ServerInfo serverInfo);
   }
 
   public interface ResourceStore {
@@ -426,9 +434,17 @@ public abstract class XdsClient {
     @Nullable
     Collection<String> getSubscribedResources(ServerInfo serverInfo,
                                               XdsResourceType<? extends ResourceUpdate> type);
+    default Collection<String> getSubscribedResources(
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority) {
+      return getSubscribedResources(serverInfo, type);
+    };
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
 
     Collection<String> getAllResources(XdsResourceType<?> type);
+    default Collection<String> getAllResources(XdsResourceType<?> type, String authority) {
+      return getAllResources(type);
+    }
+
   }
 }
