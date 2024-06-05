@@ -19,6 +19,7 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.Context;
 import android.os.Binder;
@@ -69,6 +70,7 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
@@ -560,13 +562,15 @@ public abstract class BinderTransport
     private final Bindable serviceBinding;
     /** Number of ongoing calls which keep this transport "in-use". */
     private final AtomicInteger numInUseStreams;
-
+    private final long readyTimeoutMillis;
     private final PingTracker pingTracker;
 
     @Nullable private ManagedClientTransport.Listener clientTransportListener;
 
     @GuardedBy("this")
     private int latestCallId = FIRST_CALL_ID;
+    @GuardedBy("this")
+    private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
 
     /**
      * Constructs a new transport instance.
@@ -588,6 +592,7 @@ public abstract class BinderTransport
       this.offloadExecutorPool = factory.offloadExecutorPool;
       this.securityPolicy = factory.securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
+      this.readyTimeoutMillis = factory.readyTimeoutMillis;
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
@@ -627,9 +632,22 @@ public abstract class BinderTransport
           if (inState(TransportState.NOT_STARTED)) {
             setState(TransportState.SETUP);
             serviceBinding.bind();
+            if (readyTimeoutMillis >= 0) {
+              readyTimeoutFuture = getScheduledExecutorService().schedule(
+                  BinderClientTransport.this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
+            }
           }
         }
       };
+    }
+
+    private synchronized void onReadyTimeout() {
+      if (inState(TransportState.SETUP)) {
+        readyTimeoutFuture = null;
+        shutdownInternal(Status.DEADLINE_EXCEEDED
+            .withDescription("Connect timeout " + readyTimeoutMillis + "ms lapsed"),
+            true);
+      }
     }
 
     @Override
@@ -712,6 +730,10 @@ public abstract class BinderTransport
       if (numInUseStreams.getAndSet(0) > 0) {
         clientTransportListener.transportInUse(false);
       }
+      if (readyTimeoutFuture != null) {
+        readyTimeoutFuture.cancel(false);
+        readyTimeoutFuture = null;
+      }
       serviceBinding.unbind();
       clientTransportListener.transportTerminated();
     }
@@ -761,6 +783,10 @@ public abstract class BinderTransport
               setState(TransportState.READY);
               attributes = clientTransportListener.filterTransport(attributes);
               clientTransportListener.transportReady();
+              if (readyTimeoutFuture != null) {
+                readyTimeoutFuture.cancel(false);
+                readyTimeoutFuture = null;
+              }
             }
           }
         }
