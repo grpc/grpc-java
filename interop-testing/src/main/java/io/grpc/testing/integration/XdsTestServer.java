@@ -17,7 +17,9 @@
 package io.grpc.testing.integration;
 
 import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.protobuf.ByteString;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
@@ -28,15 +30,18 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
+import io.grpc.gcp.csm.observability.CsmObservability;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.xds.XdsServerBuilder;
 import io.grpc.xds.XdsServerCredentials;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -70,11 +75,13 @@ public final class XdsTestServer {
   private int port = 8080;
   private int maintenancePort = 8080;
   private boolean secureMode = false;
+  private boolean enableCsmObservability;
   private String serverId = "java_server";
   private HealthStatusManager health;
   private Server server;
   private Server maintenanceServer;
   private String host;
+  private CsmObservability csmObservability;
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -127,6 +134,8 @@ public final class XdsTestServer {
         maintenancePort = Integer.valueOf(value);
       } else if ("secure_mode".equals(key)) {
         secureMode = Boolean.parseBoolean(value);
+      } else if ("enable_csm_observability".equals(key)) {
+        enableCsmObservability = Boolean.valueOf(value);
       } else if ("server_id".equals(key)) {
         serverId = value;
       } else {
@@ -160,6 +169,8 @@ public final class XdsTestServer {
               + " port and maintenance_port should be different for secure mode."
               + "\n                      Default: "
               + s.secureMode
+              + "\n  --enable_csm_observability=BOOL  Enable CSM observability reporting. Default: "
+              + s.enableCsmObservability
               + "\n  --server_id=STRING  server ID for response."
               + "\n                      Default: "
               + s.serverId);
@@ -168,6 +179,18 @@ public final class XdsTestServer {
   }
 
   private void start() throws Exception {
+    if (enableCsmObservability) {
+      csmObservability = CsmObservability.newBuilder()
+          .sdk(AutoConfiguredOpenTelemetrySdk.builder()
+              .addPropertiesSupplier(() -> ImmutableMap.of(
+                  "otel.logs.exporter", "none",
+                  "otel.metrics.exporter", "prometheus",
+                  "otel.traces.exporter", "none"))
+              .build()
+              .getOpenTelemetrySdk())
+          .build();
+      csmObservability.registerGlobal();
+    }
     try {
       host = InetAddress.getLocalHost().getHostName();
     } catch (UnknownHostException e) {
@@ -220,6 +243,9 @@ public final class XdsTestServer {
     if (maintenanceServer != null && !maintenanceServer.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for maintenanceServer shutdown");
     }
+    if (csmObservability != null) {
+      csmObservability.close();
+    }
   }
 
   private void blockUntilShutdown() throws InterruptedException {
@@ -249,8 +275,13 @@ public final class XdsTestServer {
 
     @Override
     public void unaryCall(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
-      responseObserver.onNext(
-          SimpleResponse.newBuilder().setServerId(serverId).setHostname(host).build());
+      responseObserver.onNext(SimpleResponse.newBuilder()
+          .setServerId(serverId)
+          .setHostname(host)
+          .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[req.getResponseSize()]))
+            .build())
+          .build());
       responseObserver.onCompleted();
     }
   }

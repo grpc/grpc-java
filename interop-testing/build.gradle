@@ -14,6 +14,7 @@ dependencies {
             project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-core'),
+            project(':grpc-gcp-csm-observability'),
             project(':grpc-googleapis'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
@@ -26,6 +27,7 @@ dependencies {
             libraries.truth,
             libraries.opencensus.contrib.grpc.metrics,
             libraries.google.auth.oauth2Http,
+            libraries.opentelemetry.sdk.extension.autoconfigure,
             libraries.guava.jre // Fix checkUpperBoundDeps using -android
     api project(':grpc-api'),
             project(':grpc-stub'),
@@ -42,6 +44,7 @@ dependencies {
     runtimeOnly libraries.opencensus.impl,
             libraries.netty.tcnative,
             libraries.netty.tcnative.classes,
+            libraries.opentelemetry.exporter.prometheus, // For xds interop client
             project(':grpc-grpclb'),
             project(':grpc-rls')
     testImplementation testFixtures(project(':grpc-api')),
