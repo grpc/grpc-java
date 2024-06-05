@@ -2783,13 +2783,15 @@ public abstract class GrpcXdsClientImplTestBase {
     // 1) the EDS unsubscription caused by CDS PUSH e1 (client-side) and,
     // 2) the immediate EDS PUSH from XdsServer (server-side) after CDS PUSH e1 (event e2).
     xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    // FIX(1): allow to send empty subscription
+    call.verifyRequest(EDS, Collections.emptyList(), VERSION_1, "0000", NODE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
     // An EDS PUSH after CDS PUSH e1.
     List<Message> endpointsV2 = ImmutableList.of(lbEndpointHealthy);
     ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
             "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV2, dropOverloads)));
     call.sendResponse(EDS, resourcesV2.values().asList(), VERSION_2, "0001");
-    // This will send an empty resource list to the XdsServer
+    // FIX(2): allow to update resource version even if the subscription resource is empty
     call.verifyRequest(EDS, Collections.emptyList(), VERSION_2, "0001", NODE);
     verifyNoMoreInteractions(edsResourceWatcher);
   }

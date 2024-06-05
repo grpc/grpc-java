@@ -152,9 +152,7 @@ final class ControlPlaneClient {
       startRpcStream();
     }
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
-    if (resources != null) {
-      adsStream.sendDiscoveryRequest(resourceType, resources);
-    }
+    adsStream.sendDiscoveryRequest(resourceType, resources == null ? Collections.emptySet() : resources);
   }
 
   /**
