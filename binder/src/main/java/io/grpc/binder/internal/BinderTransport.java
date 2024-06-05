@@ -260,8 +260,10 @@ public abstract class BinderTransport
     return !flowController.isTransmitWindowFull();
   }
 
+  @GuardedBy("this")
   abstract void notifyShutdown(Status shutdownStatus);
 
+  @GuardedBy("this")
   abstract void notifyTerminated();
 
   void releaseExecutors() {
@@ -720,13 +722,13 @@ public abstract class BinderTransport
 
     @Override
     @GuardedBy("this")
-    public void notifyShutdown(Status status) {
+    void notifyShutdown(Status status) {
       clientTransportListener.transportShutdown(status);
     }
 
     @Override
     @GuardedBy("this")
-    public void notifyTerminated() {
+    void notifyTerminated() {
       if (numInUseStreams.getAndSet(0) > 0) {
         clientTransportListener.transportInUse(false);
       }
@@ -897,13 +899,13 @@ public abstract class BinderTransport
 
     @Override
     @GuardedBy("this")
-    public void notifyShutdown(Status status) {
+    void notifyShutdown(Status status) {
       // Nothing to do.
     }
 
     @Override
     @GuardedBy("this")
-    public void notifyTerminated() {
+    void notifyTerminated() {
       if (serverTransportListener != null) {
         serverTransportListener.transportTerminated();
       }
