@@ -44,6 +44,8 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -58,6 +60,7 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.TransactionHandler {
+  private static final Logger logger = Logger.getLogger(BinderServer.class.getName());
 
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ImmutableList<ServerStreamTracer.Factory> streamTracerFactories;
@@ -188,7 +191,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
             goAwayReply.get().writeInt(0);
             callbackBinder.transact(SHUTDOWN_TRANSPORT, goAwayReply.get(), null, FLAG_ONEWAY);
           } catch (RemoteException re) {
-            // Ignore.
+            logger.log(Level.INFO, "Couldn't reply to post-shutdown() SETUP_TRANSPORT.", re);
           }
         }
       }
