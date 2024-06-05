@@ -2761,7 +2761,6 @@ public abstract class GrpcXdsClientImplTestBase {
     Assume.assumeFalse(ignoreResourceDeletion());
 
     // Suppose we have an EDS subscription A.1
-    List<String> subscribedResourceNames = ImmutableList.of("A.1");
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
