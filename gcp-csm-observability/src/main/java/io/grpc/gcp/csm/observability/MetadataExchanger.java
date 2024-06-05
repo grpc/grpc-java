@@ -39,6 +39,7 @@ import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.contrib.gcp.resource.GCPResourceProvider;
+import io.opentelemetry.sdk.autoconfigure.ResourceConfiguration;
 import java.net.URI;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -87,7 +88,7 @@ final class MetadataExchanger implements InternalOpenTelemetryPlugin {
 
   public MetadataExchanger() {
     this(
-        new GCPResourceProvider().getAttributes(),
+        addOtelResourceAttributes(new GCPResourceProvider().getAttributes()),
         System::getenv,
         InternalGrpcBootstrapperImpl::getJsonContent);
   }
@@ -146,6 +147,19 @@ final class MetadataExchanger implements InternalOpenTelemetryPlugin {
       return null;
     }
     return value.getStringValue();
+  }
+
+  private static Attributes addOtelResourceAttributes(Attributes platformAttributes) {
+    // Can't inject env variables as ResourceConfiguration requires the large ConfigProperties API
+    // to inject our own values and a default implementation isn't provided. So this reads directly
+    // from System.getenv().
+    Attributes envAttributes = ResourceConfiguration
+        .createEnvironmentResource()
+        .getAttributes();
+
+    AttributesBuilder builder = platformAttributes.toBuilder();
+    builder.putAll(envAttributes);
+    return builder.build();
   }
 
   @VisibleForTesting
