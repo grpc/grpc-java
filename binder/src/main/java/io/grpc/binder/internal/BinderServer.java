@@ -191,7 +191,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
             goAwayReply.get().writeInt(0);
             callbackBinder.transact(SHUTDOWN_TRANSPORT, goAwayReply.get(), null, FLAG_ONEWAY);
           } catch (RemoteException re) {
-            logger.log(Level.INFO, "Couldn't reply to post-shutdown() SETUP_TRANSPORT.", re);
+            logger.log(Level.WARNING, "Couldn't reply to post-shutdown() SETUP_TRANSPORT.", re);
           }
         }
       }
