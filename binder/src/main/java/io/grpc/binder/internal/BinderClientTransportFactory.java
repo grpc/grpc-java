@@ -208,8 +208,11 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      * </ul>
      *
      * <p>This setting doesn't change the need for deadlines at the call level. It merely ensures
-     * that gRPC features like load balancing and wait-for-ready work as expected despite certain
-     * edge cases that could otherwise stall the transport indefinitely.
+     * that gRPC features like
+     * <a href="https://github.com/grpc/grpc/blob/master/doc/load-balancing.md">load balancing</a>
+     * and <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">fail-fast</a>
+     * work as expected despite certain edge cases that could otherwise stall the transport
+     * indefinitely.
      *
      * <p>Optional. Use a negative value to wait indefinitely.
      */
