@@ -428,7 +428,6 @@ public abstract class GrpcXdsClientImplTestBase {
       XdsResourceType<?> type,
       int size) {
     if (size == 0) {
-      assertThat(subscribedTypeUrls.containsKey(type.typeUrl())).isFalse();
       assertThat(subscribedResourcesMetadata.containsKey(type)).isFalse();
     } else {
       assertThat(subscribedTypeUrls.containsKey(type.typeUrl())).isTrue();
@@ -2614,58 +2613,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
-  @Test
-  public void cdsResourcesDelete_edsUnsubscribed() {
-    Assume.assumeFalse(ignoreResourceDeletion());
-
-    List<String> subscribedResourceNames = ImmutableList.of("A");
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "A", cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
-    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
-    assertThat(call).isNotNull();
-    verifyResourceMetadataRequested(CDS, "A");
-    verifyResourceMetadataRequested(EDS, "A.1");
-    verifySubscribedResourcesMetadataSizes(0, 1, 0, 1);
-
-    // CDS -> {A}, version 1
-    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
-            "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, null, false, null,
-                    "envoy.transport_sockets.tls", null, null
-            )));
-    call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
-    // {A, B} -> ACK, version 1
-    verifyResourceMetadataAcked(CDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
-    call.verifyRequest(CDS, subscribedResourceNames, VERSION_1, "0000", NODE);
-
-    // EDS -> {A.1}, version 1
-    List<Message> dropOverloads = ImmutableList.of();
-    List<Message> endpointsV1 = ImmutableList.of(lbEndpointHealthy);
-    ImmutableMap<String, Any> resourcesV11 = ImmutableMap.of(
-            "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)));
-    call.sendResponse(EDS, resourcesV11.values().asList(), VERSION_1, "0000");
-    // {A.1} -> ACK, version 1
-    verifyResourceMetadataAcked(EDS, "A.1", resourcesV11.get("A.1"), VERSION_1, TIME_INCREMENT * 2);
-    verify(cdsResourceWatcher, times(1)).onChanged(any());
-
-    // Empty CDS response deletes the cluster.
-    call.sendResponse(CDS, Collections.<Any>emptyList(), VERSION_2, "0001");
-    call.verifyRequest(CDS, "A", VERSION_2, "0001", NODE);
-    verify(cdsResourceWatcher).onResourceDoesNotExist("A");
-    verifyResourceMetadataDoesNotExist(CDS, "A");
-    verifySubscribedResourcesMetadataSizes(0, 1, 0, 1);
-    // Empty CDS leads to EDS resource "A.1" unsubscribed.
-    xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
-    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
-
-    // Send any EDS will not trigger any ACK/NACK response
-    Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment("A.1",
-            ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                    mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
-            ImmutableList.<Message>of()));
-    call.sendResponse(EDS, updatedClusterLoadAssignment, VERSION_2, "0001");
-    call.verifyNoMoreRequest();
-  }
-
   /**
    * When ignore_resource_deletion server feature is on, xDS client should keep the deleted cluster
    * on empty response, and resume the normal work when CDS contains the cluster again.
@@ -2807,6 +2754,44 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+  }
+
+  @Test
+  public void edsAllowRespondAfterUnsubscription() {
+    Assume.assumeFalse(ignoreResourceDeletion());
+
+    // Suppose we have an EDS subscription A.1
+    List<String> subscribedResourceNames = ImmutableList.of("A.1");
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(EDS, "A.1");
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+
+    // EDS -> {A.1}, version 1
+    List<Message> dropOverloads = ImmutableList.of();
+    List<Message> endpointsV1 = ImmutableList.of(lbEndpointHealthy);
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+            "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)));
+    call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A.1} -> ACK, version 1
+    verifyResourceMetadataAcked(EDS, "A.1", resourcesV1.get("A.1"), VERSION_1, TIME_INCREMENT);
+    verify(edsResourceWatcher, times(1)).onChanged(any());
+
+    // trigger an EDS resource unsubscription. This would probably be caused by CDS PUSH(let's say event e1) in the real world.
+    // Then there can be a potential data race between
+    // 1) the EDS unsubscription caused by CDS PUSH e1 (client-side) and,
+    // 2) the immediate EDS PUSH from XdsServer (server-side) after CDS PUSH e1 (event e2).
+    xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
+    // An EDS PUSH after CDS PUSH e1.
+    List<Message> endpointsV2 = ImmutableList.of(lbEndpointHealthy);
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+            "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV2, dropOverloads)));
+    call.sendResponse(EDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    // This will send an empty resource list to the XdsServer
+    call.verifyRequest(EDS, Collections.emptyList(), VERSION_2, "0001", NODE);
+    verifyNoMoreInteractions(edsResourceWatcher);
   }
 
   @Test
