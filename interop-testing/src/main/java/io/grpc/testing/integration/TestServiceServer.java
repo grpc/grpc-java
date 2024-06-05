@@ -145,6 +145,7 @@ public class TestServiceServer {
     }
   }
 
+  @SuppressWarnings("AddressSelection")
   @VisibleForTesting
   void start() throws Exception {
     executor = Executors.newSingleThreadScheduledExecutor();

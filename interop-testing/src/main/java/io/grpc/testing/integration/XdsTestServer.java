@@ -193,6 +193,7 @@ public final class XdsTestServer {
     }
   }
 
+  @SuppressWarnings("AddressSelection")
   private void start() throws Exception {
     if (enableCsmObservability) {
       csmObservability = CsmObservability.newBuilder()
