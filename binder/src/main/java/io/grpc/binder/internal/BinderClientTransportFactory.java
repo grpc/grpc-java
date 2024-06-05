@@ -211,8 +211,8 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      * that gRPC features like
      * <a href="https://github.com/grpc/grpc/blob/master/doc/load-balancing.md">load balancing</a>
      * and <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">fail-fast</a>
-     * work as expected despite certain edge cases that could otherwise stall the transport
-     * indefinitely.
+     * work as expected despite certain edge cases in Android that could otherwise stall the
+     * transport indefinitely.
      *
      * <p>Optional. Use a negative value to wait indefinitely.
      */
