@@ -69,8 +69,7 @@ public class CsmObservabilityClient {
    */
   public static void main(String[] args) throws Exception {
     String user = "world";
-    String target = "localhost:50051";
-    // String target = "xds:///helloworld:50051";
+    String target = "xds:///helloworld:50051";
     int prometheusPort = 9465;
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
