@@ -82,16 +82,20 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         }
       });
 
-  private final Map<ServerInfo, LoadStatsManager2> loadStatsManagerMap =
-      new HashMap<>();
-  final Map<ServerInfo, LoadReportClient> serverLrsClientMap =
-      new HashMap<>();
+  private final Map<ServerInfo, LoadStatsManager2> loadStatsManagerMap = new HashMap<>();
+  final Map<ServerInfo, LoadReportClient> serverLrsClientMap = new HashMap<>();
+  /** Map of authority to its active control plane client (affected by xds fallback). */
+  private final Map<String, ControlPlaneClient> activeCpClients = new HashMap<>();
 
   private final Map<ServerInfo, ControlPlaneClient> serverCpClientMap = new HashMap<>();
+
+  /** Maps resource type to the corresponding map of subscribers (keyed by subscriber name). */
   private final Map<XdsResourceType<? extends ResourceUpdate>,
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
       resourceSubscribers = new HashMap<>();
+  /** Maps typeUrl to the corresponding XdsResourceType. */
   private final Map<String, XdsResourceType<?>> subscribedResourceTypeUrls = new HashMap<>();
+
   private final XdsTransportFactory xdsTransportFactory;
   private final Bootstrapper.BootstrapInfo bootstrapInfo;
   private final ScheduledExecutorService timeService;
@@ -103,10 +107,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   private final XdsLogger logger;
   private volatile boolean isShutdown;
   private final MessagePrettyPrinter messagePrinter;
-  /**
-   * Map of authority to its active control plane client.
-   */
-  private Map<String, ControlPlaneClient> activeCpClients = new HashMap<>();
 
   public XdsClientImpl(
       XdsTransportFactory xdsTransportFactory,
@@ -172,7 +172,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   @Override
   public Collection<String> getSubscribedResources(
       ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority) {
-    return getSubscribedResources(serverInfo, type, authority, false);
+    return getSubscribedResources(serverInfo, type, authority, true);
   }
 
   private Collection<String> getSubscribedResources(ServerInfo serverInfo, XdsResourceType<?
@@ -183,8 +183,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     ControlPlaneClient controlPlaneClient = serverCpClientMap.get(serverInfo);
     for (String key : resources.keySet()) {
       ResourceSubscriber<? extends ResourceUpdate> resource = resources.get(key);
-      if (resource.controlPlaneClient.equals(controlPlaneClient) &&
-          (!useAuthority || Objects.equals(authority, resource.authority))) {
+      if (resource.controlPlaneClient.equals(controlPlaneClient)
+          && (!useAuthority || Objects.equals(authority, resource.authority))) {
         builder.add(key);
       }
     }
@@ -192,35 +192,12 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     return retVal.isEmpty() ? null : retVal;
   }
 
-  @Override
-  public Collection<String> getAllResources(XdsResourceType<?> type) {
-    if (!resourceSubscribers.containsKey(type)) {
-      return null;
-    }
-    return ImmutableList.copyOf(resourceSubscribers.get(type).keySet());
-  }
-
-  @Override
-  public Collection<String> getAllResources(XdsResourceType<?> type, String authority) {
-    if (!resourceSubscribers.containsKey(type)) {
-      return null;
-    }
-
-    List<String> matchingResources = new ArrayList<>();
-    for (ResourceSubscriber<?> resource : resourceSubscribers.get(type).values()) {
-      if (Objects.equals(authority, resource.authority)) {
-        matchingResources.add(resource.resource);
-      }
-    }
-    return matchingResources;
-  }
-
 
   // As XdsClient APIs becomes resource agnostic, subscribed resource types are dynamic.
   // ResourceTypes that do not have subscribers does not show up in the snapshot keys.
   @Override
   public ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
-     getSubscribedResourcesMetadataSnapshot() {
+      getSubscribedResourcesMetadataSnapshot() {
     final SettableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>> future =
         SettableFuture.create();
     syncContext.execute(new Runnable() {
@@ -290,17 +267,22 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         if (subscriber == null) {
           logger.log(XdsLogLevel.WARNING, "double cancel of resource watch for {0}:{1}",
               type.typeName(), resourceName);
+          return;
         }
         subscriber.removeWatcher(watcher);
         if (!subscriber.isWatched()) {
           subscriber.cancelResourceWatch();
           resourceSubscribers.get(type).remove(resourceName);
-          if (subscriber.controlPlaneClient != null) {
-            subscriber.controlPlaneClient.adjustResourceSubscription(type, subscriber.authority);
+          ControlPlaneClient controlPlaneClient = subscriber.controlPlaneClient;
+          if (controlPlaneClient != null) {
+            controlPlaneClient.adjustResourceSubscription(type, subscriber.authority);
           }
           if (resourceSubscribers.get(type).isEmpty()) {
             resourceSubscribers.remove(type);
             subscribedResourceTypeUrls.remove(type.typeUrl());
+            if (controlPlaneClient != null) {
+              controlPlaneClient.removeNonceForType(type);
+            }
           }
         }
       }
@@ -432,7 +414,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         syncContext,
         backoffPolicyProvider,
         stopwatchSupplier,
-        this,
         messagePrinter
     );
 
@@ -1015,8 +996,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         return;
       }
 
-      if (activeCpClient.isReady() &&
-          compareCpClients(activeCpClient, controlPlaneClient, authority) < 0) {
+      if (activeCpClient.isReady()
+          && compareCpClients(activeCpClient, controlPlaneClient, authority) < 0) {
         logger.log(XdsLogLevel.INFO, "Ignoring stream restart for lower priority server {0}",
             serverInfo.target());
         return;
@@ -1027,7 +1008,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
           if (subscriber.controlPlaneClient == controlPlaneClient
-              && subscriber.authority == authority) {
+              && Objects.equals(subscriber.authority, authority)) {
             subscriber.restartTimer();
           }
         }
@@ -1036,8 +1017,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (activeCpClient != controlPlaneClient) {
         activeCpClients.put(authority, controlPlaneClient);
         updateRootResources(controlPlaneClient, authority, false);
-        controlPlaneClient.sendDiscoveryRequests(authority);
       }
+
+      controlPlaneClient.sendDiscoveryRequests(authority);
 
       // Shutdown any lower priority control plane clients.
       Iterator<ControlPlaneClient> iterator = serverCpClientMap.values().iterator();
@@ -1049,7 +1031,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         }
       }
     }
-
   }
 
   private int compareCpClients(ControlPlaneClient base, ControlPlaneClient other,
@@ -1059,10 +1040,13 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     }
 
     ImmutableList<ServerInfo> serverInfos = getServerInfos(authority);
-    if (!serverInfos.contains(base.getServerInfo()) || !serverInfos.contains(other.getServerInfo())) {
+    ServerInfo baseServerInfo = base.getServerInfo();
+    ServerInfo otherServerInfo = other.getServerInfo();
+
+    if (!serverInfos.contains(baseServerInfo) || !serverInfos.contains(otherServerInfo)) {
       return -100; // At least one of them isn't serving this authority
     }
 
-    return serverInfos.indexOf(base.getServerInfo()) - serverInfos.indexOf(other.getServerInfo());
+    return serverInfos.indexOf(baseServerInfo) - serverInfos.indexOf(otherServerInfo);
   }
 }

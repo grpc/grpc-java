@@ -69,6 +69,7 @@ public class XdsClientFallbackTest {
         public void onChanged(XdsListenerResource.LdsUpdate update) {
           log.info("LDS update: " + update);
         }
+
         @Override
         public void onError(Status error) {
           log.info("LDS update error: " + error.getDescription());
@@ -109,7 +110,7 @@ public class XdsClientFallbackTest {
 
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
-//    clientPoolProvider.setBackoffProviderClass(MinimalBackoffPolicyProvider.class);
+    //    clientPoolProvider.setBackoffProviderClass(MinimalBackoffPolicyProvider.class);
     xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET);
   }
 

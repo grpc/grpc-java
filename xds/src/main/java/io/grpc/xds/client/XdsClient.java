@@ -417,7 +417,7 @@ public abstract class XdsClient {
      * Is expected do manage the ControlPlanClients and cache updates associated with
      * Moving to or from a fallback server.
      *
-     * Must be synchronized.
+     * <p>Must be synchronized.
      */
     void handleStreamReady(ServerInfo serverInfo);
   }
@@ -434,17 +434,15 @@ public abstract class XdsClient {
     @Nullable
     Collection<String> getSubscribedResources(ServerInfo serverInfo,
                                               XdsResourceType<? extends ResourceUpdate> type);
-    default Collection<String> getSubscribedResources(
-        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority) {
-      return getSubscribedResources(serverInfo, type);
-    };
+
+    /**
+     * Like {@link #getSubscribedResources(ServerInfo, XdsResourceType)}, but limits the results to
+     * those matching the given authority.
+     */
+    @Nullable
+    Collection<String> getSubscribedResources(
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority);
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
-
-    Collection<String> getAllResources(XdsResourceType<?> type);
-    default Collection<String> getAllResources(XdsResourceType<?> type, String authority) {
-      return getAllResources(type);
-    }
-
   }
 }

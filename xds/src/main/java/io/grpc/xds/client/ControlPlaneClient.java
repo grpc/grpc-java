@@ -99,7 +99,6 @@ final class ControlPlaneClient {
       SynchronizationContext syncContext,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
-      XdsClient xdsClient, // Has been replaced by xdsResponseHandler
       MessagePrettyPrinter messagePrinter) {
     this.serverInfo = checkNotNull(serverInfo, "serverInfo");
     this.xdsTransport = checkNotNull(xdsTransport, "xdsTransport");
@@ -152,10 +151,13 @@ final class ControlPlaneClient {
     }
     if (adsStream == null) {
       startRpcStream();
+      // when the stream becomes ready, it will send the discovery requests
+      return;
     }
+
     Collection<String> resources =
         resourceStore.getSubscribedResources(serverInfo, resourceType, authority);
-    if (resources != null) {
+    if (resources != null && !resources.isEmpty()) {
       adsStream.sendDiscoveryRequest(resourceType, resources);
     }
   }
@@ -244,13 +246,16 @@ final class ControlPlaneClient {
         new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
     for (XdsResourceType<?> type : subscribedResourceTypes) {
       Collection<String> resources =
-          type.updateInPlaceOnFallback()
-          ? resourceStore.getAllResources(type, authority)
-          : resourceStore.getSubscribedResources(serverInfo, type, authority);
+          resourceStore.getSubscribedResources(serverInfo, type, authority);
       if (resources != null && !resources.isEmpty()) {
         adsStream.sendDiscoveryRequest(type, resources);
       }
+    }
+  }
 
+  public <T extends XdsClient.ResourceUpdate> void removeNonceForType(XdsResourceType<T> type) {
+    if (!shutdown && adsStream != null) {
+      adsStream.respNonces.remove(type);
     }
   }
 
@@ -278,6 +283,7 @@ final class ControlPlaneClient {
   private class AdsStream implements EventHandler<DiscoveryResponse> {
     private boolean responseReceived;
     private boolean closed;
+    private boolean hasGoneReady = false;
     // Response nonce for the most recently received discovery responses of each resource type.
     // Client initiated requests start response nonce with empty string.
     // Nonce in each response is echoed back in the following ACK/NACK request. It is
@@ -337,6 +343,11 @@ final class ControlPlaneClient {
 
     @Override
     public void onReady() {
+      if (shutdown || closed || hasGoneReady) {
+        return;
+      }
+
+      hasGoneReady = true;
       syncContext.execute(ControlPlaneClient.this::readyHandler);
     }
 
@@ -439,7 +450,11 @@ final class ControlPlaneClient {
 
   private long scheduleRpcRetry() {
     long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+    if (retryBackoffPolicy == null) {
+      retryBackoffPolicy = backoffPolicyProvider.get();
+    }
     long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
+
     rpcRetryTimer =
         syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
     return delayNanos;

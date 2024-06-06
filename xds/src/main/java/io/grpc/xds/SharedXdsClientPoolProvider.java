@@ -137,14 +137,14 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private XdsClient xdsClient;
     @GuardedBy("lock")
     private int refCount;
-    private final Constructor backoffProviderConstructor;
+    private final Constructor<? extends BackoffPolicy.Provider> backoffProviderConstructor;
 
     @VisibleForTesting
     RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target,
                                   Class<? extends BackoffPolicy.Provider> rawBackoffProviderClass) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
       this.target = target;
-      Class backoffProviderClass = rawBackoffProviderClass != null
+      Class<? extends BackoffPolicy.Provider> backoffProviderClass = rawBackoffProviderClass != null
           ? rawBackoffProviderClass
           : ExponentialBackoffPolicy.Provider.class;
       try {
