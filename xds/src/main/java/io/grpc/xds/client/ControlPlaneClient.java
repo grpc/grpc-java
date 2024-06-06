@@ -133,7 +133,7 @@ final class ControlPlaneClient {
         xdsTransport.shutdown();
       }
     });
-  }r
+  }
 
   @Override
   public String toString() {

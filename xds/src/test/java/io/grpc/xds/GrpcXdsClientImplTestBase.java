@@ -428,6 +428,7 @@ public abstract class GrpcXdsClientImplTestBase {
       XdsResourceType<?> type,
       int size) {
     if (size == 0) {
+      assertThat(subscribedTypeUrls.containsKey(type.typeUrl())).isFalse();
       assertThat(subscribedResourcesMetadata.containsKey(type)).isFalse();
     } else {
       assertThat(subscribedTypeUrls.containsKey(type.typeUrl())).isTrue();
