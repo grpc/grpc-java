@@ -291,6 +291,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
           }
           if (resourceSubscribers.get(type).isEmpty()) {
             resourceSubscribers.remove(type);
+            subscribedResourceTypeUrls.remove(type.typeUrl());
           }
         }
       }

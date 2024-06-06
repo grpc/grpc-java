@@ -133,7 +133,7 @@ final class ControlPlaneClient {
         xdsTransport.shutdown();
       }
     });
-  }
+  }r
 
   @Override
   public String toString() {
@@ -152,8 +152,12 @@ final class ControlPlaneClient {
       startRpcStream();
     }
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
-    adsStream.sendDiscoveryRequest(resourceType,
-            resources == null ? Collections.emptySet() : resources);
+    if (resources != null) {
+      adsStream.sendDiscoveryRequest(resourceType, resources);
+    } else {
+      // cleanup the nonce for the resource type if it's not subscribed to anymore.
+      adsStream.respNonces.remove(resourceType);
+    }
   }
 
   /**
