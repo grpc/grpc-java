@@ -16,11 +16,14 @@
 
 package io.grpc.binder.internal;
 
+import static android.os.IBinder.FLAG_ONEWAY;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.binder.internal.BinderTransport.SHUTDOWN_TRANSPORT;
 
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
+import android.os.RemoteException;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
@@ -41,6 +44,8 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -55,6 +60,7 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.TransactionHandler {
+  private static final Logger logger = Logger.getLogger(BinderServer.class.getName());
 
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ImmutableList<ServerStreamTracer.Factory> streamTracerFactories;
@@ -121,7 +127,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
     if (!shutdown) {
       shutdown = true;
       // Break the connection to the binder. We'll receive no more transactions.
-      hostServiceBinder.detach();
+      hostServiceBinder.setHandler(GoAwayHandler.INSTANCE);
       listener.serverShutdown();
       executorService = executorServicePool.returnObject(executorService);
       transportSecurityShutdownListener.onServerShutdown();
@@ -136,6 +142,12 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   @Override
   public synchronized boolean handleTransaction(int code, Parcel parcel) {
     if (code == BinderTransport.SETUP_TRANSPORT) {
+      if (shutdown) {
+        // An incoming SETUP_TRANSPORT transaction may have already been in-flight when we removed
+        // ourself as TransactionHandler in #shutdown(). So we must check for shutdown again here.
+        return GoAwayHandler.INSTANCE.handleTransaction(code, parcel);
+      }
+
       int version = parcel.readInt();
       // If the client-provided version is more recent, we accept the connection,
       // but specify the older version which we support.
@@ -163,6 +175,28 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       }
     }
     return false;
+  }
+
+  static final class GoAwayHandler implements LeakSafeOneWayBinder.TransactionHandler {
+    static final GoAwayHandler INSTANCE = new GoAwayHandler();
+
+    @Override
+    public boolean handleTransaction(int code, Parcel parcel) {
+      if (code == BinderTransport.SETUP_TRANSPORT) {
+        int version = parcel.readInt();
+        if (version >= BinderTransport.EARLIEST_SUPPORTED_WIRE_FORMAT_VERSION) {
+          IBinder callbackBinder = parcel.readStrongBinder();
+          try (ParcelHolder goAwayReply = ParcelHolder.obtain()) {
+            // Send empty flags to avoid a memory leak linked to empty parcels (b/207778694).
+            goAwayReply.get().writeInt(0);
+            callbackBinder.transact(SHUTDOWN_TRANSPORT, goAwayReply.get(), null, FLAG_ONEWAY);
+          } catch (RemoteException re) {
+            logger.log(Level.WARNING, "Couldn't reply to post-shutdown() SETUP_TRANSPORT.", re);
+          }
+        }
+      }
+      return false;
+    }
   }
 
   /** Fluent builder of {@link BinderServer} instances. */
