@@ -69,7 +69,8 @@ public class CsmObservabilityClient {
    */
   public static void main(String[] args) throws Exception {
     String user = "world";
-    String target = "xds:///helloworld:50051";
+    String target = "localhost:50051";
+    // String target = "xds:///helloworld:50051";
     int prometheusPort = 9465;
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
@@ -131,19 +132,20 @@ public class CsmObservabilityClient {
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
 
-    /** Run RPCs every second. */
-    while (sendRpcs) {
-      CsmObservabilityClient client = new CsmObservabilityClient(channel);
-      client.greet(user);
-      // Sleep for a bit before sending the next RPC.
-      Thread.sleep(3000);
-    }
-
-    /** Close CSM Observability. */
-    if (observability != null) {
+    try {
+      /** Run RPCs every second. */
+      while (sendRpcs) {
+        CsmObservabilityClient client = new CsmObservabilityClient(channel);
+        client.greet(user);
+        // Sleep for a bit before sending the next RPC.
+        Thread.sleep(3000);
+      }
+    } finally {
+      channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+      /** Shut down CSM Observability. */
       observability.close();
+      /** Shut down OpenTelemetry SDK. */
+      openTelemetrySdk.close();
     }
-    openTelemetrySdk.close();
-    channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
   }
 }

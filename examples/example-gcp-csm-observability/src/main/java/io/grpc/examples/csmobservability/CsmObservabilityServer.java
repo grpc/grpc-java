@@ -114,11 +114,9 @@ public class CsmObservabilityServer {
         } catch (InterruptedException e) {
           e.printStackTrace(System.err);
         }
-        // Shut down CSM observability
-        if(observability != null) {
-          observability.close();
-        }
-        // Shut down OpenTelemetry SDK
+        /** Shut down CSM observability. */
+        observability.close();
+        /** Shut down OpenTelemetry SDK. */
         openTelemetrySdk.close();
 
         System.err.println("*** server shut down");

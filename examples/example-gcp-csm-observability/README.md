@@ -7,29 +7,27 @@ for gRPC client and gRPC server.
 ## Configuration
 
 `CsmObservabilityClient` takes the following command-line arguments -
-* user  - The name you wish to be greeted by.
-* target - By default, the client tries to connect to target : `xds:///helloworld:50051` and gRPC would use xDS to resolve this target and connect to the server backend. This can be overridden to change the target.
-* prometheusPort - Port used for exposing prometheus metrics. Default value is 9464
+* user - Name to be greeted.
+* target - Server address. Default value is `xds:///helloworld:50051`.
+  * When client tries to connect to target, gRPC would use xDS to resolve this target and connect to the server backend.
+* prometheusPort - Port used for exposing prometheus metrics. Default value is `9464`.
 
 
 `CsmObservabilityServer` takes the following command-line arguments -
-* port - Port on which the Hello World server is run. Defaults to 50051.
-* prometheusPort - Port used for exposing prometheus metrics. Default value is 9465
+* port - Port used for running Hello World server. Default value is `50051`.
+* prometheusPort - Port used for exposing prometheus metrics. Default value is `9465`.
 
 ## Build the example
 
-From the gRPC-java directory i.e
-```
-cd grpc-java
-```
+From the `grpc-java/examples/example-gcp-csm-observability`directory:,
 
 Client:
 ```
-docker build -f examples/example-gcp-csm-observability/csm-client.Dockerfile
+docker build -f csm-client.Dockerfile
 ```
 Server:
 ```
-docker build -f examples/example-gcp-csm-observability/csm-server.Dockerfile
+docker build -f csm-server.Dockerfile
 ```
 
 To push to a registry, add a tag to the image either by adding a `-t` flag to `docker build` command above or run:
@@ -38,6 +36,6 @@ To push to a registry, add a tag to the image either by adding a `-t` flag to `d
 docker image tag ${sha from build command above} ${tag}
 ```
 
-And then push the tagged image using `docker push`
+And then push the tagged image using `docker push`.
 
 
