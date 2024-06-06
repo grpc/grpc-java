@@ -267,7 +267,7 @@ public class TestServiceClient {
     tester.setUp();
   }
 
-  synchronized void tearDown() {
+  private synchronized void tearDown() {
     try {
       tester.tearDown();
       if (customBackendMetricsLoadBalancerProvider != null) {
@@ -281,7 +281,7 @@ public class TestServiceClient {
     }
   }
 
-  void run() {
+  private void run() {
     System.out.println("Running test " + testCase);
     try {
       for (int i = 0; i < numTimes; i++) {
