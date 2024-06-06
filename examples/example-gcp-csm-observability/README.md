@@ -37,5 +37,3 @@ docker image tag ${sha from build command above} ${tag}
 ```
 
 And then push the tagged image using `docker push`.
-
-
