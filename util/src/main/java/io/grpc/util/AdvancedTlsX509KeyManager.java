@@ -189,9 +189,9 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
           this.currentCertTime = newResult.certTime;
         }
       } catch (IOException | GeneralSecurityException e) {
-        log.log(Level.SEVERE, e, () -> String.format("Failed refreshing private key and certificate"
+        log.log(Level.SEVERE, String.format("Failed refreshing private key and certificate"
                 + " chain from files. Using previous ones (keyFile lastModified = %s, certFile "
-                + "lastModified = %s)", keyFile.lastModified(), certFile.lastModified()));
+                + "lastModified = %s)", keyFile.lastModified(), certFile.lastModified()), e);
       }
     }
   }
