@@ -238,12 +238,4 @@ public final class BinderTransportSecurity {
      */
     ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
   }
-
-  /**
-   * A listener invoked when the {@link io.grpc.binder.internal.BinderServer} shuts down, allowing
-   * resources to be potentially cleaned up.
-   */
-  public interface ShutdownListener {
-    void onServerShutdown();
-  }
 }

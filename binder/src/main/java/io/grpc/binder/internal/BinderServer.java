@@ -68,7 +68,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private final LeakSafeOneWayBinder hostServiceBinder;
   private final BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker;
   private final InboundParcelablePolicy inboundParcelablePolicy;
-  private final BinderTransportSecurity.ShutdownListener transportSecurityShutdownListener;
+  private final Runnable terminationListener;
 
   @GuardedBy("this")
   private ServerListener listener;
@@ -86,7 +86,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
         ImmutableList.copyOf(checkNotNull(builder.streamTracerFactories, "streamTracerFactories"));
     this.serverPolicyChecker = BinderInternal.createPolicyChecker(builder.serverSecurityPolicy);
     this.inboundParcelablePolicy = builder.inboundParcelablePolicy;
-    this.transportSecurityShutdownListener = builder.shutdownListener;
+    this.terminationListener = builder.terminationListener;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -97,7 +97,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
 
   @Override
   public synchronized void start(ServerListener serverListener) throws IOException {
-    this.listener = serverListener;
+    listener = new ActiveTransportTracker(serverListener, terminationListener);
     executorService = executorServicePool.getObject();
   }
 
@@ -130,7 +130,6 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       hostServiceBinder.setHandler(GoAwayHandler.INSTANCE);
       listener.serverShutdown();
       executorService = executorServicePool.returnObject(executorService);
-      transportSecurityShutdownListener.onServerShutdown();
     }
   }
 
@@ -208,7 +207,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
     ServerSecurityPolicy serverSecurityPolicy = SecurityPolicies.serverInternalOnly();
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
-    BinderTransportSecurity.ShutdownListener shutdownListener = () -> {};
+    Runnable terminationListener = () -> {};
 
     public BinderServer build() {
       return new BinderServer(this);
@@ -269,12 +268,13 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
     }
 
     /**
-     * Installs a callback that will be invoked when this server is {@link #shutdown()}
+     * Installs a callback that will be invoked when this server is {@link #shutdown()} and all of
+     * its transports are terminated.
      *
      * <p>Optional.
      */
-    public Builder setShutdownListener(BinderTransportSecurity.ShutdownListener shutdownListener) {
-      this.shutdownListener = checkNotNull(shutdownListener, "shutdownListener");
+    public Builder setTerminationListener(Runnable terminationListener) {
+      this.terminationListener = checkNotNull(terminationListener, "terminationListener");
       return this;
     }
   }
