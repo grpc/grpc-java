@@ -1943,7 +1943,9 @@ public class XdsNameResolverTest {
     @Override
     public List<String> getTargets() {
       if (targets.isEmpty()) {
-        return Collections.singletonList(targetUri.toString());
+        List<String> targetList = new ArrayList<>();
+        targetList.add(targetUri.toString());
+        return targetList;
       }
       return new ArrayList<>(targets);
     }
