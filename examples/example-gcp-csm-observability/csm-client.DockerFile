@@ -44,4 +44,4 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Client
-ÏENTRYPOINT ["bin/csm-observability-client"]
+ENTRYPOINT ["bin/csm-observability-client"]
