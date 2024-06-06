@@ -240,17 +240,21 @@ final class ControlPlaneClient {
     stopwatch.reset().start();
   }
 
-  void sendDiscoveryRequests(String authority) {
-    // retry timer ran, so may have previously connected or done fallback
+  boolean sendDiscoveryRequests(String authority) {
+    boolean foundResource = false;
+
     Set<XdsResourceType<?>> subscribedResourceTypes =
         new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
     for (XdsResourceType<?> type : subscribedResourceTypes) {
       Collection<String> resources =
           resourceStore.getSubscribedResources(serverInfo, type, authority);
       if (resources != null && !resources.isEmpty()) {
+        foundResource = true;
         adsStream.sendDiscoveryRequest(type, resources);
       }
     }
+
+    return foundResource;
   }
 
   public <T extends XdsClient.ResourceUpdate> void removeNonceForType(XdsResourceType<T> type) {

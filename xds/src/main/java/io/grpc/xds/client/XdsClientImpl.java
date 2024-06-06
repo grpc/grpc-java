@@ -993,7 +993,12 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         ServerInfo serverInfo, ControlPlaneClient controlPlaneClient, String authority) {
       ControlPlaneClient activeCpClient = activeCpClients.get(authority);
       if (activeCpClient == null) {
-        return;
+        if (controlPlaneClient.sendDiscoveryRequests(authority)) {
+          activeCpClients.put(authority, controlPlaneClient);
+          restartMatchingSubscriberTimers(controlPlaneClient, authority);
+        }
+
+        return; // Since nothing was active can ignore fallback
       }
 
       if (activeCpClient.isReady()
@@ -1003,6 +1008,27 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         return;
       }
 
+      if (activeCpClient != controlPlaneClient) {
+        activeCpClients.put(authority, controlPlaneClient);
+        updateRootResources(controlPlaneClient, authority, false);
+      }
+
+      restartMatchingSubscriberTimers(controlPlaneClient, authority);
+      controlPlaneClient.sendDiscoveryRequests(authority);
+
+      // Shutdown any lower priority control plane clients.
+      Iterator<ControlPlaneClient> iterator = serverCpClientMap.values().iterator();
+      while (iterator.hasNext()) {
+        ControlPlaneClient client = iterator.next();
+        if (compareCpClients(client, activeCpClient, authority) > 0
+            && !activeCpClients.containsValue(client)) {
+          iterator.remove();
+          client.shutdown(); // TODO someday add an exponential backoff to mitigate flapping
+        }
+      }
+    }
+
+    private void restartMatchingSubscriberTimers(ControlPlaneClient controlPlaneClient, String authority) {
       // Restart the timers for all the watched resources that are associated with this stream
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
@@ -1011,23 +1037,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
               && Objects.equals(subscriber.authority, authority)) {
             subscriber.restartTimer();
           }
-        }
-      }
-
-      if (activeCpClient != controlPlaneClient) {
-        activeCpClients.put(authority, controlPlaneClient);
-        updateRootResources(controlPlaneClient, authority, false);
-      }
-
-      controlPlaneClient.sendDiscoveryRequests(authority);
-
-      // Shutdown any lower priority control plane clients.
-      Iterator<ControlPlaneClient> iterator = serverCpClientMap.values().iterator();
-      while (iterator.hasNext()) {
-        ControlPlaneClient client = iterator.next();
-        if (compareCpClients(client, activeCpClient, authority) > 0) {
-          client.shutdown(); // TODO someday add an exponential backoff to mitigate flapping
-          iterator.remove();
         }
       }
     }
