@@ -752,10 +752,11 @@ public abstract class BinderTransport
         int version = parcel.readInt();
         IBinder binder = parcel.readStrongBinder();
         if (version != WIRE_FORMAT_VERSION) {
-          shutdownInternal(Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
         } else if (binder == null) {
-          shutdownInternal(Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"),
-              true);
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
         } else {
           ListenableFuture<Status> authFuture = (securityPolicy instanceof AsyncSecurityPolicy) ?
               ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid) :
