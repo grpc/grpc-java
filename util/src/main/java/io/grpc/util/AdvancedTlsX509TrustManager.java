@@ -263,8 +263,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       try {
         this.currentTime = readAndUpdate(this.file, this.currentTime);
       } catch (IOException | GeneralSecurityException e) {
-        log.log(Level.SEVERE, e, () -> String.format("Failed refreshing trust CAs from file. Using "
-            + "previous CAs (file lastModified = %s)", file.lastModified()));
+        log.log(Level.SEVERE, String.format("Failed refreshing trust CAs from file. Using "
+            + "previous CAs (file lastModified = %s)", file.lastModified()), e);
       }
     }
   }
