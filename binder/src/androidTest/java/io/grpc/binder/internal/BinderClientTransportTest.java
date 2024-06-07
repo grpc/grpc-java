@@ -24,6 +24,8 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
@@ -35,6 +37,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.binder.AndroidComponentAddress;
+import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.SecurityPolicy;
@@ -381,6 +384,34 @@ public final class BinderClientTransportTest {
     blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.OK);
   }
 
+  @Test
+  public void testAsyncSecurityPolicyFailure() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
+    transport = new BinderClientTransportBuilder()
+        .setSecurityPolicy(securityPolicy)
+        .build();
+    RuntimeException exception = new NullPointerException();
+    securityPolicy.setAuthorizationException(exception);
+    transport.start(transportListener).run();
+    Status transportStatus = transportListener.awaitShutdown();
+    assertThat(transportStatus.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(transportStatus.getCause()).isEqualTo(exception);
+    transportListener.awaitTermination();
+  }
+
+  @Test
+  public void testAsyncSecurityPolicySuccess() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
+    transport = new BinderClientTransportBuilder()
+        .setSecurityPolicy(securityPolicy)
+        .build();
+    securityPolicy.setAuthorizationResult(Status.PERMISSION_DENIED);
+    transport.start(transportListener).run();
+    Status transportStatus = transportListener.awaitShutdown();
+    assertThat(transportStatus.getCode()).isEqualTo(Code.PERMISSION_DENIED);
+    transportListener.awaitTermination();
+  }
+
   private static void startAndAwaitReady(
       BinderTransport.BinderClientTransport transport, TestTransportListener transportListener)
       throws Exception {
@@ -538,6 +569,28 @@ public final class BinderClientTransportTest {
       } catch (InterruptedException e) {
         return Status.fromThrowable(e);
       }
+    }
+  }
+
+  /**
+   * An AsyncSecurityPolicy that lets a test specify the outcome of checkAuthorizationAsync().
+   */
+  static class SettableAsyncSecurityPolicy extends AsyncSecurityPolicy {
+    private SettableFuture<Status> result = SettableFuture.create();
+
+    public void clearAuthorizationResult() {
+      result = SettableFuture.create();
+    }
+    public boolean setAuthorizationResult(Status status) {
+      return result.set(status);
+    }
+
+    public boolean setAuthorizationException(Throwable t) {
+      return result.setException(t);
+    }
+
+    public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+      return Futures.nonCancellationPropagating(result);
     }
   }
 }
