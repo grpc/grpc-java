@@ -581,6 +581,7 @@ public final class BinderClientTransportTest {
     public void clearAuthorizationResult() {
       result = SettableFuture.create();
     }
+
     public boolean setAuthorizationResult(Status status) {
       return result.set(status);
     }
