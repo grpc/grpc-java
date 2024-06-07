@@ -797,6 +797,7 @@ public abstract class BinderTransport
         }
       }
     }
+
     private synchronized void handleAuthResult(Throwable t) {
       shutdownInternal(
           Status.INTERNAL
