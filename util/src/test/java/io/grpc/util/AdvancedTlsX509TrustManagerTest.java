@@ -82,7 +82,7 @@ public class AdvancedTlsX509TrustManagerTest {
   }
 
   @Test
-  public void useSystemDefaultDelegateManager() throws Exception {
+  public void systemDefaultDelegateManagerInstantiation() throws Exception {
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
     trustManager.useSystemDefaultTrustCerts();
     CertificateException ce = assertThrows(CertificateException.class, () -> trustManager
