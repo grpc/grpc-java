@@ -44,7 +44,7 @@ import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 /**
  * AdvancedTlsX509TrustManager is an {@code X509ExtendedTrustManager} that allows users to configure
  * advanced TLS features, such as root certificate reloading and peer cert custom verification.
- * The default instantiation pattern is
+ * The basic instantiation pattern is
  * <code>new Builder().build().useSystemDefaultTrustCerts();</code>
  *
  * <p>For Android users: this class is only supported in API level 24 and above.
@@ -122,7 +122,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       NoSuchAlgorithmException {
     // Passing a null value of KeyStore would make {@code TrustManagerFactory} attempt to use
     // system-default trust CA certs.
-    createDelegateTrustManager(null);
+    this.delegateManager = createDelegateTrustManager(null);
   }
 
   /**
@@ -220,8 +220,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * ({@link AdvancedTlsX509TrustManager#useSystemDefaultTrustCerts()},
    * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
    * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File)}).
-   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. If
-   * the provided period is less than 1 minute, it is automatically adjusted to 1 minute.
+   * Before scheduling the task, the method synchronously reads and updates trust certificates once.
+   * If the provided period is less than 1 minute, it is automatically adjusted to 1 minute.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    * @param period the period between successive read-and-update executions
@@ -307,7 +307,6 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     }
   }
 
-  // *
   // Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
   public interface Closeable extends java.io.Closeable {
     @Override
@@ -344,8 +343,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
      * 1. Proper verification of the peer certificate chain <br>
      * 2. Proper checks of the identity of the peer certificate <br>
      * Failing to do so will leave your application without any TLS-related protection. Keep in mind
-     * that any loaded trust certificates will be ignored when using this mode (see how {@code
-     * checkTrusted} is implemented).
+     * that any loaded trust certificates will be ignored when using this mode.
      */
     INSECURELY_SKIP_ALL_VERIFICATION,
   }
@@ -379,18 +377,16 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
         throws CertificateException;
   }
 
-  /** Builds a new {@link AdvancedTlsX509TrustManager}.
-   * By default, no trust certificates are loaded after the build. To load them, use one of the
-   * following methods:
-   * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
-   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile
-   * (File, long, TimeUnit, ScheduledExecutorService)},
-   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile
-   * (File, long, TimeUnit, ScheduledExecutorService)}
-   * By default, {@link Verification#CERTIFICATE_AND_HOST_NAME_VERIFICATION} mode for authenticating
-   * the peer certificate is used.
-   * If you set a {@link SslSocketAndEnginePeerVerifier}, its methods will be called in addition to
-   * verifying certificates - see how {@code checkTrusted} is implemented.
+  /**
+   * Builds a new {@link AdvancedTlsX509TrustManager}. By default, no trust certificates are loaded
+   * after the build. To load them, use one of the following methods: {@link
+   * AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])}, {@link
+   * AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit,
+   * ScheduledExecutorService)}, {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile
+   * (File, long, TimeUnit, ScheduledExecutorService)}. By default, {@link
+   * Verification#CERTIFICATE_AND_HOST_NAME_VERIFICATION} mode for authenticating the peer
+   * certificate is used. If you set a {@link SslSocketAndEnginePeerVerifier}, its methods will be
+   * called in addition to verifying certificates.
    */
   public static final class Builder {
 

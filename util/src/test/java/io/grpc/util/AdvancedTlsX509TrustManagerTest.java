@@ -18,10 +18,13 @@ package io.grpc.util;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
@@ -113,13 +116,12 @@ public class AdvancedTlsX509TrustManagerTest {
     trustManager.updateTrustCredentialsFromFile(serverCert0File, -1, TimeUnit.SECONDS,
         executor);
     log.removeHandler(handler);
-    for (LogRecord record : handler.getRecords()) {
-      if (record.getMessage().contains("Default value of ")) {
-        assertTrue(true);
-        return;
-      }
-    }
-    fail("Log message related to setting default values not found");
+    LogRecord logRecord = handler.getRecords().stream()
+        .filter(record -> record.getMessage().contains("Default value of "))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("Log message related to setting default "
+            + "values not found"));
+    assertNotNull(logRecord);
   }
 
 
