@@ -20,11 +20,6 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
