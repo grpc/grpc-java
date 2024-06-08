@@ -20,10 +20,10 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
+
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
-import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
@@ -86,7 +86,7 @@ public class AdvancedTlsX509TrustManagerTest {
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
     trustManager.useSystemDefaultTrustCerts();
     CertificateException ce = assertThrows(CertificateException.class, () -> trustManager
-      .checkServerTrusted(serverCert0, "RSA", new Socket()));
+        .checkServerTrusted(serverCert0, "RSA", new Socket()));
     assertEquals("socket is not a type of SSLSocket", ce.getMessage());
   }
 
