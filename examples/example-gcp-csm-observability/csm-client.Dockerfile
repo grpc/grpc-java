@@ -18,10 +18,10 @@
 
 FROM eclipse-temurin:11-jdk AS build
 
-WORKDIR /grpc-java
+WORKDIR /grpc-java/examples
 COPY . .
 
-RUN cd examples/example-gcp-csm-observability && ../gradlew installDist -PskipCodegen=true -PskipAndroid=true
+RUN cd example-gcp-csm-observability && ../gradlew installDist -PskipCodegen=true -PskipAndroid=true
 
 #
 # Stage 2:

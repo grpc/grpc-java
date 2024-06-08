@@ -19,15 +19,19 @@ for gRPC client and gRPC server.
 
 ## Build the example
 
-From the `grpc-java/examples/example-gcp-csm-observability`directory:,
+From the `grpc-java/examples/`directory i.e,
+```
+cd grpc-java/examples
+```
+Run the following to generate client and server images respectively.
 
 Client:
 ```
-docker build -f csm-client.Dockerfile
+docker build -f example-gcp-csm-observability/csm-client.Dockerfile .
 ```
 Server:
 ```
-docker build -f csm-server.Dockerfile
+docker build -f example-gcp-csm-observability/csm-server.Dockerfile .
 ```
 
 To push to a registry, add a tag to the image either by adding a `-t` flag to `docker build` command above or run:
