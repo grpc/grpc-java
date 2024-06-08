@@ -23,9 +23,12 @@ import static org.junit.Assert.assertThrows;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
+import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import java.io.File;
 import java.io.IOException;
+import java.net.Socket;
 import java.security.GeneralSecurityException;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,7 +67,7 @@ public class AdvancedTlsX509TrustManagerTest {
   }
 
   @Test
-  public void credentialSetting() throws Exception {
+  public void updateTrustCredentials_replacesIssuers() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
     trustManager.updateTrustCredentialsFromFile(serverCert0File);
@@ -76,6 +79,15 @@ public class AdvancedTlsX509TrustManagerTest {
     trustManager.updateTrustCredentialsFromFile(serverCert0File, 1, TimeUnit.MINUTES,
         executor);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
+  }
+
+  @Test
+  public void useSystemDefaultDelegateManager() throws Exception {
+    AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
+    trustManager.useSystemDefaultTrustCerts();
+    CertificateException ce = assertThrows(CertificateException.class, () -> trustManager
+      .checkServerTrusted(serverCert0, "RSA", new Socket()));
+    assertEquals("socket is not a type of SSLSocket", ce.getMessage());
   }
 
   @Test
