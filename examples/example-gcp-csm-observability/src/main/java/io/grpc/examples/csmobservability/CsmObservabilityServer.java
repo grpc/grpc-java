@@ -83,24 +83,22 @@ public class CsmObservabilityServer {
 
     final CsmObservabilityServer server = new CsmObservabilityServer();
 
-    /**
-     * Adds a PrometheusHttpServer to convert OpenTelemetry metrics to Prometheus format and
-     * expose these via a HttpServer exporter to the SdkMeterProvider.
-     */
+    // Adds a PrometheusHttpServer to convert OpenTelemetry metrics to Prometheus format and
+    // expose these via a HttpServer exporter to the SdkMeterProvider.
     SdkMeterProvider sdkMeterProvider = SdkMeterProvider.builder()
         .registerMetricReader(
             PrometheusHttpServer.builder().setPort(prometheusPort).build())
         .build();
 
-    /** Initialize OpenTelemetry SDK with MeterProvider configured with Prometheus metrics exporter. */
+    // Initialize OpenTelemetry SDK with MeterProvider configured with Prometheus metrics exporter
     OpenTelemetrySdk openTelemetrySdk =
         OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).build();
 
-    /** Initialize CSM Observability. */
+    // Initialize CSM Observability
     CsmObservability observability = CsmObservability.newBuilder()
         .sdk(openTelemetrySdk)
         .build();
-    /** Registers CSM observabiity globally. */
+    // Registers CSM observabiity globally
     observability.registerGlobal();
 
     server.start(port);
@@ -114,9 +112,9 @@ public class CsmObservabilityServer {
         } catch (InterruptedException e) {
           e.printStackTrace(System.err);
         }
-        /** Shut down CSM observability. */
+        // Shut down CSM observability.
         observability.close();
-        /** Shut down OpenTelemetry SDK. */
+        // Shut down OpenTelemetry SDK.
         openTelemetrySdk.close();
 
         System.err.println("*** server shut down");

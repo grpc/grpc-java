@@ -107,32 +107,30 @@ public class CsmObservabilityClient {
       }
     });
 
-    /**
-     * Adds a PrometheusHttpServer to convert OpenTelemetry metrics to Prometheus format and
-     * expose these via a HttpServer exporter to the SdkMeterProvider.
-     */
+    // Adds a PrometheusHttpServer to convert OpenTelemetry metrics to Prometheus format and
+    // expose these via a HttpServer exporter to the SdkMeterProvider.
     SdkMeterProvider sdkMeterProvider = SdkMeterProvider.builder()
         .registerMetricReader(
             PrometheusHttpServer.builder().setPort(prometheusPort).build())
         .build();
 
-    /** Initialize OpenTelemetry SDK with MeterProvider configured with Prometeheus. */
+    // Initialize OpenTelemetry SDK with MeterProvider configured with Prometeheus.
     OpenTelemetrySdk openTelemetrySdk =
         OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).build();
 
-    /** Initialize CSM Observability. */
+    // Initialize CSM Observability.
     CsmObservability observability = CsmObservability.newBuilder()
         .sdk(openTelemetrySdk)
         .build();
-    /** Registers CSM observabiity globally. */
+    // Registers CSM observabiity globally.
     observability.registerGlobal();
 
-    /** Create a communication channel to the server, known as a Channel. */
+    // Create a communication channel to the server, known as a Channel.
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
 
     try {
-      /** Run RPCs every second. */
+      // Run RPCs every second.
       while (sendRpcs) {
         CsmObservabilityClient client = new CsmObservabilityClient(channel);
         client.greet(user);
@@ -141,9 +139,9 @@ public class CsmObservabilityClient {
       }
     } finally {
       channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
-      /** Shut down CSM Observability. */
+      // Shut down CSM Observability.
       observability.close();
-      /** Shut down OpenTelemetry SDK. */
+      // Shut down OpenTelemetry SDK.
       openTelemetrySdk.close();
     }
   }
