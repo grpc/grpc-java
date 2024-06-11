@@ -327,7 +327,9 @@ public abstract class BinderTransport
                 inbound.closeAbnormal(shutdownStatus);
               }
             }
-            notifyTerminated();
+            synchronized (this) {
+              notifyTerminated();
+            } 
             releaseExecutors();
           });
     }
