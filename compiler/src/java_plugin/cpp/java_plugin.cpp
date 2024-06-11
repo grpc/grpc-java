@@ -46,7 +46,14 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
   virtual ~JavaGrpcGenerator() {}
 
   uint64_t GetSupportedFeatures() const override {
-    return FEATURE_PROTO3_OPTIONAL;
+    return Feature::FEATURE_PROTO3_OPTIONAL |
+           Feature::FEATURE_SUPPORTS_EDITIONS;
+  }
+  protobuf::Edition GetMinimumEdition() const override {
+    return protobuf::Edition::EDITION_PROTO2;
+  }
+  protobuf::Edition GetMaximumEdition() const override {
+    return protobuf::Edition::EDITION_2023;
   }
 
   virtual bool Generate(const protobuf::FileDescriptor* file,
