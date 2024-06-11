@@ -81,8 +81,6 @@ public class CsmObservabilityServer {
       prometheusPort = Integer.parseInt(args[1]);
     }
 
-    final CsmObservabilityServer server = new CsmObservabilityServer();
-
     // Adds a PrometheusHttpServer to convert OpenTelemetry metrics to Prometheus format and
     // expose these via a HttpServer exporter to the SdkMeterProvider.
     SdkMeterProvider sdkMeterProvider = SdkMeterProvider.builder()
@@ -101,6 +99,7 @@ public class CsmObservabilityServer {
     // Registers CSM observabiity globally
     observability.registerGlobal();
 
+    final CsmObservabilityServer server = new CsmObservabilityServer();
     server.start(port);
 
     Runtime.getRuntime().addShutdownHook(new Thread() {

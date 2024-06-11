@@ -31,6 +31,7 @@ import io.opentelemetry.exporter.prometheus.PrometheusHttpServer;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -41,7 +42,6 @@ import java.util.logging.Logger;
 public class CsmObservabilityClient {
   private static final Logger logger = Logger.getLogger(CsmObservabilityClient.class.getName());
 
-  private static volatile boolean sendRpcs = true;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
@@ -71,6 +71,7 @@ public class CsmObservabilityClient {
     String user = "world";
     String target = "xds:///helloworld:50051";
     int prometheusPort = 9465;
+    AtomicBoolean sendRpcs = new AtomicBoolean(true);
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
         System.err.println("Usage: [name [target [prometheusPort]]]");
@@ -97,7 +98,7 @@ public class CsmObservabilityClient {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC client since JVM is shutting down");
 
-        sendRpcs = false;
+        sendRpcs.set(false);
         try {
           mainThread.join();
         } catch (InterruptedException e) {
@@ -128,11 +129,11 @@ public class CsmObservabilityClient {
     // Create a communication channel to the server, known as a Channel.
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
         .build();
+    CsmObservabilityClient client = new CsmObservabilityClient(channel);
 
     try {
       // Run RPCs every second.
-      while (sendRpcs) {
-        CsmObservabilityClient client = new CsmObservabilityClient(channel);
+      while (sendRpcs.get()) {
         client.greet(user);
         // Sleep for a bit before sending the next RPC.
         Thread.sleep(3000);
