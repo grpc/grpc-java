@@ -294,7 +294,6 @@ final class ControlPlaneClient {
   private class AdsStream implements EventHandler<DiscoveryResponse> {
     private boolean responseReceived;
     private boolean closed;
-    private boolean hasGoneReady = false;
     // Response nonce for the most recently received discovery responses of each resource type.
     // Client initiated requests start response nonce with empty string.
     // Nonce in each response is echoed back in the following ACK/NACK request. It is
