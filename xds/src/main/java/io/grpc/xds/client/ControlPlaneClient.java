@@ -79,6 +79,8 @@ final class ControlPlaneClient {
   private final Map<XdsResourceType<?>, String> versions = new HashMap<>();
 
   private boolean shutdown;
+  private boolean hasBeenActive;
+  private boolean lastStateWasReady;
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -199,7 +201,7 @@ final class ControlPlaneClient {
    */
   // Must be synchronized.
   boolean isInBackoff() {
-    return rpcRetryTimer != null; // && rpcRetryTimer.isPending();
+    return rpcRetryTimer != null || (hasBeenActive && !isReady());
   }
 
   // Must be synchronized.
@@ -214,7 +216,7 @@ final class ControlPlaneClient {
   // Must be synchronized.
   void readyHandler() {
     if (!isReady()) {
-      if (rpcRetryTimer == null) {
+      if (rpcRetryTimer == null || !rpcRetryTimer.isPending()) {
         scheduleRpcRetry();
       }
       return;
@@ -225,7 +227,12 @@ final class ControlPlaneClient {
       rpcRetryTimer = null;
     }
 
-    xdsResponseHandler.handleStreamReady(serverInfo);
+    hasBeenActive = true;
+    if (!lastStateWasReady) {
+      lastStateWasReady = true;
+      System.out.println("About to execute handleStreamReady for target: " + serverInfo.target());
+      xdsResponseHandler.handleStreamReady(serverInfo);
+    }
   }
 
   /**
@@ -236,6 +243,7 @@ final class ControlPlaneClient {
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
     adsStream = new AdsStream();
+    adsStream.start();
     logger.log(XdsLogLevel.INFO, "ADS stream started");
     stopwatch.reset().start();
   }
@@ -302,6 +310,9 @@ final class ControlPlaneClient {
     private AdsStream() {
       this.call = xdsTransport.createStreamingCall(methodDescriptor.getFullMethodName(),
           methodDescriptor.getRequestMarshaller(), methodDescriptor.getResponseMarshaller());
+    }
+
+    void start() {
       call.start(this);
     }
 
@@ -330,6 +341,8 @@ final class ControlPlaneClient {
         builder.setErrorDetail(error);
       }
       DiscoveryRequest request = builder.build();
+      System.out.println("sendDiscoveryRequest: " + request + "\n");
+      resourceStore.assignResourcesToOwner(type, resources, ControlPlaneClient.this);
       call.sendMessage(request);
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {
         logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", messagePrinter.print(request));
@@ -347,11 +360,10 @@ final class ControlPlaneClient {
 
     @Override
     public void onReady() {
-      if (shutdown || closed || hasGoneReady) {
+      if (shutdown || closed) {
         return;
       }
 
-      hasGoneReady = true;
       syncContext.execute(ControlPlaneClient.this::readyHandler);
     }
 
@@ -383,6 +395,7 @@ final class ControlPlaneClient {
 
     @Override
     public void onStatusReceived(final Status status) {
+      lastStateWasReady = false;
       syncContext.execute(() -> {
         if (status.isOk()) {
           handleRpcStreamClosed(Status.UNAVAILABLE.withDescription(CLOSED_BY_SERVER));

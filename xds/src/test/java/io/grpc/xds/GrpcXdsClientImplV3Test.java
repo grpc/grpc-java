@@ -208,8 +208,9 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
     protected void verifyRequest(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
         EnvoyProtoData.Node node) {
-      verify(requestObserver, Mockito.timeout(2000)).onNext(argThat(new DiscoveryRequestMatcher(
-          node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce, null, null)));
+      DiscoveryRequestMatcher matcher = new DiscoveryRequestMatcher(
+          node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce, null, null);
+      verify(requestObserver, Mockito.timeout(2000)).onNext(argThat(matcher));
     }
 
     @Override
@@ -874,6 +875,19 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
         return false;
       }
       return node.equals(argument.getNode());
+    }
+
+    @Override
+    public String toString() {
+      return "DiscoveryRequestMatcher{" +
+          "node=" + node +
+          ", versionInfo='" + versionInfo + '\'' +
+          ", typeUrl='" + typeUrl + '\'' +
+          ", resources=" + resources +
+          ", responseNonce='" + responseNonce + '\'' +
+          ", errorCode=" + errorCode +
+          ", errorMessages=" + errorMessages +
+          '}';
     }
   }
 

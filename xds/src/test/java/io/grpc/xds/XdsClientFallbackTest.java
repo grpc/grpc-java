@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.junit.After;
 import org.junit.Before;
@@ -70,17 +71,17 @@ public class XdsClientFallbackTest {
 
         @Override
         public void onChanged(XdsListenerResource.LdsUpdate update) {
-          log.info("LDS update: " + update);
+          log.log(Level.FINE, "LDS update: " + update);
         }
 
         @Override
         public void onError(Status error) {
-          log.info("LDS update error: " + error.getDescription());
+          log.log(Level.FINE, "LDS update error: " + error.getDescription());
         }
 
         @Override
         public void onResourceDoesNotExist(String resourceName) {
-          log.info("LDS resource does not exist: " + resourceName);
+          log.log(Level.FINE, "LDS resource does not exist: " + resourceName);
         }
       };
 
@@ -129,7 +130,7 @@ public class XdsClientFallbackTest {
     controlPlane.setEdsConfig(
         ControlPlaneRule.buildClusterLoadAssignment(edsInetSocketAddress.getHostName(),
             edsInetSocketAddress.getPort()));
-    log.info(
+    log.log(Level.FINE,
         String.format("Set ADS config for %s with address %s", serverName, edsInetSocketAddress));
   }
 
@@ -173,7 +174,7 @@ public class XdsClientFallbackTest {
     mainTdServer.getServer().shutdownNow();
     restartServer(TdServerType.FALLBACK);
     xdsClient = xdsClientPool.getObject();
-    log.info("Fallback port = " + fallbackServer.getServer().getPort());
+    log.log(Level.FINE, "Fallback port = " + fallbackServer.getServer().getPort());
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
@@ -189,9 +190,7 @@ public class XdsClientFallbackTest {
     xdsClient = xdsClientPool.getObject();
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-
-    Thread.sleep(5000);
-    verify(ldsWatcher, never()).onChanged(any());
+    verify(ldsWatcher, timeout(5000).times(0)).onChanged(any());
 
     restartServer(TdServerType.MAIN);
 
@@ -235,8 +234,7 @@ public class XdsClientFallbackTest {
     mainTdServer.getServer().shutdownNow();
 
     // Shouldn't do fallback since all watchers are loaded
-    Thread.sleep(5000);
-    verify(ldsWatcher, never()).onChanged(
+    verify(ldsWatcher, timeout(5000).times(0)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
 
     // Should just get from cache
@@ -247,6 +245,7 @@ public class XdsClientFallbackTest {
     verify(ldsWatcher, never()).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
 
+    System.out.println(">>>>>> About to watch CDS");
     // Asking for something not in cache should force a fallback
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "cluster0", cdsWatcher);
     verify(rdsWatcher, timeout(10000)).onChanged(any());
@@ -255,6 +254,26 @@ public class XdsClientFallbackTest {
     verify(ldsWatcher2, timeout(10000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
     verify(cdsWatcher, timeout(10000)).onChanged(any());
+  }
+
+  @Test
+  public void connect_then_mainServerRestart_fallbackServerdown()  throws Exception {
+    restartServer(TdServerType.MAIN);
+    xdsClient = xdsClientPool.getObject();
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
+
+    verify(ldsWatcher, timeout(10000)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+
+    mainTdServer.getServer().shutdownNow();
+    fallbackServer.getServer().shutdownNow();
+
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "cluster0", cdsWatcher);
+    restartServer(TdServerType.MAIN);
+    verify(cdsWatcher, timeout(10000)).onChanged(any());
+    verify(ldsWatcher, timeout(10000).times(2)).onChanged(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
   }
 
   private Map<String, ?> defaultBootstrapOverride() {

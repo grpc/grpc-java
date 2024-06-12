@@ -470,6 +470,11 @@ public class CsdsServiceTest {
       return ImmutableMap.of();
     }
 
+    @Override
+    public void assignResourcesToOwner(XdsResourceType<?> type, Collection<String> resources,
+                                       Object owner) {
+      // No-op.
+    }
   }
 
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
