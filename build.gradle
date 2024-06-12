@@ -253,12 +253,24 @@ subprojects {
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
+
+            // This check is in libs.errorprone.corejava8 but has been removed
+            // in later versions. It isn't smart enough to realize the field is
+            // actually immutable. And it also doesn't complain about arrays
+            // that are actually mutable.
+            options.errorprone.check("MutableConstantField", CheckSeverity.OFF)
         }
         tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
+
+            // This check is in libs.errorprone.corejava8 but has been removed
+            // in later versions. It isn't smart enough to realize the field is
+            // actually immutable. And it also doesn't complain about arrays
+            // that are actually mutable.
+            options.errorprone.check("MutableConstantField", CheckSeverity.OFF)
         }
 
         plugins.withId("ru.vyarus.animalsniffer") {
