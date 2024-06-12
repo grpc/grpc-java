@@ -70,7 +70,7 @@ public class CsmObservabilityClient {
   public static void main(String[] args) throws Exception {
     String user = "world";
     String target = "xds:///helloworld:50051";
-    int prometheusPort = 9465;
+    int prometheusPort = 9464;
     AtomicBoolean sendRpcs = new AtomicBoolean(true);
     if (args.length > 0) {
       if ("--help".equals(args[0])) {

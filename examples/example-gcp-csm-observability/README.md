@@ -15,7 +15,7 @@ for gRPC client and gRPC server.
 
 `CsmObservabilityServer` takes the following command-line arguments -
 * port - Port used for running Hello World server. Default value is `50051`.
-* prometheusPort - Port used for exposing prometheus metrics. Default value is `9465`.
+* prometheusPort - Port used for exposing prometheus metrics. Default value is `9464`.
 
 ## Build the example
 
