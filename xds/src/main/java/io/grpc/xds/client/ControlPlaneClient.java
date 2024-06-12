@@ -216,9 +216,6 @@ final class ControlPlaneClient {
   // Must be synchronized.
   void readyHandler() {
     if (!isReady()) {
-      if (rpcRetryTimer == null || !rpcRetryTimer.isPending()) {
-        scheduleRpcRetry();
-      }
       return;
     }
 
@@ -248,21 +245,23 @@ final class ControlPlaneClient {
     stopwatch.reset().start();
   }
 
-  boolean sendDiscoveryRequests(String authority) {
-    boolean foundResource = false;
+  void sendDiscoveryRequests(String authority) {
+    if (adsStream == null) {
+      startRpcStream();
+      // when the stream becomes ready, it will send the discovery requests
+      return;
+    }
 
     Set<XdsResourceType<?>> subscribedResourceTypes =
         new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
+
     for (XdsResourceType<?> type : subscribedResourceTypes) {
       Collection<String> resources =
           resourceStore.getSubscribedResources(serverInfo, type, authority);
       if (resources != null && !resources.isEmpty()) {
-        foundResource = true;
         adsStream.sendDiscoveryRequest(type, resources);
       }
     }
-
-    return foundResource;
   }
 
   public <T extends XdsClient.ResourceUpdate> void removeNonceForType(XdsResourceType<T> type) {

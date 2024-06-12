@@ -625,9 +625,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           fallbackCpc.getServerInfo().target());
 
       setCpcForAuthority(authority, fallbackCpc);
-      updateRootResources(fallbackCpc, authority, true);
-      // Make sure we get notifications of updates for leftover cached resources from the server.
-      rerequestNonRootResources(fallbackCpc, authority);
+      fallbackCpc.sendDiscoveryRequests(authority);
       didFallback = true;
     } else {
       logger.log(XdsLogLevel.WARNING, "No working fallback XDS Servers found from {0}", oldTarget);
@@ -670,58 +668,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         }
       }
     }
-  }
-
-  private void rerequestNonRootResources(ControlPlaneClient fallbackCpc, String authority) {
-    for (XdsResourceType<?> resourceType : resourceSubscribers.keySet()) {
-      if (!resourceType.updateInPlaceOnFallback()) {
-        fallbackCpc.adjustResourceSubscription(resourceType, authority);
-      }
-    }
-  }
-
-  private void updateRootResources(ControlPlaneClient targetCpc, String authority, boolean force) {
-    Predicate<ResourceSubscriber<? extends ResourceUpdate>> cpcMatchPredicate;
-
-    if (force) {
-      // doing fallback so grab everything
-      cpcMatchPredicate = subscriber ->
-          subscriber.controlPlaneClient != targetCpc
-              && Objects.equals(subscriber.authority, authority);
-    } else {
-      // Became ready so get resources from lower priority CPC's
-      List<ControlPlaneClient> lowerPriorityCpcs = new ArrayList<>();
-      boolean found = false;
-      for (ServerInfo server : bootstrapInfo.servers()) {
-        if (server.equals(targetCpc.getServerInfo())) {
-          found = true;
-          continue;
-        } else if (found && serverCpClientMap.containsKey(server)) {
-          lowerPriorityCpcs.add(serverCpClientMap.get(server));
-        }
-      }
-
-      cpcMatchPredicate = subscriber ->
-          (subscriber.controlPlaneClient == null
-              || lowerPriorityCpcs.contains(subscriber.controlPlaneClient))
-              && Objects.equals(subscriber.authority, authority);
-    }
-
-    resourceSubscribers.keySet().stream()
-        .filter(XdsResourceType::updateInPlaceOnFallback)
-        .forEach(resourceType -> {
-          // Update all values that were pointing at replaceable XDS servers to point to target one
-          resourceSubscribers.get(resourceType).values().stream()
-              .filter(cpcMatchPredicate)
-              .forEach(
-                  subscriber -> {
-                    subscriber.controlPlaneClient = targetCpc;
-                    subscriber.data = null;
-                    subscriber.absent = false;
-                  });
-          // Reload the type from the active XDS server.
-          targetCpc.adjustResourceSubscription(resourceType, authority);
-        });
   }
 
   /**
@@ -1109,7 +1055,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
       if (activeCpClient != controlPlaneClient) {
         setCpcForAuthority(authority, controlPlaneClient);
-        updateRootResources(controlPlaneClient, authority, false);
       } else {
         assignUnassignedResources(authority);
       }

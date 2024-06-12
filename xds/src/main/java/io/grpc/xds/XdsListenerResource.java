@@ -100,11 +100,6 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   }
 
   @Override
-  protected boolean updateInPlaceOnFallback() {
-    return true;
-  }
-
-  @Override
   protected LdsUpdate doParse(Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof Listener)) {
