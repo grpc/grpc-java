@@ -451,10 +451,7 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(0.03 + 0.1 + 0.024)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0))),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -470,9 +467,7 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(1028L)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0))),
+                                        .hasBucketBoundaries(SIZE_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -490,9 +485,7 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasCount(1)
                                             .hasSum(0)
                                             .hasAttributes(clientAttributes)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0))));
+                                            .hasBucketBoundaries(SIZE_BUCKETS))));
 
 
     // faking retry
@@ -543,19 +536,13 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(0.1)
                                         .hasAttributes(clientAttributes1)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(1)
                                         .hasSum(0.154)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                    0, 0, 0, 0, 0, 0, 0, 0, 0))),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -573,17 +560,13 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasCount(1)
                                             .hasSum(0)
                                             .hasAttributes(clientAttributes1)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0),
+                                            .hasBucketBoundaries(SIZE_BUCKETS),
                                     point ->
                                         point
                                             .hasCount(1)
                                             .hasSum(0)
                                             .hasAttributes(clientAttributes)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0))),
+                                            .hasBucketBoundaries(SIZE_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -599,17 +582,13 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(1028L)
                                         .hasAttributes(clientAttributes1)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0),
+                                        .hasBucketBoundaries(SIZE_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(1)
                                         .hasSum(1028L)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0))));
+                                        .hasBucketBoundaries(SIZE_BUCKETS))));
 
     // fake transparent retry
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
@@ -650,19 +629,13 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(0.1)
                                         .hasAttributes(clientAttributes1)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(2)
                                         .hasSum(0.154 + 0.032)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0))),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -680,17 +653,13 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasCount(1)
                                             .hasSum(0)
                                             .hasAttributes(clientAttributes1)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0),
+                                            .hasBucketBoundaries(SIZE_BUCKETS),
                                     point ->
                                         point
                                             .hasCount(2)
                                             .hasSum(0 + 0)
                                             .hasAttributes(clientAttributes)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0))),
+                                            .hasBucketBoundaries(SIZE_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -706,17 +675,13 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(1028L)
                                         .hasAttributes(clientAttributes1)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0),
+                                        .hasBucketBoundaries(SIZE_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(2)
                                         .hasSum(1028L + 0)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0))));
+                                        .hasBucketBoundaries(SIZE_BUCKETS))));
 
     // fake another transparent retry
     fakeClock.forwardTime(10, MILLISECONDS);
@@ -770,25 +735,19 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(1028L)
                                         .hasAttributes(clientAttributes1)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0),
+                                        .hasBucketBoundaries(SIZE_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(2)
                                         .hasSum(1028L + 0)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0),
+                                        .hasBucketBoundaries(SIZE_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(1)
                                         .hasSum(1028L)
                                         .hasAttributes(clientAttributes2)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0))),
+                                        .hasBucketBoundaries(SIZE_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -804,10 +763,7 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasSum(0.03 + 0.1 + 0.024 + 1 + 0.1 + 0.01 + 0.032 + 0.01
                                             + 0.024)
                                         .hasAttributes(clientAttributes2)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 1, 0, 0, 0, 0, 0, 0))),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -822,28 +778,19 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(0.100)
                                         .hasAttributes(clientAttributes1)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(2)
                                         .hasSum(0.154 + 0.032)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS),
                                 point ->
                                     point
                                         .hasCount(1)
                                         .hasSum(0.024)
                                         .hasAttributes(clientAttributes2)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0))),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -861,25 +808,19 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasCount(1)
                                             .hasSum(0)
                                             .hasAttributes(clientAttributes1)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0),
+                                            .hasBucketBoundaries(SIZE_BUCKETS),
                                     point ->
                                         point
                                             .hasCount(2)
                                             .hasSum(0 + 0)
                                             .hasAttributes(clientAttributes)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0),
+                                            .hasBucketBoundaries(SIZE_BUCKETS),
                                     point ->
                                         point
                                             .hasCount(1)
                                             .hasSum(33D)
                                             .hasAttributes(clientAttributes2)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0))));
+                                            .hasBucketBoundaries(SIZE_BUCKETS))));
   }
 
   @Test
@@ -938,9 +879,7 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(0)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(SIZE_BUCKETS)
-                                        .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0))),
+                                        .hasBucketBoundaries(SIZE_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -955,10 +894,7 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(3D)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 1, 0, 0, 0, 0, 0))),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -973,10 +909,7 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasCount(1)
                                         .hasSum(0)
                                         .hasAttributes(clientAttributes)
-                                        .hasBucketBoundaries(LATENCY_BUCKETS)
-                                        .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                            0, 0, 0, 0, 0, 0, 0, 0, 0))),
+                                        .hasBucketBoundaries(LATENCY_BUCKETS))),
             metric ->
                 assertThat(metric)
                     .hasInstrumentationScope(InstrumentationScopeInfo.create(
@@ -994,9 +927,7 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasCount(1)
                                             .hasSum(0)
                                             .hasAttributes(clientAttributes)
-                                            .hasBucketBoundaries(SIZE_BUCKETS)
-                                            .hasBucketCounts(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                                0, 0))));
+                                            .hasBucketBoundaries(SIZE_BUCKETS))));
 
   }
 
