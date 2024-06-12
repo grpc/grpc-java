@@ -454,6 +454,6 @@ public abstract class XdsClient {
     default void assignResourcesToOwner(XdsResourceType<?> type, Collection<String> resources,
                                         Object owner) {
       // no-op - useful for test cases where everything is mocked
-    };
+    }
   }
 }

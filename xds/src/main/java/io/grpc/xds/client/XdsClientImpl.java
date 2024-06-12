@@ -56,7 +56,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 /**
@@ -193,7 +192,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     for (XdsResourceType<?> resourceType : resourceSubscribers.keySet()) {
       Map<String, ResourceSubscriber<? extends ResourceUpdate>> resourceSubscriberMap =
           resourceSubscribers.get(resourceType);
-      for (ResourceSubscriber<? extends ResourceUpdate> subscriber : resourceSubscriberMap.values()) {
+      for (ResourceSubscriber<? extends ResourceUpdate> subscriber
+          : resourceSubscriberMap.values()) {
         if (subscriber.controlPlaneClient == null
             && Objects.equals(subscriber.authority, authority)) {
           subscriber.controlPlaneClient = controlPlaneClient;
@@ -729,17 +729,17 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
     @Override
     public String toString() {
-      return "ResourceSubscriber{" +
-          "resource='" + resource + '\'' +
-          ", controlPlaneClient=" + controlPlaneClient +
-          ", authority='" + authority + '\'' +
-          ", type=" + type +
-          ", watchers=" + watchers.size() +
-          ", data=" + data +
-          ", absent=" + absent +
-          ", resourceDeletionIgnored=" + resourceDeletionIgnored +
-          ", errorDescription='" + errorDescription + '\'' +
-          '}';
+      return "ResourceSubscriber{"
+          + "resource='" + resource + '\''
+          + ", controlPlaneClient=" + controlPlaneClient
+          + ", authority='" + authority + '\''
+          + ", type=" + type
+          + ", watchers=" + watchers.size()
+          + ", data=" + data
+          + ", absent=" + absent
+          + ", resourceDeletionIgnored=" + resourceDeletionIgnored
+          + ", errorDescription='" + errorDescription + '\''
+          + '}';
     }
 
     void addWatcher(ResourceWatcher<T> watcher, Executor watcherExecutor) {
@@ -1071,7 +1071,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       }
     }
 
-    private void restartMatchingSubscriberTimers(ControlPlaneClient controlPlaneClient, String authority) {
+    private void restartMatchingSubscriberTimers(
+        ControlPlaneClient controlPlaneClient, String authority) {
       // Restart the timers for all the watched resources that are associated with this stream
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
@@ -1101,7 +1102,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     ServerInfo baseServerInfo = base.getServerInfo();
     ServerInfo otherServerInfo = other.getServerInfo();
 
-    if (serverInfos == null || !serverInfos.contains(baseServerInfo) || !serverInfos.contains(otherServerInfo)) {
+    if (serverInfos == null || !serverInfos.contains(baseServerInfo)
+        || !serverInfos.contains(otherServerInfo)) {
       return -100; // At least one of them isn't serving this authority
     }
 

@@ -879,15 +879,15 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
 
     @Override
     public String toString() {
-      return "DiscoveryRequestMatcher{" +
-          "node=" + node +
-          ", versionInfo='" + versionInfo + '\'' +
-          ", typeUrl='" + typeUrl + '\'' +
-          ", resources=" + resources +
-          ", responseNonce='" + responseNonce + '\'' +
-          ", errorCode=" + errorCode +
-          ", errorMessages=" + errorMessages +
-          '}';
+      return "DiscoveryRequestMatcher{"
+          + "node=" + node
+          + ", versionInfo='" + versionInfo + '\''
+          + ", typeUrl='" + typeUrl + '\''
+          + ", resources=" + resources
+          + ", responseNonce='" + responseNonce + '\''
+          + ", errorCode=" + errorCode
+          + ", errorMessages=" + errorMessages
+          + '}';
     }
   }
 
