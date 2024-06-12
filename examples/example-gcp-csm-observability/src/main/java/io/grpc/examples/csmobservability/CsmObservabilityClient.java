@@ -136,7 +136,7 @@ public class CsmObservabilityClient {
       while (sendRpcs.get()) {
         client.greet(user);
         // Sleep for a bit before sending the next RPC.
-        Thread.sleep(3000);
+        Thread.sleep(1000);
       }
     } finally {
       channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
