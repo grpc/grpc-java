@@ -227,7 +227,6 @@ final class ControlPlaneClient {
     hasBeenActive = true;
     if (!lastStateWasReady) {
       lastStateWasReady = true;
-      System.out.println("About to execute handleStreamReady for target: " + serverInfo.target());
       xdsResponseHandler.handleStreamReady(serverInfo);
     }
   }
@@ -339,7 +338,6 @@ final class ControlPlaneClient {
         builder.setErrorDetail(error);
       }
       DiscoveryRequest request = builder.build();
-      System.out.println("sendDiscoveryRequest: " + request + "\n");
       resourceStore.assignResourcesToOwner(type, resources, ControlPlaneClient.this);
       call.sendMessage(request);
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {

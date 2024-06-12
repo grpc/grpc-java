@@ -109,7 +109,6 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
       @Override
       public void sendMessage(ReqT message) {
-        System.out.println("call.sendMessage: " + message);
         call.sendMessage(message);
       }
 

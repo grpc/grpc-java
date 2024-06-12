@@ -245,7 +245,6 @@ public class XdsClientFallbackTest {
     verify(ldsWatcher, never()).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
 
-    System.out.println(">>>>>> About to watch CDS");
     // Asking for something not in cache should force a fallback
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "cluster0", cdsWatcher);
     verify(rdsWatcher, timeout(10000)).onChanged(any());

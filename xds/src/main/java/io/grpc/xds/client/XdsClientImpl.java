@@ -175,7 +175,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     for (String resource : resources) {
       ResourceSubscriber<? extends ResourceUpdate> subscriber = resourceSubscriberMap.get(resource);
       if (subscriber != null && subscriber.controlPlaneClient == null) {
-        System.out.println("Assigning " + subscriber.resource + " to " + controlPlaneClient);
         subscriber.controlPlaneClient = controlPlaneClient;
       }
     }
@@ -639,7 +638,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     }
 
     ControlPlaneClient activeCpClient = activeCpClients.get(authority);
-    System.out.println("In doFallbackIfNecessary: activeCpClient: " + activeCpClient + " authority: " + authority);
     if (cpc == activeCpClient) {
       return;
     }
@@ -968,7 +966,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           : null;
       XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, versionInfo, nonce,
           bootstrapInfo, securityConfig, toParseResourceNames);
-      syncContext.execute(() -> handleResourceUpdate(args, resources, xdsResourceType, processingTracker));
+      handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
     }
 
     @Override
@@ -1038,7 +1036,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     private void internalHandleStreamReady(
         ServerInfo serverInfo, ControlPlaneClient controlPlaneClient, String authority) {
       ControlPlaneClient activeCpClient = activeCpClients.get(authority);
-      System.out.println("In internalHandleStreamReady: " + serverInfo + " " + controlPlaneClient + " " + authority + " " + activeCpClient);
       if (activeCpClient == null) {
         setCpcForAuthority(authority, controlPlaneClient);
         restartMatchingSubscriberTimers(controlPlaneClient, authority);
@@ -1060,7 +1057,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       }
 
       restartMatchingSubscriberTimers(controlPlaneClient, authority);
-      System.out.println("Sending discovery requests for authority: " + authority);
       controlPlaneClient.sendDiscoveryRequests(authority);
 
       // Shutdown any lower priority control plane clients.

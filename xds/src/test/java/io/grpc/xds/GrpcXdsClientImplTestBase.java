@@ -2942,7 +2942,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
     verifyResourceMetadataRequested(CDS, anotherCdsResource);
 
-    System.out.println("About to sendResponse which should not be delivered");
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(CDS, Arrays.asList(CDS_RESOURCE, anotherCdsResource), "", "", NODE);
     assertThat(fakeWatchClock.runDueTasks()).isEqualTo(2);
@@ -2956,8 +2955,6 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(fakeWatchClock.getPendingTasks().size()).isEqualTo(2);
     CyclicBarrier barrier = new CyclicBarrier(2);
     doAnswer(blockUpdate(barrier)).when(cdsResourceWatcher).onChanged(any(CdsUpdate.class));
-
-    System.out.println("\nStarting countdown latch\n");
 
     CountDownLatch latch = new CountDownLatch(1);
     new Thread(() -> {
@@ -2974,7 +2971,6 @@ public abstract class GrpcXdsClientImplTestBase {
             "envoy.transport_sockets.tls", null, null
         )),
         anotherCdsResource, Any.pack(mf.buildClusterInvalid(anotherCdsResource)));
-    System.out.println("About to send another Response which should not be delivered");
     call.sendResponse(CDS, resourcesV2.values().asList(), VERSION_2, "0001");
     assertThat(call.isReady()).isFalse();
     verifyResourceMetadataAcked(
@@ -3017,7 +3013,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyNoInteractions(edsResourceWatcher);
     assertThat(fakeWatchClock.getPendingTasks().size()).isEqualTo(1);
 
-    System.out.println("About to sendResponse which should not be delivered");
     // Updated EDS response.
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
         ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
@@ -3448,7 +3443,6 @@ public abstract class GrpcXdsClientImplTestBase {
         CDS_RESOURCE, cdsResourceWatcher);
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),
         EDS_RESOURCE, edsResourceWatcher);
-    System.out.println("Before forwardNanos");
     fakeClock.forwardNanos(10L);
     call = resourceDiscoveryCalls.poll();
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
