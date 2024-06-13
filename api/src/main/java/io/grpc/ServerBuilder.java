@@ -115,7 +115,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
 
   /**
    * Adds a list of service implementations to the handler registry together. This exists for
-   * convenience - equivalent to repeatedly calling addService() with diffferent services.
+   * convenience - equivalent to repeatedly calling addService() with different services.
    * If multiple services on the list use the same name, only the last one on the list will
    * be added.
    *
