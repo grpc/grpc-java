@@ -21,6 +21,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
@@ -32,6 +34,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Handler;
@@ -79,6 +82,9 @@ public class AdvancedTlsX509TrustManagerTest {
     trustManager.updateTrustCredentialsFromFile(serverCert0File, 1, TimeUnit.MINUTES,
         executor);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
+
+    trustManager.updateTrustCredentialsFromFile(serverCert0File);
+    assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
   }
 
   @Test
@@ -123,12 +129,13 @@ public class AdvancedTlsX509TrustManagerTest {
     trustManager.updateTrustCredentialsFromFile(serverCert0File, -1, TimeUnit.SECONDS,
         executor);
     log.removeHandler(handler);
-    LogRecord logRecord = handler.getRecords().stream()
-        .filter(record -> record.getMessage().contains("Default value of "))
-        .findFirst()
-        .orElseThrow(() -> new AssertionError("Log message related to setting default "
-            + "values not found"));
-    assertNotNull(logRecord);
+    try {
+      LogRecord logRecord = Iterables.find(handler.getRecords(),
+          record -> record.getMessage().contains("Default value of "));
+      assertNotNull(logRecord);
+    } catch (NoSuchElementException e) {
+      throw new AssertionError("Log message related to setting default values not found");
+    }
   }
 
 

@@ -328,13 +328,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
      */
     CERTIFICATE_AND_HOST_NAME_VERIFICATION,
     /**
-     * This SHOULD be accompanied by proper additional peer identity checks set through
-     * {@link SslSocketAndEnginePeerVerifier}. Failing to do so will leave your applications
-     * vulnerable to MITM attacks.
-     * Keep in mind that this will only take effect if the underlying SDK implementation invokes
-     * checkClientTrusted/checkServerTrusted with the {@code SSLEngine} parameter while doing
-     * verification.
-     * Setting this on either side will only perform certificate verification.
+     * DANGEROUS: Use trusted credentials to verify the certificate, but clients will not verify the
+     * certificate is for the expected host. This setting is only appropriate when accompanied by
+     * proper additional peer identity checks set through SslSocketAndEnginePeerVerifier. Failing to
+     * do so will leave your applications vulnerable to MITM attacks.
+     * This setting has the same behavior on server-side as CERTIFICATE_AND_HOST_NAME_VERIFICATION.
      */
     CERTIFICATE_ONLY_VERIFICATION,
     /**
