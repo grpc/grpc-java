@@ -416,7 +416,7 @@ public class StressTestClient {
     return builder.build();
   }
 
-  private long getTotalCallCount() {
+  long getTotalCallCount() {
     return totalCallCount.get();
   }
 
