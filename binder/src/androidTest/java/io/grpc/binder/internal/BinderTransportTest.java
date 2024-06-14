@@ -17,18 +17,12 @@
 package io.grpc.binder.internal;
 
 import android.content.Context;
-import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.BindServiceFlags;
-import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.HostServices;
-import io.grpc.binder.InboundParcelablePolicy;
-import io.grpc.binder.SecurityPolicies;
 import io.grpc.internal.AbstractTransportTest;
-import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
@@ -57,6 +51,8 @@ public final class BinderTransportTest extends AbstractTransportTest {
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
   private final ObjectPool<Executor> offloadExecutorPool =
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+  private final ObjectPool<Executor> serverExecutorPool =
+      SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
   @Override
   @After
@@ -71,6 +67,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
 
     BinderServer binderServer = new BinderServer.Builder()
         .setListenAddress(addr)
+        .setExecutorPool(serverExecutorPool)
         .setExecutorServicePool(executorServicePool)
         .setStreamTracerFactories(streamTracerFactories)
         .build();
