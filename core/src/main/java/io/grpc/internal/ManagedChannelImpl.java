@@ -616,7 +616,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           parsedDefaultServiceConfig.getError());
       this.defaultServiceConfig =
           (ManagedChannelServiceConfig) parsedDefaultServiceConfig.getConfig();
-      this.lastServiceConfig = this.defaultServiceConfig;
     } else {
       this.defaultServiceConfig = null;
     }
@@ -707,6 +706,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @VisibleForTesting
   InternalConfigSelector getConfigSelector() {
     return realChannel.configSelector.get();
+  }
+  
+  @VisibleForTesting
+  boolean hasThrottle() {
+    return this.transportProvider.throttle != null;
   }
 
   /**

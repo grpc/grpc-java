@@ -4165,6 +4165,39 @@ public class ManagedChannelImplTest {
     }
   }
 
+
+  @Test
+  public void enableServiceConfigLookUp_usingDefaultConfig_withRetryThrottling() throws Exception {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
+    try {
+      FakeNameResolverFactory nameResolverFactory =
+              new FakeNameResolverFactory.Builder(expectedUri)
+                      .setServers(ImmutableList.of(addressGroup)).build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+      channelBuilder.enableRetry();
+      Map<String, Object> defaultServiceConfig =
+              parseConfig("{"
+                      + "\"retryThrottling\":{\"maxTokens\": 1, \"tokenRatio\": 1},"
+                      + "\"methodConfig\":[{"
+                      + "\"name\":[{\"service\":\"SimpleService1\"}],"
+                      + "\"waitForReady\":true"
+                      + "}]}");
+      channelBuilder.defaultServiceConfig(defaultServiceConfig);
+
+      createChannel();
+
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+              ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
+      assertThat(resultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY)).isNull();
+      verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+      assertThat(channel.hasThrottle()).isTrue();
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
+  }
+
   @Test
   public void enableServiceConfigLookUp_resolverReturnsNoConfig_noDefaultConfig() {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
