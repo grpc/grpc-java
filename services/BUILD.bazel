@@ -63,6 +63,28 @@ java_library(
 )
 
 java_library(
+    name = "binarylog",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/BinaryLogProvider.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogProviderImpl.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogSink.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogs.java",
+        "src/main/java/io/grpc/protobuf/services/BinlogHelper.java",
+        "src/main/java/io/grpc/protobuf/services/InetAddressUtil.java",
+        "src/main/java/io/grpc/protobuf/services/TempFileSink.java",
+    ],
+    deps = [
+        "//api",
+        "//context",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:binarylog_java_proto",
+    ],
+)
+
+java_library(
     name = "channelz",
     srcs = [
         "src/main/java/io/grpc/protobuf/services/ChannelzProtoUtil.java",
