@@ -82,9 +82,10 @@ public class CallOptionsTest {
   }
 
   @Test
-  public void withOnReadyThreshold(){
+  public void withOnReadyThreshold() {
     int onReadyThreshold = 1024;
-    CallOptions callOptions = CallOptions.DEFAULT.withOnReadyThreshold(onReadyThreshold).withWaitForReady();
+    CallOptions callOptions = CallOptions.DEFAULT.withOnReadyThreshold(onReadyThreshold);
+    callOptions = callOptions.withWaitForReady();
     assertThat(callOptions.getOnReadyThreshold()).isEqualTo(onReadyThreshold);
     callOptions = callOptions.clearOnReadyThreshold();
     assertThat(callOptions.getOnReadyThreshold()).isNull();
