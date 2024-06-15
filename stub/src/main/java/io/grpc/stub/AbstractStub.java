@@ -253,6 +253,15 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   }
 
   /**
+   * Returns a new stub that limits the maximum number of bytes per stream in the queue.
+   *
+   * @since 1.1.0
+   */
+  public final S withOnReadyThreshold(int numBytes) {
+    return build(channel, callOptions.withOnReadyThreshold(numBytes));
+  }
+
+  /**
    * A factory class for stub.
    *
    * @since 1.26.0

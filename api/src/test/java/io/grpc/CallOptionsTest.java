@@ -82,6 +82,15 @@ public class CallOptionsTest {
   }
 
   @Test
+  public void withOnReadyThreshold(){
+    int onReadyThreshold = 1024;
+    CallOptions callOptions = CallOptions.DEFAULT.withOnReadyThreshold(onReadyThreshold).withWaitForReady();
+    assertThat(callOptions.getOnReadyThreshold()).isEqualTo(onReadyThreshold);
+    callOptions = callOptions.clearOnReadyThreshold();
+    assertThat(callOptions.getOnReadyThreshold()).isNull();
+  }
+
+  @Test
   public void allWiths() {
     assertThat(allSet.getAuthority()).isSameInstanceAs(sampleAuthority);
     assertThat(allSet.getDeadline()).isSameInstanceAs(sampleDeadline);
@@ -148,6 +157,7 @@ public class CallOptionsTest {
         .withCallCredentials(null)
         .withMaxInboundMessageSize(44)
         .withMaxOutboundMessageSize(55)
+        .withOnReadyThreshold(1024)
         .toString();
 
     assertThat(actual).contains("deadline=null");
@@ -159,6 +169,7 @@ public class CallOptionsTest {
     assertThat(actual).contains("waitForReady=true");
     assertThat(actual).contains("maxInboundMessageSize=44");
     assertThat(actual).contains("maxOutboundMessageSize=55");
+    assertThat(actual).contains("onReadyThreshold=1024");
     assertThat(actual).contains("streamTracerFactories=[tracerFactory1, tracerFactory2]");
   }
 
