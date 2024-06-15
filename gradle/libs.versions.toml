@@ -1,9 +1,9 @@
 [versions]
 googleauth = "1.22.0"
-netty = '4.1.100.Final'
+netty = '4.1.111.Final'
 # Keep the following references of tcnative version in sync whenever it's updated:
 #   SECURITY.md
-nettytcnative = '2.0.61.Final'
+nettytcnative = '2.0.65.Final'
 opencensus = "0.31.1"
 protobuf = "3.25.1"
 
