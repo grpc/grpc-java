@@ -25,6 +25,8 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import org.junit.Rule;
@@ -89,5 +91,18 @@ abstract class BaseAbstractStubTest<T extends AbstractStub<T>> {
     callOptions = stub.getCallOptions();
 
     assertEquals(callOptions.getExecutor(), executor);
+  }
+
+  @Test
+  public void withOnReadyThreshold() {
+    T stub = create(channel);
+    CallOptions callOptions = stub.getCallOptions();
+    assertNull(callOptions.getOnReadyThreshold());
+
+    int onReadyThreshold = 1024;
+    stub = stub.withOnReadyThreshold(onReadyThreshold);
+    callOptions = stub.getCallOptions();
+    assert callOptions.getOnReadyThreshold() != null;
+    assertEquals(callOptions.getOnReadyThreshold().intValue(), onReadyThreshold);
   }
 }
