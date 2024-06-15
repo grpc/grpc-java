@@ -155,10 +155,16 @@ class NettyAdaptiveCumulator implements Cumulator {
         // Take ownership of the tail.
         newTail = tail.retain();
 
-        int arrayOffset = composite.internalComponent(tailComponentIndex).arrayOffset();
-        if (arrayOffset > 0 && arrayOffset < tailSize) {
-          // The tail is a slice of a larger buffer, so we need to adjust the read index.
-          newTail.setIndex( arrayOffset, tail.writerIndex() );
+        try {
+          int arrayOffset = composite.internalComponent(tailComponentIndex).arrayOffset();
+          if (arrayOffset > 0 && arrayOffset < tailSize) {
+            // The tail is a slice of a larger buffer, so we need to adjust the read index.
+            newTail.setIndex( arrayOffset, tail.writerIndex() );
+          }
+        } catch (UnsupportedOperationException e) {
+          // Try it the old way that only works for netty before 4.1.111
+          ByteBuf sliceDuplicate = composite.internalComponent(tailComponentIndex).duplicate();
+          newTail.setIndex(sliceDuplicate.readerIndex(), sliceDuplicate.writerIndex());
         }
         /*
          * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
