@@ -22,9 +22,17 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.handler.codec.ByteToMessageDecoder.Cumulator;
+import io.netty.util.Version;
 
 class NettyAdaptiveCumulator implements Cumulator {
+  private static final boolean usingPre4_1_111_Netty;
   private final int composeMinSize;
+
+  static {
+    Version version = Version.identify().get("netty-buffer");
+    usingPre4_1_111_Netty =
+        version != null && version.artifactVersion().compareTo("4.1.111.Final") < 0;
+  }
 
   /**
    * "Adaptive" cumulator: cumulate {@link ByteBuf}s by dynamically switching between merge and
@@ -155,17 +163,21 @@ class NettyAdaptiveCumulator implements Cumulator {
         // Take ownership of the tail.
         newTail = tail.retain();
 
-        try {
+        // In older versions some buffers don't support arrayOffset(), so for performance
+        // we don't want to rely on the arrayOffset when we know the alternate path works
+        if (usingPre4_1_111_Netty) {
+          // Because of the way duplicate() works in older netty versions this works.  It stops
+          // working in 4.1.111 because they changed what duplicate returns.
+          ByteBuf sliceDuplicate = composite.internalComponent(tailComponentIndex).duplicate();
+          newTail.setIndex(sliceDuplicate.readerIndex(), sliceDuplicate.writerIndex());
+        } else {
           int arrayOffset = composite.internalComponent(tailComponentIndex).arrayOffset();
           if (arrayOffset > 0 && arrayOffset + tail.readerIndex() < tailSize) {
             // The tail is a slice of a larger buffer, so we need to adjust the read index.
-            newTail.setIndex( arrayOffset + tail.readerIndex(), tail.writerIndex() );
+            newTail.setIndex(arrayOffset + tail.readerIndex(), tail.writerIndex());
           }
-        } catch (UnsupportedOperationException e) {
-          // Try it the old way that only works for netty before 4.1.111
-          ByteBuf sliceDuplicate = composite.internalComponent(tailComponentIndex).duplicate();
-          newTail.setIndex(sliceDuplicate.readerIndex(), sliceDuplicate.writerIndex());
         }
+
         /*
          * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
          *
