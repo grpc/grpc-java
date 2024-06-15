@@ -512,6 +512,7 @@ public final class CallOptions {
     builder.waitForReady = other.waitForReady;
     builder.maxInboundMessageSize = other.maxInboundMessageSize;
     builder.maxOutboundMessageSize = other.maxOutboundMessageSize;
+    builder.onReadyThreshold = other.onReadyThreshold;
     return builder;
   }
 
@@ -527,6 +528,7 @@ public final class CallOptions {
         .add("waitForReady", isWaitForReady())
         .add("maxInboundMessageSize", maxInboundMessageSize)
         .add("maxOutboundMessageSize", maxOutboundMessageSize)
+        .add("onReadyThreshold", onReadyThreshold)
         .add("streamTracerFactories", streamTracerFactories)
         .toString();
   }
