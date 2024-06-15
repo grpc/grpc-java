@@ -82,6 +82,16 @@ public class CallOptionsTest {
   }
 
   @Test
+  public void withOnReadyThreshold() {
+    int onReadyThreshold = 1024;
+    CallOptions callOptions = CallOptions.DEFAULT.withOnReadyThreshold(onReadyThreshold);
+    callOptions = callOptions.withWaitForReady();
+    assertThat(callOptions.getOnReadyThreshold()).isEqualTo(onReadyThreshold);
+    callOptions = callOptions.clearOnReadyThreshold();
+    assertThat(callOptions.getOnReadyThreshold()).isNull();
+  }
+
+  @Test
   public void allWiths() {
     assertThat(allSet.getAuthority()).isSameInstanceAs(sampleAuthority);
     assertThat(allSet.getDeadline()).isSameInstanceAs(sampleDeadline);
