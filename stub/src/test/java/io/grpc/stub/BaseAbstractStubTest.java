@@ -25,8 +25,6 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-
-import java.util.Optional;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import org.junit.Rule;
