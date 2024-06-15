@@ -101,7 +101,6 @@ abstract class BaseAbstractStubTest<T extends AbstractStub<T>> {
     int onReadyThreshold = 1024;
     stub = stub.withOnReadyThreshold(onReadyThreshold);
     callOptions = stub.getCallOptions();
-    assertThat(callOptions.getOnReadyThreshold()).isNotNull();
-    assertEquals(callOptions.getOnReadyThreshold().intValue(), onReadyThreshold);
+    assertThat(callOptions.getOnReadyThreshold()).isEqualTo(onReadyThreshold);
   }
 }
