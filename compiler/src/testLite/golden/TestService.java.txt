@@ -715,7 +715,7 @@ public final class TestServiceGrpc {
   private static final int METHODID_STREAMING_INPUT_CALL = 5;
   private static final int METHODID_FULL_BIDI_CALL = 6;
   private static final int METHODID_HALF_BIDI_CALL = 7;
-  private static final int METHODID_IMPORT = 8;;
+  private static final int METHODID_IMPORT = 8;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
