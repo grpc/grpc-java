@@ -101,8 +101,8 @@ public final class BinderTransportSecurity {
       // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
       // and asynchronous code if the authorization result is already present.
       if (!authStatusFuture.isDone()) {
-        return newServerCallListenerForPendingAuthResult(authStatusFuture,
-            transportAuthState.executor, call, headers, next);
+        return newServerCallListenerForPendingAuthResult(
+            authStatusFuture, transportAuthState.executor, call, headers, next);
       }
 
       Status authStatus;

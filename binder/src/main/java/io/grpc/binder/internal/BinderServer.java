@@ -172,7 +172,8 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
                   .set(BinderTransport.SERVER_AUTHORITY, listenAddress.getAuthority())
                   .set(BinderTransport.INBOUND_PARCELABLE_POLICY, inboundParcelablePolicy);
           BinderTransportSecurity.attachAuthAttrs(
-              attrsBuilder, callingUid, serverPolicyChecker, executor);
+              attrsBuilder, callingUid, serverPolicyChecker,
+              checkNotNull(executor, "Not started?"));
           // Create a new transport and let our listener know about it.
           BinderTransport.BinderServerTransport transport =
               new BinderTransport.BinderServerTransport(
