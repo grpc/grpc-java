@@ -22,34 +22,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.handler.codec.ByteToMessageDecoder.Cumulator;
-import io.netty.util.Version;
 
 class NettyAdaptiveCumulator implements Cumulator {
-  private static final boolean usingPre4_1_111_Netty;
   private final int composeMinSize;
-
-  static {
-    // Netty 4.1.111 introduced a change in the behavior of duplicate() method
-    // that breaks the assumption of the cumulator. We need to detect this version
-    // and adjust the behavior accordingly.
-
-    boolean identifiedOldVersion = false;
-    try {
-      Version version = Version.identify().get("netty-buffer");
-      if (version != null) {
-        String[] split = version.artifactVersion().split("\\.");
-        if (split.length >= 3
-            && Integer.parseInt(split[0]) == 4
-            && Integer.parseInt(split[1]) <= 1
-            && Integer.parseInt(split[2]) < 111) {
-          identifiedOldVersion = true;
-        }
-      }
-    } catch (Exception e) {
-      // Ignore, we'll assume it's a new version.
-    }
-    usingPre4_1_111_Netty = identifiedOldVersion;
-  }
 
   /**
    * "Adaptive" cumulator: cumulate {@link ByteBuf}s by dynamically switching between merge and
@@ -180,20 +155,11 @@ class NettyAdaptiveCumulator implements Cumulator {
         // Take ownership of the tail.
         newTail = tail.retain();
 
-        // In older versions some buffers don't support arrayOffset(), so for performance
-        // we don't want to rely on the arrayOffset when we know the alternate path works
-        if (usingPre4_1_111_Netty) {
-          // Because of the way duplicate() works in older netty versions this works.  It stops
-          // working in 4.1.111 because they changed what duplicate returns.
-          ByteBuf sliceDuplicate = composite.internalComponent(tailComponentIndex).duplicate();
-          newTail.setIndex(sliceDuplicate.readerIndex(), sliceDuplicate.writerIndex());
-        } else {
-          ByteBuf internalComponent = composite.internalComponent(tailComponentIndex);
-          int offset = tail.writerIndex() - internalComponent.writerIndex();
-          if (offset > 0) {
-            // The tail is a slice of a larger buffer, so we need to adjust the read index.
-            newTail.setIndex(offset, tail.writerIndex());
-          }
+        ByteBuf internalComponent = composite.internalComponent(tailComponentIndex);
+        int offset = tail.writerIndex() - internalComponent.writerIndex();
+        if (offset > 0) {
+          // The tail is a slice of a larger buffer, so we need to adjust the read index.
+          newTail.setIndex(offset, tail.writerIndex());
         }
 
         /*
