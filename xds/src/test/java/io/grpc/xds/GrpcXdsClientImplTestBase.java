@@ -87,6 +87,7 @@ import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.ControlPlaneClientTestBase;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.client.Locality;
@@ -140,7 +141,7 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 // The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
 // necessary. Still keep it for future version usage. Remove if too much trouble to maintain.
-public abstract class GrpcXdsClientImplTestBase {
+public abstract class GrpcXdsClientImplTestBase extends ControlPlaneClientTestBase {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
@@ -2758,7 +2759,7 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
-  public void edsAllowRespondAfterUnsubscription() {
+  public void edsCleanupNonceAfterUnsubscription() {
     Assume.assumeFalse(ignoreResourceDeletion());
 
     // Suppose we have an EDS subscription A.1
@@ -2776,6 +2777,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A.1} -> ACK, version 1
     verifyResourceMetadataAcked(EDS, "A.1", resourcesV1.get("A.1"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequest(EDS, "A.1", VERSION_1, "0000", NODE);
     verify(edsResourceWatcher, times(1)).onChanged(any());
 
     // trigger an EDS resource unsubscription.
@@ -2784,17 +2786,9 @@ public abstract class GrpcXdsClientImplTestBase {
     // 1) the EDS unsubscription caused by CDS PUSH e1 (client-side) and,
     // 2) the immediate EDS PUSH from XdsServer (server-side) after CDS PUSH e1 (event e2).
     xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
-    // FIX(1): allow to send empty subscription
-    call.verifyRequest(EDS, Collections.emptyList(), VERSION_1, "0000", NODE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
-    // An EDS PUSH after CDS PUSH e1.
-    List<Message> endpointsV2 = ImmutableList.of(lbEndpointHealthy);
-    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
-            "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV2, dropOverloads)));
-    call.sendResponse(EDS, resourcesV2.values().asList(), VERSION_2, "0001");
-    // FIX(2): allow to update resource version even if the subscription resource is empty
-    call.verifyRequest(EDS, Collections.emptyList(), VERSION_2, "0001", NODE);
-    verifyNoMoreInteractions(edsResourceWatcher);
+    // The nonce has been removed
+    assertThat(getNonceForResourceType(xdsClient, xdsServerInfo, EDS)).isNull();
   }
 
   @Test

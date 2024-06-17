@@ -84,7 +84,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   final Map<ServerInfo, LoadReportClient> serverLrsClientMap =
       new HashMap<>();
 
-  private final Map<ServerInfo, ControlPlaneClient> serverCpClientMap = new HashMap<>();
+  final Map<ServerInfo, ControlPlaneClient> serverCpClientMap = new HashMap<>();
   private final Map<XdsResourceType<? extends ResourceUpdate>,
       Map<String, ResourceSubscriber<? extends ResourceUpdate>>>
       resourceSubscribers = new HashMap<>();
