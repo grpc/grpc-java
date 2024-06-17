@@ -29,9 +29,26 @@ class NettyAdaptiveCumulator implements Cumulator {
   private final int composeMinSize;
 
   static {
-    Version version = Version.identify().get("netty-buffer");
-    usingPre4_1_111_Netty =
-        version != null && version.artifactVersion().compareTo("4.1.111.Final") < 0;
+    // Netty 4.1.111 introduced a change in the behavior of duplicate() method
+    // that breaks the assumption of the cumulator. We need to detect this version
+    // and adjust the behavior accordingly.
+
+    boolean identifiedOldVersion = false;
+    try {
+      Version version = Version.identify().get("netty-buffer");
+      if (version != null) {
+        String[] split = version.artifactVersion().split("\\.");
+        if (split.length >= 3
+            && Integer.parseInt(split[0]) == 4
+            && Integer.parseInt(split[1]) <= 1
+            && Integer.parseInt(split[2]) < 111) {
+          identifiedOldVersion = true;
+        }
+      }
+    } catch (Exception e) {
+      // Ignore, we'll assume it's a new version.
+    }
+    usingPre4_1_111_Netty = identifiedOldVersion;
   }
 
   /**
