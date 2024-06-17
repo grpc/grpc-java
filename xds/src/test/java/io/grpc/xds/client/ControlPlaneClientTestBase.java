@@ -19,12 +19,14 @@ package io.grpc.xds.client;
 import java.util.Map;
 
 public abstract class ControlPlaneClientTestBase {
-    protected static String getNonceForResourceType(XdsClientImpl xdsClient, Bootstrapper.ServerInfo serverInfo, XdsResourceType<?> type) {
-        ControlPlaneClient controlPlaneClient = xdsClient.serverCpClientMap.get(serverInfo);
-        Map<XdsResourceType<?>, String> nonceMap = controlPlaneClient.getNonce();
-        if (nonceMap == null) {
-            return null;
-        }
-        return nonceMap.get(type);
+  protected static String getNonceForResourceType(XdsClientImpl xdsClient,
+                                                  Bootstrapper.ServerInfo serverInfo,
+                                                  XdsResourceType<?> type) {
+    ControlPlaneClient controlPlaneClient = xdsClient.serverCpClientMap.get(serverInfo);
+    Map<XdsResourceType<?>, String> nonceMap = controlPlaneClient.getNonce();
+    if (nonceMap == null) {
+      return null;
     }
+    return nonceMap.get(type);
+  }
 }
