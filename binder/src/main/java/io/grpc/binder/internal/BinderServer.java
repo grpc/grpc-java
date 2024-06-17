@@ -77,6 +77,7 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   @GuardedBy("this")
   private ScheduledExecutorService executorService;
 
+  @Nullable  // Before start() and after termination.
   @GuardedBy("this")
   private Executor executor;
 
