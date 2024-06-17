@@ -17,18 +17,12 @@
 package io.grpc.binder.internal;
 
 import android.content.Context;
-import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.BindServiceFlags;
-import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.HostServices;
-import io.grpc.binder.InboundParcelablePolicy;
-import io.grpc.binder.SecurityPolicies;
 import io.grpc.internal.AbstractTransportTest;
-import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
@@ -69,13 +63,15 @@ public final class BinderTransportTest extends AbstractTransportTest {
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     AndroidComponentAddress addr = HostServices.allocateService(appContext);
 
-    BinderServer binderServer = new BinderServer.Builder()
-        .setListenAddress(addr)
-        .setExecutorServicePool(executorServicePool)
-        .setStreamTracerFactories(streamTracerFactories)
-        .build();
+    BinderServer binderServer =
+        new BinderServer.Builder()
+            .setListenAddress(addr)
+            .setExecutorServicePool(executorServicePool)
+            .setStreamTracerFactories(streamTracerFactories)
+            .build();
 
-    HostServices.configureService(addr,
+    HostServices.configureService(
+        addr,
         HostServices.serviceParamsBuilder()
             .setRawBinderSupplier(() -> binderServer.getHostBinder())
             .build());
@@ -97,19 +93,18 @@ public final class BinderTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     AndroidComponentAddress addr = (AndroidComponentAddress) server.getListenSocketAddress();
-    BinderClientTransportFactory.Builder builder = new BinderClientTransportFactory.Builder()
-        .setSourceContext(appContext)
-        .setScheduledExecutorPool(executorServicePool)
-        .setOffloadExecutorPool(offloadExecutorPool);
+    BinderClientTransportFactory.Builder builder =
+        new BinderClientTransportFactory.Builder()
+            .setSourceContext(appContext)
+            .setScheduledExecutorPool(executorServicePool)
+            .setOffloadExecutorPool(offloadExecutorPool);
 
     ClientTransportOptions options = new ClientTransportOptions();
     options.setEagAttributes(eagAttrs());
     options.setChannelLogger(transportLogger());
 
     return new BinderTransport.BinderClientTransport(
-        builder.buildClientTransportFactory(),
-        addr,
-        options);
+        builder.buildClientTransportFactory(), addr, options);
   }
 
   @Test

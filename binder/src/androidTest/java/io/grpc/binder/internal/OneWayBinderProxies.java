@@ -20,16 +20,14 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nullable;
 
-/**
- * A collection of {@link OneWayBinderProxy}-related test helpers.
- */
+/** A collection of {@link OneWayBinderProxy}-related test helpers. */
 public final class OneWayBinderProxies {
   /**
    * A {@link OneWayBinderProxy.Decorator} that blocks calling threads while an (external) test
    * provides the actual decoration.
    */
-  public static final class BlockingBinderDecorator<T extends OneWayBinderProxy> implements
-      OneWayBinderProxy.Decorator {
+  public static final class BlockingBinderDecorator<T extends OneWayBinderProxy>
+      implements OneWayBinderProxy.Decorator {
     private final BlockingQueue<OneWayBinderProxy> requests = new LinkedBlockingQueue<>();
     private final BlockingQueue<T> results = new LinkedBlockingQueue<>();
 
@@ -37,16 +35,14 @@ public final class OneWayBinderProxies {
      * Returns the next {@link OneWayBinderProxy} that needs decorating, blocking if it hasn't yet
      * been provided to {@link #decorate}.
      *
-     * <p>Follow this with a call to {@link #putNextResult(OneWayBinderProxy)} to provide
-     * the result of {@link #decorate} and unblock the waiting caller.
+     * <p>Follow this with a call to {@link #putNextResult(OneWayBinderProxy)} to provide the result
+     * of {@link #decorate} and unblock the waiting caller.
      */
     public OneWayBinderProxy takeNextRequest() throws InterruptedException {
       return requests.take();
     }
 
-    /**
-     * Provides the next value to return from {@link #decorate}.
-     */
+    /** Provides the next value to return from {@link #decorate}. */
     public void putNextResult(T next) throws InterruptedException {
       results.put(next);
     }
@@ -63,13 +59,10 @@ public final class OneWayBinderProxies {
     }
   }
 
-  /**
-   * A {@link OneWayBinderProxy} decorator whose transact method can artificially throw.
-   */
+  /** A {@link OneWayBinderProxy} decorator whose transact method can artificially throw. */
   public static final class ThrowingOneWayBinderProxy extends OneWayBinderProxy {
     private final OneWayBinderProxy wrapped;
-    @Nullable
-    private RemoteException remoteException;
+    @Nullable private RemoteException remoteException;
 
     ThrowingOneWayBinderProxy(OneWayBinderProxy wrapped) {
       super(wrapped.getDelegate());
@@ -127,5 +120,6 @@ public final class OneWayBinderProxies {
   }
 
   // Cannot be instantiated.
-  private OneWayBinderProxies() {};
+  private OneWayBinderProxies() {}
+  ;
 }

@@ -134,12 +134,10 @@ public abstract class BinderTransport
    * <p>Should this change, we should still endeavor to support earlier wire-format versions. If
    * that's not possible, {@link EARLIEST_SUPPORTED_WIRE_FORMAT_VERSION} should be updated below.
    */
-  @Internal
-  public static final int WIRE_FORMAT_VERSION = 1;
+  @Internal public static final int WIRE_FORMAT_VERSION = 1;
 
   /** The version code of the earliest wire format we support. */
-  @Internal
-  public static final int EARLIEST_SUPPORTED_WIRE_FORMAT_VERSION = 1;
+  @Internal public static final int EARLIEST_SUPPORTED_WIRE_FORMAT_VERSION = 1;
 
   /** The max number of "in-flight" bytes before we start buffering transactions. */
   private static final int TRANSACTION_BYTES_WINDOW = 128 * 1024;
@@ -152,12 +150,10 @@ public abstract class BinderTransport
    * the binder. and from the host s Followed by: int wire_protocol_version IBinder
    * client_transports_callback_binder
    */
-  @Internal
-  public static final int SETUP_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION;
+  @Internal public static final int SETUP_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION;
 
   /** Send to shutdown the transport from either end. */
-  @Internal
-  public static final int SHUTDOWN_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION + 1;
+  @Internal public static final int SHUTDOWN_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION + 1;
 
   /** Send to acknowledge receipt of rpc bytes, for flow control. */
   static final int ACKNOWLEDGE_BYTES = IBinder.FIRST_CALL_TRANSACTION + 2;
@@ -329,7 +325,7 @@ public abstract class BinderTransport
             }
             synchronized (this) {
               notifyTerminated();
-            } 
+            }
             releaseExecutors();
           });
     }
@@ -432,8 +428,8 @@ public abstract class BinderTransport
     try {
       return handleTransactionInternal(code, parcel);
     } catch (RuntimeException e) {
-      logger.log(Level.SEVERE,
-          "Terminating transport for uncaught Exception in transaction " + code, e);
+      logger.log(
+          Level.SEVERE, "Terminating transport for uncaught Exception in transaction " + code, e);
       synchronized (this) {
         // This unhandled exception may have put us in an inconsistent state. Force terminate the
         // whole transport so our peer knows something is wrong and so that clients can retry with
@@ -567,8 +563,10 @@ public abstract class BinderTransport
     private final Executor offloadExecutor;
     private final SecurityPolicy securityPolicy;
     private final Bindable serviceBinding;
+
     /** Number of ongoing calls which keep this transport "in-use". */
     private final AtomicInteger numInUseStreams;
+
     private final long readyTimeoutMillis;
     private final PingTracker pingTracker;
 
@@ -576,6 +574,7 @@ public abstract class BinderTransport
 
     @GuardedBy("this")
     private int latestCallId = FIRST_CALL_ID;
+
     @GuardedBy("this")
     private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
 
@@ -592,8 +591,11 @@ public abstract class BinderTransport
         ClientTransportOptions options) {
       super(
           factory.scheduledExecutorPool,
-          buildClientAttributes(options.getEagAttributes(),
-              factory.sourceContext, targetAddress, factory.inboundParcelablePolicy),
+          buildClientAttributes(
+              options.getEagAttributes(),
+              factory.sourceContext,
+              targetAddress,
+              factory.inboundParcelablePolicy),
           factory.binderDecorator,
           buildLogId(factory.sourceContext, targetAddress));
       this.offloadExecutorPool = factory.offloadExecutorPool;
@@ -622,7 +624,8 @@ public abstract class BinderTransport
 
     @Override
     public synchronized void onBound(IBinder binder) {
-      sendSetupTransaction(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
+      sendSetupTransaction(
+          binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
     }
 
     @Override
@@ -640,8 +643,12 @@ public abstract class BinderTransport
             setState(TransportState.SETUP);
             serviceBinding.bind();
             if (readyTimeoutMillis >= 0) {
-              readyTimeoutFuture = getScheduledExecutorService().schedule(
-                  BinderClientTransport.this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
+              readyTimeoutFuture =
+                  getScheduledExecutorService()
+                      .schedule(
+                          BinderClientTransport.this::onReadyTimeout,
+                          readyTimeoutMillis,
+                          MILLISECONDS);
             }
           }
         }
@@ -651,8 +658,9 @@ public abstract class BinderTransport
     private synchronized void onReadyTimeout() {
       if (inState(TransportState.SETUP)) {
         readyTimeoutFuture = null;
-        shutdownInternal(Status.DEADLINE_EXCEEDED
-            .withDescription("Connect timeout " + readyTimeoutMillis + "ms lapsed"),
+        shutdownInternal(
+            Status.DEADLINE_EXCEEDED.withDescription(
+                "Connect timeout " + readyTimeoutMillis + "ms lapsed"),
             true);
       }
     }
@@ -760,17 +768,23 @@ public abstract class BinderTransport
           shutdownInternal(
               Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
         } else {
-          ListenableFuture<Status> authFuture = (securityPolicy instanceof AsyncSecurityPolicy) ?
-              ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid) :
-              Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
+          ListenableFuture<Status> authFuture =
+              (securityPolicy instanceof AsyncSecurityPolicy)
+                  ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
+                  : Futures.submit(
+                      () -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
           Futures.addCallback(
               authFuture,
               new FutureCallback<Status>() {
                 @Override
-                public void onSuccess(Status result) { handleAuthResult(binder, result); }
+                public void onSuccess(Status result) {
+                  handleAuthResult(binder, result);
+                }
 
                 @Override
-                public void onFailure(Throwable t) { handleAuthResult(t); }
+                public void onFailure(Throwable t) {
+                  handleAuthResult(t);
+                }
               },
               offloadExecutor);
         }
@@ -802,10 +816,7 @@ public abstract class BinderTransport
 
     private synchronized void handleAuthResult(Throwable t) {
       shutdownInternal(
-          Status.INTERNAL
-              .withDescription("Could not evaluate SecurityPolicy")
-              .withCause(t),
-          true);
+          Status.INTERNAL.withDescription("Could not evaluate SecurityPolicy").withCause(t), true);
     }
 
     @GuardedBy("this")
@@ -815,8 +826,7 @@ public abstract class BinderTransport
     }
 
     private static ClientStream newFailingClientStream(
-        Status failure, Attributes attributes, Metadata headers,
-        ClientStreamTracer[] tracers) {
+        Status failure, Attributes attributes, Metadata headers, ClientStreamTracer[] tracers) {
       StatsTraceContext statsTraceContext =
           StatsTraceContext.newClientContext(tracers, attributes, headers);
       statsTraceContext.clientOutboundHeaders();
@@ -858,7 +868,8 @@ public abstract class BinderTransport
 
   /** Concrete server-side transport implementation. */
   @Internal
-  public static final class BinderServerTransport extends BinderTransport implements ServerTransport {
+  public static final class BinderServerTransport extends BinderTransport
+      implements ServerTransport {
 
     private final List<ServerStreamTracer.Factory> streamTracerFactories;
     @Nullable private ServerTransportListener serverTransportListener;
@@ -880,7 +891,8 @@ public abstract class BinderTransport
       setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));
     }
 
-    public synchronized void setServerTransportListener(ServerTransportListener serverTransportListener) {
+    public synchronized void setServerTransportListener(
+        ServerTransportListener serverTransportListener) {
       this.serverTransportListener = serverTransportListener;
       if (isShutdown()) {
         setState(TransportState.SHUTDOWN_TERMINATED);
@@ -983,4 +995,3 @@ public abstract class BinderTransport
     return Status.INTERNAL.withCause(e);
   }
 }
-

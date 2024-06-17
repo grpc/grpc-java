@@ -80,9 +80,8 @@ import org.junit.runner.RunWith;
 public final class BinderClientTransportTest {
   private static final long TIMEOUT_SECONDS = 5;
 
-  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
-      new ClientStreamTracer() {}
-  };
+  private static final ClientStreamTracer[] tracers =
+      new ClientStreamTracer[] {new ClientStreamTracer() {}};
 
   private final Context appContext = ApplicationProvider.getApplicationContext();
 
@@ -149,10 +148,11 @@ public final class BinderClientTransportTest {
   }
 
   private class BinderClientTransportBuilder {
-    final BinderClientTransportFactory.Builder factoryBuilder = new BinderClientTransportFactory.Builder()
-        .setSourceContext(appContext)
-        .setScheduledExecutorPool(executorServicePool)
-        .setOffloadExecutorPool(offloadServicePool);
+    final BinderClientTransportFactory.Builder factoryBuilder =
+        new BinderClientTransportFactory.Builder()
+            .setSourceContext(appContext)
+            .setScheduledExecutorPool(executorServicePool)
+            .setOffloadExecutorPool(offloadServicePool);
 
     public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
       factoryBuilder.setSecurityPolicy(securityPolicy);
@@ -171,7 +171,8 @@ public final class BinderClientTransportTest {
     }
 
     public BinderTransport.BinderClientTransport build() {
-      return factoryBuilder.buildClientTransportFactory()
+      return factoryBuilder
+          .buildClientTransportFactory()
           .newClientTransport(serverAddress, new ClientTransportOptions(), null);
     }
   }
@@ -197,8 +198,8 @@ public final class BinderClientTransportTest {
   public void testShutdownBeforeStreamStart_b153326034() throws Exception {
     transport = new BinderClientTransportBuilder().build();
     startAndAwaitReady(transport, transportListener);
-    ClientStream stream = transport.newStream(
-        methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
+    ClientStream stream =
+        transport.newStream(methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
 
     // This shouldn't throw an exception.
@@ -284,7 +285,8 @@ public final class BinderClientTransportTest {
   @Test
   public void testNewStreamBeforeTransportReadyFails() throws Exception {
     // Use a special SecurityPolicy that lets us act before the transport is setup/ready.
-    transport = new BinderClientTransportBuilder().setSecurityPolicy(blockingSecurityPolicy).build();
+    transport =
+        new BinderClientTransportBuilder().setSecurityPolicy(blockingSecurityPolicy).build();
     transport.start(transportListener).run();
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
@@ -299,12 +301,10 @@ public final class BinderClientTransportTest {
   @Test
   public void testTxnFailureDuringSetup() throws Exception {
     BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
-    transport = new BinderClientTransportBuilder()
-        .setBinderDecorator(decorator)
-        .build();
+    transport = new BinderClientTransportBuilder().setBinderDecorator(decorator).build();
     transport.start(transportListener).run();
-    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(
-        decorator.takeNextRequest());
+    ThrowingOneWayBinderProxy endpointBinder =
+        new ThrowingOneWayBinderProxy(decorator.takeNextRequest());
     DeadObjectException doe = new DeadObjectException("ouch");
     endpointBinder.setRemoteException(doe);
     decorator.putNextResult(endpointBinder);
@@ -326,15 +326,13 @@ public final class BinderClientTransportTest {
   @Test
   public void testTxnFailurePostSetup() throws Exception {
     BlockingBinderDecorator<ThrowingOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
-    transport = new BinderClientTransportBuilder()
-        .setBinderDecorator(decorator)
-        .build();
+    transport = new BinderClientTransportBuilder().setBinderDecorator(decorator).build();
     transport.start(transportListener).run();
-    ThrowingOneWayBinderProxy endpointBinder = new ThrowingOneWayBinderProxy(
-        decorator.takeNextRequest());
+    ThrowingOneWayBinderProxy endpointBinder =
+        new ThrowingOneWayBinderProxy(decorator.takeNextRequest());
     decorator.putNextResult(endpointBinder);
-    ThrowingOneWayBinderProxy serverBinder = new ThrowingOneWayBinderProxy(
-        decorator.takeNextRequest());
+    ThrowingOneWayBinderProxy serverBinder =
+        new ThrowingOneWayBinderProxy(decorator.takeNextRequest());
     DeadObjectException doe = new DeadObjectException("ouch");
     serverBinder.setRemoteException(doe);
     decorator.putNextResult(serverBinder);
@@ -355,13 +353,14 @@ public final class BinderClientTransportTest {
   @Test
   public void testBlackHoleEndpointConnectTimeout() throws Exception {
     BlockingBinderDecorator<BlackHoleOneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
-    transport = new BinderClientTransportBuilder()
-        .setBinderDecorator(decorator)
-        .setReadyTimeoutMillis(1_234)
-        .build();
+    transport =
+        new BinderClientTransportBuilder()
+            .setBinderDecorator(decorator)
+            .setReadyTimeoutMillis(1_234)
+            .build();
     transport.start(transportListener).run();
-    BlackHoleOneWayBinderProxy endpointBinder = new BlackHoleOneWayBinderProxy(
-        decorator.takeNextRequest());
+    BlackHoleOneWayBinderProxy endpointBinder =
+        new BlackHoleOneWayBinderProxy(decorator.takeNextRequest());
     endpointBinder.dropAllTransactions(true);
     decorator.putNextResult(endpointBinder);
     Status transportStatus = transportListener.awaitShutdown();
@@ -372,10 +371,11 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testBlackHoleSecurityPolicyConnectTimeout() throws Exception {
-    transport = new BinderClientTransportBuilder()
-        .setSecurityPolicy(blockingSecurityPolicy)
-        .setReadyTimeoutMillis(1_234)
-        .build();
+    transport =
+        new BinderClientTransportBuilder()
+            .setSecurityPolicy(blockingSecurityPolicy)
+            .setReadyTimeoutMillis(1_234)
+            .build();
     transport.start(transportListener).run();
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
@@ -387,9 +387,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testAsyncSecurityPolicyFailure() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
-    transport = new BinderClientTransportBuilder()
-        .setSecurityPolicy(securityPolicy)
-        .build();
+    transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
     RuntimeException exception = new NullPointerException();
     securityPolicy.setAuthorizationException(exception);
     transport.start(transportListener).run();
@@ -402,9 +400,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testAsyncSecurityPolicySuccess() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
-    transport = new BinderClientTransportBuilder()
-        .setSecurityPolicy(securityPolicy)
-        .build();
+    transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
     securityPolicy.setAuthorizationResult(Status.PERMISSION_DENIED);
     transport.start(transportListener).run();
     Status transportStatus = transportListener.awaitShutdown();
@@ -572,9 +568,7 @@ public final class BinderClientTransportTest {
     }
   }
 
-  /**
-   * An AsyncSecurityPolicy that lets a test specify the outcome of checkAuthorizationAsync().
-   */
+  /** An AsyncSecurityPolicy that lets a test specify the outcome of checkAuthorizationAsync(). */
   static class SettableAsyncSecurityPolicy extends AsyncSecurityPolicy {
     private SettableFuture<Status> result = SettableFuture.create();
 
