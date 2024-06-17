@@ -188,10 +188,11 @@ class NettyAdaptiveCumulator implements Cumulator {
           ByteBuf sliceDuplicate = composite.internalComponent(tailComponentIndex).duplicate();
           newTail.setIndex(sliceDuplicate.readerIndex(), sliceDuplicate.writerIndex());
         } else {
-          int arrayOffset = composite.internalComponent(tailComponentIndex).arrayOffset();
-          if (arrayOffset > 0 && arrayOffset + tail.readerIndex() < tailSize) {
+          ByteBuf internalComponent = composite.internalComponent(tailComponentIndex);
+          int offset = tail.writerIndex() - internalComponent.writerIndex();
+          if (offset > 0) {
             // The tail is a slice of a larger buffer, so we need to adjust the read index.
-            newTail.setIndex(arrayOffset + tail.readerIndex(), tail.writerIndex());
+            newTail.setIndex(offset, tail.writerIndex());
           }
         }
 
