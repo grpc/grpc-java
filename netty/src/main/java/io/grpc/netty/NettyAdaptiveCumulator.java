@@ -84,7 +84,7 @@ class NettyAdaptiveCumulator implements Cumulator {
         }
       } else {
         composite = alloc.compositeBuffer(Integer.MAX_VALUE)
-            .addFlattenedComponents(true, cumulation);
+            .addComponent(true, cumulation);
       }
       addInput(alloc, composite, in);
       in = null;
@@ -104,7 +104,7 @@ class NettyAdaptiveCumulator implements Cumulator {
   @VisibleForTesting
   void addInput(ByteBufAllocator alloc, CompositeByteBuf composite, ByteBuf in) {
     if (shouldCompose(composite, in, composeMinSize)) {
-      composite.addFlattenedComponents(true, in);
+      composite.addComponent(true, in);
     } else {
       // The total size of the new data and the last component are below the threshold. Merge them.
       mergeWithCompositeTail(alloc, composite, in);
@@ -150,17 +150,12 @@ class NettyAdaptiveCumulator implements Cumulator {
     ByteBuf tail = composite.component(tailComponentIndex);
     ByteBuf newTail = null;
     try {
-      if (tail.refCnt() == 1 && !tail.isReadOnly() && newTailSize <= tail.maxCapacity()) {
+      if (tail.refCnt() == 1 && !tail.isReadOnly() && newTailSize <= tail.maxCapacity()
+          && !isWrappedComposite(tail)) {
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
+
         // Take ownership of the tail.
         newTail = tail.retain();
-
-        ByteBuf internalComponent = composite.internalComponent(tailComponentIndex);
-        int offset = tail.writerIndex() - internalComponent.writerIndex();
-        if (offset > 0) {
-          // The tail is a slice of a larger buffer, so we need to adjust the read index.
-          newTail.setIndex(offset, tail.writerIndex());
-        }
 
         /*
          * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
@@ -175,6 +170,7 @@ class NettyAdaptiveCumulator implements Cumulator {
          *   as pronounced because the capacity is doubled with each reallocation.
          */
         newTail.writeBytes(in);
+
       } else {
         // The tail is shared, or not expandable. Replace it with a new buffer of desired capacity.
         newTail = alloc.buffer(alloc.calculateNewCapacity(newTailSize, Integer.MAX_VALUE));
@@ -183,12 +179,13 @@ class NettyAdaptiveCumulator implements Cumulator {
             .writerIndex(newTailSize);
         in.readerIndex(in.writerIndex());
       }
+
       // Store readerIndex to avoid out of bounds writerIndex during component replacement.
       int prevReader = composite.readerIndex();
       // Remove the old tail, reset writer index.
       composite.removeComponent(tailComponentIndex).setIndex(0, tailStart);
       // Add back the new tail.
-      composite.addFlattenedComponents(true, newTail);
+      composite.addComponent(true, newTail);
       // New tail's ownership transferred to the composite buf.
       newTail = null;
       composite.readerIndex(prevReader);
@@ -202,5 +199,13 @@ class NettyAdaptiveCumulator implements Cumulator {
         newTail.release();
       }
     }
+  }
+
+  private static boolean isWrappedComposite(ByteBuf tail) {
+    ByteBuf cur = tail;
+    while (cur.unwrap() != null) {
+      cur = cur.unwrap();
+    }
+    return cur instanceof CompositeByteBuf;
   }
 }

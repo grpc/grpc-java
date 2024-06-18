@@ -527,7 +527,7 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf compositeThrows = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
           tail) {
         @Override
-        public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
+        public CompositeByteBuf addComponent(boolean increaseWriterIndex,
             ByteBuf buffer) {
           throw expectedError;
         }
@@ -561,7 +561,7 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf compositeRo = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
           tail.asReadOnly()) {
         @Override
-        public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
+        public CompositeByteBuf addComponent(boolean increaseWriterIndex,
             ByteBuf buffer) {
           throw expectedError;
         }
@@ -623,7 +623,7 @@ public class NettyAdaptiveCumulatorTest {
       // Wrap composite1 into another cumulation. This is similar to
       // what NettyAdaptiveCumulator.cumulate() does in the case the cumulation has refCnt != 1.
       CompositeByteBuf composite2 =
-          alloc.compositeBuffer(8).addFlattenedComponents(true, composite1);
+          alloc.compositeBuffer(8).addComponent(true, composite1);
       assertThat(composite2.toString(US_ASCII)).isEqualTo("01234");
 
       // The previous operation does not adjust the read indexes of the underlying buffers,
@@ -639,13 +639,6 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf cumulation = (CompositeByteBuf) cumulator.cumulate(alloc, composite2,
           ByteBufUtil.writeAscii(alloc, "56789"));
       assertThat(cumulation.toString(US_ASCII)).isEqualTo("0123456789");
-
-      // Correctness check: we still have a single component, and this component is still the
-      // original underlying buffer.
-      assertThat(cumulation.numComponents()).isEqualTo(1);
-      // Replace '2' with '*', and '8' with '$'.
-      buf.setByte(5, '*').setByte(11, '$');
-      assertThat(cumulation.toString(US_ASCII)).isEqualTo("01*34567$9");
     }
   }
 }
