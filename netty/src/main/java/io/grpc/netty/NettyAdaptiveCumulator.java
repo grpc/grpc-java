@@ -28,7 +28,9 @@ import io.netty.handler.codec.ByteToMessageDecoder.Cumulator;
  * "Adaptive" cumulator: cumulate {@link ByteBuf}s by dynamically switching between merge and
  * compose strategies.
  * <br><br>
- * <p>Avoid using {@link CompositeByteBuf#addFlattenedComponents(boolean, ByteBuf)} as it can lead
+ *
+ * <p><b><font color="red">Avoid using</font></b>
+ * {@link CompositeByteBuf#addFlattenedComponents(boolean, ByteBuf)} as it can lead
  * to corruption, where the components' readable area are not equal to the Composite's capacity
  * (see https://github.com/netty/netty/issues/12844).
  */
