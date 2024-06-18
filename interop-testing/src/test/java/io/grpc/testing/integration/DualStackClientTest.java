@@ -20,7 +20,6 @@ import static io.grpc.testing.integration.Util.AddressType.IPV4;
 import static io.grpc.testing.integration.Util.AddressType.IPV4_IPV6;
 import static io.grpc.testing.integration.Util.AddressType.IPV6;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
@@ -32,6 +31,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TlsTesting;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -43,8 +43,8 @@ public class DualStackClientTest {
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
-//  @Rule
-//  public final Timeout globalTimeout = Timeout.seconds(10);
+  @Rule
+  public final Timeout globalTimeout = Timeout.seconds(10);
 
 
   @Test
@@ -108,47 +108,9 @@ public class DualStackClientTest {
     return builder.build();
   }
 
-  @Test
-  public void checkGaugesShouldBeExported_ipv4() throws Exception {
-    checkGaugesShouldBeExported(IPV4);
-  }
-
-  private void checkGaugesShouldBeExported(Util.AddressType addressType)
+  private static TestServiceServer getAndStartTestServiceServer(Util.AddressType addressType)
       throws Exception {
-    TestServiceServer server = getAndStartTestServiceServer(addressType);
-
-    String serverHost = getTargetServer(addressType);
-
-    StressTestClient client = null;
-    ManagedChannel ch = null;
-    try {
-      // Connect to the metrics service
-      client = new StressTestClient();
-      client.parseArgs(new String[]{"--test_cases=empty_unary:1",
-          "--server_addresses=" + serverHost + ":" + server.getPort(), "--metrics_port=" + 8079,
-          "--server_host_override=foo.test.google.fr",
-          "--use_tls=true",
-          "--use_test_ca=true",
-          "--num_stubs_per_channel=1"});
-      client.runStressTest();
-      Thread.sleep(2000);
-      assertEquals(0, client.getTotalFailureCount());
-      assertTrue(client.getTotalCallCount() > 0);
-
-    } finally {
-      if (client != null) {
-        client.shutdown();
-      }
-      if (ch != null) {
-        ch.shutdownNow();
-      }
-      server.stop();
-    }
-  }
-
-  private static TestServiceServer getAndStartTestServiceServer(Util.AddressType addressType) throws Exception {
     TestServiceServer server = new TestServiceServer();
-    int port = 8082;
     String[] args =
         addressType != null
         ? new String[]{"--port=8082", "--use_tls=true", "--address_type=" + addressType}
@@ -158,6 +120,8 @@ public class DualStackClientTest {
     return server;
   }
 
+  // Done this way to make sure that the target server is correct for the address type we want to
+  // test.
   private static String getTargetServer(Util.AddressType addressType) {
     if (addressType == null) {
       return "localhost";

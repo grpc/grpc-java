@@ -127,8 +127,8 @@ public class StressTestClientTest {
 
     // Connect to the metrics service
     ManagedChannel ch = Grpc.newChannelBuilder(
-            "localhost:" + client.getMetricServerPort(), InsecureChannelCredentials.create())
-          .build();
+          "localhost:" + client.getMetricServerPort(), InsecureChannelCredentials.create())
+        .build();
 
     MetricsServiceGrpc.MetricsServiceBlockingStub stub = MetricsServiceGrpc.newBlockingStub(ch);
 
@@ -139,8 +139,8 @@ public class StressTestClientTest {
     List<GaugeResponse> allGauges =
         ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
     while (allGauges.size() < gaugeNames.size()) {
-        Thread.sleep(100);
-        allGauges = ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
+      Thread.sleep(100);
+      allGauges = ImmutableList.copyOf(stub.getAllGauges(EmptyMessage.getDefaultInstance()));
     }
 
     for (GaugeResponse gauge : allGauges) {

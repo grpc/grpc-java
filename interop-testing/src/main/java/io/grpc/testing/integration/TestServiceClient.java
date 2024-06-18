@@ -54,6 +54,7 @@ import javax.annotation.Nullable;
  * through a series of tests.
  */
 public class TestServiceClient {
+
   private static final Charset UTF_8 = Charset.forName("UTF-8");
 
   /**
