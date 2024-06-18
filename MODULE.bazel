@@ -45,6 +45,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 ]
 # GRPC_DEPS_END
 
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
 bazel_dep(name = "grpc", repo_name = "com_github_grpc_grpc", version = "1.56.3.bcr.1")
 bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")

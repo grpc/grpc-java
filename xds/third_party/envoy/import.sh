@@ -137,7 +137,7 @@ COPIED=0
 for file in "${FILES[@]}"
 do
   mkdir -p "$(dirname "${file}")"
-  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}" && (( COPIED++ ))
+  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}" && (( ++COPIED ))
 done
 popd > /dev/null
 
