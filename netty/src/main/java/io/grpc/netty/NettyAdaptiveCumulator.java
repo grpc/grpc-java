@@ -23,6 +23,16 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.handler.codec.ByteToMessageDecoder.Cumulator;
 
+
+/**
+ * "Adaptive" cumulator: cumulate {@link ByteBuf}s by dynamically switching between merge and
+ * compose strategies.
+ * <br><br>
+ * <p>Avoid using {@link CompositeByteBuf#addFlattenedComponents(boolean, ByteBuf)} as it can lead
+ * to corruption, where the components' readable area are not equal to the Composite's capacity
+ * (see https://github.com/netty/netty/issues/12844).
+ */
+
 class NettyAdaptiveCumulator implements Cumulator {
   private final int composeMinSize;
 
