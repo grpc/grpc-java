@@ -180,10 +180,18 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
+    if (rawConnectivityState == SHUTDOWN) {
+      return;
+    }
+
     for (SubchannelData subchannelData : subchannels.values()) {
       subchannelData.getSubchannel().shutdown();
     }
     subchannels.clear();
+    if (addressIndex != null) {
+      addressIndex.updateGroups(null);
+    }
+    rawConnectivityState = IDLE;
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
@@ -196,7 +204,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (subchannelData == null || subchannelData.getSubchannel() != subchannel) {
       return;
     }
-    if (newState == SHUTDOWN) {
+    if (newState == SHUTDOWN || rawConnectivityState == SHUTDOWN) {
       return;
     }
 
