@@ -527,8 +527,7 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf compositeThrows = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
           tail) {
         @Override
-        public CompositeByteBuf addComponent(boolean increaseWriterIndex,
-            ByteBuf buffer) {
+        public CompositeByteBuf addComponent(boolean increaseWriterIndex, ByteBuf buffer) {
           throw expectedError;
         }
       };
@@ -561,8 +560,7 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf compositeRo = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
           tail.asReadOnly()) {
         @Override
-        public CompositeByteBuf addComponent(boolean increaseWriterIndex,
-            ByteBuf buffer) {
+        public CompositeByteBuf addComponent(boolean increaseWriterIndex, ByteBuf buffer) {
           throw expectedError;
         }
       };
