@@ -43,6 +43,7 @@ import io.grpc.internal.SharedResourcePool;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -63,12 +64,12 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   private static final Logger logger = Logger.getLogger(BinderServer.class.getName());
 
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
+  private final ObjectPool<? extends Executor> executorPool;
   private final ImmutableList<ServerStreamTracer.Factory> streamTracerFactories;
   private final AndroidComponentAddress listenAddress;
   private final LeakSafeOneWayBinder hostServiceBinder;
   private final BinderTransportSecurity.ServerPolicyChecker serverPolicyChecker;
   private final InboundParcelablePolicy inboundParcelablePolicy;
-  private final Runnable terminationListener;
 
   @GuardedBy("this")
   private ServerListener listener;
@@ -76,17 +77,21 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   @GuardedBy("this")
   private ScheduledExecutorService executorService;
 
+  @Nullable // Before start() and after termination.
+  @GuardedBy("this")
+  private Executor executor;
+
   @GuardedBy("this")
   private boolean shutdown;
 
   private BinderServer(Builder builder) {
     this.listenAddress = checkNotNull(builder.listenAddress);
+    this.executorPool = checkNotNull(builder.executorPool);
     this.executorServicePool = builder.executorServicePool;
     this.streamTracerFactories =
         ImmutableList.copyOf(checkNotNull(builder.streamTracerFactories, "streamTracerFactories"));
     this.serverPolicyChecker = BinderInternal.createPolicyChecker(builder.serverSecurityPolicy);
     this.inboundParcelablePolicy = builder.inboundParcelablePolicy;
-    this.terminationListener = builder.terminationListener;
     hostServiceBinder = new LeakSafeOneWayBinder(this);
   }
 
@@ -97,8 +102,9 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
 
   @Override
   public synchronized void start(ServerListener serverListener) throws IOException {
-    listener = new ActiveTransportTracker(serverListener, terminationListener);
+    listener = new ActiveTransportTracker(serverListener, this::onTerminated);
     executorService = executorServicePool.getObject();
+    executor = executorPool.getObject();
   }
 
   @Override
@@ -129,8 +135,13 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
       // Break the connection to the binder. We'll receive no more transactions.
       hostServiceBinder.setHandler(GoAwayHandler.INSTANCE);
       listener.serverShutdown();
+      // TODO(jdcormie): Shouldn't this happen in onTerminated()? Is this even used anywhere?
       executorService = executorServicePool.returnObject(executorService);
     }
+  }
+
+  private synchronized void onTerminated() {
+    executor = executorPool.returnObject(executor);
   }
 
   @Override
@@ -161,7 +172,11 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
                   .set(BinderTransport.REMOTE_UID, callingUid)
                   .set(BinderTransport.SERVER_AUTHORITY, listenAddress.getAuthority())
                   .set(BinderTransport.INBOUND_PARCELABLE_POLICY, inboundParcelablePolicy);
-          BinderTransportSecurity.attachAuthAttrs(attrsBuilder, callingUid, serverPolicyChecker);
+          BinderTransportSecurity.attachAuthAttrs(
+              attrsBuilder,
+              callingUid,
+              serverPolicyChecker,
+              checkNotNull(executor, "Not started?"));
           // Create a new transport and let our listener know about it.
           BinderTransport.BinderServerTransport transport =
               new BinderTransport.BinderServerTransport(
@@ -202,12 +217,12 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
   public static class Builder {
     @Nullable AndroidComponentAddress listenAddress;
     @Nullable List<? extends ServerStreamTracer.Factory> streamTracerFactories;
+    @Nullable ObjectPool<? extends Executor> executorPool;
 
     ObjectPool<ScheduledExecutorService> executorServicePool =
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
     ServerSecurityPolicy serverSecurityPolicy = SecurityPolicies.serverInternalOnly();
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
-    Runnable terminationListener = () -> {};
 
     public BinderServer build() {
       return new BinderServer(this);
@@ -233,6 +248,16 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
      */
     public Builder setStreamTracerFactories(List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
       this.streamTracerFactories = streamTracerFactories;
+      return this;
+    }
+
+    /**
+     * Sets the executor to be used for calling into the application.
+     *
+     * <p>Required.
+     */
+    public Builder setExecutorPool(ObjectPool<? extends Executor> executorPool) {
+      this.executorPool = executorPool;
       return this;
     }
 
@@ -264,17 +289,6 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
      */
     public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
       this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
-      return this;
-    }
-
-    /**
-     * Installs a callback that will be invoked when this server is {@link #shutdown()} and all of
-     * its transports are terminated.
-     *
-     * <p>Optional.
-     */
-    public Builder setTerminationListener(Runnable terminationListener) {
-      this.terminationListener = checkNotNull(terminationListener, "terminationListener");
       return this;
     }
   }
