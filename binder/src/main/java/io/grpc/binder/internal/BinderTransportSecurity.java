@@ -20,7 +20,6 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
-
 import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.Metadata;
@@ -32,7 +31,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
-
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -74,7 +72,9 @@ public final class BinderTransportSecurity {
    */
   @Internal
   public static void attachAuthAttrs(
-      Attributes.Builder builder, int remoteUid, ServerPolicyChecker serverPolicyChecker,
+      Attributes.Builder builder,
+      int remoteUid,
+      ServerPolicyChecker serverPolicyChecker,
       Executor executor) {
     builder
         .set(
@@ -92,8 +92,8 @@ public final class BinderTransportSecurity {
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      TransportAuthorizationState transportAuthState = call.getAttributes()
-          .get(TRANSPORT_AUTHORIZATION_STATE);
+      TransportAuthorizationState transportAuthState =
+          call.getAttributes().get(TRANSPORT_AUTHORIZATION_STATE);
       ListenableFuture<Status> authStatusFuture =
           transportAuthState.checkAuthorization(call.getMethodDescriptor());
 
@@ -126,32 +126,33 @@ public final class BinderTransportSecurity {
     }
 
     private <ReqT, RespT> ServerCall.Listener<ReqT> newServerCallListenerForPendingAuthResult(
-            ListenableFuture<Status> authStatusFuture,
-            Executor executor,
-            ServerCall<ReqT, RespT> call,
-            Metadata headers,
-            ServerCallHandler<ReqT, RespT> next) {
+        ListenableFuture<Status> authStatusFuture,
+        Executor executor,
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
       PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
       Futures.addCallback(
-              authStatusFuture,
-              new FutureCallback<Status>() {
-                @Override
-                public void onSuccess(Status authStatus) {
-                  if (!authStatus.isOk()) {
-                    call.close(authStatus, new Metadata());
-                    return;
-                  }
+          authStatusFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status authStatus) {
+              if (!authStatus.isOk()) {
+                call.close(authStatus, new Metadata());
+                return;
+              }
 
-                  listener.startCall(call, headers, next);
-                }
+              listener.startCall(call, headers, next);
+            }
 
-                @Override
-                public void onFailure(Throwable t) {
-                  call.close(
-                          Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
-                          new Metadata());
-                }
-              }, executor);
+            @Override
+            public void onFailure(Throwable t) {
+              call.close(
+                  Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
+                  new Metadata());
+            }
+          },
+          executor);
       return listener;
     }
   }
@@ -169,8 +170,8 @@ public final class BinderTransportSecurity {
     /**
      * @param executor used for calling into the application. Must outlive the transport.
      */
-    TransportAuthorizationState(int uid, ServerPolicyChecker serverPolicyChecker,
-        Executor executor) {
+    TransportAuthorizationState(
+        int uid, ServerPolicyChecker serverPolicyChecker, Executor executor) {
       this.uid = uid;
       this.serverPolicyChecker = serverPolicyChecker;
       this.executor = executor;

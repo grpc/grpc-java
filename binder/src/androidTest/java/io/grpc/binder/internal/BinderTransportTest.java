@@ -65,12 +65,13 @@ public final class BinderTransportTest extends AbstractTransportTest {
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     AndroidComponentAddress addr = HostServices.allocateService(appContext);
 
-    BinderServer binderServer = new BinderServer.Builder()
-        .setListenAddress(addr)
-        .setExecutorPool(serverExecutorPool)
-        .setExecutorServicePool(executorServicePool)
-        .setStreamTracerFactories(streamTracerFactories)
-        .build();
+    BinderServer binderServer =
+        new BinderServer.Builder()
+            .setListenAddress(addr)
+            .setExecutorPool(serverExecutorPool)
+            .setExecutorServicePool(executorServicePool)
+            .setStreamTracerFactories(streamTracerFactories)
+            .build();
 
     HostServices.configureService(addr,
         HostServices.serviceParamsBuilder()
