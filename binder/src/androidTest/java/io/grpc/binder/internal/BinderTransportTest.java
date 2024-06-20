@@ -51,6 +51,8 @@ public final class BinderTransportTest extends AbstractTransportTest {
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
   private final ObjectPool<Executor> offloadExecutorPool =
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+  private final ObjectPool<Executor> serverExecutorPool =
+      SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
   @Override
   @After
@@ -66,6 +68,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
     BinderServer binderServer =
         new BinderServer.Builder()
             .setListenAddress(addr)
+            .setExecutorPool(serverExecutorPool)
             .setExecutorServicePool(executorServicePool)
             .setStreamTracerFactories(streamTracerFactories)
             .build();
