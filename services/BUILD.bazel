@@ -10,6 +10,7 @@ java_library(
     name = "services_maven",
     exports = [
         ":admin",
+        ":binarylog",
         ":channelz",
         ":health",
         ":healthlb",
@@ -59,6 +60,28 @@ java_library(
         ":metrics",
         "//api",
         "//context",
+    ],
+)
+
+java_library(
+    name = "binarylog",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/BinaryLogProvider.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogProviderImpl.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogSink.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogs.java",
+        "src/main/java/io/grpc/protobuf/services/BinlogHelper.java",
+        "src/main/java/io/grpc/protobuf/services/InetAddressUtil.java",
+        "src/main/java/io/grpc/protobuf/services/TempFileSink.java",
+    ],
+    deps = [
+        "//api",
+        "//context",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:binarylog_java_proto",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
