@@ -27,8 +27,8 @@ java {
 // updating the version in our release process.
 def grpcVersion = '1.66.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.25.1'
-def openTelemetryVersion = '1.38.0'
-def openTelemetryPrometheusVersion = '1.38.0-alpha'
+def openTelemetryVersion = '1.39.0'
+def openTelemetryPrometheusVersion = '1.39.0-alpha'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"

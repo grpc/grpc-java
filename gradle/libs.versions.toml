@@ -76,11 +76,11 @@ opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exp
 opencensus-exporter-trace-stackdriver = { module = "io.opencensus:opencensus-exporter-trace-stackdriver", version.ref = "opencensus" }
 opencensus-impl = { module = "io.opencensus:opencensus-impl", version.ref = "opencensus" }
 opencensus-proto = "io.opencensus:opencensus-proto:0.2.0"
-opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.36.0"
-opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.36.0-alpha"
-opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.34.0-alpha"
-opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.36.0"
-opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.36.0"
+opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.39.0"
+opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.39.0-alpha"
+opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.36.0-alpha"
+opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.39.0"
+opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.39.0"
 perfmark-api = "io.perfmark:perfmark-api:0.26.0"
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
