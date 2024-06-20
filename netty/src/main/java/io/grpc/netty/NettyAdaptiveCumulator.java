@@ -95,8 +95,7 @@ class NettyAdaptiveCumulator implements Cumulator {
           composite.capacity(composite.writerIndex());
         }
       } else {
-        composite = alloc.compositeBuffer(Integer.MAX_VALUE)
-            .addComponent(true, cumulation);
+        composite = alloc.compositeBuffer(Integer.MAX_VALUE).addComponent(true, cumulation);
       }
       addInput(alloc, composite, in);
       in = null;
@@ -163,7 +162,7 @@ class NettyAdaptiveCumulator implements Cumulator {
     ByteBuf newTail = null;
     try {
       if (tail.refCnt() == 1 && !tail.isReadOnly() && newTailSize <= tail.maxCapacity()
-          && !isWrappedComposite(tail)) {
+          && !isCompositeOrWrappedComposite(tail)) {
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
 
         // Take ownership of the tail.
@@ -184,7 +183,11 @@ class NettyAdaptiveCumulator implements Cumulator {
         newTail.writeBytes(in);
 
       } else {
-        // The tail is shared, or not expandable. Replace it with a new buffer of desired capacity.
+        // The tail satisfies one or more criteria:
+        // - Shared
+        // - Not expandable
+        // - Composite
+        // - Wrapped Composite
         newTail = alloc.buffer(alloc.calculateNewCapacity(newTailSize, Integer.MAX_VALUE));
         newTail.setBytes(0, composite, tailStart, tailSize)
             .setBytes(tailSize, in, in.readerIndex(), inputSize)
@@ -213,7 +216,7 @@ class NettyAdaptiveCumulator implements Cumulator {
     }
   }
 
-  private static boolean isWrappedComposite(ByteBuf tail) {
+  private static boolean isCompositeOrWrappedComposite(ByteBuf tail) {
     ByteBuf cur = tail;
     while (cur.unwrap() != null) {
       cur = cur.unwrap();

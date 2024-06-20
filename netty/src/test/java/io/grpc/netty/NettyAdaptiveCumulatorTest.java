@@ -638,5 +638,26 @@ public class NettyAdaptiveCumulatorTest {
           ByteBufUtil.writeAscii(alloc, "56789"));
       assertThat(cumulation.toString(US_ASCII)).isEqualTo("0123456789");
     }
+
+    @Test
+    public void mergeWithNonCompositeTail() {
+      NettyAdaptiveCumulator cumulator = new NettyAdaptiveCumulator(1024);
+      ByteBufAllocator alloc = new PooledByteBufAllocator();
+      ByteBuf buf = alloc.buffer().writeBytes("tail".getBytes(US_ASCII));
+      ByteBuf in = alloc.buffer().writeBytes("-012345".getBytes(US_ASCII));
+
+      CompositeByteBuf composite = alloc.compositeBuffer().addComponent(true, buf);
+
+      CompositeByteBuf cumulation = (CompositeByteBuf) cumulator.cumulate(alloc, composite, in);
+
+      assertEquals("tail-012345", cumulation.toString(US_ASCII));
+      assertEquals(0, in.refCnt());
+      assertEquals(1, cumulation.numComponents());
+
+      buf.setByte(2, '*').setByte(7, '$');
+      assertEquals("ta*l-01$345", cumulation.toString(US_ASCII));
+
+      composite.release();
+    }
   }
 }
