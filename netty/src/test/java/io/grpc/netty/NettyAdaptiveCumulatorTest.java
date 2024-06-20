@@ -81,7 +81,7 @@ public class NettyAdaptiveCumulatorTest {
         @Override
         void addInput(ByteBufAllocator alloc, CompositeByteBuf composite, ByteBuf in) {
           // To limit the testing scope to NettyAdaptiveCumulator.cumulate(), always compose
-          composite.addFlattenedComponents(true, in);
+          composite.addComponent(true, in);
         }
       };
 
@@ -208,8 +208,8 @@ public class NettyAdaptiveCumulatorTest {
       in = ByteBufUtil.writeAscii(alloc, inData);
       tail = ByteBufUtil.writeAscii(alloc, tailData);
       composite = alloc.compositeBuffer(Integer.MAX_VALUE);
-      // Note that addFlattenedComponents() will not add a new component when tail is not readable.
-      composite.addFlattenedComponents(true, tail);
+      // Note that addComponent() will not add a new component when tail is not readable.
+      composite.addComponent(true, tail);
     }
 
     @After
@@ -345,7 +345,7 @@ public class NettyAdaptiveCumulatorTest {
       assertThat(in.readableBytes()).isAtMost(tail.writableBytes());
 
       // All fits, so tail capacity must stay the same.
-      composite.addFlattenedComponents(true, tail);
+      composite.addComponent(true, tail);
       assertTailExpanded(EXPECTED_TAIL_DATA, fitCapacity);
     }
 
@@ -362,7 +362,7 @@ public class NettyAdaptiveCumulatorTest {
           alloc.calculateNewCapacity(EXPECTED_TAIL_DATA.length(), Integer.MAX_VALUE);
 
       // Tail capacity is extended to its fast capacity.
-      composite.addFlattenedComponents(true, tail);
+      composite.addComponent(true, tail);
       assertTailExpanded(EXPECTED_TAIL_DATA, tailFastCapacity);
     }
 
@@ -372,7 +372,7 @@ public class NettyAdaptiveCumulatorTest {
       @SuppressWarnings("InlineMeInliner") // Requires Java 11
       String inSuffixOverFastBytes = Strings.repeat("a", tailFastCapacity + 1);
       int newTailSize =  tail.readableBytes() + inSuffixOverFastBytes.length();
-      composite.addFlattenedComponents(true, tail);
+      composite.addComponent(true, tail);
 
       // Make input larger than tailFastCapacity
       in.writeCharSequence(inSuffixOverFastBytes, US_ASCII);
@@ -435,21 +435,21 @@ public class NettyAdaptiveCumulatorTest {
       @SuppressWarnings("InlineMeInliner") // Requires Java 11
       String tailSuffixFullCapacity = Strings.repeat("a", tail.maxWritableBytes());
       tail.writeCharSequence(tailSuffixFullCapacity, US_ASCII);
-      composite.addFlattenedComponents(true, tail);
+      composite.addComponent(true, tail);
       assertTailReplaced();
     }
 
     @Test
     public void mergeWithCompositeTail_tailNotExpandable_shared() {
       tail.retain();
-      composite.addFlattenedComponents(true, tail);
+      composite.addComponent(true, tail);
       assertTailReplaced();
       tail.release();
     }
 
     @Test
     public void mergeWithCompositeTail_tailNotExpandable_readOnly() {
-      composite.addFlattenedComponents(true, tail.asReadOnly());
+      composite.addComponent(true, tail.asReadOnly());
       assertTailReplaced();
     }
 
@@ -527,8 +527,7 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf compositeThrows = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
           tail) {
         @Override
-        public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
-            ByteBuf buffer) {
+        public CompositeByteBuf addComponent(boolean increaseWriterIndex, ByteBuf buffer) {
           throw expectedError;
         }
       };
@@ -561,8 +560,7 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf compositeRo = new CompositeByteBuf(alloc, false, Integer.MAX_VALUE,
           tail.asReadOnly()) {
         @Override
-        public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
-            ByteBuf buffer) {
+        public CompositeByteBuf addComponent(boolean increaseWriterIndex, ByteBuf buffer) {
           throw expectedError;
         }
       };
@@ -616,14 +614,14 @@ public class NettyAdaptiveCumulatorTest {
       ByteBuf buf = alloc.buffer(32).writeBytes("---01234".getBytes(US_ASCII));
 
       // Start with a regular cumulation and add the buf as the only component.
-      CompositeByteBuf composite1 = alloc.compositeBuffer(8).addFlattenedComponents(true, buf);
+      CompositeByteBuf composite1 = alloc.compositeBuffer(8).addComponent(true, buf);
       // Read composite1 buf to the beginning of the numbers.
       assertThat(composite1.readCharSequence(3, US_ASCII).toString()).isEqualTo("---");
 
       // Wrap composite1 into another cumulation. This is similar to
       // what NettyAdaptiveCumulator.cumulate() does in the case the cumulation has refCnt != 1.
       CompositeByteBuf composite2 =
-          alloc.compositeBuffer(8).addFlattenedComponents(true, composite1);
+          alloc.compositeBuffer(8).addComponent(true, composite1);
       assertThat(composite2.toString(US_ASCII)).isEqualTo("01234");
 
       // The previous operation does not adjust the read indexes of the underlying buffers,
@@ -639,13 +637,27 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf cumulation = (CompositeByteBuf) cumulator.cumulate(alloc, composite2,
           ByteBufUtil.writeAscii(alloc, "56789"));
       assertThat(cumulation.toString(US_ASCII)).isEqualTo("0123456789");
+    }
 
-      // Correctness check: we still have a single component, and this component is still the
-      // original underlying buffer.
-      assertThat(cumulation.numComponents()).isEqualTo(1);
-      // Replace '2' with '*', and '8' with '$'.
-      buf.setByte(5, '*').setByte(11, '$');
-      assertThat(cumulation.toString(US_ASCII)).isEqualTo("01*34567$9");
+    @Test
+    public void mergeWithNonCompositeTail() {
+      NettyAdaptiveCumulator cumulator = new NettyAdaptiveCumulator(1024);
+      ByteBufAllocator alloc = new PooledByteBufAllocator();
+      ByteBuf buf = alloc.buffer().writeBytes("tail".getBytes(US_ASCII));
+      ByteBuf in = alloc.buffer().writeBytes("-012345".getBytes(US_ASCII));
+
+      CompositeByteBuf composite = alloc.compositeBuffer().addComponent(true, buf);
+
+      CompositeByteBuf cumulation = (CompositeByteBuf) cumulator.cumulate(alloc, composite, in);
+
+      assertEquals("tail-012345", cumulation.toString(US_ASCII));
+      assertEquals(0, in.refCnt());
+      assertEquals(1, cumulation.numComponents());
+
+      buf.setByte(2, '*').setByte(7, '$');
+      assertEquals("ta*l-01$345", cumulation.toString(US_ASCII));
+
+      composite.release();
     }
   }
 }
