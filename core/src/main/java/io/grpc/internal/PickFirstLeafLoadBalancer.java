@@ -191,20 +191,22 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (addressIndex != null) {
       addressIndex.updateGroups(null);
     }
-    rawConnectivityState = IDLE;
+    rawConnectivityState = TRANSIENT_FAILURE;
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
   void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     ConnectivityState newState = stateInfo.getState();
+
+    SubchannelData subchannelData = subchannels.get(getAddress(subchannel));
     // Shutdown channels/previously relevant subchannels can still callback with state updates.
     // To prevent pickers from returning these obsolete subchannels, this logic
     // is included to check if the current list of active subchannels includes this subchannel.
-    SubchannelData subchannelData = subchannels.get(getAddress(subchannel));
     if (subchannelData == null || subchannelData.getSubchannel() != subchannel) {
       return;
     }
-    if (newState == SHUTDOWN || rawConnectivityState == SHUTDOWN) {
+
+    if (newState == SHUTDOWN) {
       return;
     }
 
