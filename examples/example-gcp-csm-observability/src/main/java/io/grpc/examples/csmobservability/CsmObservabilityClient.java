@@ -20,13 +20,11 @@ import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.gcp.csm.observability.CsmObservability;
-import io.opentelemetry.exporter.logging.LoggingMetricExporter;
 import io.opentelemetry.exporter.prometheus.PrometheusHttpServer;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
@@ -69,7 +67,9 @@ public class CsmObservabilityClient {
    */
   public static void main(String[] args) throws Exception {
     String user = "world";
+    // Use xDS to establish contact with the server "helloworld:50051".
     String target = "xds:///helloworld:50051";
+    // The port on which prometheus metrics will be exposed.
     int prometheusPort = 9464;
     AtomicBoolean sendRpcs = new AtomicBoolean(true);
     if (args.length > 0) {
