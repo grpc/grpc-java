@@ -12,6 +12,7 @@ def subprojects = [
     project(':grpc-auth'),
     project(':grpc-core'),
     project(':grpc-grpclb'),
+    project(':grpc-gcp-csm-observability'),
     project(':grpc-inprocess'),
     project(':grpc-netty'),
     project(':grpc-okhttp'),
