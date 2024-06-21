@@ -257,7 +257,6 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    *
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
   public final S withOnReadyThreshold(int numBytes) {
     return build(channel, callOptions.withOnReadyThreshold(numBytes));
   }
