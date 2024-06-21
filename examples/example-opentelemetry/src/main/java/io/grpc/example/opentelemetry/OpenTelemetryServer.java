@@ -38,9 +38,9 @@ import java.util.logging.Logger;
 public class OpenTelemetryServer {
   private static final Logger logger = Logger.getLogger(OpenTelemetryServer.class.getName());
 
-  private Server gRPCServer;
+  private Server server;
   private void start(int port) throws IOException {
-    gRPCServer = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .build()
         .start();
@@ -48,8 +48,8 @@ public class OpenTelemetryServer {
   }
 
   private void stop() throws InterruptedException {
-    if (gRPCServer != null) {
-      gRPCServer.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+    if (server != null) {
+      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
 
@@ -57,8 +57,8 @@ public class OpenTelemetryServer {
    * Await termination on the main thread since the grpc library uses daemon threads.
    */
   private void blockUntilShutdown() throws InterruptedException {
-    if (gRPCServer != null) {
-      gRPCServer.awaitTermination();
+    if (server != null) {
+      server.awaitTermination();
     }
   }
 

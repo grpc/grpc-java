@@ -29,9 +29,9 @@ The opentelemetry-server accepts optional arguments for server-port and promethe
 USAGE: opentelemetry-server [server-port [prometheus-port]]
 ```
 
-The opentelemetry-client accepts optional arguments for user-name, target and prometheus-port:
-
 **opentelemetry-client**:
+
+The opentelemetry-client accepts optional arguments for user-name, target and prometheus-port:
 
 ```text
 USAGE: opentelemetry-client-client [user-name [target [prometheus-port]]]
