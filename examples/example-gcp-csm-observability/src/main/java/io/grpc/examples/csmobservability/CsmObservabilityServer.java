@@ -38,9 +38,9 @@ import java.util.logging.Logger;
 public class CsmObservabilityServer {
   private static final Logger logger = Logger.getLogger(CsmObservabilityServer.class.getName());
 
-  private Server gRPCServer;
+  private Server server;
   private void start(int port) throws IOException {
-    gRPCServer = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .build()
         .start();
@@ -48,14 +48,17 @@ public class CsmObservabilityServer {
   }
 
   private void stop() throws InterruptedException {
-    if (gRPCServer != null) {
-      gRPCServer.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+    if (server != null) {
+      server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
     }
   }
 
+  /**
+   * Await termination on the main thread since the grpc library uses daemon threads.
+   */
   private void blockUntilShutdown() throws InterruptedException {
-    if (gRPCServer != null) {
-      gRPCServer.awaitTermination();
+    if (server != null) {
+      server.awaitTermination();
     }
   }
 
@@ -63,8 +66,9 @@ public class CsmObservabilityServer {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    /* The port on which the server should run. */
+    // The port on which the server should run.
     int port = 50051;
+    // The port on which prometheus metrics will be exposed.
     int prometheusPort = 9464;
 
     if (args.length > 0) {
