@@ -246,17 +246,10 @@ public final class XdsTestServer {
           break;
         case IPV6:
           List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
-          SocketAddress localhostV6 = new InetSocketAddress("::1", port);
-          SocketAddress firstAddress = v6Addresses.isEmpty() ? localhostV6 : v6Addresses.get(0);
-          serverBuilder =
-              NettyServerBuilder.forAddress(firstAddress, insecureServerCreds);
+          serverBuilder = NettyServerBuilder.forAddress(
+                  new InetSocketAddress("::1", port), insecureServerCreds);
           for (SocketAddress address : v6Addresses) {
-            if (address != firstAddress) {
               ((NettyServerBuilder)serverBuilder).addListenAddress(address);
-            }
-          }
-          if (localhostV6 != firstAddress) {
-            ((NettyServerBuilder)serverBuilder).addListenAddress(localhostV6);
           }
           break;
         default:
