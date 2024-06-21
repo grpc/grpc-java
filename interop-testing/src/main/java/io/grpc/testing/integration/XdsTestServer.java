@@ -17,7 +17,6 @@
 package io.grpc.testing.integration;
 
 import static io.grpc.testing.integration.Util.getV4Address;
-import static io.grpc.testing.integration.Util.getV6Address;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
@@ -37,6 +36,7 @@ import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.gcp.csm.observability.CsmObservability;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.AdminInterface;
@@ -49,6 +49,7 @@ import io.grpc.xds.XdsServerCredentials;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
@@ -244,9 +245,19 @@ public final class XdsTestServer {
                   .addListenAddress(new InetSocketAddress("127.0.0.1", port));
           break;
         case IPV6:
+          List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
+          SocketAddress localhostV6 = new InetSocketAddress("::1", port);
+          SocketAddress firstAddress = v6Addresses.isEmpty() ? localhostV6 : v6Addresses.get(0);
           serverBuilder =
-              io.grpc.netty.NettyServerBuilder.forAddress(getV6Address(port), insecureServerCreds)
-                  .addListenAddress(new InetSocketAddress("::1", port));
+              NettyServerBuilder.forAddress(firstAddress, insecureServerCreds);
+          for (SocketAddress address : v6Addresses) {
+            if (address != firstAddress) {
+              ((NettyServerBuilder)serverBuilder).addListenAddress(address);
+            }
+          }
+          if (localhostV6 != firstAddress) {
+            ((NettyServerBuilder)serverBuilder).addListenAddress(localhostV6);
+          }
           break;
         default:
           throw new AssertionError("Unknown address type: " + addressType);

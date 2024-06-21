@@ -24,6 +24,7 @@ import io.grpc.protobuf.lite.ProtoLiteUtils;
 import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.Assert;
 
@@ -71,14 +72,15 @@ public class Util {
     }
   }
 
-  static SocketAddress getV6Address(int port) throws UnknownHostException {
+  static List<SocketAddress> getV6Addresses(int port) throws UnknownHostException {
+    List<SocketAddress> v6addresses = new ArrayList<>();
     InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
     for (InetAddress address : addresses) {
       if (address.getAddress().length != 4) {
-        return new java.net.InetSocketAddress(address, port);
+        v6addresses.add(new java.net.InetSocketAddress(address, port));
       }
     }
-    return null; // should never happen
+    return v6addresses;
   }
 
   static SocketAddress getV4Address(int port) throws UnknownHostException {

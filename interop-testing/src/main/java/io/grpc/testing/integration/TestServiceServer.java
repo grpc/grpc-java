@@ -27,11 +27,14 @@ import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
+import io.grpc.netty.NettyServerBuilder;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -167,6 +170,11 @@ public class TestServiceServer {
     MetricRecorder metricRecorder = MetricRecorder.newInstance();
     BindableService orcaOobService =
         OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
+
+    // Create ServerBuilder with appropriate addresses
+    // - IPV4_IPV6: bind to wildcard which covers all addresses on all interfaces of both families
+    // - IPV4: bind to v4 address for local hostname + v4 localhost
+    // - IPV6: bind to all v6 addresses for local hostname + v6 localhost
     ServerBuilder<?> serverBuilder;
     switch (addressType) {
       case IPV4_IPV6:
@@ -178,9 +186,19 @@ public class TestServiceServer {
                 .addListenAddress(new InetSocketAddress("127.0.0.1", port));
         break;
       case IPV6:
+        List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
+        SocketAddress localhostV6 = new InetSocketAddress("::1", port);
+        SocketAddress firstAddress = v6Addresses.isEmpty() ? localhostV6 : v6Addresses.get(0);
         serverBuilder =
-            io.grpc.netty.NettyServerBuilder.forAddress(Util.getV6Address(port), serverCreds)
-                .addListenAddress(new InetSocketAddress("::1", port));
+            NettyServerBuilder.forAddress(firstAddress, serverCreds);
+        for (SocketAddress address : v6Addresses) {
+          if (address != firstAddress) {
+            ((NettyServerBuilder)serverBuilder).addListenAddress(address);
+          }
+        }
+        if (localhostV6 != firstAddress) {
+          ((NettyServerBuilder)serverBuilder).addListenAddress(localhostV6);
+        }
         break;
       default:
         throw new AssertionError("Unknown address type: " + addressType);
