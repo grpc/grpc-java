@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import java.util.List;
 
 /**
@@ -33,7 +35,16 @@ public interface MetricRecorder {
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
   default void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
+  }
 
   /**
    * Adds a value for a long valued counter metric instrument.
@@ -44,7 +55,16 @@ public interface MetricRecorder {
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
   default void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
+  }
 
   /**
    * Records a value for a double-precision histogram metric instrument.
@@ -55,7 +75,16 @@ public interface MetricRecorder {
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
   default void recordDoubleHistogram(DoubleHistogramMetricInstrument metricInstrument, double value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
+  }
 
   /**
    * Records a value for a long valued histogram metric instrument.
@@ -66,7 +95,16 @@ public interface MetricRecorder {
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
   default void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: "
+            + metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: "
+            + metricInstrument.getOptionalLabelKeys().size());
+  }
 
   /**
    * Registers a callback to produce metric values for only the listed instruments. The returned
@@ -95,8 +133,17 @@ public interface MetricRecorder {
      * @param requiredLabelValues A list of required label values for the metric.
      * @param optionalLabelValues A list of additional, optional label values for the metric.
      */
-    void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
-        List<String> requiredLabelValues, List<String> optionalLabelValues);
+    default void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
+        List<String> requiredLabelValues, List<String> optionalLabelValues) {
+      checkArgument(requiredLabelValues != null
+              && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+          "Incorrect number of required labels provided. Expected: %s",
+          metricInstrument.getRequiredLabelKeys().size());
+      checkArgument(optionalLabelValues != null
+              && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+          "Incorrect number of optional labels provided. Expected: %s",
+          metricInstrument.getOptionalLabelKeys().size());
+    }
   }
 
   /** A handle to a registration, that allows unregistration. */
