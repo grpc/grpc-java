@@ -38,12 +38,12 @@ public interface MetricRecorder {
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
     checkArgument(requiredLabelValues != null
             && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
     checkArgument(optionalLabelValues != null
             && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
   }
 
   /**
@@ -58,12 +58,12 @@ public interface MetricRecorder {
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
     checkArgument(requiredLabelValues != null
             && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
     checkArgument(optionalLabelValues != null
             && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
   }
 
   /**
@@ -78,12 +78,12 @@ public interface MetricRecorder {
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
     checkArgument(requiredLabelValues != null
             && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
     checkArgument(optionalLabelValues != null
             && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
   }
 
   /**
@@ -98,12 +98,12 @@ public interface MetricRecorder {
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
     checkArgument(requiredLabelValues != null
             && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
     checkArgument(optionalLabelValues != null
             && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
   }
 
   /**
