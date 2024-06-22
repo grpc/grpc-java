@@ -18,6 +18,7 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -119,6 +120,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param executor the execute service we use to read and update the credentials
    * @return an object that caller should close when the file refreshes are not needed
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
       long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException,
       GeneralSecurityException {
@@ -146,6 +148,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
   public void updateIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
       GeneralSecurityException {
     UpdateResult newResult = readAndUpdate(keyFile, certFile, 0, 0);
