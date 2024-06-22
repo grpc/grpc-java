@@ -249,7 +249,7 @@ public final class XdsTestServer {
           serverBuilder = NettyServerBuilder.forAddress(
                   new InetSocketAddress("::1", port), insecureServerCreds);
           for (SocketAddress address : v6Addresses) {
-              ((NettyServerBuilder)serverBuilder).addListenAddress(address);
+            ((NettyServerBuilder)serverBuilder).addListenAddress(address);
           }
           break;
         default:
