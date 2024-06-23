@@ -30,11 +30,14 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
+import android.os.Build;
 import android.os.Process;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Status;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,6 +45,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.shadows.ShadowSigningInfo;
 import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
@@ -82,6 +86,12 @@ public final class SecurityPoliciesTest {
       packageNames[i] = packageInfo[i].packageName;
     }
     shadowOf(packageManager).setPackagesForUid(uid, packageNames);
+  }
+
+  private void setupPlatformSignature(Signature... signatures) {
+    PackageInfo platformPackageInfo =
+        newBuilder().setPackageName("android").setSignatures(signatures).build();
+    installPackages(Process.SYSTEM_UID, platformPackageInfo);
   }
 
   @Test
@@ -149,6 +159,68 @@ public final class SecurityPoliciesTest {
     // THEN UID for package that doesn't have SIG1 will not be authorized
     assertThat(policy.checkAuthorization(OTHER_UID).getCode())
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
+  public void testHasSameSignatureAsPlatform_succeedsIfSignaturesMatch() {
+    setupPlatformSignature(SIG2, SIG1);
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG1).build();
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.hasSameSignatureAsPlatform(
+            packageManager, OTHER_UID_PACKAGE_NAME, MoreExecutors.newDirectExecutorService());
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode()).isEqualTo(Status.OK.getCode());
+  }
+
+  @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
+  public void testHasSameSignatureAsPlatform_failsIfPackageNameDoesNotMatch() {
+    setupPlatformSignature(SIG1);
+    PackageInfo info =
+        newBuilder()
+            .setPackageName(OTHER_UID_SAME_SIGNATURE_PACKAGE_NAME)
+            .setSignatures(SIG1)
+            .build();
+    installPackages(OTHER_UID_SAME_SIGNATURE, info);
+
+    policy =
+        SecurityPolicies.hasSameSignatureAsPlatform(
+            packageManager, appContext.getPackageName(), MoreExecutors.newDirectExecutorService());
+
+    assertThat(policy.checkAuthorization(OTHER_UID_SAME_SIGNATURE).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
+  public void testHasSameSignatureAsPlatform_failsIfSignatureDoesNotMatch() {
+    setupPlatformSignature(SIG1);
+    PackageInfo info =
+        newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
+    installPackages(OTHER_UID, info);
+
+    policy =
+        SecurityPolicies.hasSameSignatureAsPlatform(
+            packageManager, OTHER_UID_PACKAGE_NAME, MoreExecutors.newDirectExecutorService());
+
+    assertThat(policy.checkAuthorization(OTHER_UID).getCode())
+        .isEqualTo(Status.PERMISSION_DENIED.getCode());
+  }
+
+  @Test
+  @Config(sdk = {Build.VERSION_CODES.O_MR1, Build.VERSION_CODES.P})
+  public void testHasSameSignatureAsPlatform_failsIfUidUnknown() {
+    setupPlatformSignature(SIG1);
+    policy =
+        SecurityPolicies.hasSameSignatureAsPlatform(
+            packageManager, appContext.getPackageName(), MoreExecutors.newDirectExecutorService());
+
+    assertThat(policy.checkAuthorization(OTHER_UID_UNKNOWN).getCode())
+        .isEqualTo(Status.UNAUTHENTICATED.getCode());
   }
 
   @Test
@@ -500,6 +572,13 @@ public final class SecurityPoliciesTest {
 
       if (this.signatures != null) {
         packageInfo.signatures = this.signatures;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+          SigningInfo signingInfo = new SigningInfo();
+          ShadowSigningInfo shadowSigningInfo = shadowOf(signingInfo);
+          shadowSigningInfo.setSignatures(this.signatures);
+          packageInfo.signingInfo = signingInfo;
+        }
       }
 
       if (!this.permissions.isEmpty()) {

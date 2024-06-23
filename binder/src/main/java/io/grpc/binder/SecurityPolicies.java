@@ -16,6 +16,9 @@
 
 package io.grpc.binder;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+
 import android.annotation.SuppressLint;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
@@ -23,6 +26,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Process;
@@ -32,6 +36,8 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
@@ -40,6 +46,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /** Static factory methods for creating standard security policies. */
 @CheckReturnValue
@@ -95,6 +102,54 @@ public final class SecurityPolicies {
       PackageManager packageManager, String packageName, Signature requiredSignature) {
     return oneOfSignatures(
         packageManager, packageName, ImmutableList.of(requiredSignature));
+  }
+
+  /**
+   * Creates a {@link SecurityPolicy} which checks if the given package is signed with the same
+   * certificate that the current Android platform was signed with.
+   *
+   * @param packageName the package name of the allowed package.
+   * @param backgroundExecutor an executor suitable for blocking I/O.
+   * @throws NullPointerException if any of the inputs are {@code null}.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11238")
+  public static AsyncSecurityPolicy hasSameSignatureAsPlatform(
+      PackageManager packageManager, String packageName, Executor backgroundExecutor) {
+    return new AsyncSecurityPolicy() {
+      @Override
+      public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+        return Futures.submit(
+            () -> {
+              Signature[] platformSignatures = getPlatformSignatures(packageManager);
+
+              return oneOfSignatures(
+                      packageManager,
+                      packageName,
+                      ImmutableList.copyOf(platformSignatures))
+                  .checkAuthorization(uid);
+            },
+            backgroundExecutor);
+      }
+    };
+  }
+
+  private static Signature[] getPlatformSignatures(PackageManager packageManager) {
+    try {
+      PackageInfo packageInfo;
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        packageInfo =
+            packageManager.getPackageInfo("android", PackageManager.GET_SIGNING_CERTIFICATES);
+        SigningInfo signingInfo = checkNotNull(packageInfo.signingInfo);
+        return signingInfo.hasMultipleSigners()
+            ? signingInfo.getApkContentsSigners()
+            : signingInfo.getSigningCertificateHistory();
+      } else {
+        packageInfo = packageManager.getPackageInfo("android", PackageManager.GET_SIGNATURES);
+        return checkNotNull(packageInfo.signatures);
+      }
+    } catch (NameNotFoundException nnfe) {
+      throw new AssertionError(nnfe); // impossible: the "android" package is always present
+    }
   }
 
   /**
