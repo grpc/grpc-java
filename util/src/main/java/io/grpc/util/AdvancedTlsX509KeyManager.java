@@ -18,6 +18,7 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -39,6 +40,7 @@ import javax.net.ssl.X509ExtendedKeyManager;
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
  * advanced TLS features, such as private key and certificate chain reloading.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
   // Minimum allowed period for refreshing files with credential information.
