@@ -27,9 +27,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * byte array of size N. This means we can't simply read into a large block and be done with it, we
  * need to allocate a new buffer specifically. Boo, Android.
  *
- * <p>When writing data though, we can use a fixed-size buffer, so when large messages are
- * split into standard-sized blocks, we only need a byte array allocation to read the last
- * block.
+ * <p>When writing data though, we can use a fixed-size buffer, so when large messages are split
+ * into standard-sized blocks, we only need a byte array allocation to read the last block.
  *
  * <p>This class maintains a pool of blocks of standard size, but also provides smaller blocks when
  * requested. Currently, blocks of standard size are retained in the pool, when released, but we
@@ -38,8 +37,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 final class BlockPool {
 
   /**
-   * The size of each standard block. (Currently 16k)
-   * The block size must be at least as large as the maximum header list size.
+   * The size of each standard block. (Currently 16k) The block size must be at least as large as
+   * the maximum header list size.
    */
   private static final int BLOCK_SIZE = Math.max(16 * 1024, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
 

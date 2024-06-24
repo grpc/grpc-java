@@ -41,8 +41,8 @@ import javax.annotation.Nullable;
 /**
  * Manages security for an Android Service hosted gRPC server.
  *
- * <p>Attaches authorization state to a newly-created transport, and contains a
- * ServerInterceptor which ensures calls are authorized before allowing them to proceed.
+ * <p>Attaches authorization state to a newly-created transport, and contains a ServerInterceptor
+ * which ensures calls are authorized before allowing them to proceed.
  */
 public final class BinderTransportSecurity {
 
@@ -205,15 +205,18 @@ public final class BinderTransportSecurity {
           serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
       if (useCache) {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
-        Futures.addCallback(authorization, new FutureCallback<Status>() {
-          @Override
-          public void onSuccess(Status result) {}
+        Futures.addCallback(
+            authorization,
+            new FutureCallback<Status>() {
+              @Override
+              public void onSuccess(Status result) {}
 
-          @Override
-          public void onFailure(Throwable t) {
-            serviceAuthorization.remove(serviceName, authorization);
-          }
-        }, MoreExecutors.directExecutor());
+              @Override
+              public void onFailure(Throwable t) {
+                serviceAuthorization.remove(serviceName, authorization);
+              }
+            },
+            MoreExecutors.directExecutor());
       }
       return authorization;
     }
@@ -238,7 +241,7 @@ public final class BinderTransportSecurity {
      * @param uid The Android UID to authenticate.
      * @param serviceName The name of the gRPC service being called.
      * @return a future with the result of the authorization check. A failed future represents a
-     *    failure to perform the authorization check, not that the access is denied.
+     *     failure to perform the authorization check, not that the access is denied.
      */
     ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
   }

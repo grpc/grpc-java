@@ -147,12 +147,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       state = State.BINDING;
       Status bindResult =
           bindInternal(
-            sourceContext,
-            bindIntent,
-            this,
-            bindFlags,
-            channelCredentials,
-            targetUserHandle);
+              sourceContext, bindIntent, this, bindFlags, channelCredentials, targetUserHandle);
       if (!bindResult.isOk()) {
         handleBindServiceFailure(sourceContext, this);
         state = State.UNBOUND;
@@ -184,7 +179,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       }
       boolean bindResult = false;
       switch (bindMethodType) {
-        case BIND_SERVICE: 
+        case BIND_SERVICE:
           bindResult = context.bindService(bindIntent, conn, flags);
           break;
         case BIND_SERVICE_AS_USER:
@@ -193,17 +188,18 @@ final class ServiceBinding implements Bindable, ServiceConnection {
         case DEVICE_POLICY_BIND_SEVICE_ADMIN:
           DevicePolicyManager devicePolicyManager =
               (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
-          bindResult = devicePolicyManager.bindDeviceAdminServiceAsUser(
-            channelCredentials.getDevicePolicyAdminComponentName(),
-            bindIntent,
-            conn,
-            flags,
-            targetUserHandle);
+          bindResult =
+              devicePolicyManager.bindDeviceAdminServiceAsUser(
+                  channelCredentials.getDevicePolicyAdminComponentName(),
+                  bindIntent,
+                  conn,
+                  flags,
+                  targetUserHandle);
           break;
       }
       if (!bindResult) {
         return Status.UNIMPLEMENTED.withDescription(
-              bindMethodType.methodName() + "(" + bindIntent + ") returned false");
+            bindMethodType.methodName() + "(" + bindIntent + ") returned false");
       }
       return Status.OK;
     } catch (SecurityException e) {
@@ -211,8 +207,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
           .withCause(e)
           .withDescription("SecurityException from " + bindMethodType.methodName());
     } catch (RuntimeException e) {
-      return Status.INTERNAL.withCause(e).withDescription(
-        "RuntimeException from " + bindMethodType.methodName());
+      return Status.INTERNAL
+          .withCause(e)
+          .withDescription("RuntimeException from " + bindMethodType.methodName());
     }
   }
 

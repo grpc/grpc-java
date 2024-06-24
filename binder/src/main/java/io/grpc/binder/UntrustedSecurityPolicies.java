@@ -20,9 +20,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import javax.annotation.CheckReturnValue;
 
-/**
- * Static factory methods for creating untrusted security policies.
- */
+/** Static factory methods for creating untrusted security policies. */
 @CheckReturnValue
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class UntrustedSecurityPolicies {
@@ -30,11 +28,9 @@ public final class UntrustedSecurityPolicies {
   private UntrustedSecurityPolicies() {}
 
   /**
-   * Return a security policy which allows any peer on device.
-   * Servers should only use this policy if they intend to expose
-   * a service to all applications on device.
-   * Clients should only use this policy if they don't need to trust the
-   * application they're connecting to.
+   * Return a security policy which allows any peer on device. Servers should only use this policy
+   * if they intend to expose a service to all applications on device. Clients should only use this
+   * policy if they don't need to trust the application they're connecting to.
    */
   public static SecurityPolicy untrustedPublic() {
     return new SecurityPolicy() {

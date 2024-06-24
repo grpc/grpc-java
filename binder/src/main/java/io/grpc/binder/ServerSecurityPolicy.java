@@ -27,7 +27,7 @@ import javax.annotation.CheckReturnValue;
 /**
  * A security policy for a gRPC server.
  *
- * Contains a default policy, and optional policies for each server.
+ * <p>Contains a default policy, and optional policies for each server.
  */
 public final class ServerSecurityPolicy {
 
@@ -61,8 +61,8 @@ public final class ServerSecurityPolicy {
   /**
    * Returns whether the given Android UID is authorized to access a particular service.
    *
-   * <p>This method never throws an exception. If the execution of the security policy check
-   * fails, a failed future with such exception is returned.
+   * <p>This method never throws an exception. If the execution of the security policy check fails,
+   * a failed future with such exception is returned.
    *
    * @param uid The Android UID to authenticate.
    * @param serviceName The name of the gRPC service being called.

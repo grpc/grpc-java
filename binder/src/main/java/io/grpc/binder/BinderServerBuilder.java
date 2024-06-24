@@ -30,35 +30,29 @@ import io.grpc.binder.internal.BinderServer;
 import io.grpc.binder.internal.BinderTransportSecurity;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ServerImplBuilder;
-
 import java.io.File;
 import java.util.concurrent.ScheduledExecutorService;
 
-/**
- * Builder for a server that services requests from an Android Service.
- */
-public final class BinderServerBuilder
-    extends ForwardingServerBuilder<BinderServerBuilder> {
+/** Builder for a server that services requests from an Android Service. */
+public final class BinderServerBuilder extends ForwardingServerBuilder<BinderServerBuilder> {
 
   /**
    * Creates a server builder that will listen for bindings to the specified address.
    *
-   * <p>The listening {@link IBinder} associated with new {@link Server}s will be stored
-   * in {@code binderReceiver} upon {@link #build()}. Callers should return it from {@link
+   * <p>The listening {@link IBinder} associated with new {@link Server}s will be stored in {@code
+   * binderReceiver} upon {@link #build()}. Callers should return it from {@link
    * Service#onBind(Intent)} when the binding intent matches {@code listenAddress}.
    *
    * @param listenAddress an Android Service and binding Intent associated with this server.
    * @param receiver an "out param" for the new {@link Server}'s listening {@link IBinder}
    * @return a new builder
    */
-  public static BinderServerBuilder forAddress(AndroidComponentAddress listenAddress,
-      IBinderReceiver receiver) {
+  public static BinderServerBuilder forAddress(
+      AndroidComponentAddress listenAddress, IBinderReceiver receiver) {
     return new BinderServerBuilder(listenAddress, receiver);
   }
 
-  /**
-   * Always fails. Call {@link #forAddress(AndroidComponentAddress, IBinderReceiver)} instead.
-   */
+  /** Always fails. Call {@link #forAddress(AndroidComponentAddress, IBinderReceiver)} instead. */
   @DoNotCall("Unsupported. Use forAddress() instead")
   public static BinderServerBuilder forPort(int port) {
     throw new UnsupportedOperationException("call forAddress() instead");
@@ -69,16 +63,17 @@ public final class BinderServerBuilder
   private boolean isBuilt;
 
   private BinderServerBuilder(
-      AndroidComponentAddress listenAddress,
-      IBinderReceiver binderReceiver) {
+      AndroidComponentAddress listenAddress, IBinderReceiver binderReceiver) {
     internalBuilder.setListenAddress(listenAddress);
 
-    serverImplBuilder = new ServerImplBuilder(streamTracerFactories -> {
-      internalBuilder.setStreamTracerFactories(streamTracerFactories);
-      BinderServer server = internalBuilder.build();
-      BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
-      return server;
-    });
+    serverImplBuilder =
+        new ServerImplBuilder(
+            streamTracerFactories -> {
+              internalBuilder.setStreamTracerFactories(streamTracerFactories);
+              BinderServer server = internalBuilder.build();
+              BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
+              return server;
+            });
 
     // Disable stats and tracing by default.
     serverImplBuilder.setStatsEnabled(false);
@@ -114,8 +109,8 @@ public final class BinderServerBuilder
    */
   public BinderServerBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-     internalBuilder.setExecutorServicePool(
-          new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService")));
+    internalBuilder.setExecutorServicePool(
+        new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService")));
     return this;
   }
 
@@ -140,9 +135,7 @@ public final class BinderServerBuilder
     return this;
   }
 
-  /**
-   * Always fails. TLS is not supported in BinderServer.
-   */
+  /** Always fails. TLS is not supported in BinderServer. */
   @Override
   public BinderServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in BinderServer");

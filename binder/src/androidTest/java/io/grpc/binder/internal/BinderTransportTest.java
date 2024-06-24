@@ -73,7 +73,8 @@ public final class BinderTransportTest extends AbstractTransportTest {
             .setStreamTracerFactories(streamTracerFactories)
             .build();
 
-    HostServices.configureService(addr,
+    HostServices.configureService(
+        addr,
         HostServices.serviceParamsBuilder()
             .setRawBinderSupplier(() -> binderServer.getHostBinder())
             .build());
@@ -95,19 +96,18 @@ public final class BinderTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     AndroidComponentAddress addr = (AndroidComponentAddress) server.getListenSocketAddress();
-    BinderClientTransportFactory.Builder builder = new BinderClientTransportFactory.Builder()
-        .setSourceContext(appContext)
-        .setScheduledExecutorPool(executorServicePool)
-        .setOffloadExecutorPool(offloadExecutorPool);
+    BinderClientTransportFactory.Builder builder =
+        new BinderClientTransportFactory.Builder()
+            .setSourceContext(appContext)
+            .setScheduledExecutorPool(executorServicePool)
+            .setOffloadExecutorPool(offloadExecutorPool);
 
     ClientTransportOptions options = new ClientTransportOptions();
     options.setEagAttributes(eagAttrs());
     options.setChannelLogger(transportLogger());
 
     return new BinderTransport.BinderClientTransport(
-        builder.buildClientTransportFactory(),
-        addr,
-        options);
+        builder.buildClientTransportFactory(), addr, options);
   }
 
   @Test
