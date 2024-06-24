@@ -93,7 +93,7 @@ public abstract class NameResolver {
             listener.onError(error);
           }
 
-          @Override
+        @Override
           public void onResult(ResolutionResult resolutionResult) {
             listener.onAddresses(resolutionResult.getAddresses(), resolutionResult.getAttributes());
           }
@@ -234,6 +234,7 @@ public abstract class NameResolver {
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
+     * @Deprecated
      */
     public abstract void onResult(ResolutionResult resolutionResult);
 
@@ -246,6 +247,15 @@ public abstract class NameResolver {
      */
     @Override
     public abstract void onError(Status error);
+
+    /**
+     * Handles updates on resolved addresses and attributes.
+     *
+     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     */
+    public Status onResult2(ResolutionResult resolutionResult) {
+      throw new UnsupportedOperationException("Not implemented.");
+    }
   }
 
   /**

@@ -21,6 +21,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Listener2;
@@ -79,7 +80,7 @@ public class RetryingNameResolverTest {
   // Make sure the ResolutionResultListener callback is added to the ResolutionResult attributes,
   // and the retry scheduler is reset since the name resolution was successful.
   @Test
-  public void onResult_sucess() {
+  public void onResult_success() {
     retryingNameResolver.start(mockListener);
     verify(mockNameResolver).start(listenerCaptor.capture());
 
@@ -91,6 +92,17 @@ public class RetryingNameResolverTest {
     assertThat(resolutionResultListener).isNotNull();
 
     resolutionResultListener.resolutionAttempted(Status.OK);
+    verify(mockRetryScheduler).reset();
+  }
+
+  @Test
+  public void onResult2_sucesss() {
+    when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.OK);
+    retryingNameResolver.start(mockListener);
+    verify(mockNameResolver).start(listenerCaptor.capture());
+
+    assertThat(listenerCaptor.getValue().onResult2(ResolutionResult.newBuilder().build())).isEqualTo(Status.OK);
+
     verify(mockRetryScheduler).reset();
   }
 
@@ -109,6 +121,18 @@ public class RetryingNameResolverTest {
     assertThat(resolutionResultListener).isNotNull();
 
     resolutionResultListener.resolutionAttempted(Status.UNAVAILABLE);
+    verify(mockRetryScheduler).schedule(isA(Runnable.class));
+  }
+
+  // Make sure that a retry gets scheduled when the resolution results are rejected.
+  @Test
+  public void onResult2_failure() {
+    when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.UNAVAILABLE);
+    retryingNameResolver.start(mockListener);
+    verify(mockNameResolver).start(listenerCaptor.capture());
+
+    assertThat(listenerCaptor.getValue().onResult2(ResolutionResult.newBuilder().build())).isEqualTo(Status.UNAVAILABLE);
+
     verify(mockRetryScheduler).schedule(isA(Runnable.class));
   }
 
