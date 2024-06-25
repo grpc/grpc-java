@@ -158,6 +158,7 @@ public class CallOptionsTest {
         .withCallCredentials(null)
         .withMaxInboundMessageSize(44)
         .withMaxOutboundMessageSize(55)
+        .withOnReadyThreshold(1024)
         .toString();
 
     assertThat(actual).contains("deadline=null");
@@ -169,6 +170,7 @@ public class CallOptionsTest {
     assertThat(actual).contains("waitForReady=true");
     assertThat(actual).contains("maxInboundMessageSize=44");
     assertThat(actual).contains("maxOutboundMessageSize=55");
+    assertThat(actual).contains("onReadyThreshold=1024");
     assertThat(actual).contains("streamTracerFactories=[tracerFactory1, tracerFactory2]");
   }
 
