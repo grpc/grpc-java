@@ -616,6 +616,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
           parsedDefaultServiceConfig.getError());
       this.defaultServiceConfig =
           (ManagedChannelServiceConfig) parsedDefaultServiceConfig.getConfig();
+      if (this.defaultServiceConfig != null
+              && this.defaultServiceConfig.getRetryThrottling() != null) {
+        this.transportProvider.throttle = this.defaultServiceConfig.getRetryThrottling();
+      }
     } else {
       this.defaultServiceConfig = null;
     }
