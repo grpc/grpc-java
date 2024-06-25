@@ -27,11 +27,15 @@ import static io.opencensus.contrib.grpc.metrics.RpcMeasureConstants.GRPC_SERVER
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
 import io.opencensus.stats.Aggregation;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.View;
+import io.opencensus.tags.TagKey;
+import io.opencensus.tags.TagValue;
 import io.opencensus.trace.SpanContext;
 import java.util.Arrays;
 
@@ -46,6 +50,16 @@ public final class ObservabilityCensusConstants {
 
   public static CallOptions.Key<SpanContext> CLIENT_TRACE_SPAN_CONTEXT_KEY
       = CallOptions.Key.createWithDefault("Client span context for tracing", SpanContext.INVALID);
+
+  public static final TagKey INSTRUMENTATION_SOURCE = TagKey.create("instrumentation_source");
+
+  public static final TagKey INSTRUMENTATION_VERSION = TagKey.create("instrumentation_version");
+
+  public static final TagValue LIBRARY_NAME = TagValue.create("grpc-java");
+
+  static GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
+  public static final TagValue LIBRARY_VERSION = TagValue.create(
+      "v" + buildVersion.getImplementationVersion());
 
   static final Aggregation AGGREGATION_WITH_BYTES_HISTOGRAM =
       RpcViewConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC_VIEW.getAggregation();
@@ -65,7 +79,8 @@ public final class ObservabilityCensusConstants {
           "Time taken by gRPC to complete an RPC from application's perspective",
           API_LATENCY_PER_CALL,
           AGGREGATION_WITH_MILLIS_HISTOGRAM,
-          Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS));
+          Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS,
+              INSTRUMENTATION_SOURCE, INSTRUMENTATION_VERSION));
 
   public static final View GRPC_CLIENT_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW =
       View.create(
@@ -73,7 +88,8 @@ public final class ObservabilityCensusConstants {
           "Compressed message bytes sent per client RPC attempt",
           GRPC_CLIENT_SENT_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
-          Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS));
+          Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS,
+              INSTRUMENTATION_SOURCE, INSTRUMENTATION_VERSION));
 
   public static final View GRPC_CLIENT_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW =
       View.create(
@@ -81,7 +97,8 @@ public final class ObservabilityCensusConstants {
           "Compressed message bytes received per client RPC attempt",
           GRPC_CLIENT_RECEIVED_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
-          Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS));
+          Arrays.asList(GRPC_CLIENT_METHOD, GRPC_CLIENT_STATUS,
+              INSTRUMENTATION_SOURCE, INSTRUMENTATION_VERSION));
 
   public static final View GRPC_SERVER_SENT_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW =
       View.create(
@@ -89,7 +106,8 @@ public final class ObservabilityCensusConstants {
           "Compressed message bytes sent per server RPC",
           GRPC_SERVER_SENT_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
-          Arrays.asList(GRPC_SERVER_METHOD, GRPC_SERVER_STATUS));
+          Arrays.asList(GRPC_SERVER_METHOD, GRPC_SERVER_STATUS,
+              INSTRUMENTATION_SOURCE, INSTRUMENTATION_VERSION));
 
   public static final View GRPC_SERVER_RECEIVED_COMPRESSED_MESSAGE_BYTES_PER_RPC_VIEW =
       View.create(
@@ -97,7 +115,8 @@ public final class ObservabilityCensusConstants {
           "Compressed message bytes received per server RPC",
           GRPC_SERVER_RECEIVED_BYTES_PER_RPC,
           AGGREGATION_WITH_BYTES_HISTOGRAM,
-          Arrays.asList(GRPC_SERVER_METHOD, GRPC_SERVER_STATUS));
+          Arrays.asList(GRPC_SERVER_METHOD, GRPC_SERVER_STATUS,
+              INSTRUMENTATION_SOURCE, INSTRUMENTATION_VERSION));
 
   private ObservabilityCensusConstants() {}
 }
