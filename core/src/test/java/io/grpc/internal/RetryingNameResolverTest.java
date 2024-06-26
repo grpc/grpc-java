@@ -84,7 +84,7 @@ public class RetryingNameResolverTest {
     retryingNameResolver.start(mockListener);
     verify(mockNameResolver).start(listenerCaptor.capture());
 
-    listenerCaptor.getValue().onResult2(ResolutionResult.newBuilder().build());
+    listenerCaptor.getValue().onResult(ResolutionResult.newBuilder().build());
     verify(mockListener).onResult(onResultCaptor.capture());
     ResolutionResultListener resolutionResultListener = onResultCaptor.getValue()
         .getAttributes()

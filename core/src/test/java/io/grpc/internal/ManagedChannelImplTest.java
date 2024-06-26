@@ -115,6 +115,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.StringMarshaller;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
@@ -1050,6 +1051,78 @@ public class ManagedChannelImplTest {
 
     // No more callback should be delivered to LoadBalancer after it's shut down
     resolver.listener.onError(resolutionError);
+    resolver.resolved();
+    verifyNoMoreInteractions(mockLoadBalancer);
+  }
+
+  @Test
+  public void noMoreCallbackAfterLoadBalancerShutdown_usesNameResolverListener2OnResult2() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    Status resolutionError = Status.UNAVAILABLE.withDescription("Resolution failed");
+    createChannel();
+
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
+    verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
+    assertThat(resolvedAddressCaptor.getValue().getAddresses()).containsExactly(addressGroup);
+
+    SubchannelStateListener stateListener1 = mock(SubchannelStateListener.class);
+    SubchannelStateListener stateListener2 = mock(SubchannelStateListener.class);
+    Subchannel subchannel1 =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, stateListener1);
+    Subchannel subchannel2 =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, stateListener2);
+    requestConnectionSafely(helper, subchannel1);
+    requestConnectionSafely(helper, subchannel2);
+    verify(mockTransportFactory, times(2))
+        .newClientTransport(
+            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+    MockClientTransportInfo transportInfo1 = transports.poll();
+    MockClientTransportInfo transportInfo2 = transports.poll();
+
+    // LoadBalancer receives all sorts of callbacks
+    transportInfo1.listener.transportReady();
+
+    verify(stateListener1, times(2)).onSubchannelState(stateInfoCaptor.capture());
+    assertSame(CONNECTING, stateInfoCaptor.getAllValues().get(0).getState());
+    assertSame(READY, stateInfoCaptor.getAllValues().get(1).getState());
+
+    verify(stateListener2).onSubchannelState(stateInfoCaptor.capture());
+    assertSame(CONNECTING, stateInfoCaptor.getValue().getState());
+
+    channel.syncContext.execute(() ->
+        resolver.listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(resolutionError)).build()));
+    verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
+
+    verifyNoMoreInteractions(mockLoadBalancer);
+
+    channel.shutdown();
+    verify(mockLoadBalancer).shutdown();
+    verifyNoMoreInteractions(stateListener1, stateListener2);
+
+    // LoadBalancer will normally shutdown all subchannels
+    shutdownSafely(helper, subchannel1);
+    shutdownSafely(helper, subchannel2);
+
+    // Since subchannels are shutdown, SubchannelStateListeners will only get SHUTDOWN regardless of
+    // the transport states.
+    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo2.listener.transportReady();
+    verify(stateListener1).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
+    verify(stateListener2).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
+    verifyNoMoreInteractions(stateListener1, stateListener2);
+
+    // No more callback should be delivered to LoadBalancer after it's shut down
+    channel.syncContext.execute(() ->
+        resolver.listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(resolutionError)).build()));
     resolver.resolved();
     verifyNoMoreInteractions(mockLoadBalancer);
   }
@@ -3161,11 +3234,19 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult2(
+            ResolutionResult.newBuilder()
+              .setAddressesOrError(
+                  StatusOr.fromStatus(Status.INTERNAL)).build()));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(
+                    StatusOr.fromStatus(Status.INTERNAL)).build()));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
@@ -4724,7 +4805,10 @@ public class ManagedChannelImplTest {
 
       void resolved() {
         if (error != null) {
-          listener.onError(error);
+          syncContext.execute(() ->
+              listener.onResult2(
+                  ResolutionResult.newBuilder()
+                      .setAddressesOrError(StatusOr.fromStatus(error)).build()));
           return;
         }
         ResolutionResult.Builder builder =

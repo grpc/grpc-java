@@ -1699,7 +1699,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             resolutionResult.getAttributes());
 
         if (lastResolutionState != ResolutionState.SUCCESS) {
-          channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", serversOrError);
+          channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", serversOrError.value());
           lastResolutionState = ResolutionState.SUCCESS;
         }
 
