@@ -16,8 +16,6 @@
 
 package io.grpc.testing.integration;
 
-import static io.grpc.testing.integration.Util.getV4Address;
-
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -117,7 +115,7 @@ public final class XdsTestServer {
     server.blockUntilShutdown();
   }
 
-  private void parseArgs(String[] args) {
+  void parseArgs(String[] args) {
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -148,9 +146,7 @@ public final class XdsTestServer {
       } else if ("server_id".equals(key)) {
         serverId = value;
       } else if ("address_type".equals(key)) {
-        if (!value.isEmpty()) {
-          addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
-        }
+        addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -195,7 +191,7 @@ public final class XdsTestServer {
   }
 
   @SuppressWarnings("AddressSelection")
-  private void start() throws Exception {
+  void start() throws Exception {
     if (enableCsmObservability) {
       csmObservability = CsmObservability.newBuilder()
           .sdk(AutoConfiguredOpenTelemetrySdk.builder()
@@ -216,6 +212,9 @@ public final class XdsTestServer {
     }
     health = new HealthStatusManager();
     if (secureMode) {
+      if (addressType != Util.AddressType.IPV4_IPV6) {
+        throw new IllegalArgumentException("Secure mode only supports IPV4_IPV6 address type");
+      }
       maintenanceServer =
           Grpc.newServerBuilderForPort(maintenancePort, InsecureServerCredentials.create())
               .addService(new XdsUpdateHealthServiceImpl(health))
@@ -240,9 +239,12 @@ public final class XdsTestServer {
           serverBuilder = Grpc.newServerBuilderForPort(port, insecureServerCreds);
           break;
         case IPV4:
-          serverBuilder =
-              io.grpc.netty.NettyServerBuilder.forAddress(getV4Address(port), insecureServerCreds)
-                  .addListenAddress(new InetSocketAddress("127.0.0.1", port));
+          SocketAddress v4Address = Util.getV4Address(port);
+          serverBuilder = NettyServerBuilder.forAddress(
+              new InetSocketAddress("127.0.0.1", port), insecureServerCreds);
+          if (v4Address == null) {
+            ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
+          }
           break;
         case IPV6:
           List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
@@ -274,7 +276,7 @@ public final class XdsTestServer {
     health.setStatus("", ServingStatus.SERVING);
   }
 
-  private void stop() throws Exception {
+  void stop() throws Exception {
     server.shutdownNow();
     if (maintenanceServer != null) {
       maintenanceServer.shutdownNow();

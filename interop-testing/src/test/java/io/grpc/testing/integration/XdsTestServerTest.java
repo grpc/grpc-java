@@ -24,20 +24,22 @@ import static org.junit.Assert.assertEquals;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.TlsChannelCredentials;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.testing.TlsTesting;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link StressTestClient}. */
+/** Unit tests to make sure that the {@link XdsTestServer} is working as expected.
+ * Specifically, that for dualstack communication is handled correctly across address families
+ * and that the test server is correctly handling the address_type flag.
+ */
 @RunWith(JUnit4.class)
-public class DualStackClientTest {
+public class XdsTestServerTest {
   protected static final EmptyProtos.Empty EMPTY = EmptyProtos.Empty.getDefaultInstance();
 
   @Rule
@@ -64,16 +66,20 @@ public class DualStackClientTest {
 
   @Test
   public void checkNoAddressType() throws Exception {
+    // This ensures that all of the other xds tests aren't broken by the address_type argument.
     checkConnectionWorks(null);
   }
 
+  // Simple test to ensure that communication with the server works which includes starting and
+  // stopping the server, creating a channel and doing a unary rpc.
   private void checkConnectionWorks(Util.AddressType addressType)
       throws Exception {
 
-    TestServiceServer server = getAndStartTestServiceServer(addressType);
+    int port = Util.pickUnusedPort();
+
+    XdsTestServer server = getAndStartTestServiceServer(addressType, port);
     String target = getTargetServer(addressType);
 
-    int port = server.getPort();
     try {
       ManagedChannel realChannel = createChannel(port, target);
       Channel channel = cleanupRule.register(realChannel);
@@ -88,14 +94,7 @@ public class DualStackClientTest {
   }
 
   private static ManagedChannel createChannel(int port, String target) {
-    ChannelCredentials creds;
-    try {
-      creds = TlsChannelCredentials.newBuilder()
-          .trustManager(TlsTesting.loadCert("ca.pem"))
-          .build();
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
+    ChannelCredentials creds = InsecureChannelCredentials.create();
 
     ManagedChannelBuilder<?> builder;
     if (port == 0) {
@@ -108,13 +107,13 @@ public class DualStackClientTest {
     return builder.build();
   }
 
-  private static TestServiceServer getAndStartTestServiceServer(Util.AddressType addressType)
+  private static XdsTestServer getAndStartTestServiceServer(Util.AddressType addressType, int port)
       throws Exception {
-    TestServiceServer server = new TestServiceServer();
+    XdsTestServer server = new XdsTestServer();
     String[] args =
         addressType != null
-        ? new String[]{"--port=8082", "--use_tls=true", "--address_type=" + addressType}
-        : new String[]{"--port=8083", "--use_tls=true"};
+        ? new String[]{"--port=" + port, "--address_type=" + addressType}
+        : new String[]{"--port=" + port};
     server.parseArgs(args);
     server.start();
     return server;

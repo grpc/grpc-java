@@ -111,9 +111,7 @@ public class TestServiceServer {
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
       } else if ("address_type".equals(key)) {
-        if (!value.isEmpty()) {
-          addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
-        }
+        addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
       } else if ("grpc_version".equals(key)) {
         if (!"2".equals(value)) {
           System.err.println("Only grpc version 2 is supported");
@@ -181,9 +179,12 @@ public class TestServiceServer {
         serverBuilder = Grpc.newServerBuilderForPort(port, serverCreds);
         break;
       case IPV4:
+        SocketAddress v4Address = Util.getV4Address(port);
         serverBuilder =
-            io.grpc.netty.NettyServerBuilder.forAddress(Util.getV4Address(port), serverCreds)
-                .addListenAddress(new InetSocketAddress("127.0.0.1", port));
+            NettyServerBuilder.forAddress(new InetSocketAddress("127.0.0.1", port), serverCreds);
+        if (v4Address == null) {
+          ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
+        }
         break;
       case IPV6:
         List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
