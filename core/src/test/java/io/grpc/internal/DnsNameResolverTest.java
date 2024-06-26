@@ -50,6 +50,7 @@ import io.grpc.ProxyDetector;
 import io.grpc.StaticTestingClassLoader;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.DnsNameResolver.ResourceResolver;
@@ -656,7 +657,9 @@ public class DnsNameResolverTest {
     dnsResolver.setResourceResolver(null);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onError(errorCaptor.capture());
+    verify(mockListener).onResult2(ResolutionResult.newBuilder()
+        .setAddressesOrError(StatusOr.fromStatus(errorCaptor.capture()))
+        .build());
     Status errorStatus = errorCaptor.getValue();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
@@ -730,7 +733,9 @@ public class DnsNameResolverTest {
     dnsResolver.setResourceResolver(mockResourceResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onError(errorCaptor.capture());
+    verify(mockListener).onResult2(ResolutionResult.newBuilder()
+        .setAddressesOrError(StatusOr.fromStatus(errorCaptor.capture()))
+        .build());
     Status errorStatus = errorCaptor.getValue();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");

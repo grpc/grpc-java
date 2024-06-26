@@ -22,6 +22,9 @@ import static org.mockito.Mockito.verify;
 
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.StatusOr;
+import io.grpc.SynchronizationContext;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
@@ -41,6 +44,13 @@ public class UdsNameResolverTest {
 
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
 
   @Mock
   private NameResolver.Listener2 mockListener;
@@ -52,11 +62,11 @@ public class UdsNameResolverTest {
 
   @Test
   public void testValidTargetPath() {
-    udsNameResolver = new UdsNameResolver(null, "sock.sock");
+    udsNameResolver = new UdsNameResolver(null, "sock.sock", NameResolver.Args.newBuilder().setSynchronizationContext(syncContext).build());
     udsNameResolver.start(mockListener);
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     NameResolver.ResolutionResult result = resultCaptor.getValue();
-    List<EquivalentAddressGroup> list = result.getAddresses();
+    List<EquivalentAddressGroup> list = result.getAddressesOrError().value();
     assertThat(list).isNotNull();
     assertThat(list).hasSize(1);
     EquivalentAddressGroup eag = list.get(0);
@@ -72,7 +82,7 @@ public class UdsNameResolverTest {
   @Test
   public void testNonNullAuthority() {
     try {
-      udsNameResolver = new UdsNameResolver("authority", "sock.sock");
+      udsNameResolver = new UdsNameResolver("authority", "sock.sock", args);
       fail("exception expected");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().isEqualTo("non-null authority not supported");

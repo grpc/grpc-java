@@ -32,6 +32,7 @@ import io.grpc.NameResolver;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
@@ -59,7 +60,7 @@ import javax.annotation.Nullable;
  * A DNS-based {@link NameResolver}.
  *
  * <p>Each {@code A} or {@code AAAA} record emits an {@link EquivalentAddressGroup} in the list
- * passed to {@link NameResolver.Listener2#onResult(ResolutionResult)}.
+ * passed to {@link NameResolver.Listener2#onResult2(ResolutionResult)}.
  *
  * @see DnsNameResolverProvider
  */
@@ -317,7 +318,11 @@ public class DnsNameResolver extends NameResolver {
         } else {
           result = doResolve(false);
           if (result.error != null) {
-            savedListener.onError(result.error);
+            InternalResolutionResult finalResult = result;
+            syncContext.execute(() ->
+            savedListener.onResult2(ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(finalResult.error))
+                .build()));
             return;
           }
           if (result.addresses != null) {
@@ -334,8 +339,12 @@ public class DnsNameResolver extends NameResolver {
           savedListener.onResult2(resolutionResultBuilder.build());
         });
       } catch (IOException e) {
-        savedListener.onError(
-            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
+        syncContext.execute(() ->
+        savedListener.onResult2(ResolutionResult.newBuilder()
+            .setAddressesOrError(
+                StatusOr.fromStatus(
+                    Status.UNAVAILABLE.withDescription(
+                        "Unable to resolve host " + host).withCause(e))).build()));
       } finally {
         final boolean succeed = result != null && result.error == null;
         syncContext.execute(new Runnable() {

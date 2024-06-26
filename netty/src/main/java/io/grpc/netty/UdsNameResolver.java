@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.Preconditions;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.SynchronizationContext;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,10 +31,12 @@ import java.util.List;
 final class UdsNameResolver extends NameResolver {
   private NameResolver.Listener2 listener;
   private final String authority;
+  private final SynchronizationContext syncContext;
 
-  UdsNameResolver(String authority, String targetPath) {
+  UdsNameResolver(String authority, String targetPath, Args args) {
     checkArgument(authority == null, "non-null authority not supported");
     this.authority = targetPath;
+    this.syncContext = args.getSynchronizationContext();
   }
 
   @Override
