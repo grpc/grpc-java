@@ -75,7 +75,6 @@ opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-g
 opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exporter-stats-stackdriver", version.ref = "opencensus" }
 opencensus-exporter-trace-stackdriver = { module = "io.opencensus:opencensus-exporter-trace-stackdriver", version.ref = "opencensus" }
 opencensus-impl = { module = "io.opencensus:opencensus-impl", version.ref = "opencensus" }
-opencensus-proto = "io.opencensus:opencensus-proto:0.2.0"
 opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.39.0"
 opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.39.0-alpha"
 opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.36.0-alpha"
