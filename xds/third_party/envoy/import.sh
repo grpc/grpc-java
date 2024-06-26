@@ -67,10 +67,8 @@ envoy/config/trace/v3/datadog.proto
 envoy/config/trace/v3/dynamic_ot.proto
 envoy/config/trace/v3/http_tracer.proto
 envoy/config/trace/v3/lightstep.proto
-envoy/config/trace/v3/opencensus.proto
 envoy/config/trace/v3/opentelemetry.proto
 envoy/config/trace/v3/service.proto
-envoy/config/trace/v3/trace.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
