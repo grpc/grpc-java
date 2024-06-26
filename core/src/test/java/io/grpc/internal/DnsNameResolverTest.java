@@ -649,6 +649,7 @@ public class DnsNameResolverTest {
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
         .thenThrow(new IOException("no addr"));
+    when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.UNAVAILABLE);
     String name = "foo.googleapis.com";
 
     RetryingNameResolver resolver = newResolver(name, 81);
@@ -657,10 +658,8 @@ public class DnsNameResolverTest {
     dnsResolver.setResourceResolver(null);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onResult2(ResolutionResult.newBuilder()
-        .setAddressesOrError(StatusOr.fromStatus(errorCaptor.capture()))
-        .build());
-    Status errorStatus = errorCaptor.getValue();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    Status errorStatus = resultCaptor.getValue().getAddressesOrError().status();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
 
@@ -724,6 +723,7 @@ public class DnsNameResolverTest {
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
         .thenThrow(new IOException("no addr"));
+    when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.UNAVAILABLE);
     String name = "foo.googleapis.com";
 
     ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
@@ -733,10 +733,8 @@ public class DnsNameResolverTest {
     dnsResolver.setResourceResolver(mockResourceResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onResult2(ResolutionResult.newBuilder()
-        .setAddressesOrError(StatusOr.fromStatus(errorCaptor.capture()))
-        .build());
-    Status errorStatus = errorCaptor.getValue();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    Status errorStatus = resultCaptor.getValue().getAddressesOrError().status();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
     verify(mockResourceResolver, never()).resolveTxt(anyString());
