@@ -91,6 +91,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       handleNameResolutionError(unavailableStatus);
       return unavailableStatus;
     }
+
+    List<EquivalentAddressGroup> cleanServers = new ArrayList<>();
+
     for (EquivalentAddressGroup eag : servers) {
       if (eag == null) {
         Status unavailableStatus = Status.UNAVAILABLE.withDescription(
@@ -100,6 +103,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         handleNameResolutionError(unavailableStatus);
         return unavailableStatus;
       }
+      cleanServers.add(removeDuplicateAddresses(eag));
     }
 
     // Since we have a new set of addresses, we are again at first pass
@@ -112,15 +116,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       PickFirstLeafLoadBalancerConfig config
           = (PickFirstLeafLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       if (config.shuffleAddressList != null && config.shuffleAddressList) {
-        servers = new ArrayList<>(servers);
-        Collections.shuffle(servers,
+        Collections.shuffle(cleanServers,
             config.randomSeed != null ? new Random(config.randomSeed) : new Random());
       }
     }
 
     // Make sure we're storing our own list rather than what was passed in
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
-        ImmutableList.<EquivalentAddressGroup>builder().addAll(servers).build();
+        ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
 
     if (addressIndex == null) {
       addressIndex = new Index(newImmutableAddressGroups);
@@ -176,6 +179,23 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     return Status.OK;
+  }
+
+  private static EquivalentAddressGroup removeDuplicateAddresses(EquivalentAddressGroup eag) {
+    Set<SocketAddress> addressSet = new HashSet<>();
+    ArrayList<SocketAddress> addrs = new ArrayList<>(); // maintains order
+
+    for (SocketAddress address : eag.getAddresses()) {
+      if (addressSet.add(address)) {
+        addrs.add(address);
+      }
+    }
+
+    if (addressSet.size() == eag.getAddresses().size()) {
+      return eag;
+    }
+
+    return new EquivalentAddressGroup(addrs, eag.getAttributes());
   }
 
   @Override
