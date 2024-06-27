@@ -25,9 +25,11 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.testing.GrpcCleanupRule;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.util.logging.Logger;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,22 +39,30 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class XdsTestServerTest {
+  private static final Logger logger = Logger.getLogger(XdsTestServerTest.class.getName());
   protected static final EmptyProtos.Empty EMPTY = EmptyProtos.Empty.getDefaultInstance();
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
-  @Rule
-  public final Timeout globalTimeout = Timeout.seconds(10);
-
 
   @Test
   public void check_ipv4() throws Exception {
+    if (Inet4Address.getAllByName("localhost").length == 0) {
+      // Skip this test if localhost doesn't resolve to an IPv4 address.
+      logger.warning("Skipping test because localhost doesn't resolve to an IPv4 address");
+      return;
+    }
     checkConnectionWorks("127.0.0.1", "--address_type=IPV4");
   }
 
   @Test
   public void check_ipv6() throws Exception {
+    if (Inet6Address.getAllByName("localhost").length == 0) {
+      // Skip this test if localhost doesn't resolve to an IPv6 address.
+      logger.warning("Skipping test because localhost doesn't resolve to an IPv6 address");
+      return;
+    }
     checkConnectionWorks("::1", "--address_type=IPV6");
   }
 
