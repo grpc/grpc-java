@@ -142,8 +142,8 @@ public class PickFirstLeafLoadBalancerTest {
   @Before
   public void setUp() {
     originalHappyEyeballsEnabledValue =
-        System.getProperty(PickFirstLoadBalancerProvider.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS);
-    System.setProperty(PickFirstLoadBalancerProvider.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS,
+        System.getProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS);
+    System.setProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS,
         enableHappyEyeballs ? "true" : "false");
 
     for (int i = 1; i <= 5; i++) {
@@ -173,9 +173,9 @@ public class PickFirstLeafLoadBalancerTest {
   @After
   public void tearDown() {
     if (originalHappyEyeballsEnabledValue == null) {
-      System.clearProperty(PickFirstLoadBalancerProvider.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS);
+      System.clearProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS);
     } else {
-      System.setProperty(PickFirstLoadBalancerProvider.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS,
+      System.setProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS,
           originalHappyEyeballsEnabledValue);
     }
 
