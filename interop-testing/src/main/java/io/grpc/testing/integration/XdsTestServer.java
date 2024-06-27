@@ -242,7 +242,7 @@ public final class XdsTestServer {
           SocketAddress v4Address = Util.getV4Address(port);
           serverBuilder = NettyServerBuilder.forAddress(
               new InetSocketAddress("127.0.0.1", port), insecureServerCreds);
-          if (v4Address == null) {
+          if (v4Address != null) {
             ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
           }
           break;
