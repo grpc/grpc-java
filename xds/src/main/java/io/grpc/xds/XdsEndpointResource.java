@@ -51,7 +51,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   public static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
-      "GRPC_EXPERIMENTAL_HAPPY_EYEBALLS";
+      "GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS";
 
   private static final XdsEndpointResource instance = new XdsEndpointResource();
 
