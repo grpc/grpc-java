@@ -64,6 +64,20 @@ import java.util.logging.Logger;
  * A {@link LoadBalancer} that provides weighted-round-robin load-balancing over the
  * {@link EquivalentAddressGroup}s from the {@link NameResolver}. The subchannel weights are
  * determined by backend metrics using ORCA.
+ * To user WRR, users may configure through channel serviceConfig. Example config:
+ *       String wrrConfig = "{\"loadBalancingConfig\":" +
+ *           "[{\"weighted_round_robin\":{\"enableOobLoadReport\":true, " +
+ *           "\"blackoutPeriod\":\"10s\"," +
+ *           "\"oobReportingPeriod\":\"10s\"," +
+ *           "\"weightExpirationPeriod\":\"180s\"," +
+ *           "\"errorUtilizationPenalty\":\"1.0\"," +
+ *           "\"weightUpdatePeriod\":\"1s\"}}]}";
+ *        serviceConfig = (Map<String, ?>) JsonParser.parse(wrrConfig);
+ *        channel = ManagedChannelBuilder.forTarget("test:///lb.test.grpc.io")
+ *            .defaultServiceConfig(serviceConfig)
+ *            .build();
+ *  Users may also configure through xDS control plane via custom lb policy. But that is much complex
+ *  to set up. Related documentation: https://cloud.google.com/service-mesh/legacy/load-balancing-apis/proxyless-configure-advanced-traffic-management#custom-lb-config
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
