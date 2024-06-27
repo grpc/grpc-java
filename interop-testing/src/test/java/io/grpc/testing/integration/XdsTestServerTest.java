@@ -16,9 +16,6 @@
 
 package io.grpc.testing.integration;
 
-import static io.grpc.testing.integration.Util.AddressType.IPV4;
-import static io.grpc.testing.integration.Util.AddressType.IPV4_IPV6;
-import static io.grpc.testing.integration.Util.AddressType.IPV6;
 import static org.junit.Assert.assertEquals;
 
 import io.grpc.Channel;
@@ -51,37 +48,36 @@ public class XdsTestServerTest {
 
   @Test
   public void check_ipv4() throws Exception {
-    checkConnectionWorks(IPV4);
+    checkConnectionWorks("127.0.0.1", "--address_type=IPV4");
   }
 
   @Test
   public void check_ipv6() throws Exception {
-    checkConnectionWorks(IPV6);
+    checkConnectionWorks("::1", "--address_type=IPV6");
   }
 
   @Test
   public void check_ipv4_ipv6() throws Exception {
-    checkConnectionWorks(IPV4_IPV6);
+    checkConnectionWorks("localhost", "--address_type=IPV4_IPV6");
   }
 
   @Test
   public void checkNoAddressType() throws Exception {
     // This ensures that all of the other xds tests aren't broken by the address_type argument.
-    checkConnectionWorks(null);
+    checkConnectionWorks("localhost", null);
   }
 
   // Simple test to ensure that communication with the server works which includes starting and
   // stopping the server, creating a channel and doing a unary rpc.
-  private void checkConnectionWorks(Util.AddressType addressType)
+  private void checkConnectionWorks(String targetServer, String addressTypeArg)
       throws Exception {
 
     int port = Util.pickUnusedPort();
 
-    XdsTestServer server = getAndStartTestServiceServer(addressType, port);
-    String target = getTargetServer(addressType);
+    XdsTestServer server = getAndStartTestServiceServer(port, addressTypeArg);
 
     try {
-      ManagedChannel realChannel = createChannel(port, target);
+      ManagedChannel realChannel = createChannel(port, targetServer);
       Channel channel = cleanupRule.register(realChannel);
       TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel);
 
@@ -107,35 +103,15 @@ public class XdsTestServerTest {
     return builder.build();
   }
 
-  private static XdsTestServer getAndStartTestServiceServer(Util.AddressType addressType, int port)
+  private static XdsTestServer getAndStartTestServiceServer(int port, String addressTypeArg)
       throws Exception {
     XdsTestServer server = new XdsTestServer();
-    String[] args =
-        addressType != null
-        ? new String[]{"--port=" + port, "--address_type=" + addressType}
+    String[] args = addressTypeArg != null
+        ? new String[]{"--port=" + port, addressTypeArg}
         : new String[]{"--port=" + port};
     server.parseArgs(args);
     server.start();
     return server;
-  }
-
-  // Done this way to make sure that the target server is correct for the address type we want to
-  // test.
-  private static String getTargetServer(Util.AddressType addressType) {
-    if (addressType == null) {
-      return "localhost";
-    }
-
-    switch (addressType) {
-      case IPV4:
-        return "127.0.0.1";
-      case IPV6:
-        return "[::1]";
-      case IPV4_IPV6:
-        return "localhost";
-      default:
-        return "localhost";
-    }
   }
 
 }
