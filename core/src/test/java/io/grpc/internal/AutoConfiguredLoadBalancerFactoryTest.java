@@ -99,7 +99,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
               new FakeLoadBalancerProvider("test_lb2", testLbBalancer2, nextParsedConfigOrError2)));
 
   private final Class<? extends LoadBalancer> pfLbClass =
-      PickFirstLoadBalancerProvider.enableNewPickFirst
+      PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
           ? PickFirstLeafLoadBalancer.class
           : PickFirstLoadBalancer.class;
 
