@@ -600,7 +600,7 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
-  public void pickWithDupEAGsUpDownUp() {
+  public void pickWithDupEagsUpDownUp() {
     InOrder inOrder = inOrder(mockHelper);
     List<EquivalentAddressGroup> newServers = Lists.newArrayList(servers.get(0), servers.get(0));
 

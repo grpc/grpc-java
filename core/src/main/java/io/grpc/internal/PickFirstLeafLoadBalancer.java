@@ -179,17 +179,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private static List<EquivalentAddressGroup> deDupAddresses(List<EquivalentAddressGroup> groups) {
-    if (groups == null) {
-      return Collections.emptyList();
-    }
-
     Set<SocketAddress> seenAddresses = new HashSet<>();
     List<EquivalentAddressGroup> newGroups = new ArrayList<>();
 
     for (EquivalentAddressGroup group : groups) {
-      if (group == null) {
-        throw new IllegalArgumentException("Null EquivalentAddressGroup in address list");
-      }
       List<SocketAddress> addrs = new ArrayList<>();
       for (SocketAddress addr : group.getAddresses()) {
         if (seenAddresses.add(addr)) {
