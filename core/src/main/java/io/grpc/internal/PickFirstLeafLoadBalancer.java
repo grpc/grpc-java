@@ -204,23 +204,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return newGroups;
   }
 
-  private static EquivalentAddressGroup removeDuplicateAddresses(EquivalentAddressGroup eag) {
-    Set<SocketAddress> addressSet = new HashSet<>();
-    ArrayList<SocketAddress> addrs = new ArrayList<>(); // maintains order
-
-    for (SocketAddress address : eag.getAddresses()) {
-      if (addressSet.add(address)) {
-        addrs.add(address);
-      }
-    }
-
-    if (addressSet.size() == eag.getAddresses().size()) {
-      return eag;
-    }
-
-    return new EquivalentAddressGroup(addrs, eag.getAttributes());
-  }
-
   @Override
   public void handleNameResolutionError(Status error) {
     if (rawConnectivityState == SHUTDOWN) {
