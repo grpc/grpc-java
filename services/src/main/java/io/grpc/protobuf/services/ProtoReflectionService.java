@@ -50,7 +50,6 @@ public final class ProtoReflectionService implements BindableService {
   }
 
   @Override
-  @SuppressWarnings("unchecked")
   public ServerServiceDefinition bindService() {
     ServerServiceDefinition serverServiceDefinitionV1 = ProtoReflectionServiceV1.newInstance()
         .bindService();
