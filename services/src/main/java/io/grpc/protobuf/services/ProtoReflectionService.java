@@ -72,15 +72,15 @@ public final class ProtoReflectionService implements BindableService {
             .setSchemaDescriptor(serviceDescriptorV1AlphaGenerated.getSchemaDescriptor())
             .addMethod(methodDescriptorV1Alpha)
             .build();
-    return ServerServiceDefinition.builder(serviceDescriptorV1Alpha)
-        .addMethod(methodDescriptorV1Alpha, createServerCallHandler(serverServiceDefinitionV1))
-        .build();
+    return reCreateServerServiceDefinition(serviceDescriptorV1Alpha, methodDescriptorV1Alpha, serverServiceDefinitionV1);
   }
 
-  private ServerCallHandler createServerCallHandler(
-      ServerServiceDefinition serverServiceDefinition) {
-    return serverServiceDefinition.getMethod(
-            ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName())
-        .getServerCallHandler();
+  private <ReqT, RespT> ServerServiceDefinition reCreateServerServiceDefinition(ServiceDescriptor serviceDescriptor,
+      MethodDescriptor<ReqT, RespT> methodDescriptor, ServerServiceDefinition serverServiceDefinition) {
+    ServerMethodDefinition<ReqT, RespT> serverMethodDefinition = (ServerMethodDefinition<ReqT, RespT>) serverServiceDefinition.getMethod(
+        ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName());
+    return ServerServiceDefinition.builder(serviceDescriptor)
+        .addMethod(methodDescriptor, serverMethodDefinition.getServerCallHandler())
+        .build();
   }
 }
