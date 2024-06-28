@@ -565,12 +565,44 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
-  public void pickAWithDupAddressesUpDownUp() {
+  public void pickWithDupAddressesUpDownUp() {
     InOrder inOrder = inOrder(mockHelper);
     SocketAddress socketAddress = servers.get(0).getAddresses().get(0);
     EquivalentAddressGroup badEag = new EquivalentAddressGroup(
         Lists.newArrayList(socketAddress, socketAddress), affinity);
     List<EquivalentAddressGroup> newServers = Lists.newArrayList(badEag);
+
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+
+    reset(mockHelper);
+
+    // An error has happened.
+    Status error = Status.UNAVAILABLE.withDescription("boom!");
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+
+    // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verifyNoMoreInteractions(mockHelper);
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+
+    // Transition from CONNECTING to READY .
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+  }
+
+  @Test
+  public void pickWithDupEagsUpDownUp() {
+    InOrder inOrder = inOrder(mockHelper);
+    List<EquivalentAddressGroup> newServers = Lists.newArrayList(servers.get(0), servers.get(0));
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());

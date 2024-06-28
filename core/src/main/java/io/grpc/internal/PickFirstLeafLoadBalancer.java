@@ -91,9 +91,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       handleNameResolutionError(unavailableStatus);
       return unavailableStatus;
     }
-
-    List<EquivalentAddressGroup> cleanServers = new ArrayList<>();
-
     for (EquivalentAddressGroup eag : servers) {
       if (eag == null) {
         Status unavailableStatus = Status.UNAVAILABLE.withDescription(
@@ -103,11 +100,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         handleNameResolutionError(unavailableStatus);
         return unavailableStatus;
       }
-      cleanServers.add(removeDuplicateAddresses(eag));
     }
 
     // Since we have a new set of addresses, we are again at first pass
     firstPass = true;
+
+    List<EquivalentAddressGroup> cleanServers = deDupAddresses(servers);
 
     // We can optionally be configured to shuffle the address list. This can help better distribute
     // the load.
@@ -121,7 +119,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    // Make sure we're storing our own list rather than what was passed in
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
         ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
 
@@ -181,21 +178,23 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return Status.OK;
   }
 
-  private static EquivalentAddressGroup removeDuplicateAddresses(EquivalentAddressGroup eag) {
-    Set<SocketAddress> addressSet = new HashSet<>();
-    ArrayList<SocketAddress> addrs = new ArrayList<>(); // maintains order
+  private static List<EquivalentAddressGroup> deDupAddresses(List<EquivalentAddressGroup> groups) {
+    Set<SocketAddress> seenAddresses = new HashSet<>();
+    List<EquivalentAddressGroup> newGroups = new ArrayList<>();
 
-    for (SocketAddress address : eag.getAddresses()) {
-      if (addressSet.add(address)) {
-        addrs.add(address);
+    for (EquivalentAddressGroup group : groups) {
+      List<SocketAddress> addrs = new ArrayList<>();
+      for (SocketAddress addr : group.getAddresses()) {
+        if (seenAddresses.add(addr)) {
+          addrs.add(addr);
+        }
+      }
+      if (!addrs.isEmpty()) {
+        newGroups.add(new EquivalentAddressGroup(addrs, group.getAttributes()));
       }
     }
 
-    if (addressSet.size() == eag.getAddresses().size()) {
-      return eag;
-    }
-
-    return new EquivalentAddressGroup(addrs, eag.getAttributes());
+    return newGroups;
   }
 
   @Override
