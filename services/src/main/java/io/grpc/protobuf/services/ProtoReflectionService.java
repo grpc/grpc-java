@@ -50,6 +50,7 @@ public final class ProtoReflectionService implements BindableService {
   }
 
   @Override
+  @SuppressWarnings("unchecked")
   public ServerServiceDefinition bindService() {
     ServerServiceDefinition serverServiceDefinitionV1 = ProtoReflectionServiceV1.newInstance()
         .bindService();
@@ -72,15 +73,16 @@ public final class ProtoReflectionService implements BindableService {
             .setSchemaDescriptor(serviceDescriptorV1AlphaGenerated.getSchemaDescriptor())
             .addMethod(methodDescriptorV1Alpha)
             .build();
-    return reCreateServerServiceDefinition(serviceDescriptorV1Alpha, methodDescriptorV1Alpha, serverServiceDefinitionV1);
+    return ServerServiceDefinition.builder(serviceDescriptorV1Alpha)
+        .addMethod(methodDescriptorV1Alpha, createServerCallHandler(serverServiceDefinitionV1))
+        .build();
   }
 
-  private <ReqT, RespT> ServerServiceDefinition reCreateServerServiceDefinition(ServiceDescriptor serviceDescriptor,
-      MethodDescriptor<ReqT, RespT> methodDescriptor, ServerServiceDefinition serverServiceDefinition) {
-    ServerMethodDefinition<ReqT, RespT> serverMethodDefinition = (ServerMethodDefinition<ReqT, RespT>) serverServiceDefinition.getMethod(
-        ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName());
-    return ServerServiceDefinition.builder(serviceDescriptor)
-        .addMethod(methodDescriptor, serverMethodDefinition.getServerCallHandler())
-        .build();
+  @SuppressWarnings("unchecked")
+  private ServerCallHandler<ServerReflectionRequest, ServerReflectionResponse> createServerCallHandler(
+      ServerServiceDefinition serverServiceDefinition) {
+    return (ServerCallHandler<ServerReflectionRequest, ServerReflectionResponse>) serverServiceDefinition.getMethod(
+            ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName())
+        .getServerCallHandler();
   }
 }
