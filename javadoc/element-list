@@ -2,6 +2,7 @@ io.grpc
 io.grpc.auth
 io.grpc.binarylog.v1
 io.grpc.channelz.v1
+io.grpc.gcp.csm.observability
 io.grpc.grpclb
 io.grpc.health.v1
 io.grpc.inprocess
