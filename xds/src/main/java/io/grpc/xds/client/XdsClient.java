@@ -412,6 +412,14 @@ public abstract class XdsClient {
     /** Called when the ADS stream has been recreated. */
     // Must be synchronized.
     void handleStreamRestarted(ServerInfo serverInfo);
+
+    /** Called when the ADS stream has established communication with the xds server.
+     * Is expected do manage the ControlPlanClients and cache updates associated with
+     * Moving to or from a fallback server.
+     *
+     * <p>Must be synchronized.
+     */
+    void handleStreamReady(ServerInfo serverInfo);
   }
 
   public interface ResourceStore {
@@ -427,6 +435,25 @@ public abstract class XdsClient {
     Collection<String> getSubscribedResources(ServerInfo serverInfo,
                                               XdsResourceType<? extends ResourceUpdate> type);
 
+    /**
+     * Like {@link #getSubscribedResources(ServerInfo, XdsResourceType)}, but limits the results to
+     * those matching the given authority.
+     */
+    @Nullable
+    Collection<String> getSubscribedResources(
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority);
+
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
+
+    /**
+     * Assigns the given resources to the given owner.  Generally, the owner is a ControlPlaneClient
+     * @param type the type of the resources
+     * @param resources the names of the resources
+     * @param owner the object that should take over ownership of the resources
+     */
+    default void assignResourcesToOwner(XdsResourceType<?> type, Collection<String> resources,
+                                        Object owner) {
+      // no-op - useful for test cases where everything is mocked
+    }
   }
 }
