@@ -24,11 +24,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -62,21 +59,14 @@ public final class WrrLocalityLoadBalancerProvider extends LoadBalancerProvider 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
     try {
-      List<LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+      ConfigOrError childConfig = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
           JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
-      if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
-        return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-            "No child policy in wrr_locality LB policy: "
-                + rawConfig));
+      if (childConfig.getError() != null) {
+        return ConfigOrError.fromError(Status.INTERNAL
+            .withDescription("Failed to parse child policy in wrr_locality LB policy: " + rawConfig)
+            .withCause(childConfig.getError().asRuntimeException()));
       }
-      ConfigOrError selectedConfig =
-          ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates,
-              LoadBalancerRegistry.getDefaultRegistry());
-      if (selectedConfig.getError() != null) {
-        return selectedConfig;
-      }
-      PolicySelection policySelection = (PolicySelection) selectedConfig.getConfig();
-      return ConfigOrError.fromConfig(new WrrLocalityConfig(policySelection));
+      return ConfigOrError.fromConfig(new WrrLocalityConfig(childConfig.getConfig()));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(Status.INTERNAL.withCause(e)
           .withDescription("Failed to parse wrr_locality LB config: " + rawConfig));

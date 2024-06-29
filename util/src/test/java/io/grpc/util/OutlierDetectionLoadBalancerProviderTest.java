@@ -89,7 +89,9 @@ public class OutlierDetectionLoadBalancerProviderTest {
         = (OutlierDetectionLoadBalancerConfig) configOrError.getConfig();
     assertThat(config.successRateEjection).isNotNull();
     assertThat(config.failurePercentageEjection).isNotNull();
-    assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(config.childConfig).getPolicyName())
+        .isEqualTo("round_robin");
   }
 
   @Test
@@ -135,7 +137,9 @@ public class OutlierDetectionLoadBalancerProviderTest {
     assertThat(config.failurePercentageEjection.minimumHosts).isEqualTo(100);
     assertThat(config.failurePercentageEjection.requestVolume).isEqualTo(100);
 
-    assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(config.childConfig).getPolicyName())
+        .isEqualTo("round_robin");
   }
 
   @SuppressWarnings("unchecked")

@@ -145,11 +145,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
     childLbHelper.updateFilterMetadata(config.filterMetadata);
 
-    childSwitchLb.switchTo(config.childPolicy.getProvider());
     childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
-            .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
+            .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
     return Status.OK;
   }

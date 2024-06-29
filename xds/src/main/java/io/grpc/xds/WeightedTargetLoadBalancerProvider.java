@@ -26,11 +26,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
@@ -97,22 +94,16 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
               "Wrong weight for target " + name + " in weighted_target LB policy:\n " + rawConfig));
         }
-        List<LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-            JsonUtil.getListOfObjects(rawWeightedTarget, "childPolicy"));
-        if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No child policy for target " + name + " in weighted_target LB policy:\n "
-                  + rawConfig));
-        }
         LoadBalancerRegistry lbRegistry =
             this.lbRegistry == null ? LoadBalancerRegistry.getDefaultRegistry() : this.lbRegistry;
-        ConfigOrError selectedConfig =
-            ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, lbRegistry);
-        if (selectedConfig.getError() != null) {
-          return selectedConfig;
+        ConfigOrError childConfig = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+            JsonUtil.getListOfObjects(rawWeightedTarget, "childPolicy"), lbRegistry);
+        if (childConfig.getError() != null) {
+          return ConfigOrError.fromError(Status.INTERNAL
+              .withDescription("Could not parse weighted_target's child policy:" + name)
+              .withCause(childConfig.getError().asRuntimeException()));
         }
-        PolicySelection policySelection = (PolicySelection) selectedConfig.getConfig();
-        parsedChildConfigs.put(name, new WeightedPolicySelection(weight, policySelection));
+        parsedChildConfigs.put(name, new WeightedPolicySelection(weight, childConfig.getConfig()));
       }
       return ConfigOrError.fromConfig(new WeightedTargetConfig(parsedChildConfigs));
     } catch (RuntimeException e) {
@@ -125,11 +116,11 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
   static final class WeightedPolicySelection {
 
     final int weight;
-    final PolicySelection policySelection;
+    final Object childConfig;
 
-    WeightedPolicySelection(int weight, PolicySelection policySelection) {
+    WeightedPolicySelection(int weight, Object childConfig) {
       this.weight = weight;
-      this.policySelection = policySelection;
+      this.childConfig = childConfig;
     }
 
     @Override
@@ -141,19 +132,19 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
         return false;
       }
       WeightedPolicySelection that = (WeightedPolicySelection) o;
-      return weight == that.weight && Objects.equals(policySelection, that.policySelection);
+      return weight == that.weight && Objects.equals(childConfig, that.childConfig);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(weight, policySelection);
+      return Objects.hash(weight, childConfig);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("weight", weight)
-          .add("policySelection", policySelection)
+          .add("childConfig", childConfig)
           .toString();
     }
   }

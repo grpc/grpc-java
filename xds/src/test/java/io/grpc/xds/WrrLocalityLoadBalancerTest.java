@@ -38,7 +38,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
@@ -112,7 +112,7 @@ public class WrrLocalityLoadBalancerTest {
     // A two locality cluster with a mock child LB policy.
     String localityOne = "localityOne";
     String localityTwo = "localityTwo";
-    PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
+    Object childPolicy = newChildConfig(mockChildProvider, null);
 
     // The child config is delivered wrapped in the wrr_locality config and the locality weights
     // in a ResolvedAddresses attribute.
@@ -138,7 +138,7 @@ public class WrrLocalityLoadBalancerTest {
   @Test
   public void handleResolvedAddresses_noLocalityWeights() {
     // A two locality cluster with a mock child LB policy.
-    PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
+    Object childPolicy = newChildConfig(mockChildProvider, null);
 
     // The child config is delivered wrapped in the wrr_locality config and the locality weights
     // in a ResolvedAddresses attribute.
@@ -163,7 +163,7 @@ public class WrrLocalityLoadBalancerTest {
 
   @Test
   public void handleNameResolutionError_withChildLb() {
-    deliverAddresses(new WrrLocalityConfig(new PolicySelection(mockChildProvider, null)),
+    deliverAddresses(new WrrLocalityConfig(newChildConfig(mockChildProvider, null)),
         ImmutableList.of(makeAddress("addr1", "test-locality", 1)));
     Status status = Status.DEADLINE_EXCEEDED.withDescription("too slow");
     loadBalancer.handleNameResolutionError(status);
@@ -175,7 +175,7 @@ public class WrrLocalityLoadBalancerTest {
 
   @Test
   public void localityWeightAttributeNotPropagated() {
-    PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
+    Object childPolicy = newChildConfig(mockChildProvider, null);
 
     WrrLocalityConfig wlConfig = new WrrLocalityConfig(childPolicy);
     deliverAddresses(wlConfig, ImmutableList.of(makeAddress("addr1", "test-locality", 1)));
@@ -190,7 +190,7 @@ public class WrrLocalityLoadBalancerTest {
 
   @Test
   public void shutdown() {
-    deliverAddresses(new WrrLocalityConfig(new PolicySelection(mockChildProvider, null)),
+    deliverAddresses(new WrrLocalityConfig(newChildConfig(mockChildProvider, null)),
         ImmutableList.of(makeAddress("addr", "test-locality", 1)));
     loadBalancer.shutdown();
 
@@ -199,15 +199,17 @@ public class WrrLocalityLoadBalancerTest {
 
   @Test
   public void configEquality() {
-    WrrLocalityConfig configOne = new WrrLocalityConfig(
-        new PolicySelection(mockChildProvider, null));
-    WrrLocalityConfig configTwo = new WrrLocalityConfig(
-        new PolicySelection(mockChildProvider, null));
+    WrrLocalityConfig configOne = new WrrLocalityConfig(newChildConfig(mockChildProvider, null));
+    WrrLocalityConfig configTwo = new WrrLocalityConfig(newChildConfig(mockChildProvider, null));
     WrrLocalityConfig differentConfig = new WrrLocalityConfig(
-        new PolicySelection(mockChildProvider, "config"));
+        newChildConfig(mockChildProvider, "config"));
 
     new EqualsTester().addEqualityGroup(configOne, configTwo).addEqualityGroup(differentConfig)
         .testEquals();
+  }
+
+  private Object newChildConfig(LoadBalancerProvider provider, Object config) {
+    return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
   }
 
   private void deliverAddresses(WrrLocalityConfig config, List<EquivalentAddressGroup> addresses) {

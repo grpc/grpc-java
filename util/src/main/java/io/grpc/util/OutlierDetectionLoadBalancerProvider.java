@@ -20,18 +20,13 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TimeProvider;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.FailurePercentageEjection;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.SuccessRateEjection;
-import java.util.List;
 import java.util.Map;
 
 @Internal
@@ -150,20 +145,14 @@ public final class OutlierDetectionLoadBalancerProvider extends LoadBalancerProv
     }
 
     // Child load balancer configuration.
-    List<LbConfig> childConfigCandidates = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+    ConfigOrError childConfig = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
         JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
-    if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
-      return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-          "No child policy in outlier_detection_experimental LB policy: "
-              + rawConfig));
+    if (childConfig.getError() != null) {
+      return ConfigOrError.fromError(Status.INTERNAL
+          .withDescription("Failed to parse child in outlier_detection_experimental: " + rawConfig)
+          .withCause(childConfig.getError().asRuntimeException()));
     }
-    ConfigOrError selectedConfig =
-        ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates,
-            LoadBalancerRegistry.getDefaultRegistry());
-    if (selectedConfig.getError() != null) {
-      return selectedConfig;
-    }
-    configBuilder.setChildPolicy((PolicySelection) selectedConfig.getConfig());
+    configBuilder.setChildConfig(childConfig.getConfig());
 
     return ConfigOrError.fromConfig(configBuilder.build());
   }

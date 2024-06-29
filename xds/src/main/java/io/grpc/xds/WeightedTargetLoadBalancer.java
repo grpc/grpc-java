@@ -79,17 +79,11 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     WeightedTargetConfig weightedTargetConfig = (WeightedTargetConfig) lbConfig;
     Map<String, WeightedPolicySelection> newTargets = weightedTargetConfig.targets;
     for (String targetName : newTargets.keySet()) {
-      WeightedPolicySelection weightedChildLbConfig = newTargets.get(targetName);
       if (!targets.containsKey(targetName)) {
         ChildHelper childHelper = new ChildHelper(targetName);
         GracefulSwitchLoadBalancer childBalancer = new GracefulSwitchLoadBalancer(childHelper);
-        childBalancer.switchTo(weightedChildLbConfig.policySelection.getProvider());
         childHelpers.put(targetName, childHelper);
         childBalancers.put(targetName, childBalancer);
-      } else if (!weightedChildLbConfig.policySelection.getProvider().equals(
-          targets.get(targetName).policySelection.getProvider())) {
-        childBalancers.get(targetName)
-            .switchTo(weightedChildLbConfig.policySelection.getProvider());
       }
     }
     targets = newTargets;
@@ -97,7 +91,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       childBalancers.get(targetName).handleResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), targetName))
-              .setLoadBalancingPolicyConfig(targets.get(targetName).policySelection.getConfig())
+              .setLoadBalancingPolicyConfig(targets.get(targetName).childConfig)
               .setAttributes(resolvedAddresses.getAttributes().toBuilder()
                 .set(CHILD_NAME, targetName)
                 .build())
