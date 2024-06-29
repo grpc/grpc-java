@@ -87,6 +87,7 @@ import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.ControlPlaneClientTestBase;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.client.Locality;
@@ -140,7 +141,7 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 // The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
 // necessary. Still keep it for future version usage. Remove if too much trouble to maintain.
-public abstract class GrpcXdsClientImplTestBase {
+public abstract class GrpcXdsClientImplTestBase extends ControlPlaneClientTestBase {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
@@ -2755,6 +2756,39 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+  }
+
+  @Test
+  public void edsCleanupNonceAfterUnsubscription() {
+    Assume.assumeFalse(ignoreResourceDeletion());
+
+    // Suppose we have an EDS subscription A.1
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(EDS, "A.1");
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+
+    // EDS -> {A.1}, version 1
+    List<Message> dropOverloads = ImmutableList.of();
+    List<Message> endpointsV1 = ImmutableList.of(lbEndpointHealthy);
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+            "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)));
+    call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A.1} -> ACK, version 1
+    verifyResourceMetadataAcked(EDS, "A.1", resourcesV1.get("A.1"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequest(EDS, "A.1", VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher, times(1)).onChanged(any());
+
+    // trigger an EDS resource unsubscription.
+    // This would probably be caused by CDS PUSH(let's say event e1) in the real world.
+    // Then there can be a potential data race between
+    // 1) the EDS unsubscription caused by CDS PUSH e1 (client-side) and,
+    // 2) the immediate EDS PUSH from XdsServer (server-side) after CDS PUSH e1 (event e2).
+    xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
+    // The nonce has been removed
+    assertThat(getNonceForResourceType(xdsClient, xdsServerInfo, EDS)).isNull();
   }
 
   @Test

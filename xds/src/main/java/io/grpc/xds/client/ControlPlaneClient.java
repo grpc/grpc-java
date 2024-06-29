@@ -154,6 +154,9 @@ final class ControlPlaneClient {
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
     if (resources != null) {
       adsStream.sendDiscoveryRequest(resourceType, resources);
+    } else {
+      // cleanup the nonce for the resource type if it's not subscribed to anymore.
+      adsStream.respNonces.remove(resourceType);
     }
   }
 
@@ -200,6 +203,15 @@ final class ControlPlaneClient {
   // Must be synchronized.
   boolean isReady() {
     return adsStream != null && adsStream.call != null && adsStream.call.isReady();
+  }
+
+  @Nullable
+  @VisibleForTesting
+  Map<XdsResourceType<?>, String> getNonce() {
+    if (adsStream == null) {
+      return null;
+    }
+    return adsStream.respNonces;
   }
 
   /**
