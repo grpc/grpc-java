@@ -37,6 +37,7 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
@@ -220,6 +221,7 @@ public final class XdsTestServer {
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
+              .addService(ProtoReflectionServiceV1.newInstance())
               .addServices(AdminInterface.getStandardServices())
               .build();
       maintenanceServer.start();
@@ -268,6 +270,7 @@ public final class XdsTestServer {
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
+              .addService(ProtoReflectionServiceV1.newInstance())
               .addServices(AdminInterface.getStandardServices())
               .build();
       server.start();
