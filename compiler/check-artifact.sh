@@ -113,24 +113,8 @@ checkDependencies ()
     dump_cmd='objdump -x '"$1"' | fgrep "DLL Name"'
     white_list="KERNEL32\.dll\|msvcrt\.dll\|USER32\.dll"
   elif [[ "$OS" == linux ]]; then
-    dump_cmd='ldd '"$1"
-    if [[ "$ARCH" == x86_32 ]]; then
-      white_list="linux-gate\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld-linux\.so\.2"
-    elif [[ "$ARCH" == x86_64 ]]; then
-      white_list="linux-vdso\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld-linux-x86-64\.so\.2"
-    elif [[ "$ARCH" == aarch_64 ]]; then
-      dump_cmd='aarch64-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
-      white_list="linux-vdso\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld-linux-aarch64\.so\.1"
-    elif [[ "$ARCH" == loongarch_64 ]]; then
-      dump_cmd='objdump -x '"$1"' | grep NEEDED'
-      white_list="linux-vdso\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld\.so\.1"
-    elif [[ "$ARCH" == ppcle_64 ]]; then
-      dump_cmd='powerpc64le-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
-      white_list="linux-vdso64\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld64\.so\.2"
-    elif [[ "$ARCH" == s390_64 ]]; then
-      dump_cmd='s390x-linux-gnu-objdump -x '"$1"' |grep "NEEDED"'
-      white_list="linux-vdso64\.so\.1\|libpthread\.so\.0\|libm\.so\.6\|libc\.so\.6\|ld64\.so\.1"
-    fi
+    dump_cmd='objdump -x '"$1"' | grep "NEEDED"'
+    white_list="libpthread\.so\.0\|libstdc++\.so\.6\|libm\.so\.6\|libc\.so\.6"
   elif [[ "$OS" == osx ]]; then
     dump_cmd='otool -L '"$1"' | fgrep dylib'
     white_list="libz\.1\.dylib\|libc++.1.dylib\|libstdc++\.6\.dylib\|libSystem\.B\.dylib"
