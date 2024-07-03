@@ -200,7 +200,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
           currentDelegateManager.checkServerTrusted(chain, authType, sslSocket);
         }
       } else {
-        currentDelegateManager.checkClientTrusted(chain, authType, sslEngine);
+        if (sslEngine != null) {
+          currentDelegateManager.checkClientTrusted(chain, authType, sslEngine);
+        } else {
+          currentDelegateManager.checkClientTrusted(chain, authType, socket);
+        }
       }
     }
     // Perform the additional peer cert check.
