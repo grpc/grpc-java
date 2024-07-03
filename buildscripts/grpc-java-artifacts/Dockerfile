@@ -1,17 +1,15 @@
-FROM centos:7.9.2009
+FROM almalinux:8
 
 RUN yum install -y \
             autoconf \
             automake \
+            diffutils \
             gcc-c++ \
-            gcc-c++.i686 \
             glibc-devel \
             glibc-devel.i686 \
             java-11-openjdk-devel \
             libstdc++-devel \
             libstdc++-devel.i686 \
-            libstdc++-static \
-            libstdc++-static.i686 \
             libtool \
             make \
             tar \
