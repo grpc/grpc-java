@@ -115,6 +115,15 @@ checkDependencies ()
   elif [[ "$OS" == linux ]]; then
     dump_cmd='objdump -x '"$1"' | grep "NEEDED"'
     white_list="libpthread\.so\.0\|libstdc++\.so\.6\|libm\.so\.6\|libc\.so\.6"
+    if [[ "$ARCH" == aarch_64 ]]; then
+      white_list="${white_list}\|ld-linux-aarch64\.so\.1"
+    elif [[ "$ARCH" == loongarch_64 ]]; then
+      white_list="${white_list}\|ld\.so\.1"
+    elif [[ "$ARCH" == ppcle_64 ]]; then
+      white_list="${white_list}\|ld64\.so\.2"
+    elif [[ "$ARCH" == s390_64 ]]; then
+      white_list="${white_list}\|ld64\.so\.1"
+    fi
   elif [[ "$OS" == osx ]]; then
     dump_cmd='otool -L '"$1"' | fgrep dylib'
     white_list="libz\.1\.dylib\|libc++.1.dylib\|libstdc++\.6\.dylib\|libSystem\.B\.dylib"
