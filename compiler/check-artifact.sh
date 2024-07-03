@@ -114,15 +114,13 @@ checkDependencies ()
     white_list="KERNEL32\.dll\|msvcrt\.dll\|USER32\.dll"
   elif [[ "$OS" == linux ]]; then
     dump_cmd='objdump -x '"$1"' | grep "NEEDED"'
-    white_list="libpthread\.so\.0\|libstdc++\.so\.6\|libm\.so\.6\|libc\.so\.6"
-    if [[ "$ARCH" == aarch_64 ]]; then
+    white_list="libpthread\.so\.0\|libstdc++\.so\.6\|libc\.so\.6"
+    if [[ "$ARCH" == x86_32 ]]; then
+      white_list="${white_list}\|libm\.so\.6"
+    elif [[ "$ARCH" == x86_64 ]]; then
+      white_list="${white_list}\|libm\.so\.6"
+    elif [[ "$ARCH" == aarch_64 ]]; then
       white_list="${white_list}\|ld-linux-aarch64\.so\.1"
-    elif [[ "$ARCH" == loongarch_64 ]]; then
-      white_list="${white_list}\|ld\.so\.1"
-    elif [[ "$ARCH" == ppcle_64 ]]; then
-      white_list="${white_list}\|ld64\.so\.2"
-    elif [[ "$ARCH" == s390_64 ]]; then
-      white_list="${white_list}\|ld64\.so\.1"
     fi
   elif [[ "$OS" == osx ]]; then
     dump_cmd='otool -L '"$1"' | fgrep dylib'
