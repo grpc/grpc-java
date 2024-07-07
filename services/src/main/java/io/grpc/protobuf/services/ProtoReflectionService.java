@@ -16,15 +16,10 @@
 
 package io.grpc.protobuf.services;
 
-import static io.grpc.MethodDescriptor.create;
-import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.reflection.v1alpha.ServerReflectionGrpc.SERVICE_NAME;
-
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCallHandler;
-import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.reflection.v1.ServerReflectionGrpc;
@@ -64,7 +59,8 @@ public final class ProtoReflectionService implements BindableService {
             .setFullMethodName(methodDescriptorV1AlphaGenerated.getFullMethodName())
             .setSchemaDescriptor(methodDescriptorV1AlphaGenerated.getSchemaDescriptor())
             .build();
-    // Retain the v1 server call handler but change the service name schema descriptor in the service descriptor to v1alpha.
+    // Retain the v1 server call handler but change the service name schema descriptor in the
+    // service descriptor to v1alpha.
     ServiceDescriptor serviceDescriptorV1AlphaGenerated =
         io.grpc.reflection.v1alpha.ServerReflectionGrpc.getServiceDescriptor();
     ServiceDescriptor serviceDescriptorV1Alpha =
@@ -78,9 +74,11 @@ public final class ProtoReflectionService implements BindableService {
   }
 
   @SuppressWarnings("unchecked")
-  private ServerCallHandler<ServerReflectionRequest, ServerReflectionResponse> createServerCallHandler(
+  private ServerCallHandler<ServerReflectionRequest, ServerReflectionResponse>
+      createServerCallHandler(
       ServerServiceDefinition serverServiceDefinition) {
-    return (ServerCallHandler<ServerReflectionRequest, ServerReflectionResponse>) serverServiceDefinition.getMethod(
+    return (ServerCallHandler<ServerReflectionRequest, ServerReflectionResponse>)
+        serverServiceDefinition.getMethod(
             ServerReflectionGrpc.getServerReflectionInfoMethod().getFullMethodName())
         .getServerCallHandler();
   }
