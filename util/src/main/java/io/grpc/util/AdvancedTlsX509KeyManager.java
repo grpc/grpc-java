@@ -144,7 +144,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD_IN_MINUTES) {
       log.log(Level.FINE,
           "Provided refresh period of {0} {1} is too small. Default value of {2} minute(s) "
-              + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
+          + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
       period = MINIMUM_REFRESH_PERIOD_IN_MINUTES;
       unit = TimeUnit.MINUTES;
     }
