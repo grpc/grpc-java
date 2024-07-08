@@ -1671,7 +1671,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
-          onResult2(resolutionResult, true);
+          Status status = onResult2(resolutionResult);
+          ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
+              .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
+          resolutionResultListener.resolutionAttempted(status);
         }
       }
 
@@ -1680,13 +1683,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public Status onResult2(final ResolutionResult resolutionResult) {
-      return onResult2(resolutionResult, false);
-    }
-
-    private Status onResult2(final ResolutionResult resolutionResult, boolean useResolutionResultListener) {
       syncContext.throwIfNotInThisSynchronizationContext();
       if (ManagedChannelImpl.this.nameResolver != resolver) {
-        return Status.FAILED_PRECONDITION;
+        return Status.OK;
       }
 
       List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
@@ -1702,8 +1701,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       ConfigOrError configOrError = resolutionResult.getServiceConfig();
-      ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
-          .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
       InternalConfigSelector resolvedConfigSelector =
           resolutionResult.getAttributes().get(InternalConfigSelector.KEY);
       ManagedChannelServiceConfig validServiceConfig =
@@ -1760,9 +1757,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
             // we later check for these error codes when investigating pick results in
             // GrpcUtil.getTransportFromPickResult().
             onError(configOrError.getError());
-            if (useResolutionResultListener) {
-              resolutionResultListener.resolutionAttempted(configOrError.getError());
-            }
             return configOrError.getError();
           } else {
             effectiveServiceConfig = lastServiceConfig;
@@ -1807,21 +1801,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         Attributes attributes = attrBuilder.build();
 
-        Status addressAcceptanceStatus = helper.lb.tryAcceptResolvedAddresses(
+        return helper.lb.tryAcceptResolvedAddresses(
             ResolvedAddresses.newBuilder()
                 .setAddresses(servers)
                 .setAttributes(attributes)
                 .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
                 .build());
-        if (useResolutionResultListener) {
-          // If a listener is provided, let it know if the addresses were accepted.
-          if (resolutionResultListener != null) {
-            resolutionResultListener.resolutionAttempted(addressAcceptanceStatus);
-          }
-        }
-        return addressAcceptanceStatus;
       }
-      return Status.FAILED_PRECONDITION;
+      return Status.OK;
     }
 
     @Override
