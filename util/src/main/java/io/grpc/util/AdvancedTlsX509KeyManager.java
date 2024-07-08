@@ -110,10 +110,10 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   /**
    * Updates the current cached private key and cert chains.
    *
-   * @param key  the private key that is going to be used
    * @param certs  the certificate chain that is going to be used
+   * @param key  the private key that is going to be used
    */
-  public void updateIdentityCredentials(X509Certificate[] certs, PrivateKey key,) {
+  public void updateIdentityCredentials(X509Certificate[] certs, PrivateKey key) {
     this.keyInfo = new KeyInfo(checkNotNull(key, "key"), checkNotNull(certs, "certs"));
   }
 
@@ -130,7 +130,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param keyFile  the file on disk holding the private key
    * @param period the period between successive read-and-update executions
    * @param unit the time unit of the initialDelay and period parameters
-   * @param executor the execute service we use to read and update the credentials
+   * @param executor the executor service we use to read and update the credentials
    * @return an object that caller should close when the file refreshes are not needed
    */
   public Closeable updateIdentityCredentials(File certFile, File keyFile,
@@ -152,32 +152,6 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
         checkNotNull(executor, "executor").scheduleWithFixedDelay(
             new LoadFilePathExecution(certFile, keyFile), period, period, unit);
     return () -> future.cancel(false);
-  }
-
-  /**
-   * Schedules a {@code ScheduledExecutorService} to read private key and certificate chains from
-   * the local file paths periodically, and update the cached identity credentials if they are both
-   * updated. You must close the returned Closeable before calling this method again or other update
-   * methods ({@link AdvancedTlsX509KeyManager#updateIdentityCredentials}, {@link
-   * AdvancedTlsX509KeyManager#updateIdentityCredentials(File, File)}).
-   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. The
-   * minimum refresh period of 1 minute is enforced.
-   *
-   * @param keyFile  the file on disk holding the private key
-   * @param certFile  the file on disk holding the certificate chain
-   * @param period the period between successive read-and-update executions
-   * @param unit the time unit of the initialDelay and period parameters
-   * @param executor the execute service we use to read and update the credentials
-   * @return an object that caller should close when the file refreshes are not needed
-   * @deprecated Use {@link
-   * #updateIdentityCredentials(File, File, long, TimeUnit, ScheduledExecutorService)} instead.
-   */
-  @Deprecated
-  @InlineMe(replacement = "this.updateIdentityCredentials(certFile, keyFile, period, unit, executor)")
-  public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
-      long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException,
-      GeneralSecurityException {
-    return updateIdentityCredentials(certFile, keyFile, period, unit, executor);
   }
 
   /**
@@ -207,6 +181,33 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   public void updateIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
       GeneralSecurityException {
     updateIdentityCredentials(certFile, keyFile);
+  }
+
+  /**
+   * Schedules a {@code ScheduledExecutorService} to read private key and certificate chains from
+   * the local file paths periodically, and update the cached identity credentials if they are both
+   * updated. You must close the returned Closeable before calling this method again or other update
+   * methods ({@link AdvancedTlsX509KeyManager#updateIdentityCredentials}, {@link
+   * AdvancedTlsX509KeyManager#updateIdentityCredentials(File, File)}).
+   * Before scheduling the task, the method synchronously executes {@code  readAndUpdate} once. The
+   * minimum refresh period of 1 minute is enforced.
+   *
+   * @param keyFile  the file on disk holding the private key
+   * @param certFile  the file on disk holding the certificate chain
+   * @param period the period between successive read-and-update executions
+   * @param unit the time unit of the initialDelay and period parameters
+   * @param executor the executor service we use to read and update the credentials
+   * @return an object that caller should close when the file refreshes are not needed
+   * @deprecated Use {@link
+   * #updateIdentityCredentials(File, File, long, TimeUnit, ScheduledExecutorService)} instead.
+   */
+  @Deprecated
+  @InlineMe(replacement =
+      "this.updateIdentityCredentials(certFile, keyFile, period, unit, executor)")
+  public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
+      long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException,
+      GeneralSecurityException {
+    return updateIdentityCredentials(certFile, keyFile, period, unit, executor);
   }
 
   private static class KeyInfo {
