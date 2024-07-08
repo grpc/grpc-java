@@ -83,11 +83,11 @@ public class AdvancedTlsX509KeyManagerTest {
     assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
 
-    serverKeyManager.updateIdentityCredentialsFromFile(clientKey0File, clientCert0File);
+    serverKeyManager.updateIdentityCredentials(clientCert0File, clientKey0File);
     assertEquals(clientKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(clientCert0, serverKeyManager.getCertificateChain(ALIAS));
 
-    serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1,
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File,1,
         TimeUnit.MINUTES, executor);
     assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
@@ -106,20 +106,20 @@ public class AdvancedTlsX509KeyManagerTest {
     assertEquals("certs", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(null, serverCert0File));
+        .updateIdentityCredentials(null, serverKey0File));
     assertEquals("keyFile", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverKey0File, null));
+        .updateIdentityCredentials(serverCert0File, null));
     assertEquals("certFile", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1, null,
+        .updateIdentityCredentialsFromFile(serverCert0File, serverKey0File, 1, null,
             executor));
     assertEquals("unit", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1,
+        .updateIdentityCredentialsFromFile(serverCert0File, serverKey0File, 1,
             TimeUnit.MINUTES, null));
     assertEquals("executor", npe.getMessage());
 
@@ -128,7 +128,7 @@ public class AdvancedTlsX509KeyManagerTest {
     log.addHandler(handler);
     log.setUseParentHandlers(false);
     log.setLevel(Level.FINE);
-    serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, -1,
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File, -1,
             TimeUnit.SECONDS, executor);
     log.removeHandler(handler);
     for (LogRecord record : handler.getRecords()) {

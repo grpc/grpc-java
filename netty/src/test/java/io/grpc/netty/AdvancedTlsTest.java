@@ -334,8 +334,8 @@ public class AdvancedTlsTest {
   public void onFileReloadingKeyManagerTrustManagerTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
-        serverCert0File, 100, TimeUnit.MILLISECONDS, executor);
+    Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentials(serverCert0File,
+        serverKey0File, 100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
@@ -348,8 +348,8 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
-        clientCert0File,100, TimeUnit.MILLISECONDS, executor);
+    Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentials(clientCert0File,
+        clientKey0File,100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
@@ -420,8 +420,8 @@ public class AdvancedTlsTest {
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
     // We swap the order of key and certificates to intentionally create an exception.
     assertThrows(GeneralSecurityException.class,
-        () -> keyManager.updateIdentityCredentialsFromFile(serverCert0File,
-          serverKey0File, 100, TimeUnit.MILLISECONDS, executor));
+        () -> keyManager.updateIdentityCredentials(serverKey0File, serverCert0File,
+          100, TimeUnit.MILLISECONDS, executor));
   }
 
   @Test
