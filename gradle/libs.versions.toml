@@ -96,8 +96,8 @@ tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.89"
 # 1.4.3+ causes "unknown enum constant ElementType.MODULE" warning.
 # https://github.com/google/truth/issues/1320
 truth = "com.google.truth:truth:1.4.2"
-undertow-servlet = "io.undertow:undertow-servlet:2.2.32.Final"
-undertow-servlet-jakartaee9 = "io.undertow:undertow-servlet:2.3.14.Final"
+undertow-servlet22 = "io.undertow:undertow-servlet:2.2.32.Final"
+undertow-servlet = "io.undertow:undertow-servlet:2.3.14.Final"
 
 # Do not update: Pinned to the last version supporting Java 8.
 # See https://checkstyle.sourceforge.io/releasenotes.html#Release_10.1
