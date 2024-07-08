@@ -381,7 +381,7 @@ public class AdvancedTlsTest {
   public void onFileLoadingKeyManagerTrustManagerTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File);
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
@@ -393,7 +393,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File, clientCert0File);
+    clientKeyManager.updateIdentityCredentials(clientCert0File, clientKey0File);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();

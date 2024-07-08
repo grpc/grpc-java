@@ -162,7 +162,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
       long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException,
       GeneralSecurityException {
-    return updateIdentityCredentials(certFile, keyFile, period, unit, executor);
+    return this.updateIdentityCredentials(certFile, keyFile, period, unit, executor);
   }
 
   /**
@@ -173,7 +173,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    */
   public void updateIdentityCredentials(File certFile, File keyFile) throws IOException,
       GeneralSecurityException {
-    UpdateResult newResult = readAndUpdate(keyFile, certFile, 0, 0);
+    UpdateResult newResult = readAndUpdate(certFile, keyFile, 0, 0);
     if (!newResult.success) {
       throw new GeneralSecurityException(
           "Files were unmodified before their initial update. Probably a bug.");
@@ -190,7 +190,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   @Deprecated
   public void updateIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
       GeneralSecurityException {
-    updateIdentityCredentials(certFile, keyFile);
+    this.updateIdentityCredentials(certFile, keyFile);
   }
 
   private static class KeyInfo {
