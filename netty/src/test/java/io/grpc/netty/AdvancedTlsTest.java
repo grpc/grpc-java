@@ -147,7 +147,7 @@ public class AdvancedTlsTest {
   public void advancedTlsKeyManagerTrustManagerMutualTlsTest() throws Exception {
     // Create a server with the key manager and trust manager.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
@@ -159,7 +159,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
     // Create a client with the key manager and trust manager.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientCert0, clientKey0);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
@@ -182,7 +182,7 @@ public class AdvancedTlsTest {
   @Test
   public void trustManagerCustomVerifierMutualTlsTest() throws Exception {
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     // Set server's custom verification based on the information of clientCert0.
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
@@ -221,7 +221,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientCert0, clientKey0);
     // Set client's custom verification based on the information of serverCert0.
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
@@ -275,7 +275,7 @@ public class AdvancedTlsTest {
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     // Even if we provide bad credentials for the server, the test should still pass, because we
     // will configure the client to skip all checks later.
-    serverKeyManager.updateIdentityCredentials(serverKeyBad, serverCertBad);
+    serverKeyManager.updateIdentityCredentials(serverCertBad, serverKeyBad);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
@@ -297,7 +297,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientCert0, clientKey0);
     // Set the client to skip all checks, including traditional certificate verification.
     // Note this is very dangerous in production environment - only do so if you are confident on
     // what you are doing!

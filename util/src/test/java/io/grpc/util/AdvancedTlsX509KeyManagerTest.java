@@ -79,7 +79,7 @@ public class AdvancedTlsX509KeyManagerTest {
   public void credentialSetting() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
 
@@ -98,11 +98,11 @@ public class AdvancedTlsX509KeyManagerTest {
     // Checking edge cases of public API parameter setting.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     NullPointerException npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentials(null, serverCert0));
+        .updateIdentityCredentials(serverCert0, null));
     assertEquals("key", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentials(serverKey0, null));
+        .updateIdentityCredentials(null, serverKey0));
     assertEquals("certs", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager

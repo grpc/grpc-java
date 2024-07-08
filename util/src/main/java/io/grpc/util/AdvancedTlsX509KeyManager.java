@@ -99,8 +99,21 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    *
    * @param key  the private key that is going to be used
    * @param certs  the certificate chain that is going to be used
+   * @deprecated Use {@link #updateIdentityCredentials(X509Certificate[], PrivateKey)}
    */
+  @Deprecated
+  @InlineMe(replacement = "this.updateIdentityCredentials(certs, key)")
   public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs) {
+    updateIdentityCredentials(certs, key);
+  }
+
+  /**
+   * Updates the current cached private key and cert chains.
+   *
+   * @param key  the private key that is going to be used
+   * @param certs  the certificate chain that is going to be used
+   */
+  public void updateIdentityCredentials(X509Certificate[] certs, PrivateKey key,) {
     this.keyInfo = new KeyInfo(checkNotNull(key, "key"), checkNotNull(certs, "certs"));
   }
 
@@ -271,7 +284,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
         FileInputStream certInputStream = new FileInputStream(certFile);
         try {
           X509Certificate[] certs = CertificateUtils.getX509Certificates(certInputStream);
-          updateIdentityCredentials(key, certs);
+          updateIdentityCredentials(certs, key);
           return new UpdateResult(true, newKeyTime, newCertTime);
         } finally {
           certInputStream.close();
