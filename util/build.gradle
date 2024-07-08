@@ -16,7 +16,8 @@ tasks.named("jar").configure {
 }
 
 dependencies {
-    api project(':grpc-api')
+    api project(':grpc-api'),
+        libraries.errorprone.annotations
 
     implementation project(':grpc-core'),
             libraries.animalsniffer.annotations,
