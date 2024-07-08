@@ -21,7 +21,6 @@ import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -30,6 +29,7 @@ import static org.junit.Assert.fail;
 
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
+import com.google.common.testing.EqualsTester;
 import io.grpc.internal.GrpcUtil;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -368,14 +368,12 @@ public class MetadataTest {
   @Test
   public void keyEqualsHashNameWorks() {
     Metadata.Key<?> k1 = Metadata.Key.of("case", Metadata.ASCII_STRING_MARSHALLER);
-
     Metadata.Key<?> k2 = Metadata.Key.of("CASE", Metadata.ASCII_STRING_MARSHALLER);
-    assertEquals(k1, k1);
-    assertNotEquals(k1, null);
-    assertNotEquals(k1, new Object(){});
-    assertEquals(k1, k2);
 
-    assertEquals(k1.hashCode(), k2.hashCode());
+    new EqualsTester()
+        .addEqualityGroup(k1, k2)
+        .addEqualityGroup(new Object(){})
+        .testEquals();
     // Check that the casing is preserved.
     assertEquals("CASE", k2.originalName());
     assertEquals("case", k2.name());
