@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -exu -o pipefail
-cat /VERSION
 
 BASE_DIR="$(pwd)"
 
@@ -23,7 +22,14 @@ cat <<EOF >> gradle.properties
 org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m
 EOF
 
-(yes || true) | "${ANDROID_HOME}/tools/bin/sdkmanager" --licenses
+export ANDROID_HOME=/tmp/Android/Sdk
+mkdir -p "${ANDROID_HOME}/cmdline-tools"
+curl -Ls -o cmdline.zip \
+    "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip"
+unzip -qd "${ANDROID_HOME}/cmdline-tools" cmdline.zip
+rm cmdline.zip
+mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
+(yes || true) | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses
 
 # Proto deps
 buildscripts/make_dependencies.sh
