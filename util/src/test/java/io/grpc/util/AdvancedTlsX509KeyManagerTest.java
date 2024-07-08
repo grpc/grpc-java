@@ -114,12 +114,12 @@ public class AdvancedTlsX509KeyManagerTest {
     assertEquals("certFile", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverCert0File, serverKey0File, 1, null,
+        .updateIdentityCredentials(serverCert0File, serverKey0File, 1, null,
             executor));
     assertEquals("unit", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverCert0File, serverKey0File, 1,
+        .updateIdentityCredentials(serverCert0File, serverKey0File, 1,
             TimeUnit.MINUTES, null));
     assertEquals("executor", npe.getMessage());
 

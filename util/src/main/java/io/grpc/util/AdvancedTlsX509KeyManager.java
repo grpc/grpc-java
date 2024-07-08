@@ -18,6 +18,7 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.InlineMe;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -159,10 +160,11 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * #updateIdentityCredentials(File, File, long, TimeUnit, ScheduledExecutorService)} instead.
    */
   @Deprecated
+  @InlineMe(replacement = "this.updateIdentityCredentials(certFile, keyFile, period, unit, executor)")
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
       long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException,
       GeneralSecurityException {
-    return this.updateIdentityCredentials(certFile, keyFile, period, unit, executor);
+    return updateIdentityCredentials(certFile, keyFile, period, unit, executor);
   }
 
   /**
@@ -188,9 +190,10 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @deprecated Use {@link #updateIdentityCredentials(File, File)} instead.
    */
   @Deprecated
+  @InlineMe(replacement = "this.updateIdentityCredentials(certFile, keyFile)")
   public void updateIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
       GeneralSecurityException {
-    this.updateIdentityCredentials(certFile, keyFile);
+    updateIdentityCredentials(certFile, keyFile);
   }
 
   private static class KeyInfo {
