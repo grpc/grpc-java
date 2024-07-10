@@ -19,6 +19,7 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.errorprone.annotations.InlineMe;
+import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -103,6 +104,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    */
   @Deprecated
   @InlineMe(replacement = "this.updateIdentityCredentials(certs, key)")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
   public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs) {
     updateIdentityCredentials(certs, key);
   }
@@ -178,6 +180,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    */
   @Deprecated
   @InlineMe(replacement = "this.updateIdentityCredentials(certFile, keyFile)")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
   public void updateIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
       GeneralSecurityException {
     updateIdentityCredentials(certFile, keyFile);
@@ -204,6 +207,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   @Deprecated
   @InlineMe(replacement =
       "this.updateIdentityCredentials(certFile, keyFile, period, unit, executor)")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
       long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException,
       GeneralSecurityException {
