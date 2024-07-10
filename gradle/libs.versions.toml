@@ -93,7 +93,9 @@ signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.25"
 tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.89"
-truth = "com.google.truth:truth:1.4.3"
+# 1.4.3+ causes "unknown enum constant ElementType.MODULE" warning.
+# https://github.com/google/truth/issues/1320
+truth = "com.google.truth:truth:1.4.2"
 undertow-servlet = "io.undertow:undertow-servlet:2.2.32.Final"
 undertow-servlet-jakartaee9 = "io.undertow:undertow-servlet:2.3.14.Final"
 
