@@ -1826,7 +1826,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           effectiveServiceConfig = defaultServiceConfig;
           if (effectiveServiceConfig != null) {
             realChannel.updateConfigSelector(effectiveServiceConfig.getDefaultConfigSelector());
-            channelLogger.log(ChannelLogLevel.ERROR, "Initial Name Resolution error, using default service config");
+            channelLogger.log(ChannelLogLevel.ERROR,
+                    "Initial Name Resolution error, using default service config");
           }
         }
       }
