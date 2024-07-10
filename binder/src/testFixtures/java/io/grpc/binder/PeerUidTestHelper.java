@@ -7,14 +7,10 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 
-/**
- * Class which helps set up {@link PeerUids} to be used in tests.
- */
+/** Class which helps set up {@link PeerUids} to be used in tests. */
 public final class PeerUidTestHelper {
 
-  /**
-   * The UID of the calling package is set with the value of this key.
-   */
+  /** The UID of the calling package is set with the value of this key. */
   public static final Metadata.Key<Integer> UID_KEY =
       Metadata.Key.of("binder-remote-uid-for-unit-testing", PeerUidTestMarshaller.INSTANCE);
 
@@ -41,8 +37,7 @@ public final class PeerUidTestHelper {
     };
   }
 
-  private PeerUidTestHelper() {
-  }
+  private PeerUidTestHelper() {}
 
   private static class PeerUidTestMarshaller implements Metadata.AsciiMarshaller<Integer> {
 
@@ -58,6 +53,5 @@ public final class PeerUidTestHelper {
       return Integer.parseInt(serialized);
     }
   }
-
   ;
 }

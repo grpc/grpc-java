@@ -110,8 +110,7 @@ public class MainThreadScheduledExecutorService extends AbstractExecutorService
   }
 
   @Override
-  public void shutdown() {
-  }
+  public void shutdown() {}
 
   @Override
   public List<Runnable> shutdownNow() {
@@ -154,8 +153,7 @@ public class MainThreadScheduledExecutorService extends AbstractExecutorService
 
     @Override
     public int compareTo(Delayed other) {
-      return Comparator.comparingLong(
-              (Delayed delayed) -> delayed.getDelay(TimeUnit.MILLISECONDS))
+      return Comparator.comparingLong((Delayed delayed) -> delayed.getDelay(TimeUnit.MILLISECONDS))
           .compare(this, other);
     }
 

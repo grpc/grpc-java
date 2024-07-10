@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
@@ -54,6 +56,7 @@ import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
@@ -140,12 +143,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
+    childLbHelper.updateFilterMetadata(config.filterMetadata);
 
-    childSwitchLb.switchTo(config.childPolicy.getProvider());
     childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
-            .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
+            .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
     return Status.OK;
   }
@@ -189,6 +192,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable
     private SslContextProviderSupplier sslContextProviderSupplier;
+    private Map<String, Struct> filterMetadata = ImmutableMap.of();
     @Nullable
     private final ServerInfo lrsServerInfo;
 
@@ -201,8 +205,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
       currentState = newState;
       currentPicker =  newPicker;
-      SubchannelPicker picker =
-          new RequestLimitingSubchannelPicker(newPicker, dropPolicies, maxConcurrentRequests);
+      SubchannelPicker picker = new RequestLimitingSubchannelPicker(
+          newPicker, dropPolicies, maxConcurrentRequests, filterMetadata);
       delegate().updateBalancingState(newState, picker);
     }
 
@@ -311,20 +315,29 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
               : null;
     }
 
+    private void updateFilterMetadata(Map<String, Struct> filterMetadata) {
+      this.filterMetadata = ImmutableMap.copyOf(filterMetadata);
+    }
+
     private class RequestLimitingSubchannelPicker extends SubchannelPicker {
       private final SubchannelPicker delegate;
       private final List<DropOverload> dropPolicies;
       private final long maxConcurrentRequests;
+      private final Map<String, Struct> filterMetadata;
 
       private RequestLimitingSubchannelPicker(SubchannelPicker delegate,
-          List<DropOverload> dropPolicies, long maxConcurrentRequests) {
+          List<DropOverload> dropPolicies, long maxConcurrentRequests,
+          Map<String, Struct> filterMetadata) {
         this.delegate = delegate;
         this.dropPolicies = dropPolicies;
         this.maxConcurrentRequests = maxConcurrentRequests;
+        this.filterMetadata = checkNotNull(filterMetadata, "filterMetadata");
       }
 
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
+        args.getCallOptions().getOption(ClusterImplLoadBalancerProvider.FILTER_METADATA_CONSUMER)
+            .accept(filterMetadata);
         for (DropOverload dropOverload : dropPolicies) {
           int rand = random.nextInt(1_000_000);
           if (rand < dropOverload.dropsPerMillion()) {

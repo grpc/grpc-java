@@ -32,7 +32,6 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.binder.internal.MainThreadScheduledExecutorService;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransportListener;

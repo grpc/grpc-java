@@ -25,10 +25,13 @@ import javax.annotation.Nullable;
 final class TransactionUtils {
   /** Set when the transaction contains rpc prefix data. */
   static final int FLAG_PREFIX = 0x1;
+
   /** Set when the transaction contains some message data. */
   static final int FLAG_MESSAGE_DATA = 0x2;
+
   /** Set when the transaction contains rpc suffix data. */
   static final int FLAG_SUFFIX = 0x4;
+
   /** Set when the transaction is an out-of-band close event. */
   static final int FLAG_OUT_OF_BAND_CLOSE = 0x8;
 

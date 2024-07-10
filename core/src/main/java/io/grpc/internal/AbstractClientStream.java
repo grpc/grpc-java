@@ -304,7 +304,7 @@ public abstract class AbstractClientStream extends AbstractStream
      */
     protected void inboundHeadersReceived(Metadata headers) {
       checkState(!statusReported, "Received headers on closed stream");
-      statsTraceCtx.clientInboundHeaders();
+      statsTraceCtx.clientInboundHeaders(headers);
 
       boolean compressedStream = false;
       String streamEncoding = headers.get(CONTENT_ENCODING_KEY);

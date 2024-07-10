@@ -18,6 +18,8 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.SIZE_BUCKETS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -84,8 +86,8 @@ public final class GrpcOpenTelemetry {
     this.disableDefault = builder.disableAll;
     this.resource = createMetricInstruments(meter, enableMetrics, disableDefault);
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
-    this.openTelemetryMetricsModule =
-        new OpenTelemetryMetricsModule(STOPWATCH_SUPPLIER, resource, optionalLabels);
+    this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
+        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
 
@@ -172,6 +174,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("s")
               .setDescription(
                   "Time taken by gRPC to complete an RPC from application's perspective")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -189,6 +192,7 @@ public final class GrpcOpenTelemetry {
                   "grpc.client.attempt.duration")
               .setUnit("s")
               .setDescription("Time taken to complete a client call attempt")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -200,6 +204,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes sent per client call attempt")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -211,6 +216,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes received per call attempt")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -228,6 +234,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("s")
               .setDescription(
                   "Time taken to complete a call from server transport's perspective")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -239,6 +246,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes sent per server call")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -250,6 +258,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes received per server call")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -272,6 +281,7 @@ public final class GrpcOpenTelemetry {
    */
   public static class Builder {
     private OpenTelemetry openTelemetrySdk = OpenTelemetry.noop();
+    private final List<OpenTelemetryPlugin> plugins = new ArrayList<>();
     private final Collection<String> optionalLabels = new ArrayList<>();
     private final Map<String, Boolean> enableMetrics = new HashMap<>();
     private boolean disableAll;
@@ -285,6 +295,11 @@ public final class GrpcOpenTelemetry {
      */
     public Builder sdk(OpenTelemetry sdk) {
       this.openTelemetrySdk = sdk;
+      return this;
+    }
+
+    Builder plugin(OpenTelemetryPlugin plugin) {
+      plugins.add(checkNotNull(plugin, "plugin"));
       return this;
     }
 

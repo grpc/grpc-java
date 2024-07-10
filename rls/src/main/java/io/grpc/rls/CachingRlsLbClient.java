@@ -109,6 +109,7 @@ final class CachingRlsLbClient {
   // LRU cache based on access order (BACKOFF and actual data will be here)
   @GuardedBy("lock")
   private final RlsAsyncLruCache linkedHashLruCache;
+  private final Future<?> periodicCleaner;
   // any RPC on the fly will cached in this map
   @GuardedBy("lock")
   private final Map<RouteLookupRequest, PendingCacheEntry> pendingCallCache = new HashMap<>();
@@ -177,10 +178,10 @@ final class CachingRlsLbClient {
         new RlsAsyncLruCache(
             rlsConfig.cacheSizeBytes(),
             new AutoCleaningEvictionListener(builder.evictionListener),
-            scheduledExecutorService,
             ticker,
-            lock,
             helper);
+    periodicCleaner =
+        scheduledExecutorService.scheduleAtFixedRate(this::periodicClean, 1, 1, TimeUnit.MINUTES);
     logger = helper.getChannelLogger();
     String serverHost = null;
     try {
@@ -267,6 +268,12 @@ final class CachingRlsLbClient {
             serverName, status.getCode(), status.getDescription()));
   }
 
+  private void periodicClean() {
+    synchronized (lock) {
+      linkedHashLruCache.cleanupExpiredEntries();
+    }
+  }
+
   /** Populates async cache entry for new request. */
   @GuardedBy("lock")
   private CachedRouteLookupResponse asyncRlsCall(
@@ -349,6 +356,7 @@ final class CachingRlsLbClient {
   void close() {
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient closed");
     synchronized (lock) {
+      periodicCleaner.cancel(false);
       // all childPolicyWrapper will be returned via AutoCleaningEvictionListener
       linkedHashLruCache.close();
       // TODO(creamsoup) maybe cancel all pending requests
@@ -887,15 +895,8 @@ final class CachingRlsLbClient {
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
-        ScheduledExecutorService ses, Ticker ticker, Object lock, RlsLbHelper helper) {
-      super(
-          maxEstimatedSizeBytes,
-          evictionListener,
-          1,
-          TimeUnit.MINUTES,
-          ses,
-          ticker,
-          lock);
+        Ticker ticker, RlsLbHelper helper) {
+      super(maxEstimatedSizeBytes, evictionListener, ticker);
       this.helper = checkNotNull(helper, "helper");
     }
 

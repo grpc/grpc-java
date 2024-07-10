@@ -308,7 +308,9 @@ public class StressTestClient {
     }
 
     try {
-      metricsServer.shutdownNow();
+      if (metricsServer != null) {
+        metricsServer.shutdownNow();
+      }
     } catch (Throwable t) {
       log.log(Level.WARNING, "Error shutting down metrics service!", t);
     }

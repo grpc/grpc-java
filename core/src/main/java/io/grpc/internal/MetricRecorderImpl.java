@@ -63,14 +63,8 @@ final class MetricRecorderImpl implements MetricRecorder {
   @Override
   public void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    checkArgument(requiredLabelValues != null
-            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
-    checkArgument(optionalLabelValues != null
-            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+    MetricRecorder.super.addDoubleCounter(metricInstrument, value, requiredLabelValues,
+        optionalLabelValues);
     for (MetricSink sink : metricSinks) {
       // TODO(dnvindhya): Move updating measures logic from sink to here
       int measuresSize = sink.getMeasuresSize();
@@ -95,14 +89,8 @@ final class MetricRecorderImpl implements MetricRecorder {
   @Override
   public void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    checkArgument(requiredLabelValues != null
-            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
-    checkArgument(optionalLabelValues != null
-            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+    MetricRecorder.super.addLongCounter(metricInstrument, value, requiredLabelValues,
+        optionalLabelValues);
     for (MetricSink sink : metricSinks) {
       int measuresSize = sink.getMeasuresSize();
       if (measuresSize <= metricInstrument.getIndex()) {
@@ -126,14 +114,8 @@ final class MetricRecorderImpl implements MetricRecorder {
   @Override
   public void recordDoubleHistogram(DoubleHistogramMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    checkArgument(requiredLabelValues != null
-            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
-    checkArgument(optionalLabelValues != null
-            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+    MetricRecorder.super.recordDoubleHistogram(metricInstrument, value, requiredLabelValues,
+        optionalLabelValues);
     for (MetricSink sink : metricSinks) {
       int measuresSize = sink.getMeasuresSize();
       if (measuresSize <= metricInstrument.getIndex()) {
@@ -157,14 +139,8 @@ final class MetricRecorderImpl implements MetricRecorder {
   @Override
   public void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
-    checkArgument(requiredLabelValues != null
-            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-        "Incorrect number of required labels provided. Expected: "
-            + metricInstrument.getRequiredLabelKeys().size());
-    checkArgument(optionalLabelValues != null
-            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-        "Incorrect number of optional labels provided. Expected: "
-            + metricInstrument.getOptionalLabelKeys().size());
+    MetricRecorder.super.recordLongHistogram(metricInstrument, value, requiredLabelValues,
+        optionalLabelValues);
     for (MetricSink sink : metricSinks) {
       int measuresSize = sink.getMeasuresSize();
       if (measuresSize <= metricInstrument.getIndex()) {
@@ -220,16 +196,10 @@ final class MetricRecorderImpl implements MetricRecorder {
     @Override
     public void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
         List<String> requiredLabelValues, List<String> optionalLabelValues) {
+      BatchRecorder.super.recordLongGauge(metricInstrument, value, requiredLabelValues,
+          optionalLabelValues);
       checkArgument(allowedInstruments.get(metricInstrument.getIndex()),
           "Instrument was not listed when registering callback: %s", metricInstrument);
-      checkArgument(requiredLabelValues != null
-              && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
-          "Incorrect number of required labels provided. Expected: %s",
-          metricInstrument.getRequiredLabelKeys().size());
-      checkArgument(optionalLabelValues != null
-              && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
-          "Incorrect number of optional labels provided. Expected: %s",
-          metricInstrument.getOptionalLabelKeys().size());
       // Registering the callback checked that the instruments were be present in sink.
       sink.recordLongGauge(metricInstrument, value, requiredLabelValues, optionalLabelValues);
     }

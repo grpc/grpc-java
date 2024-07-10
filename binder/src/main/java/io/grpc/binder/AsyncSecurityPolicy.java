@@ -19,7 +19,6 @@ package io.grpc.binder;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
-
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import javax.annotation.CheckReturnValue;
@@ -37,24 +36,24 @@ import javax.annotation.CheckReturnValue;
 @CheckReturnValue
 public abstract class AsyncSecurityPolicy extends SecurityPolicy {
 
-/**
- * @deprecated Prefer {@link #checkAuthorizationAsync(int)} for async or slow calls or subclass
- *     {@link SecurityPolicy} directly for quick, synchronous implementations.
- */
-@Override
-@Deprecated
-public final Status checkAuthorization(int uid) {
-  try {
-    return checkAuthorizationAsync(uid).get();
-  } catch (ExecutionException e) {
-    return Status.fromThrowable(e);
-  } catch (CancellationException e) {
-    return Status.CANCELLED.withCause(e);
-  } catch (InterruptedException e) {
-    Thread.currentThread().interrupt();  // re-set the current thread's interruption state
-    return Status.CANCELLED.withCause(e);
+  /**
+   * @deprecated Prefer {@link #checkAuthorizationAsync(int)} for async or slow calls or subclass
+   *     {@link SecurityPolicy} directly for quick, synchronous implementations.
+   */
+  @Override
+  @Deprecated
+  public final Status checkAuthorization(int uid) {
+    try {
+      return checkAuthorizationAsync(uid).get();
+    } catch (ExecutionException e) {
+      return Status.fromThrowable(e);
+    } catch (CancellationException e) {
+      return Status.CANCELLED.withCause(e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt(); // re-set the current thread's interruption state
+      return Status.CANCELLED.withCause(e);
+    }
   }
-}
 
   /**
    * Decides whether the given Android UID is authorized. (Validity is implementation dependent).

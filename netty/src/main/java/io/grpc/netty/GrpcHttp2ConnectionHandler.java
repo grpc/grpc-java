@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.Internal;
@@ -27,6 +28,7 @@ import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Settings;
+import io.netty.util.Version;
 import javax.annotation.Nullable;
 
 /**
@@ -41,6 +43,30 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
   @Nullable
   protected final ChannelPromise channelUnused;
   private final ChannelLogger negotiationLogger;
+  private static final boolean usingPre4_1_111_Netty;
+
+  static {
+    // Netty 4.1.111 introduced a change in the behavior of duplicate() method
+    // that breaks the assumption of the cumulator. We need to detect this version
+    // and adjust the behavior accordingly.
+
+    boolean identifiedOldVersion = false;
+    try {
+      Version version = Version.identify().get("netty-buffer");
+      if (version != null) {
+        String[] split = version.artifactVersion().split("\\.");
+        if (split.length >= 3
+            && Integer.parseInt(split[0]) == 4
+            && Integer.parseInt(split[1]) <= 1
+            && Integer.parseInt(split[2]) < 111) {
+          identifiedOldVersion = true;
+        }
+      }
+    } catch (Exception e) {
+      // Ignore, we'll assume it's a new version.
+    }
+    usingPre4_1_111_Netty = identifiedOldVersion;
+  }
 
   protected GrpcHttp2ConnectionHandler(
       ChannelPromise channelUnused,
@@ -51,7 +77,16 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
     super(decoder, encoder, initialSettings);
     this.channelUnused = channelUnused;
     this.negotiationLogger = negotiationLogger;
-    setCumulator(ADAPTIVE_CUMULATOR);
+    if (usingPre4_1_111_Netty()) {
+      // We need to use the adaptive cumulator only if we're using a version of Netty that
+      // doesn't have the behavior that breaks it.
+      setCumulator(ADAPTIVE_CUMULATOR);
+    }
+  }
+
+  @VisibleForTesting
+  static boolean usingPre4_1_111_Netty() {
+    return usingPre4_1_111_Netty;
   }
 
   /**

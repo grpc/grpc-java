@@ -4,10 +4,8 @@ import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
-
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
-
 import javax.annotation.Nullable;
 
 /**
@@ -23,16 +21,14 @@ final class PendingAuthListener<ReqT, RespT> extends ServerCall.Listener<ReqT> {
 
   PendingAuthListener() {}
 
-  void startCall(ServerCall<ReqT, RespT> call,
-                         Metadata headers,
-                         ServerCallHandler<ReqT, RespT> next) {
+  void startCall(
+      ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     ServerCall.Listener<ReqT> delegate;
     try {
       delegate = next.startCall(call, headers);
     } catch (RuntimeException e) {
       call.close(
-          Status
-              .INTERNAL
+          Status.INTERNAL
               .withCause(e)
               .withDescription("Failed to start server call after authorization check"),
           new Metadata());

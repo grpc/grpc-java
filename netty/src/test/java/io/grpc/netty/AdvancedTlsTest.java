@@ -45,14 +45,11 @@ import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
 import java.io.Closeable;
 import java.io.File;
-import java.io.IOException;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -65,13 +62,13 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class AdvancedTlsTest {
-  public static final String SERVER_0_KEY_FILE = "server0.key";
-  public static final String SERVER_0_PEM_FILE = "server0.pem";
-  public static final String CLIENT_0_KEY_FILE = "client.key";
-  public static final String CLIENT_0_PEM_FILE = "client.pem";
-  public static final String CA_PEM_FILE = "ca.pem";
-  public static final String SERVER_BAD_KEY_FILE = "badserver.key";
-  public static final String SERVER_BAD_PEM_FILE = "badserver.pem";
+  private static final String SERVER_0_KEY_FILE = "server0.key";
+  private static final String SERVER_0_PEM_FILE = "server0.pem";
+  private static final String CLIENT_0_KEY_FILE = "client.key";
+  private static final String CLIENT_0_PEM_FILE = "client.pem";
+  private static final String CA_PEM_FILE = "ca.pem";
+  private static final String SERVER_BAD_KEY_FILE = "badserver.key";
+  private static final String SERVER_BAD_PEM_FILE = "badserver.pem";
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -92,7 +89,7 @@ public class AdvancedTlsTest {
 
   @Before
   public void setUp()
-      throws NoSuchAlgorithmException, IOException, CertificateException, InvalidKeySpecException {
+      throws Exception {
     executor = Executors.newSingleThreadScheduledExecutor();
     caCertFile = TestUtils.loadCert(CA_PEM_FILE);
     serverKey0File = TestUtils.loadCert(SERVER_0_KEY_FILE);
@@ -150,7 +147,7 @@ public class AdvancedTlsTest {
   public void advancedTlsKeyManagerTrustManagerMutualTlsTest() throws Exception {
     // Create a server with the key manager and trust manager.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
@@ -162,7 +159,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
     // Create a client with the key manager and trust manager.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientCert0, clientKey0);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
@@ -185,7 +182,7 @@ public class AdvancedTlsTest {
   @Test
   public void trustManagerCustomVerifierMutualTlsTest() throws Exception {
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     // Set server's custom verification based on the information of clientCert0.
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
@@ -224,7 +221,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientCert0, clientKey0);
     // Set client's custom verification based on the information of serverCert0.
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
@@ -278,18 +275,18 @@ public class AdvancedTlsTest {
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     // Even if we provide bad credentials for the server, the test should still pass, because we
     // will configure the client to skip all checks later.
-    serverKeyManager.updateIdentityCredentials(serverKeyBad, serverCertBad);
+    serverKeyManager.updateIdentityCredentials(serverCertBad, serverKeyBad);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
             new SslSocketAndEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
+                  Socket socket) { }
 
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
+                  SSLEngine engine) { }
             })
         .build();
     serverTrustManager.updateTrustCredentials(caCert);
@@ -300,7 +297,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientCert0, clientKey0);
     // Set the client to skip all checks, including traditional certificate verification.
     // Note this is very dangerous in production environment - only do so if you are confident on
     // what you are doing!
@@ -310,11 +307,11 @@ public class AdvancedTlsTest {
             new SslSocketAndEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
+                  Socket socket) { }
 
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
+                  SSLEngine engine) { }
             })
         .build();
     clientTrustManager.updateTrustCredentials(caCert);
@@ -337,8 +334,8 @@ public class AdvancedTlsTest {
   public void onFileReloadingKeyManagerTrustManagerTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
-        serverCert0File, 100, TimeUnit.MILLISECONDS, executor);
+    Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentials(serverCert0File,
+        serverKey0File, 100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
@@ -351,8 +348,8 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
-        clientCert0File,100, TimeUnit.MILLISECONDS, executor);
+    Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentials(clientCert0File,
+        clientKey0File,100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
@@ -384,7 +381,7 @@ public class AdvancedTlsTest {
   public void onFileLoadingKeyManagerTrustManagerTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File);
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
@@ -396,7 +393,7 @@ public class AdvancedTlsTest {
         new SimpleServiceImpl()).build().start();
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File, clientCert0File);
+    clientKeyManager.updateIdentityCredentials(clientCert0File, clientKey0File);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
@@ -419,12 +416,12 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void onFileReloadingKeyManagerBadInitialContentTest() throws Exception {
+  public void onFileReloadingKeyManagerBadInitialContentTest() {
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
     // We swap the order of key and certificates to intentionally create an exception.
     assertThrows(GeneralSecurityException.class,
-        () -> keyManager.updateIdentityCredentialsFromFile(serverCert0File,
-          serverKey0File, 100, TimeUnit.MILLISECONDS, executor));
+        () -> keyManager.updateIdentityCredentials(serverKey0File, serverCert0File,
+          100, TimeUnit.MILLISECONDS, executor));
   }
 
   @Test
@@ -439,7 +436,7 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void keyManagerAliasesTest() throws Exception {
+  public void keyManagerAliasesTest() {
     AdvancedTlsX509KeyManager km = new AdvancedTlsX509KeyManager();
     assertArrayEquals(
         new String[] {"default"}, km.getClientAliases("", null));

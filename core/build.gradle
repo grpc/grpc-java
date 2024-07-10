@@ -32,7 +32,6 @@ dependencies {
             libraries.truth,
             project(':grpc-testing')
     testImplementation testFixtures(project(':grpc-api')),
-            project(':grpc-inprocess'),
             project(':grpc-testing')
     testImplementation libraries.guava.testlib
 

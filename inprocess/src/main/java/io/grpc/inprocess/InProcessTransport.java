@@ -203,21 +203,14 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         }
       };
     }
-    return new Runnable() {
-      @Override
-      @SuppressWarnings("deprecation")
-      public void run() {
-        synchronized (InProcessTransport.this) {
-          Attributes serverTransportAttrs = Attributes.newBuilder()
-              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, address)
-              .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, address)
-              .build();
-          serverStreamAttributes = serverTransportListener.transportReady(serverTransportAttrs);
-          attributes = clientTransportListener.filterTransport(attributes);
-          clientTransportListener.transportReady();
-        }
-      }
-    };
+    Attributes serverTransportAttrs = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, address)
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, address)
+        .build();
+    serverStreamAttributes = serverTransportListener.transportReady(serverTransportAttrs);
+    attributes = clientTransportListener.filterTransport(attributes);
+    clientTransportListener.transportReady();
+    return null;
   }
 
   @Override
@@ -571,7 +564,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             return;
           }
 
-          clientStream.statsTraceCtx.clientInboundHeaders();
+          clientStream.statsTraceCtx.clientInboundHeaders(headers);
           syncContext.executeLater(() -> clientStreamListener.headersRead(headers));
         }
         syncContext.drain();

@@ -32,8 +32,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class PeerUidTestHelperTest {
 
-  @Rule
-  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+  @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
   private static final int FAKE_UID = 12345;
 

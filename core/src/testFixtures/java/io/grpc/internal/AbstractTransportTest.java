@@ -2251,6 +2251,7 @@ public abstract class AbstractTransportTest {
 
     @Override
     public Attributes transportReady(Attributes attributes) {
+      assertFalse(terminated.isDone());
       return Attributes.newBuilder()
           .setAll(attributes)
           .set(ADDITIONAL_TRANSPORT_ATTR_KEY, "additional attribute value")
