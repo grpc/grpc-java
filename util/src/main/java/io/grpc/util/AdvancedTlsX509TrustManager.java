@@ -336,8 +336,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
      */
     CERTIFICATE_ONLY_VERIFICATION,
     /**
-     * This SHOULD be used by advanced user intended to implement the entire verification logic
-     * themselves {@link SslSocketAndEnginePeerVerifier}) themselves. This includes: <br>
+     * DANGEROUS: This SHOULD be used by advanced user intended to implement the entire verification
+     * logic themselves {@link SslSocketAndEnginePeerVerifier}) themselves. This includes: <br>
      * 1. Proper verification of the peer certificate chain <br>
      * 2. Proper checks of the identity of the peer certificate <br>
      * Failing to do so will leave your application without any TLS-related protection. Keep in mind
@@ -381,10 +381,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])}, {@link
    * AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit,
    * ScheduledExecutorService)}, {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile
-   * (File, long, TimeUnit, ScheduledExecutorService)}. By default, {@link
-   * Verification#CERTIFICATE_AND_HOST_NAME_VERIFICATION} mode for authenticating the peer
-   * certificate is used. If you set a {@link SslSocketAndEnginePeerVerifier}, its methods will be
-   * called in addition to verifying certificates.
+   * (File, long, TimeUnit, ScheduledExecutorService)}.
    */
   public static final class Builder {
 
@@ -393,11 +390,26 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
     private Builder() {}
 
+    /**
+     * Sets {@link Verification}, mode when authenticating the peer certificate. By default, {@link
+     * Verification#CERTIFICATE_AND_HOST_NAME_VERIFICATION} value is used.
+     *
+     * @param  verification Verification mode used for the current AdvancedTlsX509TrustManager
+     * @return Builder with set verification
+     */
     public Builder setVerification(Verification verification) {
       this.verification = verification;
       return this;
     }
 
+    /**
+     * Sets {@link SslSocketAndEnginePeerVerifier}, which methods will be called in addition to
+     * verifying certificates.
+     *
+     * @param  verifier SslSocketAndEnginePeerVerifier used for the current
+     * AdvancedTlsX509TrustManager
+     * @return Builder with set verifier
+     */
     public Builder setSslSocketAndEnginePeerVerifier(SslSocketAndEnginePeerVerifier verifier) {
       this.socketAndEnginePeerVerifier = verifier;
       return this;
