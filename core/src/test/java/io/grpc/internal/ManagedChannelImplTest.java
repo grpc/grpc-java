@@ -4476,6 +4476,38 @@ public class ManagedChannelImplTest {
     }
   }
 
+  @Test
+  public void testApplyDefaultServiceConfigIfInitialNameResolutionFails() throws Exception {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
+    try {
+      FakeNameResolverFactory nameResolverFactory =
+              new FakeNameResolverFactory.Builder(expectedUri)
+                      .setServers(ImmutableList.of(addressGroup)).build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+      Map<String, Object> rawServiceConfig =
+              parseConfig("{\"methodConfig\":[{"
+                      + "\"name\":[{\"service\":\"null\"}],"
+                      + "\"waitForReady\":false}]}");
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+              createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+              ConfigOrError.fromConfig(managedChannelServiceConfig));
+      createChannel();
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+              ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
+      verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+      managedChannelServiceConfig =
+              createManagedChannelServiceConfig(rawServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+              ConfigOrError.fromConfig(managedChannelServiceConfig));
+      nameResolverFactory.allResolved();
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
+  }
+
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
