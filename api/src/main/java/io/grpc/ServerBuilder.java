@@ -114,13 +114,15 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract T addService(BindableService bindableService);
 
   /**
-   * Adds a list of service implementations to the handler registry together.
+   * Adds a list of service implementations to the handler registry together. This exists for
+   * convenience - equivalent to repeatedly calling addService() with different services.
+   * If multiple services on the list use the same name, only the last one on the list will
+   * be added.
    *
    * @param services the list of ServerServiceDefinition objects
    * @return this
    * @since 1.37.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7925")
   public final T addServices(List<ServerServiceDefinition> services) {
     checkNotNull(services, "services");
     for (ServerServiceDefinition service : services) {

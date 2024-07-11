@@ -49,8 +49,9 @@ import javax.annotation.Nullable;
 class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
-  static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
-      "grpc.experimental.xdsDualstackEndpoints";
+
+  public static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
+      "GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS";
 
   private static final XdsEndpointResource instance = new XdsEndpointResource();
 
@@ -201,6 +202,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       }
       List<java.net.SocketAddress> addresses = new ArrayList<>();
       addresses.add(getInetSocketAddress(endpoint.getEndpoint().getAddress()));
+
       if (isEnabledXdsDualStack()) {
         for (Endpoint.AdditionalAddress additionalAddress
             : endpoint.getEndpoint().getAdditionalAddressesList()) {

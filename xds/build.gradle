@@ -43,8 +43,7 @@ configurations {
 dependencies {
     thirdpartyCompileOnly libraries.javax.annotation
     thirdpartyImplementation project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            libraries.opencensus.proto
+            project(':grpc-stub')
     compileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),

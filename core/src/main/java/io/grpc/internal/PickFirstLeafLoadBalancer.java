@@ -105,6 +105,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     // Since we have a new set of addresses, we are again at first pass
     firstPass = true;
 
+    List<EquivalentAddressGroup> cleanServers = deDupAddresses(servers);
+
     // We can optionally be configured to shuffle the address list. This can help better distribute
     // the load.
     if (resolvedAddresses.getLoadBalancingPolicyConfig()
@@ -112,15 +114,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       PickFirstLeafLoadBalancerConfig config
           = (PickFirstLeafLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       if (config.shuffleAddressList != null && config.shuffleAddressList) {
-        servers = new ArrayList<>(servers);
-        Collections.shuffle(servers,
+        Collections.shuffle(cleanServers,
             config.randomSeed != null ? new Random(config.randomSeed) : new Random());
       }
     }
 
-    // Make sure we're storing our own list rather than what was passed in
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
-        ImmutableList.<EquivalentAddressGroup>builder().addAll(servers).build();
+        ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
 
     if (addressIndex == null) {
       addressIndex = new Index(newImmutableAddressGroups);
@@ -178,24 +178,53 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return Status.OK;
   }
 
+  private static List<EquivalentAddressGroup> deDupAddresses(List<EquivalentAddressGroup> groups) {
+    Set<SocketAddress> seenAddresses = new HashSet<>();
+    List<EquivalentAddressGroup> newGroups = new ArrayList<>();
+
+    for (EquivalentAddressGroup group : groups) {
+      List<SocketAddress> addrs = new ArrayList<>();
+      for (SocketAddress addr : group.getAddresses()) {
+        if (seenAddresses.add(addr)) {
+          addrs.add(addr);
+        }
+      }
+      if (!addrs.isEmpty()) {
+        newGroups.add(new EquivalentAddressGroup(addrs, group.getAttributes()));
+      }
+    }
+
+    return newGroups;
+  }
+
   @Override
   public void handleNameResolutionError(Status error) {
+    if (rawConnectivityState == SHUTDOWN) {
+      return;
+    }
+
     for (SubchannelData subchannelData : subchannels.values()) {
       subchannelData.getSubchannel().shutdown();
     }
     subchannels.clear();
+    if (addressIndex != null) {
+      addressIndex.updateGroups(null);
+    }
+    rawConnectivityState = TRANSIENT_FAILURE;
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
   void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     ConnectivityState newState = stateInfo.getState();
+
+    SubchannelData subchannelData = subchannels.get(getAddress(subchannel));
     // Shutdown channels/previously relevant subchannels can still callback with state updates.
     // To prevent pickers from returning these obsolete subchannels, this logic
     // is included to check if the current list of active subchannels includes this subchannel.
-    SubchannelData subchannelData = subchannels.get(getAddress(subchannel));
     if (subchannelData == null || subchannelData.getSubchannel() != subchannel) {
       return;
     }
+
     if (newState == SHUTDOWN) {
       return;
     }

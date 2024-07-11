@@ -252,4 +252,14 @@ public class JettyTransportTest extends AbstractTransportTest {
   @Ignore("regression since bumping grpc v1.46 to v1.53")
   @Test
   public void messageProducerOnlyProducesRequestedMessages() {}
+
+  @Override
+  @Ignore("https://github.com/jetty/jetty.project/issues/11822")
+  @Test
+  public void clientChecksInboundMetadataSize_header() {}
+
+  @Override
+  @Ignore("https://github.com/jetty/jetty.project/issues/11822")
+  @Test
+  public void clientChecksInboundMetadataSize_trailer() {}
 }

@@ -29,74 +29,51 @@ import io.grpc.ServerBuilder;
 import io.grpc.binder.internal.BinderServer;
 import io.grpc.binder.internal.BinderTransportSecurity;
 import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServerImplBuilder;
-import io.grpc.internal.ObjectPool;
-import io.grpc.internal.SharedResourcePool;
-
-import java.io.Closeable;
 import java.io.File;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 
-import javax.annotation.Nullable;
-
-/**
- * Builder for a server that services requests from an Android Service.
- */
-public final class BinderServerBuilder
-    extends ForwardingServerBuilder<BinderServerBuilder> {
+/** Builder for a server that services requests from an Android Service. */
+public final class BinderServerBuilder extends ForwardingServerBuilder<BinderServerBuilder> {
 
   /**
    * Creates a server builder that will listen for bindings to the specified address.
    *
-   * <p>The listening {@link IBinder} associated with new {@link Server}s will be stored
-   * in {@code binderReceiver} upon {@link #build()}. Callers should return it from {@link
+   * <p>The listening {@link IBinder} associated with new {@link Server}s will be stored in {@code
+   * binderReceiver} upon {@link #build()}. Callers should return it from {@link
    * Service#onBind(Intent)} when the binding intent matches {@code listenAddress}.
    *
    * @param listenAddress an Android Service and binding Intent associated with this server.
    * @param receiver an "out param" for the new {@link Server}'s listening {@link IBinder}
    * @return a new builder
    */
-  public static BinderServerBuilder forAddress(AndroidComponentAddress listenAddress,
-      IBinderReceiver receiver) {
+  public static BinderServerBuilder forAddress(
+      AndroidComponentAddress listenAddress, IBinderReceiver receiver) {
     return new BinderServerBuilder(listenAddress, receiver);
   }
 
-  /**
-   * Always fails. Call {@link #forAddress(AndroidComponentAddress, IBinderReceiver)} instead.
-   */
+  /** Always fails. Call {@link #forAddress(AndroidComponentAddress, IBinderReceiver)} instead. */
   @DoNotCall("Unsupported. Use forAddress() instead")
   public static BinderServerBuilder forPort(int port) {
     throw new UnsupportedOperationException("call forAddress() instead");
   }
 
   private final ServerImplBuilder serverImplBuilder;
-  private ObjectPool<ScheduledExecutorService> schedulerPool =
-      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
-  private ServerSecurityPolicy securityPolicy;
-  private InboundParcelablePolicy inboundParcelablePolicy;
+  private final BinderServer.Builder internalBuilder = new BinderServer.Builder();
   private boolean isBuilt;
-  @Nullable private BinderTransportSecurity.ShutdownListener shutdownListener = null;
 
   private BinderServerBuilder(
-      AndroidComponentAddress listenAddress,
-      IBinderReceiver binderReceiver) {
-    securityPolicy = SecurityPolicies.serverInternalOnly();
-    inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
+      AndroidComponentAddress listenAddress, IBinderReceiver binderReceiver) {
+    internalBuilder.setListenAddress(listenAddress);
 
-    serverImplBuilder = new ServerImplBuilder(streamTracerFactories -> {
-      BinderServer server = new BinderServer(
-          listenAddress,
-          schedulerPool,
-          streamTracerFactories,
-          BinderInternal.createPolicyChecker(securityPolicy),
-          inboundParcelablePolicy,
-          // 'shutdownListener' should have been set by build()
-          checkNotNull(shutdownListener));
-      BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
-      return server;
-    });
+    serverImplBuilder =
+        new ServerImplBuilder(
+            streamTracerFactories -> {
+              internalBuilder.setStreamTracerFactories(streamTracerFactories);
+              BinderServer server = internalBuilder.build();
+              BinderInternal.setIBinder(binderReceiver, server.getHostBinder());
+              return server;
+            });
 
     // Disable stats and tracing by default.
     serverImplBuilder.setStatsEnabled(false);
@@ -132,8 +109,8 @@ public final class BinderServerBuilder
    */
   public BinderServerBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-     schedulerPool =
-          new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
+    internalBuilder.setExecutorServicePool(
+        new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService")));
     return this;
   }
 
@@ -146,7 +123,7 @@ public final class BinderServerBuilder
    * @return this
    */
   public BinderServerBuilder securityPolicy(ServerSecurityPolicy securityPolicy) {
-    this.securityPolicy = checkNotNull(securityPolicy, "securityPolicy");
+    internalBuilder.setServerSecurityPolicy(securityPolicy);
     return this;
   }
 
@@ -154,13 +131,11 @@ public final class BinderServerBuilder
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public BinderServerBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
-    this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
+    internalBuilder.setInboundParcelablePolicy(inboundParcelablePolicy);
     return this;
   }
 
-  /**
-   * Always fails. TLS is not supported in BinderServer.
-   */
+  /** Always fails. TLS is not supported in BinderServer. */
   @Override
   public BinderServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in BinderServer");
@@ -173,16 +148,14 @@ public final class BinderServerBuilder
    *
    * @return the new Server
    */
-  @Override // For javadoc refinement only.
+  @Override
   public Server build() {
     // Since we install a final interceptor here, we need to ensure we're only built once.
     checkState(!isBuilt, "BinderServerBuilder can only be used to build one server instance.");
     isBuilt = true;
     // We install the security interceptor last, so it's closest to the transport.
-    ObjectPool<? extends Executor> executorPool = serverImplBuilder.getExecutorPool();
-    Executor executor = executorPool.getObject();
-    BinderTransportSecurity.installAuthInterceptor(this, executor);
-    shutdownListener = () -> executorPool.returnObject(executor);
+    BinderTransportSecurity.installAuthInterceptor(this);
+    internalBuilder.setExecutorPool(serverImplBuilder.getExecutorPool());
     return super.build();
   }
 }

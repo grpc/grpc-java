@@ -26,7 +26,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -90,18 +89,18 @@ public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
     }
 
     static final class PriorityChildConfig {
-      final PolicySelection policySelection;
+      final Object childConfig;
       final boolean ignoreReresolution;
 
-      PriorityChildConfig(PolicySelection policySelection, boolean ignoreReresolution) {
-        this.policySelection = checkNotNull(policySelection, "policySelection");
+      PriorityChildConfig(Object childConfig, boolean ignoreReresolution) {
+        this.childConfig = checkNotNull(childConfig, "childConfig");
         this.ignoreReresolution = ignoreReresolution;
       }
 
       @Override
       public String toString() {
         return MoreObjects.toStringHelper(this)
-            .add("policySelection", policySelection)
+            .add("childConfig", childConfig)
             .add("ignoreReresolution", ignoreReresolution)
             .toString();
       }

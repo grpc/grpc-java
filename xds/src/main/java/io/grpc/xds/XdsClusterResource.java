@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import com.google.protobuf.Struct;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -160,6 +161,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
 
     updateBuilder.lbPolicyConfig(lbPolicyConfig);
+    updateBuilder.filterMetadata(
+        ImmutableMap.copyOf(cluster.getMetadata().getFilterMetadataMap()));
 
     return updateBuilder.build();
   }
@@ -559,14 +562,21 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     @Nullable
     abstract OutlierDetection outlierDetection();
 
-    static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
-      checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
+    abstract ImmutableMap<String, Struct> filterMetadata();
+
+    private static Builder newBuilder(String clusterName) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
-          .clusterType(ClusterType.AGGREGATE)
           .minRingSize(0)
           .maxRingSize(0)
           .choiceCount(0)
+          .filterMetadata(ImmutableMap.of());
+    }
+
+    static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
+      checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
+      return newBuilder(clusterName)
+          .clusterType(ClusterType.AGGREGATE)
           .prioritizedClusterNames(ImmutableList.copyOf(prioritizedClusterNames));
     }
 
@@ -574,12 +584,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
                           @Nullable UpstreamTlsContext upstreamTlsContext,
                           @Nullable OutlierDetection outlierDetection) {
-      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
-          .clusterName(clusterName)
+      return newBuilder(clusterName)
           .clusterType(ClusterType.EDS)
-          .minRingSize(0)
-          .maxRingSize(0)
-          .choiceCount(0)
           .edsServiceName(edsServiceName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
@@ -591,12 +597,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                                  @Nullable ServerInfo lrsServerInfo,
                                  @Nullable Long maxConcurrentRequests,
                                  @Nullable UpstreamTlsContext upstreamTlsContext) {
-      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
-          .clusterName(clusterName)
+      return newBuilder(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
-          .minRingSize(0)
-          .maxRingSize(0)
-          .choiceCount(0)
           .dnsHostName(dnsHostName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
@@ -684,6 +686,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
 
       protected abstract Builder outlierDetection(OutlierDetection outlierDetection);
+
+      protected abstract Builder filterMetadata(ImmutableMap<String, Struct> filterMetadata);
 
       abstract CdsUpdate build();
     }

@@ -94,8 +94,8 @@ public abstract class CheckForUpdatesTask extends DefaultTask {
           .getDependencies().iterator().next()).getSelected().getModuleVersion();
       if (oldId != newId) {
         System.out.println(String.format(
-            "libs.%s = %s:%s %s -> %s",
-            name, newId.getGroup(), newId.getModule(), oldId.getVersion(), newId.getVersion()));
+            "libs.%s = %s %s -> %s",
+            name, newId.getModule(), oldId.getVersion(), newId.getVersion()));
       }
     }
   }

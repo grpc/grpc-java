@@ -37,15 +37,14 @@ dependencies {
     compileOnly libraries.javax.servlet.api,
             libraries.javax.annotation // java 9, 10 needs it
 
-    implementation project(':grpc-util'),
-            project(':grpc-core'),
+    implementation project(':grpc-core'),
             libraries.guava
 
     testImplementation libraries.javax.servlet.api
 
     threadingTestImplementation project(':grpc-servlet'),
         libraries.truth,
-	libraries.javax.servlet.api,
+        libraries.javax.servlet.api,
         libraries.lincheck
 
     itImplementation project(':grpc-servlet'),

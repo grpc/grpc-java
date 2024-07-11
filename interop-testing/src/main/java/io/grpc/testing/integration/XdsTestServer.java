@@ -17,30 +17,41 @@
 package io.grpc.testing.integration;
 
 import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.protobuf.ByteString;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
+import io.grpc.gcp.csm.observability.CsmObservability;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.xds.XdsServerBuilder;
 import io.grpc.xds.XdsServerCredentials;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -70,11 +81,14 @@ public final class XdsTestServer {
   private int port = 8080;
   private int maintenancePort = 8080;
   private boolean secureMode = false;
+  private boolean enableCsmObservability;
   private String serverId = "java_server";
   private HealthStatusManager health;
   private Server server;
   private Server maintenanceServer;
   private String host;
+  private Util.AddressType addressType = Util.AddressType.IPV4_IPV6;
+  private CsmObservability csmObservability;
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -101,7 +115,7 @@ public final class XdsTestServer {
     server.blockUntilShutdown();
   }
 
-  private void parseArgs(String[] args) {
+  void parseArgs(String[] args) {
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -127,8 +141,12 @@ public final class XdsTestServer {
         maintenancePort = Integer.valueOf(value);
       } else if ("secure_mode".equals(key)) {
         secureMode = Boolean.parseBoolean(value);
+      } else if ("enable_csm_observability".equals(key)) {
+        enableCsmObservability = Boolean.valueOf(value);
       } else if ("server_id".equals(key)) {
         serverId = value;
+      } else if ("address_type".equals(key)) {
+        addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -160,14 +178,32 @@ public final class XdsTestServer {
               + " port and maintenance_port should be different for secure mode."
               + "\n                      Default: "
               + s.secureMode
+              + "\n  --enable_csm_observability=BOOL  Enable CSM observability reporting. Default: "
+              + s.enableCsmObservability
               + "\n  --server_id=STRING  server ID for response."
               + "\n                      Default: "
-              + s.serverId);
+              + s.serverId
+              + "\n  --address_type=STRING  type of IP address to bind to (IPV4|IPV6|IPV4_IPV6)."
+              + "\n                      Default: "
+              + s.addressType);
       System.exit(1);
     }
   }
 
-  private void start() throws Exception {
+  @SuppressWarnings("AddressSelection")
+  void start() throws Exception {
+    if (enableCsmObservability) {
+      csmObservability = CsmObservability.newBuilder()
+          .sdk(AutoConfiguredOpenTelemetrySdk.builder()
+              .addPropertiesSupplier(() -> ImmutableMap.of(
+                  "otel.logs.exporter", "none",
+                  "otel.metrics.exporter", "prometheus",
+                  "otel.traces.exporter", "none"))
+              .build()
+              .getOpenTelemetrySdk())
+          .build();
+      csmObservability.registerGlobal();
+    }
     try {
       host = InetAddress.getLocalHost().getHostName();
     } catch (UnknownHostException e) {
@@ -176,6 +212,9 @@ public final class XdsTestServer {
     }
     health = new HealthStatusManager();
     if (secureMode) {
+      if (addressType != Util.AddressType.IPV4_IPV6) {
+        throw new IllegalArgumentException("Secure mode only supports IPV4_IPV6 address type");
+      }
       maintenanceServer =
           Grpc.newServerBuilderForPort(maintenancePort, InsecureServerCredentials.create())
               .addService(new XdsUpdateHealthServiceImpl(health))
@@ -193,8 +232,36 @@ public final class XdsTestServer {
               .build();
       server.start();
     } else {
+      ServerBuilder<?> serverBuilder;
+      ServerCredentials insecureServerCreds = InsecureServerCredentials.create();
+      switch (addressType) {
+        case IPV4_IPV6:
+          serverBuilder = Grpc.newServerBuilderForPort(port, insecureServerCreds);
+          break;
+        case IPV4:
+          SocketAddress v4Address = Util.getV4Address(port);
+          serverBuilder = NettyServerBuilder.forAddress(
+              new InetSocketAddress("127.0.0.1", port), insecureServerCreds);
+          if (v4Address != null) {
+            ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
+          }
+          break;
+        case IPV6:
+          List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
+          serverBuilder = NettyServerBuilder.forAddress(
+                  new InetSocketAddress("::1", port), insecureServerCreds);
+          for (SocketAddress address : v6Addresses) {
+            ((NettyServerBuilder)serverBuilder).addListenAddress(address);
+          }
+          break;
+        default:
+          throw new AssertionError("Unknown address type: " + addressType);
+      }
+
+      logger.info("Starting server on port " + port + " with address type " + addressType);
+
       server =
-          Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+          serverBuilder
               .addService(
                   ServerInterceptors.intercept(
                       new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
@@ -209,7 +276,7 @@ public final class XdsTestServer {
     health.setStatus("", ServingStatus.SERVING);
   }
 
-  private void stop() throws Exception {
+  void stop() throws Exception {
     server.shutdownNow();
     if (maintenanceServer != null) {
       maintenanceServer.shutdownNow();
@@ -219,6 +286,9 @@ public final class XdsTestServer {
     }
     if (maintenanceServer != null && !maintenanceServer.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for maintenanceServer shutdown");
+    }
+    if (csmObservability != null) {
+      csmObservability.close();
     }
   }
 
@@ -249,8 +319,13 @@ public final class XdsTestServer {
 
     @Override
     public void unaryCall(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
-      responseObserver.onNext(
-          SimpleResponse.newBuilder().setServerId(serverId).setHostname(host).build());
+      responseObserver.onNext(SimpleResponse.newBuilder()
+          .setServerId(serverId)
+          .setHostname(host)
+          .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[req.getResponseSize()]))
+            .build())
+          .build());
       responseObserver.onCompleted();
     }
   }

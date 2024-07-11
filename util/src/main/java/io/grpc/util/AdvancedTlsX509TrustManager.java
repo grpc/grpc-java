@@ -249,6 +249,20 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     return () -> future.cancel(false);
   }
 
+  /**
+   * Updates the trust certificates from a local file path.
+   *
+   * @param trustCertFile  the file on disk holding the trust certificates
+   */
+  public void updateTrustCredentialsFromFile(File trustCertFile) throws IOException,
+      GeneralSecurityException {
+    long updatedTime = readAndUpdate(trustCertFile, 0);
+    if (updatedTime == 0) {
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
+    }
+  }
+
   private class LoadFilePathExecution implements Runnable {
     File file;
     long currentTime;
@@ -266,20 +280,6 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
         log.log(Level.SEVERE, String.format("Failed refreshing trust CAs from file. Using "
             + "previous CAs (file lastModified = %s)", file.lastModified()), e);
       }
-    }
-  }
-
-  /**
-   * Updates the trust certificates from a local file path.
-   *
-   * @param trustCertFile  the file on disk holding the trust certificates
-   */
-  public void updateTrustCredentialsFromFile(File trustCertFile) throws IOException,
-      GeneralSecurityException {
-    long updatedTime = readAndUpdate(trustCertFile, 0);
-    if (updatedTime == 0) {
-      throw new GeneralSecurityException(
-          "Files were unmodified before their initial update. Probably a bug.");
     }
   }
 

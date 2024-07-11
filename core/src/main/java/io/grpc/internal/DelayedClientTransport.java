@@ -140,7 +140,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
           }
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
-        // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
+        // race with reprocess()), we will buffer the RPC.  Otherwise, will try with the new picker.
         synchronized (lock) {
           PickerState newerState = pickerState;
           if (state == newerState) {

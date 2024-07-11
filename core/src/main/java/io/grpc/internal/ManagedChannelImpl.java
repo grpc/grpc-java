@@ -616,7 +616,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           parsedDefaultServiceConfig.getError());
       this.defaultServiceConfig =
           (ManagedChannelServiceConfig) parsedDefaultServiceConfig.getConfig();
-      this.lastServiceConfig = this.defaultServiceConfig;
+      this.transportProvider.throttle = this.defaultServiceConfig.getRetryThrottling();
     } else {
       this.defaultServiceConfig = null;
     }
@@ -707,6 +707,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @VisibleForTesting
   InternalConfigSelector getConfigSelector() {
     return realChannel.configSelector.get();
+  }
+  
+  @VisibleForTesting
+  boolean hasThrottle() {
+    return this.transportProvider.throttle != null;
   }
 
   /**
@@ -2081,6 +2086,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void transportInUse(final boolean inUse) {
       inUseStateAggregator.updateObjectInUse(delayedTransport, inUse);
+      if (inUse) {
+        // It's possible to be in idle mode while inUseStateAggregator is in-use, if one of the
+        // subchannels is in use. But we should never be in idle mode when delayed transport is in
+        // use.
+        exitIdleMode();
+      }
     }
 
     @Override
