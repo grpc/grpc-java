@@ -76,7 +76,7 @@ fi
 
 # Save a copy of set_github_status.py (it may differ from the base commit)
 
-SET_GITHUB_STATUS="$TMPDIR/set_github_status.py"
+SET_GITHUB_STATUS="$(mktemp -d)/set_github_status.py"
 cp "$BASE_DIR/github/grpc-java/buildscripts/set_github_status.py" "$SET_GITHUB_STATUS"
 
 
