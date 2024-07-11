@@ -76,7 +76,7 @@ public class AdvancedTlsX509KeyManagerTest {
   }
 
   @Test
-  public void credentialSetting() throws Exception {
+  public void updateTrustCredentials_replacesIssuers() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
@@ -89,6 +89,10 @@ public class AdvancedTlsX509KeyManagerTest {
 
     serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File,1,
         TimeUnit.MINUTES, executor);
+    assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
+    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
+
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
   }
