@@ -407,7 +407,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
      * verifying certificates.
      *
      * @param  verifier SslSocketAndEnginePeerVerifier used for the current
-     * AdvancedTlsX509TrustManager
+     *         AdvancedTlsX509TrustManager
      * @return Builder with set verifier
      */
     public Builder setSslSocketAndEnginePeerVerifier(SslSocketAndEnginePeerVerifier verifier) {
