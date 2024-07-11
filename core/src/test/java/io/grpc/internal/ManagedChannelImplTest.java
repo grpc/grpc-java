@@ -1121,6 +1121,7 @@ public class ManagedChannelImplTest {
             .setServiceConfig(ConfigOrError.fromError(Status.UNAVAILABLE.withDescription("Resolution failed")))
             .build());
     Thread.sleep(1100);
+    assertThat(timer.getPendingTasks()).isEmpty();
     resolver.resolved();
     verifyNoMoreInteractions(mockLoadBalancer);
   }
