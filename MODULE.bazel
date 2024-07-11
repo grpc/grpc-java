@@ -70,7 +70,6 @@ grpc_repo_deps_ext = use_extension("@com_github_grpc_grpc//bazel:grpc_deps.bzl",
 use_repo(
     grpc_repo_deps_ext,
     "com_envoyproxy_protoc_gen_validate",
-    "com_github_cncf_udpa",
     "opencensus_proto",
 )
 

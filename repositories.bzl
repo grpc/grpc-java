@@ -87,16 +87,6 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 
 def grpc_java_repositories(bzlmod = False):
     """Imports dependencies for grpc-java."""
-    if not native.existing_rule("com_github_cncf_udpa"):
-        http_archive(
-            name = "com_github_cncf_udpa",
-            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
-            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
-            urls = [
-                "https://storage.googleapis.com/grpc-bazel-mirror/github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
-                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
-            ],
-        )
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
