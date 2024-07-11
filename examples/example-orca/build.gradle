@@ -18,7 +18,7 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
-def grpcVersion = '1.65.1-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.65.1' // CURRENT_GRPC_VERSION
 def protocVersion = '3.25.1'
 
 dependencies {
