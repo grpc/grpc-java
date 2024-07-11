@@ -15,4 +15,6 @@ export GRADLE_FLAGS="${GRADLE_FLAGS:-} --max-workers=2"
 . "$GRPC_JAVA_DIR"/buildscripts/kokoro/kokoro.sh
 trap spongify_logs EXIT
 
+export PATH="$(/usr/libexec/java_home -v"1.8.0"):${PATH}"
+
 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
