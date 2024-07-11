@@ -339,8 +339,8 @@ public class AdvancedTlsTest {
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
-    Closeable serverTrustShutdown = serverTrustManager.updateTrustCredentialsFromFile(caCertFile,
-        100, TimeUnit.MILLISECONDS, executor);
+    Closeable serverTrustShutdown = serverTrustManager.updateTrustCredentials(caCertFile,100,
+        TimeUnit.MILLISECONDS, executor);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverKeyManager).trustManager(serverTrustManager)
         .clientAuth(ClientAuth.REQUIRE).build();
@@ -353,8 +353,8 @@ public class AdvancedTlsTest {
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
-    Closeable clientTrustShutdown = clientTrustManager.updateTrustCredentialsFromFile(caCertFile,
-        100, TimeUnit.MILLISECONDS, executor);
+    Closeable clientTrustShutdown = clientTrustManager.updateTrustCredentials(caCertFile,100,
+        TimeUnit.MILLISECONDS, executor);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
     channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
@@ -385,7 +385,7 @@ public class AdvancedTlsTest {
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
-    serverTrustManager.updateTrustCredentialsFromFile(caCertFile);
+    serverTrustManager.updateTrustCredentials(caCertFile);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverKeyManager).trustManager(serverTrustManager)
         .clientAuth(ClientAuth.REQUIRE).build();
@@ -397,7 +397,7 @@ public class AdvancedTlsTest {
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
-    clientTrustManager.updateTrustCredentialsFromFile(caCertFile);
+    clientTrustManager.updateTrustCredentials(caCertFile);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
     channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)

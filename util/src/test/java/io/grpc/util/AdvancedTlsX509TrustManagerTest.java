@@ -72,17 +72,17 @@ public class AdvancedTlsX509TrustManagerTest {
   public void updateTrustCredentials_replacesIssuers() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-    trustManager.updateTrustCredentialsFromFile(serverCert0File);
+    trustManager.updateTrustCredentials(serverCert0File);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
 
     trustManager.updateTrustCredentials(caCert);
     assertArrayEquals(caCert, trustManager.getAcceptedIssuers());
 
-    trustManager.updateTrustCredentialsFromFile(serverCert0File, 1, TimeUnit.MINUTES,
+    trustManager.updateTrustCredentials(serverCert0File, 1, TimeUnit.MINUTES,
         executor);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
 
-    trustManager.updateTrustCredentialsFromFile(serverCert0File);
+    trustManager.updateTrustCredentials(serverCert0File);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
   }
 
@@ -101,23 +101,15 @@ public class AdvancedTlsX509TrustManagerTest {
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
 
     NullPointerException npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentials(null));
-    assertEquals("trustCerts", npe.getMessage());
-
-    npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(null));
+        .updateTrustCredentials(null, 1, null, null));
     assertEquals("trustCertFile", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(null, 1, null, null));
-    assertEquals("trustCertFile", npe.getMessage());
-
-    npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(caCertFile, 1, null, null));
+        .updateTrustCredentials(caCertFile, 1, null, null));
     assertEquals("unit", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(caCertFile, 1, TimeUnit.MINUTES, null));
+        .updateTrustCredentials(caCertFile, 1, TimeUnit.MINUTES, null));
     assertEquals("executor", npe.getMessage());
 
     Logger log = Logger.getLogger(AdvancedTlsX509TrustManager.class.getName());
@@ -125,8 +117,7 @@ public class AdvancedTlsX509TrustManagerTest {
     log.addHandler(handler);
     log.setUseParentHandlers(false);
     log.setLevel(Level.FINE);
-    trustManager.updateTrustCredentialsFromFile(serverCert0File, -1, TimeUnit.SECONDS,
-        executor);
+    trustManager.updateTrustCredentials(serverCert0File, -1, TimeUnit.SECONDS, executor);
     log.removeHandler(handler);
     try {
       LogRecord logRecord = Iterables.find(handler.getRecords(),

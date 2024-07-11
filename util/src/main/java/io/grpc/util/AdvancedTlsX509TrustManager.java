@@ -18,6 +18,8 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.InlineMe;
+import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -26,6 +28,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.ScheduledExecutorService;
@@ -233,7 +236,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * @param executor the executor service we use to read and update the credentials
    * @return an object that caller should close when the file refreshes are not needed
    */
-  public Closeable updateTrustCredentialsFromFile(File trustCertFile, long period, TimeUnit unit,
+  public Closeable updateTrustCredentials(File trustCertFile, long period, TimeUnit unit,
       ScheduledExecutorService executor) throws IOException, GeneralSecurityException {
     long updatedTime = readAndUpdate(trustCertFile, 0);
     if (updatedTime == 0) {
@@ -243,7 +246,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD_IN_MINUTES) {
       log.log(Level.FINE,
           "Provided refresh period of {0} {1} is too small. Default value of {2} minute(s) "
-          + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
+              + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
       period = MINIMUM_REFRESH_PERIOD_IN_MINUTES;
       unit = TimeUnit.MINUTES;
     }
@@ -254,17 +257,56 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   /**
+   * Schedules a {@code ScheduledExecutorService} to read trust certificates from a local file path
+   * periodically, and updates the cached trust certs if there is an update. You must close the
+   * returned Closeable before calling this method again or other update methods
+   * ({@link AdvancedTlsX509TrustManager#useSystemDefaultTrustCerts()},
+   * {@link AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])},
+   * {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File)}).
+   * Before scheduling the task, the method synchronously reads and updates trust certificates once.
+   * If the provided period is less than 1 minute, it is automatically adjusted to 1 minute.
+   *
+   * @param trustCertFile  the file on disk holding the trust certificates
+   * @param period the period between successive read-and-update executions
+   * @param unit the time unit of the initialDelay and period parameters
+   * @param executor the executor service we use to read and update the credentials
+   * @return an object that caller should close when the file refreshes are not needed
+   * @deprecated Use {@link #updateTrustCredentials(File, long ,TimeUnit, ScheduledExecutorService)}
+   */
+  @Deprecated
+  @InlineMe(replacement = "this.updateTrustCredentials(trustCertFile, period, unit, executor)")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
+  public Closeable updateTrustCredentialsFromFile(File trustCertFile, long period, TimeUnit unit,
+      ScheduledExecutorService executor) throws IOException, GeneralSecurityException {
+    return updateTrustCredentials(trustCertFile, period, unit, executor);
+  }
+
+  /**
    * Updates the trust certificates from a local file path.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    */
-  public void updateTrustCredentialsFromFile(File trustCertFile) throws IOException,
+  public void updateTrustCredentials(File trustCertFile) throws IOException,
       GeneralSecurityException {
     long updatedTime = readAndUpdate(trustCertFile, 0);
     if (updatedTime == 0) {
       throw new GeneralSecurityException(
           "Files were unmodified before their initial update. Probably a bug.");
     }
+  }
+
+  /**
+   * Updates the trust certificates from a local file path.
+   *
+   * @param trustCertFile  the file on disk holding the trust certificates
+   * @deprecated Use {@link #updateTrustCredentials(File)}
+   */
+  @Deprecated
+  @InlineMe(replacement = "this.updateTrustCredentials(trustCertFile)")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
+  public void updateTrustCredentialsFromFile(File trustCertFile) throws IOException,
+      GeneralSecurityException {
+    updateTrustCredentials(trustCertFile);
   }
 
   private class LoadFilePathExecution implements Runnable {
@@ -383,8 +425,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * Builds a new {@link AdvancedTlsX509TrustManager}. By default, no trust certificates are loaded
    * after the build. To load them, use one of the following methods: {@link
    * AdvancedTlsX509TrustManager#updateTrustCredentials(X509Certificate[])}, {@link
-   * AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile(File, long, TimeUnit,
-   * ScheduledExecutorService)}, {@link AdvancedTlsX509TrustManager#updateTrustCredentialsFromFile
+   * AdvancedTlsX509TrustManager#updateTrustCredentials(File, long, TimeUnit,
+   * ScheduledExecutorService)}, {@link AdvancedTlsX509TrustManager#updateTrustCredentials
    * (File, long, TimeUnit, ScheduledExecutorService)}.
    */
   public static final class Builder {
