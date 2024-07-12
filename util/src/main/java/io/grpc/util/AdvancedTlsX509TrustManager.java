@@ -28,7 +28,6 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.ScheduledExecutorService;
@@ -119,32 +118,13 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   /**
    * Uses the default trust certificates stored on user's local system.
    * After this is used, functions that will provide new credential
-   * data(e.g. updateTrustCredentials(), updateTrustCredentialsFromFile()) should not be called.
+   * data(e.g. updateTrustCredentials) should not be called.
    */
   public void useSystemDefaultTrustCerts() throws CertificateException, KeyStoreException,
       NoSuchAlgorithmException {
     // Passing a null value of KeyStore would make {@code TrustManagerFactory} attempt to use
     // system-default trust CA certs.
     this.delegateManager = createDelegateTrustManager(null);
-  }
-
-  /**
-   * Updates the current cached trust certificates as well as the key store.
-   *
-   * @param trustCerts the trust certificates that are going to be used
-   */
-  public void updateTrustCredentials(X509Certificate[] trustCerts) throws IOException,
-      GeneralSecurityException {
-    checkNotNull(trustCerts, "trustCerts");
-    KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-    keyStore.load(null, null);
-    int i = 1;
-    for (X509Certificate cert: trustCerts) {
-      String alias = Integer.toString(i);
-      keyStore.setCertificateEntry(alias, cert);
-      i++;
-    }
-    this.delegateManager = createDelegateTrustManager(keyStore);
   }
 
   private static X509ExtendedTrustManager createDelegateTrustManager(KeyStore keyStore)
@@ -221,6 +201,25 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   /**
+   * Updates the current cached trust certificates as well as the key store.
+   *
+   * @param trustCerts the trust certificates that are going to be used
+   */
+  public void updateTrustCredentials(X509Certificate[] trustCerts) throws IOException,
+      GeneralSecurityException {
+    checkNotNull(trustCerts, "trustCerts");
+    KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keyStore.load(null, null);
+    int i = 1;
+    for (X509Certificate cert: trustCerts) {
+      String alias = Integer.toString(i);
+      keyStore.setCertificateEntry(alias, cert);
+      i++;
+    }
+    this.delegateManager = createDelegateTrustManager(keyStore);
+  }
+
+  /**
    * Schedules a {@code ScheduledExecutorService} to read trust certificates from a local file path
    * periodically, and updates the cached trust certs if there is an update. You must close the
    * returned Closeable before calling this method again or other update methods
@@ -246,7 +245,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     if (checkNotNull(unit, "unit").toMinutes(period) < MINIMUM_REFRESH_PERIOD_IN_MINUTES) {
       log.log(Level.FINE,
           "Provided refresh period of {0} {1} is too small. Default value of {2} minute(s) "
-              + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
+          + "will be used.", new Object[] {period, unit.name(), MINIMUM_REFRESH_PERIOD_IN_MINUTES});
       period = MINIMUM_REFRESH_PERIOD_IN_MINUTES;
       unit = TimeUnit.MINUTES;
     }
