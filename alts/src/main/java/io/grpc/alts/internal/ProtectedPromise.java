@@ -78,7 +78,7 @@ public final class ProtectedPromise extends DefaultChannelPromise {
     if (!doneAllocating) {
       doneAllocating = true;
       if (successfulCount == expectedCount) {
-        trySuccessInternal(null);
+        trySuccessInternal();
         return super.setSuccess(null);
       }
     }
@@ -127,7 +127,7 @@ public final class ProtectedPromise extends DefaultChannelPromise {
     if (awaitingPromises()) {
       ++successfulCount;
       if (successfulCount == expectedCount && doneAllocating) {
-        trySuccessInternal(null);
+        trySuccessInternal();
         return super.trySuccess(null);
       }
       // TODO: We break the interface a bit here.
@@ -137,7 +137,7 @@ public final class ProtectedPromise extends DefaultChannelPromise {
     return false;
   }
 
-  private void trySuccessInternal(Void unused) {
+  private void trySuccessInternal() {
     for (int i = 0; i < unprotectedPromises.size(); ++i) {
       unprotectedPromises.get(i).trySuccess(null);
     }
