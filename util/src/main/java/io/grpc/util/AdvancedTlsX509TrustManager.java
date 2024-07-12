@@ -220,6 +220,20 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   /**
+   * Updates the trust certificates from a local file path.
+   *
+   * @param trustCertFile  the file on disk holding the trust certificates
+   */
+  public void updateTrustCredentials(File trustCertFile) throws IOException,
+      GeneralSecurityException {
+    long updatedTime = readAndUpdate(trustCertFile, 0);
+    if (updatedTime == 0) {
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
+    }
+  }
+
+  /**
    * Schedules a {@code ScheduledExecutorService} to read trust certificates from a local file path
    * periodically, and updates the cached trust certs if there is an update. You must close the
    * returned Closeable before calling this method again or other update methods
@@ -278,20 +292,6 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   public Closeable updateTrustCredentialsFromFile(File trustCertFile, long period, TimeUnit unit,
       ScheduledExecutorService executor) throws IOException, GeneralSecurityException {
     return updateTrustCredentials(trustCertFile, period, unit, executor);
-  }
-
-  /**
-   * Updates the trust certificates from a local file path.
-   *
-   * @param trustCertFile  the file on disk holding the trust certificates
-   */
-  public void updateTrustCredentials(File trustCertFile) throws IOException,
-      GeneralSecurityException {
-    long updatedTime = readAndUpdate(trustCertFile, 0);
-    if (updatedTime == 0) {
-      throw new GeneralSecurityException(
-          "Files were unmodified before their initial update. Probably a bug.");
-    }
   }
 
   /**
