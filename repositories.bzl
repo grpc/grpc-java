@@ -90,10 +90,10 @@ def grpc_java_repositories(bzlmod = False):
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
-            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
-            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
+            strip_prefix = "xds-555b57ec207be86f811fb0c04752db6f85e3d7e2",
+            sha256 = "0c8c4f0f67fed967b51049f7d5e2ca7a9bd433970a29c88e272c8665328172f5",
             urls = [
-                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
+                "https://github.com/cncf/xds/archive/555b57ec207be86f811fb0c04752db6f85e3d7e2.tar.gz",
             ],
         )
     if not bzlmod and not native.existing_rule("com_github_grpc_grpc"):
