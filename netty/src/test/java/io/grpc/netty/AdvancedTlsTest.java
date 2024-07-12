@@ -431,8 +431,8 @@ public class AdvancedTlsTest {
         .build();
     // We pass in a key as the trust certificates to intentionally create an exception.
     assertThrows(GeneralSecurityException.class,
-        () -> trustManager.updateTrustCredentialsFromFile(serverKey0File,
-          100, TimeUnit.MILLISECONDS, executor));
+        () -> trustManager.updateTrustCredentials(serverKey0File,100,
+            TimeUnit.MILLISECONDS, executor));
   }
 
   @Test
