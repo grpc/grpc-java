@@ -74,23 +74,18 @@ if [[ -z "${KOKORO_GITHUB_PULL_REQUEST_COMMIT:-}" ]]; then
     exit 0
 fi
 
-# Save a copy of set_github_status.py (it may differ from the base commit)
-
-SET_GITHUB_STATUS="$TMPDIR/set_github_status.py"
-cp "$BASE_DIR/github/grpc-java/buildscripts/set_github_status.py" "$SET_GITHUB_STATUS"
-
-
 # Collect APK size and dex count stats for the helloworld example
-sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
-
 HELLO_WORLD_OUTPUT_DIR="$BASE_DIR/github/grpc-java/examples/android/helloworld/app/build/outputs"
 
+# Install dependencies of apkanalyzer
+"${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;35.0.0"
+
 read -r ignored new_dex_count < \
-  <("${ANDROID_HOME}/tools/bin/apkanalyzer" dex references \
+  <("${ANDROID_HOME}/cmdline-tools/latest/bin/apkanalyzer" dex references \
   "$HELLO_WORLD_OUTPUT_DIR/apk/release/app-release-unsigned.apk")
 
 set +x
-all_new_methods=`"${ANDROID_HOME}/tools/bin/apkanalyzer" dex packages \
+all_new_methods=`"${ANDROID_HOME}/cmdline-tools/latest/bin/apkanalyzer" dex packages \
   --proguard-mapping "$HELLO_WORLD_OUTPUT_DIR/mapping/release/mapping.txt" \
   "$HELLO_WORLD_OUTPUT_DIR/apk/release/app-release-unsigned.apk" | grep ^M | cut -f4 | sort`
 set -x
@@ -99,8 +94,6 @@ new_apk_size="$(stat --printf=%s $HELLO_WORLD_OUTPUT_DIR/apk/release/app-release
 
 
 # Get the APK size and dex count stats using the pull request base commit
-sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
-
 cd $BASE_DIR/github/grpc-java
 ./gradlew clean
 git checkout HEAD^
@@ -109,12 +102,11 @@ git checkout HEAD^
 cd examples/android/helloworld/
 ../../gradlew build $GRADLE_FLAGS
 
-sudo update-java-alternatives --set java-1.8.0-openjdk-amd64
 read -r ignored old_dex_count < \
-  <("${ANDROID_HOME}/tools/bin/apkanalyzer" dex references app/build/outputs/apk/release/app-release-unsigned.apk)
+  <("${ANDROID_HOME}/cmdline-tools/latest/bin/apkanalyzer" dex references app/build/outputs/apk/release/app-release-unsigned.apk)
 
 set +x
-all_old_methods=`"${ANDROID_HOME}/tools/bin/apkanalyzer" dex packages --proguard-mapping app/build/outputs/mapping/release/mapping.txt app/build/outputs/apk/release/app-release-unsigned.apk | grep ^M | cut -f4 | sort`
+all_old_methods=`"${ANDROID_HOME}/cmdline-tools/latest/bin/apkanalyzer" dex packages --proguard-mapping app/build/outputs/mapping/release/mapping.txt app/build/outputs/apk/release/app-release-unsigned.apk | grep ^M | cut -f4 | sort`
 set -x
 
 old_apk_size="$(stat --printf=%s app/build/outputs/apk/release/app-release-unsigned.apk)"
@@ -136,14 +128,14 @@ fi
 
 gsutil cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
 
-"$SET_GITHUB_STATUS" \
-  --sha1 "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" \
-  --state success \
-  --description "New DEX reference count: $(printf "%'d" "$new_dex_count") (delta: $(printf "%'d" "$dex_count_delta"))" \
-  --context android/dex_diff --oauth_file ~/oauth_token.txt
+desc="New DEX reference count: $(printf "%'d" "$new_dex_count") (delta: $(printf "%'d" "$dex_count_delta"))"
+curl -f -s -X POST -H "Content-Type: application/json" \
+    -H "Authorization: token $(cat ~/oauth_token.txt | tr -d '\n')" \
+    -d '{"state": "success", "context": "android/dex_diff", "description": "'"${desc}"'"}' \
+    "https://api.github.com/repos/grpc/grpc-java/statuses/${KOKORO_GITHUB_PULL_REQUEST_COMMIT}"
 
-"$SET_GITHUB_STATUS" \
-  --sha1 "$KOKORO_GITHUB_PULL_REQUEST_COMMIT" \
-  --state success \
-  --description "New APK size in bytes: $(printf "%'d" "$new_apk_size") (delta: $(printf "%'d" "$apk_size_delta"))" \
-  --context android/apk_diff --oauth_file ~/oauth_token.txt
+desc="New APK size in bytes: $(printf "%'d" "$new_apk_size") (delta: $(printf "%'d" "$apk_size_delta"))"
+curl -f -s -X POST -H "Content-Type: application/json" \
+    -H "Authorization: token $(cat ~/oauth_token.txt | tr -d '\n')" \
+    -d '{"state": "success", "context": "android/apk_diff", "description": "'"${desc}"'"}' \
+    "https://api.github.com/repos/grpc/grpc-java/statuses/${KOKORO_GITHUB_PULL_REQUEST_COMMIT}"
