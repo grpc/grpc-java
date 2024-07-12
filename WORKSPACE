@@ -19,6 +19,10 @@ load("@rules_jvm_external//:defs.bzl", "maven_install")
 load("//:repositories.bzl", "IO_GRPC_GRPC_JAVA_ARTIFACTS")
 load("//:repositories.bzl", "IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS")
 load("//:repositories.bzl", "grpc_java_repositories")
+load("@com_github_cncf_xds//bazel:envoy_http_archive.bzl", "xds_http_archive")
+load("@com_github_cncf_xds//bazel:repository_locations.bzl", "REPOSITORY_LOCATIONS")
+
+xds_http_archive(name = "dev_cel", locations = REPOSITORY_LOCATIONS)
 
 grpc_java_repositories()
 
