@@ -339,8 +339,8 @@ public class AdvancedTlsTest {
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
-    Closeable serverTrustShutdown = serverTrustManager.updateTrustCredentials(caCertFile,100,
-        TimeUnit.MILLISECONDS, executor);
+    Closeable serverTrustShutdown = serverTrustManager.updateTrustCredentials(caCertFile,
+        100, TimeUnit.MILLISECONDS, executor);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverKeyManager).trustManager(serverTrustManager)
         .clientAuth(ClientAuth.REQUIRE).build();
@@ -349,12 +349,12 @@ public class AdvancedTlsTest {
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentials(clientCert0File,
-        clientKey0File,100, TimeUnit.MILLISECONDS, executor);
+        clientKey0File, 100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
-    Closeable clientTrustShutdown = clientTrustManager.updateTrustCredentials(caCertFile,100,
-        TimeUnit.MILLISECONDS, executor);
+    Closeable clientTrustShutdown = clientTrustManager.updateTrustCredentials(caCertFile,
+        100, TimeUnit.MILLISECONDS, executor);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
     channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
@@ -431,8 +431,8 @@ public class AdvancedTlsTest {
         .build();
     // We pass in a key as the trust certificates to intentionally create an exception.
     assertThrows(GeneralSecurityException.class,
-        () -> trustManager.updateTrustCredentials(serverKey0File,100,
-            TimeUnit.MILLISECONDS, executor));
+        () -> trustManager.updateTrustCredentials(serverKey0File, 100, TimeUnit.MILLISECONDS,
+            executor));
   }
 
   @Test
