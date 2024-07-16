@@ -20,11 +20,14 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
+import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
@@ -40,6 +43,7 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import javax.net.ssl.SSLSocket;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -128,6 +132,18 @@ public class AdvancedTlsX509TrustManagerTest {
     }
   }
 
+  @Test
+  public void clientTrustedWithSocketTest() throws Exception {
+    AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION).build();
+    trustManager.updateTrustCredentials(caCert);
+    SSLSocket sslSocket = mock(SSLSocket.class);
+    when(sslSocket.isConnected()).thenReturn(true);
+    when(sslSocket.getHandshakeSession()).thenReturn(null);
+    CertificateException ce = assertThrows(CertificateException.class, () -> trustManager
+        .checkClientTrusted(serverCert0, "RSA", sslSocket));
+    assertEquals("No handshake session", ce.getMessage());
+  }
 
   private static class TestHandler extends Handler {
     private final List<LogRecord> records = new ArrayList<>();
