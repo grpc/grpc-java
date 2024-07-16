@@ -116,7 +116,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param key  the private key that is going to be used
    */
   public void updateIdentityCredentials(X509Certificate[] certs, PrivateKey key) {
-    this.keyInfo = new KeyInfo(checkNotNull(key, "key"), checkNotNull(certs, "certs"));
+    this.keyInfo = new KeyInfo(checkNotNull(certs, "certs"), checkNotNull(key, "key"));
   }
 
   /**
@@ -216,26 +216,26 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
 
   private static class KeyInfo {
     // The private key and the cert chain we will use to send to peers to prove our identity.
-    final PrivateKey key;
     final X509Certificate[] certs;
+    final PrivateKey key;
 
-    public KeyInfo(PrivateKey key, X509Certificate[] certs) {
-      this.key = key;
+    public KeyInfo(X509Certificate[] certs, PrivateKey key) {
       this.certs = certs;
+      this.key = key;
     }
   }
 
   private class LoadFilePathExecution implements Runnable {
     File keyFile;
     File certFile;
-    long currentKeyTime;
     long currentCertTime;
+    long currentKeyTime;
 
     public LoadFilePathExecution(File certFile, File keyFile) {
       this.certFile = certFile;
       this.keyFile = keyFile;
-      this.currentKeyTime = 0;
       this.currentCertTime = 0;
+      this.currentKeyTime = 0;
     }
 
     @Override
@@ -244,11 +244,11 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
         UpdateResult newResult = readAndUpdate(this.certFile, this.keyFile, this.currentKeyTime,
             this.currentCertTime);
         if (newResult.success) {
-          this.currentKeyTime = newResult.keyTime;
           this.currentCertTime = newResult.certTime;
+          this.currentKeyTime = newResult.keyTime;
         }
       } catch (IOException | GeneralSecurityException e) {
-        log.log(Level.SEVERE, String.format("Failed refreshing private key and certificate"
+        log.log(Level.SEVERE, String.format("Failed refreshing certificate and private key"
                 + " chain from files. Using previous ones (certFile lastModified = %s, keyFile "
                 + "lastModified = %s)", certFile.lastModified(), keyFile.lastModified()), e);
       }
@@ -257,13 +257,13 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
 
   private static class UpdateResult {
     boolean success;
-    long keyTime;
     long certTime;
+    long keyTime;
 
-    public UpdateResult(boolean success, long keyTime, long certTime) {
+    public UpdateResult(boolean success, long certTime, long keyTime) {
       this.success = success;
-      this.keyTime = keyTime;
       this.certTime = certTime;
+      this.keyTime = keyTime;
     }
   }
 

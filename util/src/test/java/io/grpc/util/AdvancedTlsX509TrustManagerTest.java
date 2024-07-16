@@ -20,11 +20,14 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
+import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
@@ -40,6 +43,7 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import javax.net.ssl.SSLSocket;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -72,17 +76,17 @@ public class AdvancedTlsX509TrustManagerTest {
   public void updateTrustCredentials_replacesIssuers() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-    trustManager.updateTrustCredentialsFromFile(serverCert0File);
+    trustManager.updateTrustCredentials(serverCert0File);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
 
     trustManager.updateTrustCredentials(caCert);
     assertArrayEquals(caCert, trustManager.getAcceptedIssuers());
 
-    trustManager.updateTrustCredentialsFromFile(serverCert0File, 1, TimeUnit.MINUTES,
+    trustManager.updateTrustCredentials(serverCert0File, 1, TimeUnit.MINUTES,
         executor);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
 
-    trustManager.updateTrustCredentialsFromFile(serverCert0File);
+    trustManager.updateTrustCredentials(serverCert0File);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
   }
 
@@ -101,23 +105,15 @@ public class AdvancedTlsX509TrustManagerTest {
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
 
     NullPointerException npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentials(null));
-    assertEquals("trustCerts", npe.getMessage());
-
-    npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(null));
+        .updateTrustCredentials(null, 1, null, null));
     assertEquals("trustCertFile", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(null, 1, null, null));
-    assertEquals("trustCertFile", npe.getMessage());
-
-    npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(caCertFile, 1, null, null));
+        .updateTrustCredentials(caCertFile, 1, null, null));
     assertEquals("unit", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> trustManager
-        .updateTrustCredentialsFromFile(caCertFile, 1, TimeUnit.MINUTES, null));
+        .updateTrustCredentials(caCertFile, 1, TimeUnit.MINUTES, null));
     assertEquals("executor", npe.getMessage());
 
     Logger log = Logger.getLogger(AdvancedTlsX509TrustManager.class.getName());
@@ -125,8 +121,7 @@ public class AdvancedTlsX509TrustManagerTest {
     log.addHandler(handler);
     log.setUseParentHandlers(false);
     log.setLevel(Level.FINE);
-    trustManager.updateTrustCredentialsFromFile(serverCert0File, -1, TimeUnit.SECONDS,
-        executor);
+    trustManager.updateTrustCredentials(serverCert0File, -1, TimeUnit.SECONDS, executor);
     log.removeHandler(handler);
     try {
       LogRecord logRecord = Iterables.find(handler.getRecords(),
@@ -137,6 +132,18 @@ public class AdvancedTlsX509TrustManagerTest {
     }
   }
 
+  @Test
+  public void clientTrustedWithSocketTest() throws Exception {
+    AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION).build();
+    trustManager.updateTrustCredentials(caCert);
+    SSLSocket sslSocket = mock(SSLSocket.class);
+    when(sslSocket.isConnected()).thenReturn(true);
+    when(sslSocket.getHandshakeSession()).thenReturn(null);
+    CertificateException ce = assertThrows(CertificateException.class, () -> trustManager
+        .checkClientTrusted(serverCert0, "RSA", sslSocket));
+    assertEquals("No handshake session", ce.getMessage());
+  }
 
   private static class TestHandler extends Handler {
     private final List<LogRecord> records = new ArrayList<>();
