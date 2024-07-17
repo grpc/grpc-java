@@ -208,27 +208,40 @@ public class ControlPlaneRule extends TestWatcher {
   }
 
   void setRdsConfig(RouteConfiguration routeConfiguration) {
-    getService().setXdsConfig(ADS_TYPE_URL_RDS, ImmutableMap.of(RDS_NAME, routeConfiguration));
+    setRdsConfig(RDS_NAME, routeConfiguration);
+  }
+
+  public void setRdsConfig(String rdsName, RouteConfiguration routeConfiguration) {
+    getService().setXdsConfig(ADS_TYPE_URL_RDS, ImmutableMap.of(rdsName, routeConfiguration));
   }
 
   void setCdsConfig(Cluster cluster) {
+    setCdsConfig(CLUSTER_NAME, cluster);
+  }
+
+    void setCdsConfig(String clusterName, Cluster cluster) {
     getService().setXdsConfig(ADS_TYPE_URL_CDS,
-        ImmutableMap.<String, Message>of(CLUSTER_NAME, cluster));
+        ImmutableMap.<String, Message>of(clusterName, cluster));
   }
 
   void setEdsConfig(ClusterLoadAssignment clusterLoadAssignment) {
+    setEdsConfig(EDS_NAME, clusterLoadAssignment);
+  }
+
+  void setEdsConfig(String edsName, ClusterLoadAssignment clusterLoadAssignment) {
     getService().setXdsConfig(ADS_TYPE_URL_EDS,
-        ImmutableMap.<String, Message>of(EDS_NAME, clusterLoadAssignment));
+        ImmutableMap.<String, Message>of(edsName, clusterLoadAssignment));
   }
 
   /**
    * Builds a new default RDS configuration.
    */
   static RouteConfiguration buildRouteConfiguration(String authority) {
-    return buildRouteConfiguration(authority, RDS_NAME);
+    return buildRouteConfiguration(authority, RDS_NAME, CLUSTER_NAME);
   }
 
-  static RouteConfiguration buildRouteConfiguration(String authority, String rdsName) {
+  static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
+                                                    String clusterName) {
     VirtualHost.Builder vhBuilder = VirtualHost.newBuilder()
         .setName(rdsName)
         .addDomains(authority)
@@ -237,24 +250,25 @@ public class ControlPlaneRule extends TestWatcher {
                 .setMatch(
                     RouteMatch.newBuilder().setPrefix("/").build())
                 .setRoute(
-                    RouteAction.newBuilder().setCluster(CLUSTER_NAME).build()).build());
-    if (!RDS_NAME.equals(rdsName)) {
-      vhBuilder.setName(rdsName);
-    }
+                    RouteAction.newBuilder().setCluster(clusterName).build()).build());
     VirtualHost virtualHost = vhBuilder.build();
-    return RouteConfiguration.newBuilder().setName(RDS_NAME).addVirtualHosts(virtualHost).build();
+    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
   }
 
   /**
    * Builds a new default CDS configuration.
    */
   static Cluster buildCluster() {
+    return buildCluster(CLUSTER_NAME, EDS_NAME);
+  }
+
+  static Cluster buildCluster(String clusterName, String edsName) {
     return Cluster.newBuilder()
-        .setName(CLUSTER_NAME)
+        .setName(clusterName)
         .setType(Cluster.DiscoveryType.EDS)
         .setEdsClusterConfig(
             Cluster.EdsClusterConfig.newBuilder()
-                .setServiceName(EDS_NAME)
+                .setServiceName(edsName)
                 .setEdsConfig(
                     ConfigSource.newBuilder()
                         .setAds(AggregatedConfigSource.newBuilder().build())
@@ -268,6 +282,11 @@ public class ControlPlaneRule extends TestWatcher {
    * Builds a new default EDS configuration.
    */
   static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, int port) {
+    return buildClusterLoadAssignment(hostName, port, EDS_NAME);
+  }
+
+  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, int port,
+                                                          String edsName) {
     Address address = Address.newBuilder()
         .setSocketAddress(
             SocketAddress.newBuilder().setAddress(hostName).setPortValue(port).build()).build();
@@ -281,7 +300,7 @@ public class ControlPlaneRule extends TestWatcher {
                 .setHealthStatus(HealthStatus.HEALTHY)
                 .build()).build();
     return ClusterLoadAssignment.newBuilder()
-        .setClusterName(EDS_NAME)
+        .setClusterName(edsName)
         .addEndpoints(endpoints)
         .build();
   }
@@ -295,6 +314,9 @@ public class ControlPlaneRule extends TestWatcher {
 
 
   static Listener buildClientListener(String name, String identifier) {
+    return buildClientListener(name, identifier, RDS_NAME);
+  }
+  static Listener buildClientListener(String name, String identifier, String rdsName) {
     HttpFilter httpFilter = HttpFilter.newBuilder()
         .setName(identifier)
         .setTypedConfig(Any.pack(Router.newBuilder().build()))
@@ -305,7 +327,7 @@ public class ControlPlaneRule extends TestWatcher {
             .HttpConnectionManager.newBuilder()
             .setRds(
                 Rds.newBuilder()
-                    .setRouteConfigName(RDS_NAME)
+                    .setRouteConfigName(rdsName)
                     .setConfigSource(
                         ConfigSource.newBuilder()
                             .setAds(AggregatedConfigSource.getDefaultInstance())))
@@ -361,4 +383,5 @@ public class ControlPlaneRule extends TestWatcher {
         .addFilterChains(filterChain)
         .build();
   }
+
 }

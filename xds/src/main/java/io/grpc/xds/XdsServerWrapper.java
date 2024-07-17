@@ -77,7 +77,7 @@ import javax.annotation.Nullable;
 
 final class XdsServerWrapper extends Server {
   private static final Logger logger = Logger.getLogger(XdsServerWrapper.class.getName());
-  public static final String SELF_TARGET = "SELF";
+  private static final String SELF_TARGET = "SELF";
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {

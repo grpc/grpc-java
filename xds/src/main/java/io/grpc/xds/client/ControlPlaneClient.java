@@ -201,12 +201,16 @@ final class ControlPlaneClient {
    */
   // Must be synchronized.
   boolean isInBackoff() {
-    return rpcRetryTimer != null || (hasBeenActive && !isReady());
+    return rpcRetryTimer != null || (hasBeenActive && !xdsTransport.isConnected());
   }
 
   // Must be synchronized.
   boolean isReady() {
     return adsStream != null && adsStream.call != null && adsStream.call.isReady();
+  }
+
+  boolean isConnected() {
+    return xdsTransport.isConnected();
   }
 
   /**
@@ -255,11 +259,7 @@ final class ControlPlaneClient {
         new HashSet<>(resourceStore.getSubscribedResourceTypesWithTypeUrl().values());
 
     for (XdsResourceType<?> type : subscribedResourceTypes) {
-      Collection<String> resources =
-          resourceStore.getSubscribedResources(serverInfo, type, authority);
-      if (resources != null && !resources.isEmpty()) {
-        adsStream.sendDiscoveryRequest(type, resources);
-      }
+      adjustResourceSubscription(type, authority);
     }
   }
 
@@ -278,7 +278,6 @@ final class ControlPlaneClient {
       }
 
       startRpcStream();
-      xdsResponseHandler.handleStreamRestarted(serverInfo);
 
       // handling CPC management is triggered in readyHandler
     }
@@ -338,7 +337,9 @@ final class ControlPlaneClient {
         builder.setErrorDetail(error);
       }
       DiscoveryRequest request = builder.build();
-      resourceStore.assignResourcesToOwner(type, resources, ControlPlaneClient.this);
+      if (isConnected()) {
+        resourceStore.assignResourcesToOwner(type, resources, ControlPlaneClient.this);
+      }
       call.sendMessage(request);
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {
         logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", messagePrinter.print(request));
