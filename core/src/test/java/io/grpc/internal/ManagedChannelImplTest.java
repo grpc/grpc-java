@@ -4036,11 +4036,9 @@ public class ManagedChannelImplTest {
         ImmutableList.of(new EquivalentAddressGroup(new SocketAddress() {}));
     final class FakeNameResolver extends NameResolver {
       Listener2 listener;
-      private final ManagedChannelImpl managedChannel;
       private final SynchronizationContext syncContext;
 
-      FakeNameResolver(ManagedChannelImpl managedChannel, Args args) {
-        this.managedChannel = managedChannel;
+      FakeNameResolver(Args args) {
         this.syncContext = args.getSynchronizationContext();
       }
 
@@ -4074,7 +4072,7 @@ public class ManagedChannelImplTest {
       @Override
       public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
         syncContext = args.getSynchronizationContext();
-        return (resolver = new FakeNameResolver(managedChannel, args));}
+        return (resolver = new FakeNameResolver(args));}
 
       @Override
       public String getDefaultScheme() {
