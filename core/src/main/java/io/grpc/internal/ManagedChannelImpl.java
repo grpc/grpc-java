@@ -1769,7 +1769,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           channelLogger.log(
               ChannelLogLevel.INFO,
               "Service config changed{0}",
-              effectiveServiceConfig == EMPTY_SERVICE_CONFIG ? " to empty" : "");
+              effectiveServiceConfig.equals(EMPTY_SERVICE_CONFIG) ? " to empty" : "");
           lastServiceConfig = effectiveServiceConfig;
           transportProvider.throttle = effectiveServiceConfig.getRetryThrottling();
         }
