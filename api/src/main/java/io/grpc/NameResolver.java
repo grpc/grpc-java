@@ -218,7 +218,7 @@ public abstract class NameResolver {
     @Override
     @Deprecated
     @InlineMe(
-        replacement = "this.onResult(ResolutionResult.newBuilder().setAddresses(servers)"
+        replacement = "this.onResult2(ResolutionResult.newBuilder().setAddresses(servers)"
             + ".setAttributes(attributes).build())",
         imports = "io.grpc.NameResolver.ResolutionResult")
     public final void onAddresses(
@@ -236,6 +236,7 @@ public abstract class NameResolver {
      * @since 1.21.0
      * @deprecated Will be superseded by onResult2.
      */
+    @Deprecated
     public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
@@ -252,6 +253,7 @@ public abstract class NameResolver {
      * Handles updates on resolved addresses and attributes.
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     * @since 1.66
      */
     public Status onResult2(ResolutionResult resolutionResult) {
       throw new UnsupportedOperationException("Not implemented.");
