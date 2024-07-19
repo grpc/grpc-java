@@ -218,7 +218,7 @@ public abstract class NameResolver {
     @Override
     @Deprecated
     @InlineMe(
-        replacement = "this.onResult2(ResolutionResult.newBuilder().setAddresses(servers)"
+        replacement = "this.onResult(ResolutionResult.newBuilder().setAddresses(servers)"
             + ".setAttributes(attributes).build())",
         imports = "io.grpc.NameResolver.ResolutionResult")
     public final void onAddresses(
@@ -234,9 +234,7 @@ public abstract class NameResolver {
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
-     * @deprecated Will be superseded by onResult2.
      */
-    @Deprecated
     public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
