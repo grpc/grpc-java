@@ -101,7 +101,8 @@ public class RetryingNameResolverTest {
     retryingNameResolver.start(mockListener);
     verify(mockNameResolver).start(listenerCaptor.capture());
 
-    assertThat(listenerCaptor.getValue().onResult2(ResolutionResult.newBuilder().build())).isEqualTo(Status.OK);
+    assertThat(listenerCaptor.getValue().onResult2(ResolutionResult.newBuilder().build()))
+        .isEqualTo(Status.OK);
 
     verify(mockRetryScheduler).reset();
   }
@@ -131,7 +132,8 @@ public class RetryingNameResolverTest {
     retryingNameResolver.start(mockListener);
     verify(mockNameResolver).start(listenerCaptor.capture());
 
-    assertThat(listenerCaptor.getValue().onResult2(ResolutionResult.newBuilder().build())).isEqualTo(Status.UNAVAILABLE);
+    assertThat(listenerCaptor.getValue().onResult2(ResolutionResult.newBuilder().build()))
+        .isEqualTo(Status.UNAVAILABLE);
 
     verify(mockRetryScheduler).schedule(isA(Runnable.class));
   }
