@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static java.lang.Math.min;
 
 import com.google.common.io.ByteStreams;
+import io.grpc.ByteBufferBacked;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Drainable;
@@ -282,17 +283,12 @@ public class MessageFramer implements Framer {
     }
   }
 
-  private void writeRaw(byte[] b, int off, int len) {
+  // package-private to avoid synthetic access from OutputStreamAdapter
+  void writeRaw(byte[] b, int off, int len) {
     while (len > 0) {
-      if (buffer != null && buffer.writableBytes() == 0) {
-        commitToSink(false, false);
-      }
-      if (buffer == null) {
-        // Request a buffer allocation using the message length as a hint.
-        buffer = bufferAllocator.allocate(len);
-      }
-      int toWrite = min(len, buffer.writableBytes());
-      buffer.write(b, off, toWrite);
+      WritableBuffer buf = getWritableBuffer(len);
+      int toWrite = min(len, buf.writableBytes());
+      buf.write(b, off, toWrite);
       off += toWrite;
       len -= toWrite;
     }
@@ -306,6 +302,17 @@ public class MessageFramer implements Framer {
     if (buffer != null && buffer.readableBytes() > 0) {
       commitToSink(false, true);
     }
+  }
+
+  WritableBuffer getWritableBuffer(int len) {
+    if (buffer != null && buffer.writableBytes() == 0) {
+      commitToSink(false, false);
+    }
+    if (buffer == null) {
+      // Request a buffer allocation using the message length as a hint.
+      buffer = bufferAllocator.allocate(len);
+    }
+    return buffer;
   }
 
   /**
@@ -365,7 +372,7 @@ public class MessageFramer implements Framer {
   }
 
   /** OutputStream whose write()s are passed to the framer. */
-  private class OutputStreamAdapter extends OutputStream {
+  private class OutputStreamAdapter extends OutputStream implements ByteBufferBacked {
     /**
      * This is slow, don't call it.  If you care about write overhead, use a BufferedOutputStream.
      * Better yet, you can use your own single byte buffer and call
@@ -381,13 +388,29 @@ public class MessageFramer implements Framer {
     public void write(byte[] b, int off, int len) {
       writeRaw(b, off, len);
     }
+
+    @Override
+    public ByteBuffer getWritableBuffer(int size) {
+      if (size > 0) {
+        WritableBuffer buf = MessageFramer.this.getWritableBuffer(size);
+        if (buf instanceof ByteBufferBacked) {
+          return ((ByteBufferBacked) buf).getWritableBuffer(size);
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public void bufferBytesWritten(int size) {
+      MessageFramer.bufferBytesWritten(buffer, size);
+    }
   }
 
   /**
    * Produce a collection of {@link WritableBuffer} instances from the data written to an
    * {@link OutputStream}.
    */
-  private final class BufferChainOutputStream extends OutputStream {
+  private final class BufferChainOutputStream extends OutputStream implements ByteBufferBacked {
     private final List<WritableBuffer> bufferList = new ArrayList<>();
     private WritableBuffer current;
 
@@ -408,7 +431,7 @@ public class MessageFramer implements Framer {
 
     @Override
     public void write(byte[] b, int off, int len) {
-      if (current == null) {
+      if (current == null && len > 0) {
         // Request len bytes initially from the allocator, it may give us more.
         current = bufferAllocator.allocate(len);
         bufferList.add(current);
@@ -436,5 +459,35 @@ public class MessageFramer implements Framer {
       }
       return readable;
     }
+
+    @Override
+    public ByteBuffer getWritableBuffer(int size) {
+      if (size > 0) {
+        if (current == null || current.writableBytes() == 0) {
+          bufferList.add(current = bufferAllocator.allocate(size));
+        }
+        if (current instanceof ByteBufferBacked) {
+          return ((ByteBufferBacked) current).getWritableBuffer(size);
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public void bufferBytesWritten(int size) {
+      MessageFramer.bufferBytesWritten(current, size);
+    }
+  }
+
+  static void bufferBytesWritten(WritableBuffer buffer, int size) {
+    try {
+      ((ByteBufferBacked) buffer).bufferBytesWritten(size);
+      return;
+    } catch (ClassCastException cce) {
+      // fall-through
+    } catch (NullPointerException npe) {
+      // fall-through
+    }
+    throw new IllegalStateException();
   }
 }
