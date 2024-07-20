@@ -83,8 +83,8 @@ public final class SecurityPolicies {
   }
 
   /**
-   * Creates a {@link SecurityPolicy} which checks if the package signature
-   * matches {@code requiredSignature}.
+   * Creates a {@link SecurityPolicy} which checks if the package signature matches {@code
+   * requiredSignature}.
    *
    * @param packageName the package name of the allowed package.
    * @param requiredSignature the allowed signature of the allowed package.
@@ -93,8 +93,7 @@ public final class SecurityPolicies {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy hasSignature(
       PackageManager packageManager, String packageName, Signature requiredSignature) {
-    return oneOfSignatures(
-        packageManager, packageName, ImmutableList.of(requiredSignature));
+    return oneOfSignatures(packageManager, packageName, ImmutableList.of(requiredSignature));
   }
 
   /**
@@ -114,8 +113,8 @@ public final class SecurityPolicies {
   }
 
   /**
-   * Creates a {@link SecurityPolicy} which checks if the package signature
-   * matches any of {@code requiredSignatures}.
+   * Creates a {@link SecurityPolicy} which checks if the package signature matches any of {@code
+   * requiredSignatures}.
    *
    * @param packageName the package name of the allowed package.
    * @param requiredSignatures the allowed signatures of the allowed package.
@@ -124,14 +123,11 @@ public final class SecurityPolicies {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
   public static SecurityPolicy oneOfSignatures(
-      PackageManager packageManager,
-      String packageName,
-      Collection<Signature> requiredSignatures) {
+      PackageManager packageManager, String packageName, Collection<Signature> requiredSignatures) {
     Preconditions.checkNotNull(packageManager, "packageManager");
     Preconditions.checkNotNull(packageName, "packageName");
     Preconditions.checkNotNull(requiredSignatures, "requiredSignatures");
-    Preconditions.checkArgument(!requiredSignatures.isEmpty(),
-        "requiredSignatures");
+    Preconditions.checkArgument(!requiredSignatures.isEmpty(), "requiredSignatures");
     ImmutableList<Signature> requiredSignaturesImmutable = ImmutableList.copyOf(requiredSignatures);
 
     for (Signature requiredSignature : requiredSignaturesImmutable) {
@@ -141,8 +137,7 @@ public final class SecurityPolicies {
     return new SecurityPolicy() {
       @Override
       public Status checkAuthorization(int uid) {
-        return checkUidSignature(
-            packageManager, uid, packageName, requiredSignaturesImmutable);
+        return checkUidSignature(packageManager, uid, packageName, requiredSignaturesImmutable);
       }
     };
   }
@@ -186,22 +181,23 @@ public final class SecurityPolicies {
   }
 
   /**
-   * Creates {@link SecurityPolicy} which checks if the app is a device owner app. See
-   * {@link DevicePolicyManager}.
+   * Creates {@link SecurityPolicy} which checks if the app is a device owner app. See {@link
+   * DevicePolicyManager}.
    */
   @RequiresApi(18)
   public static io.grpc.binder.SecurityPolicy isDeviceOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
     return anyPackageWithUidSatisfies(
-        applicationContext, pkg -> devicePolicyManager.isDeviceOwnerApp(pkg),
+        applicationContext,
+        pkg -> devicePolicyManager.isDeviceOwnerApp(pkg),
         "Rejected by device owner policy. No packages found for UID.",
         "Rejected by device owner policy");
   }
 
   /**
-   * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See
-   * {@link DevicePolicyManager}.
+   * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See {@link
+   * DevicePolicyManager}.
    */
   @RequiresApi(21)
   public static SecurityPolicy isProfileOwner(Context applicationContext) {
@@ -223,9 +219,10 @@ public final class SecurityPolicies {
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
     return anyPackageWithUidSatisfies(
         applicationContext,
-        pkg -> VERSION.SDK_INT >= 30
-            && devicePolicyManager.isProfileOwnerApp(pkg)
-            && devicePolicyManager.isOrganizationOwnedDeviceWithManagedProfile(),
+        pkg ->
+            VERSION.SDK_INT >= 30
+                && devicePolicyManager.isProfileOwnerApp(pkg)
+                && devicePolicyManager.isOrganizationOwnedDeviceWithManagedProfile(),
         "Rejected by profile owner on organization-owned device policy. No packages found for UID.",
         "Rejected by profile owner on organization-owned device policy");
   }
@@ -237,8 +234,7 @@ public final class SecurityPolicies {
       ImmutableList<Signature> requiredSignatures) {
     String[] packages = packageManager.getPackagesForUid(uid);
     if (packages == null) {
-      return Status.UNAUTHENTICATED.withDescription(
-          "Rejected by signature check security policy");
+      return Status.UNAUTHENTICATED.withDescription("Rejected by signature check security policy");
     }
     boolean packageNameMatched = false;
     for (String pkg : packages) {
@@ -251,8 +247,7 @@ public final class SecurityPolicies {
       }
     }
     return Status.PERMISSION_DENIED.withDescription(
-        "Rejected by signature check security policy. Package name matched: "
-            + packageNameMatched);
+        "Rejected by signature check security policy. Package name matched: " + packageNameMatched);
   }
 
   private static Status checkUidSha256Signature(
@@ -289,9 +284,8 @@ public final class SecurityPolicies {
    *
    * @param packageName the package to be checked
    * @param signatureCheckFunction {@link Predicate} that takes a signature and verifies if it
-   * satisfies any signature constraints
-   * return {@code true} if {@code packageName} has a signature that satisfies {@code
-   * signatureCheckFunction}.
+   *     satisfies any signature constraints return {@code true} if {@code packageName} has a
+   *     signature that satisfies {@code signatureCheckFunction}.
    */
   @SuppressWarnings("deprecation") // For PackageInfo.signatures
   @SuppressLint("PackageManagerGetSignatures") // We only allow 1 signature.
@@ -423,23 +417,23 @@ public final class SecurityPolicies {
   /**
    * Creates a {@link SecurityPolicy} which checks if the caller has all of the given permissions
    * from {@code permissions}.
-   * 
+   *
    * <p>The gRPC framework assumes that a {@link SecurityPolicy}'s verdict for a given peer UID will
    * not change over the lifetime of any process with that UID. But Android runtime permissions can
-   * be granted or revoked by the user at any time and so using the {@link #hasPermissions}
-   * {@link SecurityPolicy} comes with certain special responsibilities.
-   * 
-   * <p>In particular, callers must ensure that the *subjects* of the returned
-   * {@link SecurityPolicy} hold all required {@code permissions} *before* making use of it. Android
-   * kills an app's processes when it loses any permission but the same isn't true when a permission
-   * is granted. And so without special care, a {@link #hasPermissions} denial could incorrectly
+   * be granted or revoked by the user at any time and so using the {@link #hasPermissions} {@link
+   * SecurityPolicy} comes with certain special responsibilities.
+   *
+   * <p>In particular, callers must ensure that the *subjects* of the returned {@link
+   * SecurityPolicy} hold all required {@code permissions} *before* making use of it. Android kills
+   * an app's processes when it loses any permission but the same isn't true when a permission is
+   * granted. And so without special care, a {@link #hasPermissions} denial could incorrectly
    * persist even if the subject is later granted all required {@code permissions}.
-   * 
+   *
    * <p>A server using {@link #hasPermissions} must, as part of its RPC API contract, require
    * clients to request and receive all {@code permissions} before making a call. This is in line
    * with official Android guidance to request and confirm receipt of runtime permissions before
-   * using them. 
-   * 
+   * using them.
+   *
    * <p>A client, on the other hand, should only use {@link #hasPermissions} policies that require
    * install-time permissions which cannot change.
    *

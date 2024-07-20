@@ -18,6 +18,8 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.SIZE_BUCKETS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -172,6 +174,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("s")
               .setDescription(
                   "Time taken by gRPC to complete an RPC from application's perspective")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -189,6 +192,7 @@ public final class GrpcOpenTelemetry {
                   "grpc.client.attempt.duration")
               .setUnit("s")
               .setDescription("Time taken to complete a client call attempt")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -200,6 +204,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes sent per client call attempt")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -211,6 +216,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes received per call attempt")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -228,6 +234,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("s")
               .setDescription(
                   "Time taken to complete a call from server transport's perspective")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -239,6 +246,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes sent per server call")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -250,6 +258,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes received per server call")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 

@@ -41,9 +41,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
-/**
- * Creates new binder transports.
- */
+/** Creates new binder transports. */
 @Internal
 public final class BinderClientTransportFactory implements ClientTransportFactory {
   final Context sourceContext;
@@ -52,11 +50,11 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final ObjectPool<ScheduledExecutorService> scheduledExecutorPool;
   final ObjectPool<? extends Executor> offloadExecutorPool;
   final SecurityPolicy securityPolicy;
-  @Nullable
-  final UserHandle targetUserHandle;
+  @Nullable final UserHandle targetUserHandle;
   final BindServiceFlags bindServiceFlags;
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
+  final long readyTimeoutMillis;
 
   ScheduledExecutorService executorService;
   Executor offloadExecutor;
@@ -65,8 +63,10 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   private BinderClientTransportFactory(Builder builder) {
     sourceContext = checkNotNull(builder.sourceContext);
     channelCredentials = checkNotNull(builder.channelCredentials);
-    mainThreadExecutor = builder.mainThreadExecutor != null ?
-        builder.mainThreadExecutor : ContextCompat.getMainExecutor(sourceContext);
+    mainThreadExecutor =
+        builder.mainThreadExecutor != null
+            ? builder.mainThreadExecutor
+            : ContextCompat.getMainExecutor(sourceContext);
     scheduledExecutorPool = checkNotNull(builder.scheduledExecutorPool);
     offloadExecutorPool = checkNotNull(builder.offloadExecutorPool);
     securityPolicy = checkNotNull(builder.securityPolicy);
@@ -74,6 +74,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     bindServiceFlags = checkNotNull(builder.bindServiceFlags);
     inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
     binderDecorator = checkNotNull(builder.binderDecorator);
+    readyTimeoutMillis = builder.readyTimeoutMillis;
 
     executorService = scheduledExecutorPool.getObject();
     offloadExecutor = offloadExecutorPool.getObject();
@@ -110,9 +111,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     return Collections.singleton(AndroidComponentAddress.class);
   }
 
-  /**
-   * Allows fluent construction of ClientTransportFactory.
-   */
+  /** Allows fluent construction of ClientTransportFactory. */
   public static final class Builder implements ClientTransportFactoryBuilder {
     // Required.
     Context sourceContext;
@@ -120,15 +119,15 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
 
     // Optional.
     BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault();
-    Executor mainThreadExecutor;  // Default filled-in at build time once sourceContext is decided.
+    Executor mainThreadExecutor; // Default filled-in at build time once sourceContext is decided.
     ObjectPool<ScheduledExecutorService> scheduledExecutorPool =
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
     SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
-    @Nullable
-    UserHandle targetUserHandle;
+    @Nullable UserHandle targetUserHandle;
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
+    long readyTimeoutMillis = 60_000;
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
@@ -140,8 +139,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
       return this;
     }
 
-    public Builder setOffloadExecutorPool(
-        ObjectPool<? extends Executor> offloadExecutorPool) {
+    public Builder setOffloadExecutorPool(ObjectPool<? extends Executor> offloadExecutorPool) {
       this.offloadExecutorPool = checkNotNull(offloadExecutorPool, "offloadExecutorPool");
       return this;
     }
@@ -178,7 +176,8 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     }
 
     public Builder setInboundParcelablePolicy(InboundParcelablePolicy inboundParcelablePolicy) {
-      this.inboundParcelablePolicy = checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
+      this.inboundParcelablePolicy =
+          checkNotNull(inboundParcelablePolicy, "inboundParcelablePolicy");
       return this;
     }
 
@@ -189,6 +188,32 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      */
     public Builder setBinderDecorator(OneWayBinderProxy.Decorator binderDecorator) {
       this.binderDecorator = checkNotNull(binderDecorator, "binderDecorator");
+      return this;
+    }
+
+    /**
+     * Limits how long it can take to for a new transport to become ready after being started.
+     *
+     * <p>This process currently includes:
+     *
+     * <ul>
+     *   <li>Creating an Android binding.
+     *   <li>Waiting for Android to create the server process.
+     *   <li>Waiting for the remote Service to be created and handle onBind().
+     *   <li>Exchanging handshake transactions according to the wire protocol.
+     *   <li>Evaluating a {@link SecurityPolicy} on both sides.
+     * </ul>
+     *
+     * <p>This setting doesn't change the need for deadlines at the call level. It merely ensures
+     * that gRPC features like <a
+     * href="https://github.com/grpc/grpc/blob/master/doc/load-balancing.md">load balancing</a> and
+     * <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">fail-fast</a> work
+     * as expected despite certain edge cases that could otherwise stall the transport indefinitely.
+     *
+     * <p>Optional but enabled by default. Use a negative value to wait indefinitely.
+     */
+    public Builder setReadyTimeoutMillis(long readyTimeoutMillis) {
+      this.readyTimeoutMillis = readyTimeoutMillis;
       return this;
     }
   }

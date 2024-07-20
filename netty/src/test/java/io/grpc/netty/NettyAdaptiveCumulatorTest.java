@@ -122,7 +122,7 @@ public class NettyAdaptiveCumulatorTest {
 
     @Test
     public void cumulate_compositeCumulation_inputAppendedAsANewComponent() {
-      CompositeByteBuf composite = alloc.compositeBuffer().addComponent(true, contiguous);
+      CompositeByteBuf composite = alloc.compositeBuffer().addFlattenedComponents(true, contiguous);
       assertSame(composite, cumulator.cumulate(alloc, composite, in));
       assertEquals(DATA_INITIAL, composite.component(0).toString(US_ASCII));
       assertEquals(DATA_INCOMING, composite.component(1).toString(US_ASCII));
@@ -136,7 +136,7 @@ public class NettyAdaptiveCumulatorTest {
 
     @Test
     public void cumulate_compositeCumulation_inputReleasedOnError() {
-      CompositeByteBuf composite = alloc.compositeBuffer().addComponent(true, contiguous);
+      CompositeByteBuf composite = alloc.compositeBuffer().addFlattenedComponents(true, contiguous);
       try {
         throwingCumulator.cumulate(alloc, composite, in);
         fail("Cumulator didn't throw");
@@ -386,6 +386,9 @@ public class NettyAdaptiveCumulatorTest {
     }
 
     private void assertTailExpanded(String expectedTailReadableData, int expectedNewTailCapacity) {
+      if (!GrpcHttp2ConnectionHandler.usingPre4_1_111_Netty()) {
+        return; // Netty 4.1.111 doesn't work with NettyAdaptiveCumulator
+      }
       int originalNumComponents = composite.numComponents();
 
       // Handle the case when reader index is beyond all readable bytes of the cumulation.
@@ -528,7 +531,7 @@ public class NettyAdaptiveCumulatorTest {
           tail) {
         @Override
         public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
-            ByteBuf buffer) {
+                                                       ByteBuf buffer) {
           throw expectedError;
         }
       };
@@ -562,7 +565,7 @@ public class NettyAdaptiveCumulatorTest {
           tail.asReadOnly()) {
         @Override
         public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex,
-            ByteBuf buffer) {
+                                                       ByteBuf buffer) {
           throw expectedError;
         }
       };
@@ -625,6 +628,10 @@ public class NettyAdaptiveCumulatorTest {
       CompositeByteBuf composite2 =
           alloc.compositeBuffer(8).addFlattenedComponents(true, composite1);
       assertThat(composite2.toString(US_ASCII)).isEqualTo("01234");
+
+      if (!GrpcHttp2ConnectionHandler.usingPre4_1_111_Netty()) {
+        return; // Netty 4.1.111 doesn't work with NettyAdaptiveCumulator
+      }
 
       // The previous operation does not adjust the read indexes of the underlying buffers,
       // only the internal Component offsets. When the cumulator attempts to append the input to

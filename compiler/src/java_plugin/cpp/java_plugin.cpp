@@ -45,9 +45,23 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
   JavaGrpcGenerator() {}
   virtual ~JavaGrpcGenerator() {}
 
+// Protobuf 5.27 released edition 2023.
+#if GOOGLE_PROTOBUF_VERSION >= 5027000
   uint64_t GetSupportedFeatures() const override {
-    return FEATURE_PROTO3_OPTIONAL;
+    return Feature::FEATURE_PROTO3_OPTIONAL |
+           Feature::FEATURE_SUPPORTS_EDITIONS;
   }
+  protobuf::Edition GetMinimumEdition() const override {
+    return protobuf::Edition::EDITION_PROTO2;
+  }
+  protobuf::Edition GetMaximumEdition() const override {
+    return protobuf::Edition::EDITION_2023;
+  }
+#else
+  uint64_t GetSupportedFeatures() const override {
+    return Feature::FEATURE_PROTO3_OPTIONAL;
+  }
+#endif
 
   virtual bool Generate(const protobuf::FileDescriptor* file,
                         const std::string& parameter,

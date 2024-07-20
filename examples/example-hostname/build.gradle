@@ -3,7 +3,7 @@ plugins {
     id 'java'
 
     id "com.google.protobuf" version "0.9.4"
-    id 'com.google.cloud.tools.jib' version '3.4.1' // For releasing to Docker Hub
+    id 'com.google.cloud.tools.jib' version '3.4.3' // For releasing to Docker Hub
 }
 
 repositories {
@@ -23,8 +23,8 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.65.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.25.1'
+def grpcVersion = '1.66.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.3'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"

@@ -71,15 +71,13 @@ public abstract class OneWayBinderProxy {
    */
   public interface Decorator {
     /**
-     * Returns an instance of {@link OneWayBinderProxy} that decorates {@code input} with some
-     * new behavior.
+     * Returns an instance of {@link OneWayBinderProxy} that decorates {@code input} with some new
+     * behavior.
      */
     OneWayBinderProxy decorate(OneWayBinderProxy input);
   }
 
-  /**
-   * A {@link Decorator} that does nothing.
-   */
+  /** A {@link Decorator} that does nothing. */
   public static final Decorator IDENTITY_DECORATOR = (x) -> x;
 
   /**

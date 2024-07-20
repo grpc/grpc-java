@@ -262,9 +262,4 @@ public class JettyTransportTest extends AbstractTransportTest {
   @Ignore("https://github.com/jetty/jetty.project/issues/11822")
   @Test
   public void clientChecksInboundMetadataSize_trailer() {}
-
-  @Override
-  @Ignore("Not yet investigated, but has been seen for multiple servlet containers")
-  @Test
-  public void clientShutdownBeforeStartRunnable() {}
 }

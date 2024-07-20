@@ -42,8 +42,7 @@ import javax.annotation.Nullable;
  *     Services</a>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
-public final class BinderChannelBuilder
-    extends ForwardingChannelBuilder<BinderChannelBuilder> {
+public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderChannelBuilder> {
 
   /**
    * Creates a channel builder that will bind to a remote Android service.
@@ -97,8 +96,8 @@ public final class BinderChannelBuilder
   }
 
   /**
-   * Creates a channel builder that will bind to a remote Android service, via a string
-   * target name which will be resolved.
+   * Creates a channel builder that will bind to a remote Android service, via a string target name
+   * which will be resolved.
    *
    * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
    * after 30 minutes without use by default but can be configured via {@link
@@ -109,16 +108,13 @@ public final class BinderChannelBuilder
    * resulting builder. They will not be shut down automatically.
    *
    * @param target A target uri which should resolve into an {@link AndroidComponentAddress}
-   * referencing the service to bind to.
+   *     referencing the service to bind to.
    * @param sourceContext the context to bind from (e.g. The current Activity or Application).
    * @return a new builder
    */
   public static BinderChannelBuilder forTarget(String target, Context sourceContext) {
     return new BinderChannelBuilder(
-        null,
-        checkNotNull(target, "target"),
-        sourceContext,
-        BinderChannelCredentials.forDefault());
+        null, checkNotNull(target, "target"), sourceContext, BinderChannelCredentials.forDefault());
   }
 
   /**
@@ -147,18 +143,14 @@ public final class BinderChannelBuilder
         null, checkNotNull(target, "target"), sourceContext, channelCredentials);
   }
 
-  /**
-   * Always fails. Call {@link #forAddress(AndroidComponentAddress, Context)} instead.
-   */
+  /** Always fails. Call {@link #forAddress(AndroidComponentAddress, Context)} instead. */
   @DoNotCall("Unsupported. Use forAddress(AndroidComponentAddress, Context) instead")
   public static BinderChannelBuilder forAddress(String name, int port) {
     throw new UnsupportedOperationException(
         "call forAddress(AndroidComponentAddress, Context) instead");
   }
 
-  /**
-   * Always fails. Call {@link #forAddress(AndroidComponentAddress, Context)} instead.
-   */
+  /** Always fails. Call {@link #forAddress(AndroidComponentAddress, Context)} instead. */
   @DoNotCall("Unsupported. Use forTarget(String, Context) instead")
   public static BinderChannelBuilder forTarget(String target) {
     throw new UnsupportedOperationException(
@@ -175,23 +167,18 @@ public final class BinderChannelBuilder
       @Nullable String target,
       Context sourceContext,
       BinderChannelCredentials channelCredentials) {
-    transportFactoryBuilder = new BinderClientTransportFactory.Builder()
-        .setSourceContext(sourceContext)
-        .setChannelCredentials(channelCredentials);
+    transportFactoryBuilder =
+        new BinderClientTransportFactory.Builder()
+            .setSourceContext(sourceContext)
+            .setChannelCredentials(channelCredentials);
 
     if (directAddress != null) {
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(
-              directAddress,
-              directAddress.getAuthority(),
-              transportFactoryBuilder,
-              null);
+              directAddress, directAddress.getAuthority(), transportFactoryBuilder, null);
     } else {
       managedChannelImplBuilder =
-          new ManagedChannelImplBuilder(
-              target,
-              transportFactoryBuilder,
-              null);
+          new ManagedChannelImplBuilder(target, transportFactoryBuilder, null);
     }
     idleTimeout(60, TimeUnit.SECONDS);
   }
@@ -218,7 +205,7 @@ public final class BinderChannelBuilder
    */
   public BinderChannelBuilder scheduledExecutorService(
       ScheduledExecutorService scheduledExecutorService) {
-   transportFactoryBuilder.setScheduledExecutorPool(
+    transportFactoryBuilder.setScheduledExecutorPool(
         new FixedObjectPool<>(checkNotNull(scheduledExecutorService, "scheduledExecutorService")));
     return this;
   }
@@ -248,7 +235,7 @@ public final class BinderChannelBuilder
     return this;
   }
 
-/**
+  /**
    * Provides the target {@UserHandle} of the remote Android service.
    *
    * <p>When targetUserHandle is set, Context.bindServiceAsUser will used and additional Android
@@ -273,11 +260,10 @@ public final class BinderChannelBuilder
     return this;
   }
 
-  /** 
-   * Disables the channel idle timeout and prevents it from being enabled. This
-   * allows a centralized application method to configure the channel builder
-   * and return it, without worrying about another part of the application
-   * accidentally enabling the idle timeout.
+  /**
+   * Disables the channel idle timeout and prevents it from being enabled. This allows a centralized
+   * application method to configure the channel builder and return it, without worrying about
+   * another part of the application accidentally enabling the idle timeout.
    */
   public BinderChannelBuilder strictLifecycleManagement() {
     strictLifecycleManagement = true;
@@ -287,7 +273,9 @@ public final class BinderChannelBuilder
 
   @Override
   public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
-    checkState(!strictLifecycleManagement, "Idle timeouts are not supported when strict lifecycle management is enabled");
+    checkState(
+        !strictLifecycleManagement,
+        "Idle timeouts are not supported when strict lifecycle management is enabled");
     super.idleTimeout(value, unit);
     return this;
   }

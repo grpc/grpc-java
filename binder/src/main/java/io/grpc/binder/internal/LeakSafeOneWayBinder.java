@@ -68,7 +68,12 @@ public final class LeakSafeOneWayBinder extends Binder {
   }
 
   public void detach() {
-    handler = null;
+    setHandler(null);
+  }
+
+  /** Replaces the current {@link TransactionHandler} with `handler`. */
+  public void setHandler(@Nullable TransactionHandler handler) {
+    this.handler = handler;
   }
 
   @Override

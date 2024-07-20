@@ -344,8 +344,7 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
       }
       int index = parcel.readInt();
       boolean hasPrefix = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_PREFIX);
-      boolean hasMessageData =
-          TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_MESSAGE_DATA);
+      boolean hasMessageData = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_MESSAGE_DATA);
       boolean hasSuffix = TransactionUtils.hasFlag(flags, TransactionUtils.FLAG_SUFFIX);
       if (hasPrefix) {
         handlePrefix(flags, parcel);
