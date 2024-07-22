@@ -203,5 +203,3 @@ maven.override(
 switched_rules = use_extension("@com_google_googleapis//:extensions.bzl", "switched_rules")
 
 switched_rules.use_languages(java = True)
-
-use_repo(switched_rules, "com_google_googleapis_imports")
