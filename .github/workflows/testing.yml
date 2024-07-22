@@ -97,7 +97,17 @@ jobs:
     - name: Run bazel build
       run: bazelisk build //... --enable_bzlmod=false
 
+    - name: Run example bazel build
+      run: bazelisk build //... --enable_bzlmod=false
+      working-directory: ./examples
+
     - name: Run bazel build (bzlmod)
       env:
         USE_BAZEL_VERSION: 7.0.0
       run: bazelisk build //... --enable_bzlmod=true
+
+    - name: Run example bazel build (bzlmod)
+      env:
+        USE_BAZEL_VERSION: 7.0.0
+      run: bazelisk build //... --enable_bzlmod=true
+      working-directory: ./examples
