@@ -1822,10 +1822,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         public void run() {
           handleErrorInSyncContext(error);
-          ManagedChannelServiceConfig effectiveServiceConfig;
-          effectiveServiceConfig = defaultServiceConfig;
-          if (effectiveServiceConfig != null) {
-            realChannel.updateConfigSelector(effectiveServiceConfig.getDefaultConfigSelector());
+          if (defaultServiceConfig != null) {
+            realChannel.updateConfigSelector(defaultServiceConfig.getDefaultConfigSelector());
             channelLogger.log(ChannelLogLevel.ERROR,
                     "Initial Name Resolution error, using default service config");
           }
