@@ -4480,10 +4480,9 @@ public class ManagedChannelImplTest {
   public void testApplyDefaultServiceConfigIfInitialNameResolutionFails() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
-      FakeNameResolverFactory nameResolverFactory =
-              new FakeNameResolverFactory.Builder(expectedUri)
-                      .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
-                      .build();
+      FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory
+              .Builder(expectedUri).setServers(Collections.singletonList
+              (new EquivalentAddressGroup(socketAddress))).build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
       Map<String, Object> defaultServiceConfig =
               parseConfig("{\"methodConfig\":[{"
