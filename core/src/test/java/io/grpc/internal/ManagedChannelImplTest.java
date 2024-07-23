@@ -4482,27 +4482,20 @@ public class ManagedChannelImplTest {
     try {
       FakeNameResolverFactory nameResolverFactory =
               new FakeNameResolverFactory.Builder(expectedUri)
-                      .setServers(ImmutableList.of(addressGroup)).build();
+                      .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+                      .build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
-      Map<String, Object> rawServiceConfig =
+      Map<String, Object> defaultServiceConfig =
               parseConfig("{\"methodConfig\":[{"
-                      + "\"name\":[{\"service\":\"null\"}],"
-                      + "\"waitForReady\":false}]}");
-      ManagedChannelServiceConfig managedChannelServiceConfig =
-              createManagedChannelServiceConfig(rawServiceConfig, null);
-      nameResolverFactory.nextConfigOrError.set(
-              ConfigOrError.fromConfig(managedChannelServiceConfig));
+                      + "\"name\":[{\"service\":\"SimpleService1\"}],"
+                      + "\"waitForReady\":true}]}");
+      channelBuilder.defaultServiceConfig(defaultServiceConfig);
       createChannel();
-      ArgumentCaptor<ResolvedAddresses> resultCaptor =
-              ArgumentCaptor.forClass(ResolvedAddresses.class);
-      verify(mockLoadBalancer).acceptResolvedAddresses(resultCaptor.capture());
-      assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-      verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
-      managedChannelServiceConfig =
-              createManagedChannelServiceConfig(rawServiceConfig, null);
-      nameResolverFactory.nextConfigOrError.set(
-              ConfigOrError.fromConfig(managedChannelServiceConfig));
-      nameResolverFactory.allResolved();
+      FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+      Status resolutionError = Status.UNAVAILABLE.
+              withDescription("Initial Name Resolution error, using default service config");
+      resolver.listener.onError(resolutionError);
+      verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
     }
