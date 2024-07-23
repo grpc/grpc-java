@@ -62,7 +62,6 @@ use_repo(
     non_module_deps,
     "com_github_cncf_xds",
     "envoy_api",
-    "com_google_protobuf_javalite",
 )
 
 grpc_repo_deps_ext = use_extension("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_repo_deps_ext")
