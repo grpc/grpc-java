@@ -4491,8 +4491,8 @@ public class ManagedChannelImplTest {
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
       createChannel();
       FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-      Status resolutionError = Status.UNAVAILABLE.withDescription
-              ("Initial Name Resolution error, using default service config");
+      Status resolutionError = Status.UNAVAILABLE
+              .withDescription("Initial Name Resolution error, using default service config");
       resolver.listener.onError(resolutionError);
       verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
     } finally {
