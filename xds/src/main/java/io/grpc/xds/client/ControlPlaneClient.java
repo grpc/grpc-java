@@ -206,15 +206,6 @@ final class ControlPlaneClient {
     return adsStream != null && adsStream.call != null && adsStream.call.isReady();
   }
 
-  @Nullable
-  @VisibleForTesting
-  Map<XdsResourceType<?>, String> getNonce() {
-    if (adsStream == null) {
-      return null;
-    }
-    return adsStream.respNonces;
-  }
-
   /**
    * Starts a timer for each requested resource that hasn't been responded to and
    * has been waiting for the channel to get ready.
