@@ -22,6 +22,7 @@ import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Optional;
+import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -35,6 +36,7 @@ import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
+import io.grpc.KnownLength;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -59,6 +61,8 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
@@ -716,6 +720,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       private boolean closed;
       @GuardedBy("this")
       private int outboundSeqNo;
+      private byte[] payload;
 
       InProcessClientStream(
           CallOptions callOptions, StatsTraceContext statsTraceContext) {
@@ -786,6 +791,15 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+          if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
+            try {
+              payload = ByteStreams.toByteArray(message);
+              message = new ByteArrayInputStream(payload);
+            } catch (IOException ex) {
+              throw new RuntimeException(ex);
+            }
+          }
+          statsTraceCtx.outboundWireSize(payload.length);
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (serverRequested > 0) {

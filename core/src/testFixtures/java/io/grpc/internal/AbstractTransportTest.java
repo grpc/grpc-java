@@ -861,7 +861,9 @@ public abstract class AbstractTransportTest {
       assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
     } else {
-      assertThat(clientStreamTracer1.getOutboundWireSize()).isEqualTo(0L);
+      // Ensuring outboundWireSize is non-zero after message write, addressing the potential 
+      // memory leak issue with retries in InProcessTransport (#8712)
+      assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
     }
     assertThat(serverStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
