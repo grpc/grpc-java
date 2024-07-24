@@ -134,6 +134,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
+import org.mockito.verification.VerificationMode;
 
 /**
  * Tests for {@link XdsClientImpl}.
@@ -2766,8 +2767,7 @@ public abstract class GrpcXdsClientImplTestBase extends ControlPlaneClientTestBa
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
-    verifyResourceMetadataRequested(EDS, "A.1");
-    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+    call.verifyRequest(EDS, "A.1", "", "", NODE);
 
     // EDS -> {A.1}, version 1
     List<Message> dropOverloads = ImmutableList.of();
@@ -2776,19 +2776,17 @@ public abstract class GrpcXdsClientImplTestBase extends ControlPlaneClientTestBa
             "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)));
     call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A.1} -> ACK, version 1
-    verifyResourceMetadataAcked(EDS, "A.1", resourcesV1.get("A.1"), VERSION_1, TIME_INCREMENT);
     call.verifyRequest(EDS, "A.1", VERSION_1, "0000", NODE);
     verify(edsResourceWatcher, times(1)).onChanged(any());
 
     // trigger an EDS resource unsubscription.
-    // This would probably be caused by CDS PUSH(let's say event e1) in the real world.
-    // Then there can be a potential data race between
-    // 1) the EDS unsubscription caused by CDS PUSH e1 (client-side) and,
-    // 2) the immediate EDS PUSH from XdsServer (server-side) after CDS PUSH e1 (event e2).
     xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
-    // The nonce has been removed
-    assertThat(getNonceForResourceType(xdsClient, xdsServerInfo, EDS)).isNull();
+
+    // When re-subscribing, the version and nonce were properly forgotten, so the request is the
+    // same as the initial request
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    call.verifyRequest(EDS, "A.1", "", "", NODE, Mockito.timeout(2000).times(2));
   }
 
   @Test
@@ -3821,8 +3819,20 @@ public abstract class GrpcXdsClientImplTestBase extends ControlPlaneClientTestBa
 
     protected void verifyRequest(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
-        Node node) {
+        Node node, VerificationMode verificationMode) {
       throw new UnsupportedOperationException();
+    }
+
+    protected void verifyRequest(
+        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
+        Node node) {
+      verifyRequest(type, resources, versionInfo, nonce, node, Mockito.timeout(2000));
+    }
+
+    protected void verifyRequest(
+        XdsResourceType<?> type, String resource, String versionInfo, String nonce,
+        Node node, VerificationMode verificationMode) {
+      verifyRequest(type, ImmutableList.of(resource), versionInfo, nonce, node, verificationMode);
     }
 
     protected void verifyRequest(

@@ -155,7 +155,8 @@ final class ControlPlaneClient {
     if (resources != null) {
       adsStream.sendDiscoveryRequest(resourceType, resources);
     } else {
-      // cleanup the nonce for the resource type if it's not subscribed to anymore.
+      // The resource type no longer has subscribing resources; clean up references to it
+      versions.remove(resourceType);
       adsStream.respNonces.remove(resourceType);
     }
   }
