@@ -857,13 +857,12 @@ public abstract class AbstractTransportTest {
     message.close();
     assertThat(clientStreamTracer1.nextOutboundEvent())
         .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
+    // Ensuring outboundWireSize is non-zero after message write, addressing the potential 
+    // memory leak issue with retries in InProcessTransport (#8712)
+    assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
     if (sizesReported()) {
-      assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
     } else {
-      // Ensuring outboundWireSize is non-zero after message write, addressing the potential 
-      // memory leak issue with retries in InProcessTransport (#8712)
-      assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
     }
     assertThat(serverStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
