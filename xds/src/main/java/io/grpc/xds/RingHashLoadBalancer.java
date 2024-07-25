@@ -228,8 +228,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
-    return new ChildLbState(key, lazyLbFactory, null, EMPTY_PICKER);
+      ResolvedAddresses resolvedAddresses) {
+    return new ChildLbState(key, lazyLbFactory, null);
   }
 
   private Status validateAddrList(List<EquivalentAddressGroup> addrList) {
