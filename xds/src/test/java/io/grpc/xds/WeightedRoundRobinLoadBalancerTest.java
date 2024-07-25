@@ -536,8 +536,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue().getClass().getName())
-        .isEqualTo("io.grpc.util.RoundRobinLoadBalancer$EmptyPicker");
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
+        .isEqualTo(PickResult.withNoResult());
     int expectedCount = isEnabledHappyEyeballs() ? servers.size() + 1 : 1;
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo( expectedCount);
   }
