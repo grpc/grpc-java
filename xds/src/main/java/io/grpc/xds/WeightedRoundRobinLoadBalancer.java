@@ -340,6 +340,14 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       public Subchannel createSubchannel(CreateSubchannelArgs args) {
         return new WrrSubchannel(super.createSubchannel(args), WeightedChildLbState.this);
       }
+
+      @Override
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+        super.updateBalancingState(newState, newPicker);
+        if (!resolvingAddresses && newState == ConnectivityState.IDLE) {
+          getLb().requestConnection();
+        }
+      }
     }
 
     final class OrcaReportListener implements OrcaPerRequestReportListener, OrcaOobReportListener {

@@ -66,7 +66,6 @@ import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
-import io.grpc.xds.RingHashLoadBalancer.RingHashChildLbState;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
@@ -177,8 +176,7 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
-    RingHashChildLbState childLbState =
-        (RingHashChildLbState) loadBalancer.getChildLbStates().iterator().next();
+    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
     assertThat(subchannels.get(Collections.singletonList(childLbState.getEag()))).isNull();
 
     // Picking subchannel triggers connection.
@@ -422,7 +420,7 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Create subchannel for the first address
-    ((RingHashChildLbState) loadBalancer.getChildLbStateEag(servers.get(0))).getCurrentPicker()
+    loadBalancer.getChildLbStateEag(servers.get(0)).getCurrentPicker()
         .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
     verifyConnection(1);
 

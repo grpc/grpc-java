@@ -229,7 +229,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
       SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
-    return new RingHashChildLbState((Endpoint)key);
+    return new ChildLbState(key, lazyLbFactory, null, EMPTY_PICKER);
   }
 
   private Status validateAddrList(List<EquivalentAddressGroup> addrList) {
@@ -358,7 +358,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       this.ring = ring;
       pickableSubchannels = new HashMap<>(subchannels.size());
       for (Map.Entry<Object, ChildLbState> entry : subchannels.entrySet()) {
-        RingHashChildLbState childLbState = (RingHashChildLbState) entry.getValue();
+        ChildLbState childLbState = entry.getValue();
         pickableSubchannels.put((Endpoint)entry.getKey(),
             new SubchannelView(childLbState, childLbState.getCurrentState()));
       }
@@ -405,7 +405,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       for (int i = 0; i < ring.size(); i++) {
         int index = (targetIndex + i) % ring.size();
         SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
-        RingHashChildLbState childLbState = subchannelView.childLbState;
+        ChildLbState childLbState = subchannelView.childLbState;
 
         if (subchannelView.connectivityState  == READY) {
           return childLbState.getCurrentPicker().pickSubchannel(args);
@@ -427,7 +427,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       }
 
       // return the pick from the original subchannel hit by hash, which is probably an error
-      RingHashChildLbState originalSubchannel =
+      ChildLbState originalSubchannel =
           pickableSubchannels.get(ring.get(targetIndex).addrKey).childLbState;
       return originalSubchannel.getCurrentPicker().pickSubchannel(args);
     }
@@ -439,10 +439,10 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
    * state changes.
    */
   private static final class SubchannelView {
-    private final RingHashChildLbState childLbState;
+    private final ChildLbState childLbState;
     private final ConnectivityState connectivityState;
 
-    private SubchannelView(RingHashChildLbState childLbState, ConnectivityState state) {
+    private SubchannelView(ChildLbState childLbState, ConnectivityState state) {
       this.childLbState = childLbState;
       this.connectivityState = state;
     }
@@ -485,43 +485,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           .add("minRingSize", minRingSize)
           .add("maxRingSize", maxRingSize)
           .toString();
-    }
-  }
-
-  class RingHashChildLbState extends MultiChildLoadBalancer.ChildLbState {
-
-    public RingHashChildLbState(Endpoint key) {
-      super(key, lazyLbFactory, null, EMPTY_PICKER);
-    }
-
-    @Override
-    protected ChildLbStateHelper createChildHelper() {
-      return new RingHashChildHelper();
-    }
-
-    // Need to expose this to the LB class
-    @Override
-    protected void shutdown() {
-      super.shutdown();
-    }
-
-    private class RingHashChildHelper extends ChildLbStateHelper {
-      @Override
-      public void updateBalancingState(final ConnectivityState newState,
-                                       final SubchannelPicker newPicker) {
-        setCurrentState(newState);
-        setCurrentPicker(newPicker);
-        
-        if (getChildLbState(getKey()) == null) {
-          return;
-        }
-
-        // If we are already in the process of resolving addresses, the overall balancing state
-        // will be updated at the end of it, and we don't need to trigger that update here.
-        if (!resolvingAddresses) {
-          updateOverallBalancingState();
-        }
-      }
     }
   }
 }

@@ -95,6 +95,25 @@ final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     return new ReadyPicker(pickerList, sequence);
   }
 
+  @Override
+  protected ChildLbState createChildLbState(Object key, Object policyConfig,
+      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
+    return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker) {
+      @Override
+      protected ChildLbStateHelper createChildHelper() {
+        return new ChildLbStateHelper() {
+          @Override
+          public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+            super.updateBalancingState(newState, newPicker);
+            if (!resolvingAddresses && newState == IDLE) {
+              getLb().requestConnection();
+            }
+          }
+        };
+      }
+    };
+  }
+
   @VisibleForTesting
   static class ReadyPicker extends SubchannelPicker {
     private final List<SubchannelPicker> subchannelPickers; // non-empty
