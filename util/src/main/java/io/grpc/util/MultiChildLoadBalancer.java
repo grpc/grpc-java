@@ -456,8 +456,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       /**
        * Update current state and picker for this child and then use
        * {@link #updateOverallBalancingState()} for the parent LB.
-       *
-       * <p/>Override this if you don't want to automatically request a connection when in IDLE
        */
       @Override
       public void updateBalancingState(final ConnectivityState newState,
@@ -471,9 +469,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         // If we are already in the process of resolving addresses, the overall balancing state
         // will be updated at the end of it, and we don't need to trigger that update here.
         if (!resolvingAddresses) {
-          if (newState == IDLE) {
-            lb.requestConnection();
-          }
           updateOverallBalancingState();
         }
       }

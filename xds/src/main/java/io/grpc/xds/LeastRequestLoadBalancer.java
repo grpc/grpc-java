@@ -328,5 +328,18 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     int getActiveRequests() {
       return activeRequests.get();
     }
+
+    @Override
+    protected ChildLbStateHelper createChildHelper() {
+      return new ChildLbStateHelper() {
+        @Override
+        public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+          super.updateBalancingState(newState, newPicker);
+          if (!resolvingAddresses && newState == IDLE) {
+            getLb().requestConnection();
+          }
+        }
+      };
+    }
   }
 }
