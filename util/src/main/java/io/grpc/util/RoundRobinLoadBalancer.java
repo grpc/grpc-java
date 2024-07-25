@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private final AtomicInteger sequence = new AtomicInteger(new Random().nextInt());
-  private SubchannelPicker currentPicker = new EmptyPicker();
+  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
   public RoundRobinLoadBalancer(Helper helper) {
     super(helper);
@@ -68,7 +68,7 @@ final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       }
 
       if (isConnecting) {
-        updateBalancingState(CONNECTING, new EmptyPicker());
+        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
       } else {
         updateBalancingState(TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
       }
@@ -159,24 +159,6 @@ final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
           && index == other.index
           && subchannelPickers.size() == other.subchannelPickers.size()
           && new HashSet<>(subchannelPickers).containsAll(other.subchannelPickers);
-    }
-  }
-
-  @VisibleForTesting
-  static final class EmptyPicker extends SubchannelPicker {
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withNoResult();
-    }
-
-    @Override
-    public int hashCode() {
-      return getClass().hashCode();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      return o instanceof EmptyPicker;
     }
   }
 }
