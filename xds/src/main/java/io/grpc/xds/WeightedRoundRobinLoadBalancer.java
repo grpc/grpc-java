@@ -42,7 +42,7 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
-import io.grpc.util.RoundRobinLoadBalancer;
+import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
@@ -90,7 +90,7 @@ import java.util.logging.Logger;
  *  See related documentation: https://cloud.google.com/service-mesh/legacy/load-balancing-apis/proxyless-configure-advanced-traffic-management#custom-lb-config
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
-final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
+final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   private static final LongCounterMetricInstrument RR_FALLBACK_COUNTER;
   private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER;
@@ -107,6 +107,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final long infTime;
   private final Ticker ticker;
   private String locality = "";
+  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
   // The metric instruments are only registered once and shared by all instances of this LB.
   static {
@@ -209,11 +210,49 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     return acceptRetVal.status;
   }
 
+  /**
+   * Updates picker with the list of active subchannels (state == READY).
+   */
   @Override
-  public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
+  protected void updateOverallBalancingState() {
+    List<ChildLbState> activeList = getReadyChildren();
+    if (activeList.isEmpty()) {
+      // No READY subchannels
+
+      // MultiChildLB will request connection immediately on subchannel IDLE.
+      boolean isConnecting = false;
+      for (ChildLbState childLbState : getChildLbStates()) {
+        ConnectivityState state = childLbState.getCurrentState();
+        if (state == ConnectivityState.CONNECTING || state == ConnectivityState.IDLE) {
+          isConnecting = true;
+          break;
+        }
+      }
+
+      if (isConnecting) {
+        updateBalancingState(
+            ConnectivityState.CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+      } else {
+        updateBalancingState(
+            ConnectivityState.TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
+      }
+    } else {
+      updateBalancingState(ConnectivityState.READY, createReadyPicker(activeList));
+    }
+  }
+
+  private SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
         config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper(),
         locality);
+  }
+
+  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+    if (state != currentConnectivityState || !picker.equals(currentPicker)) {
+      getHelper().updateBalancingState(state, picker);
+      currentConnectivityState = state;
+      currentPicker = picker;
+    }
   }
 
   @VisibleForTesting
