@@ -91,8 +91,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (existingChildLbState != null) {
         childLbMap.put(endpoint, existingChildLbState);
       } else {
-        childLbMap.put(endpoint,
-            createChildLbState(endpoint, null, getInitialPicker(), resolvedAddresses));
+        childLbMap.put(endpoint, createChildLbState(endpoint, null, resolvedAddresses));
       }
     }
     return childLbMap;
@@ -102,8 +101,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    * Override to create an instance of a subclass.
    */
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
-    return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
+      ResolvedAddresses resolvedAddresses) {
+    return new ChildLbState(key, pickFirstLbProvider, policyConfig);
   }
 
   /**
@@ -185,15 +184,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    */
   protected void handleNameResolutionError(ChildLbState child, Status error) {
     child.lb.handleNameResolutionError(error);
-  }
-
-  /**
-   * Creates a picker representing the state before any connections have been established.
-   *
-   * <p/>Override to produce a custom picker.
-   */
-  protected SubchannelPicker getInitialPicker() {
-    return new FixedResultPicker(PickResult.withNoResult());
   }
 
   /**
@@ -365,12 +355,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     private final LoadBalancer lb;
     private ConnectivityState currentState;
-    private SubchannelPicker currentPicker;
+    private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
-    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig,
-          SubchannelPicker initialPicker) {
+    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig) {
       this.key = key;
-      this.currentPicker = initialPicker;
       this.config = childConfig;
       this.lb = policyFactory.newLoadBalancer(createChildHelper());
       this.currentState = CONNECTING;

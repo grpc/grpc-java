@@ -85,7 +85,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
         ChildLbState child = getChildLbState(entry.getKey());
         if (child == null) {
           child = new ClusterManagerLbState(entry.getKey(),
-              entry.getValue().getProvider(), entry.getValue().getConfig(), getInitialPicker());
+              entry.getValue().getProvider(), entry.getValue().getConfig());
         }
         newChildPolicies.put(entry.getKey(), child);
       }
@@ -202,8 +202,8 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     ScheduledHandle deletionTimer;
 
     public ClusterManagerLbState(Object key, LoadBalancerProvider policyProvider,
-        Object childConfig, SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+        Object childConfig) {
+      super(key, policyProvider, childConfig);
     }
 
     @Override

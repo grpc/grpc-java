@@ -149,9 +149,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses unused) {
-    ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig,
-        initialPicker);
+      ResolvedAddresses unused) {
+    ChildLbState childLbState = new WeightedChildLbState(key, pickFirstLbProvider, policyConfig);
     return childLbState;
   }
 
@@ -290,9 +289,9 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
     private OrcaReportListener orcaReportListener;
 
-    public WeightedChildLbState(Object key, LoadBalancerProvider policyProvider, Object childConfig,
-        SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+    public WeightedChildLbState(
+        Object key, LoadBalancerProvider policyProvider, Object childConfig) {
+      super(key, policyProvider, childConfig);
     }
 
     @Override
