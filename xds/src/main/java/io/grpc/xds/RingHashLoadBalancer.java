@@ -89,18 +89,10 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     try {
       resolvingAddresses = true;
-      // Subclass handles any special manipulation to create appropriate types of ChildLbStates
-      Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
-
-      if (newChildren.isEmpty()) {
-        addressValidityStatus = Status.UNAVAILABLE.withDescription(
-            "Ring hash lb error: EDS resolution was successful, but there were no valid addresses");
-        handleNameResolutionError(addressValidityStatus);
-        return addressValidityStatus;
+      AcceptResolvedAddrRetVal acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
       }
-
-      addMissingChildren(newChildren);
-      updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
 
       // Now do the ringhash specific logic with weights and building the ring
       RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -145,7 +137,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // clusters and resolver can remove them in service config.
       updateOverallBalancingState();
 
-      shutdownRemoved(getRemovedChildren(newChildren.keySet()));
+      shutdownRemoved(acceptRetVal.removedChildren);
     } finally {
       this.resolvingAddresses = false;
     }
