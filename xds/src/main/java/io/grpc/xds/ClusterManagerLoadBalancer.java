@@ -70,8 +70,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
-      Object unusedChildConfig) {
+  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses) {
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
     Object childConfig = config.childPolicies.get(key);
@@ -87,7 +86,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
       for (String key : config.childPolicies.keySet()) {
         ChildLbState child = getChildLbState(key);
         if (child == null) {
-          child = new ClusterManagerLbState(key, GracefulSwitchLoadBalancerFactory.INSTANCE, null);
+          child = new ClusterManagerLbState(key, GracefulSwitchLoadBalancerFactory.INSTANCE);
         }
         newChildPolicies.put(key, child);
       }
@@ -204,9 +203,8 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     @Nullable
     ScheduledHandle deletionTimer;
 
-    public ClusterManagerLbState(Object key, LoadBalancer.Factory policyFactory,
-        Object childConfig) {
-      super(key, policyFactory, childConfig);
+    public ClusterManagerLbState(Object key, LoadBalancer.Factory policyFactory) {
+      super(key, policyFactory);
     }
 
     @Override

@@ -96,9 +96,8 @@ final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      ResolvedAddresses resolvedAddresses) {
-    return new ChildLbState(key, pickFirstLbProvider, policyConfig) {
+  protected ChildLbState createChildLbState(Object key) {
+    return new ChildLbState(key, pickFirstLbProvider) {
       @Override
       protected ChildLbStateHelper createChildHelper() {
         return new ChildLbStateHelper() {

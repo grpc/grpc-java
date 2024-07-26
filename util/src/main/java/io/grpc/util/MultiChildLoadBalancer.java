@@ -90,7 +90,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (existingChildLbState != null) {
         childLbMap.put(endpoint, existingChildLbState);
       } else {
-        childLbMap.put(endpoint, createChildLbState(endpoint, null, resolvedAddresses));
+        childLbMap.put(endpoint, createChildLbState(endpoint));
       }
     }
     return childLbMap;
@@ -99,9 +99,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   /**
    * Override to create an instance of a subclass.
    */
-  protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      ResolvedAddresses resolvedAddresses) {
-    return new ChildLbState(key, pickFirstLbProvider, policyConfig);
+  protected ChildLbState createChildLbState(Object key) {
+    return new ChildLbState(key, pickFirstLbProvider);
   }
 
   /**
@@ -133,11 +132,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    * Override this if your keys are not of type Endpoint.
    * @param key Key to identify the ChildLbState
    * @param resolvedAddresses list of addresses which include attributes
-   * @param childConfig a load balancing policy config. This field is optional.
    * @return a fully loaded ResolvedAddresses object for the specified key
    */
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
-      Object childConfig) {
+  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses) {
     Endpoint endpointKey;
     if (key instanceof EquivalentAddressGroup) {
       endpointKey = new Endpoint((EquivalentAddressGroup) key);
@@ -160,7 +157,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return resolvedAddresses.toBuilder()
         .setAddresses(Collections.singletonList(eagToUse))
         .setAttributes(Attributes.newBuilder().set(IS_PETIOLE_POLICY, true).build())
-        .setLoadBalancingPolicyConfig(childConfig)
+        .setLoadBalancingPolicyConfig(null)
         .build();
   }
 
@@ -226,10 +223,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   private void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
                                                      Map<Object, ChildLbState> newChildren) {
     for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
-      Object childConfig = entry.getValue().getConfig();
       ChildLbState childLbState = childLbStates.get(entry.getKey());
-      ResolvedAddresses childAddresses =
-          getChildAddresses(entry.getKey(), resolvedAddresses, childConfig);
+      ResolvedAddresses childAddresses = getChildAddresses(entry.getKey(), resolvedAddresses);
       childLbState.setResolvedAddresses(childAddresses); // update child
       childLbState.lb.handleResolvedAddresses(childAddresses); // update child LB
     }
@@ -328,15 +323,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   public class ChildLbState {
     private final Object key;
     private ResolvedAddresses resolvedAddresses;
-    private final Object config;
 
     private final LoadBalancer lb;
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
-    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig) {
+    public ChildLbState(Object key, LoadBalancer.Factory policyFactory) {
       this.key = key;
-      this.config = childConfig;
       this.lb = policyFactory.newLoadBalancer(createChildHelper());
       this.currentState = CONNECTING;
     }
@@ -398,10 +391,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     protected final void setResolvedAddresses(ResolvedAddresses newAddresses) {
       checkNotNull(newAddresses, "Missing address list for child");
       resolvedAddresses = newAddresses;
-    }
-
-    private Object getConfig() {
-      return config;
     }
 
     @VisibleForTesting
