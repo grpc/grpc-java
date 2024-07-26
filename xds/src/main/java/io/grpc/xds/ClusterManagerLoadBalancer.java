@@ -70,31 +70,28 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses) {
-    ClusterManagerConfig config = (ClusterManagerConfig)
-        resolvedAddresses.getLoadBalancingPolicyConfig();
-    Object childConfig = config.childPolicies.get(key);
-    return resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
+  protected ChildLbState createChildLbState(Object key) {
+    return new ClusterManagerLbState(key, GracefulSwitchLoadBalancerFactory.INSTANCE);
   }
 
   @Override
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
+  protected Map<Object, ResolvedAddresses> createChildAddressesMap(
+      ResolvedAddresses resolvedAddresses) {
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
-    Map<Object, ChildLbState> newChildPolicies = new HashMap<>();
+    Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
     if (config != null) {
-      for (String key : config.childPolicies.keySet()) {
-        ChildLbState child = getChildLbState(key);
-        if (child == null) {
-          child = new ClusterManagerLbState(key, GracefulSwitchLoadBalancerFactory.INSTANCE);
-        }
-        newChildPolicies.put(key, child);
+      for (Map.Entry<String, Object> childPolicy : config.childPolicies.entrySet()) {
+        ResolvedAddresses addresses = resolvedAddresses.toBuilder()
+            .setLoadBalancingPolicyConfig(childPolicy.getValue())
+            .build();
+        childAddresses.put(childPolicy.getKey(), addresses);
       }
     }
     logger.log(
         XdsLogLevel.INFO,
-        "Received cluster_manager lb config: child names={0}", newChildPolicies.keySet());
-    return newChildPolicies;
+        "Received cluster_manager lb config: child names={0}", childAddresses.keySet());
+    return childAddresses;
   }
 
   /**
