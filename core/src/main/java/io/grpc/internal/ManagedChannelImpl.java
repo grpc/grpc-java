@@ -1668,7 +1668,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public void onResult(final ResolutionResult resolutionResult) {
       final class NamesResolved implements Runnable {
 
-        @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
           Status status = onResult2(resolutionResult);
@@ -1681,6 +1680,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.execute(new NamesResolved());
     }
 
+    @SuppressWarnings("ReferenceEquality")
     @Override
     public Status onResult2(final ResolutionResult resolutionResult) {
       syncContext.throwIfNotInThisSynchronizationContext();
@@ -1769,7 +1769,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           channelLogger.log(
               ChannelLogLevel.INFO,
               "Service config changed{0}",
-              effectiveServiceConfig.equals(EMPTY_SERVICE_CONFIG) ? " to empty" : "");
+              effectiveServiceConfig == EMPTY_SERVICE_CONFIG ? " to empty" : "");
           lastServiceConfig = effectiveServiceConfig;
           transportProvider.throttle = effectiveServiceConfig.getRetryThrottling();
         }
