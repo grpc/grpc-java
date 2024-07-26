@@ -16,7 +16,6 @@
 
 package io.grpc.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
@@ -80,20 +79,20 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   /**
    * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
+   * Override this if keys are not Endpoints or if child policies have configuration.
    */
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
-    Map<Object, ChildLbState> childLbMap = new HashMap<>();
-    List<EquivalentAddressGroup> addresses = resolvedAddresses.getAddresses();
-    for (EquivalentAddressGroup eag : addresses) {
-      Endpoint endpoint = new Endpoint(eag); // keys need to be just addresses
-      ChildLbState existingChildLbState = childLbStates.get(endpoint);
-      if (existingChildLbState != null) {
-        childLbMap.put(endpoint, existingChildLbState);
-      } else {
-        childLbMap.put(endpoint, createChildLbState(endpoint));
-      }
+  protected Map<Object, ResolvedAddresses> createChildAddressesMap(
+      ResolvedAddresses resolvedAddresses) {
+    Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
+    for (EquivalentAddressGroup eag : resolvedAddresses.getAddresses()) {
+      ResolvedAddresses addresses = resolvedAddresses.toBuilder()
+          .setAddresses(Collections.singletonList(eag))
+          .setAttributes(Attributes.newBuilder().set(IS_PETIOLE_POLICY, true).build())
+          .setLoadBalancingPolicyConfig(null)
+          .build();
+      childAddresses.put(new Endpoint(eag), addresses);
     }
-    return childLbMap;
+    return childAddresses;
   }
 
   /**
@@ -129,39 +128,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Override this if your keys are not of type Endpoint.
-   * @param key Key to identify the ChildLbState
-   * @param resolvedAddresses list of addresses which include attributes
-   * @return a fully loaded ResolvedAddresses object for the specified key
-   */
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses) {
-    Endpoint endpointKey;
-    if (key instanceof EquivalentAddressGroup) {
-      endpointKey = new Endpoint((EquivalentAddressGroup) key);
-    } else {
-      checkArgument(key instanceof Endpoint, "key is wrong type");
-      endpointKey = (Endpoint) key;
-    }
-
-    // Retrieve the non-stripped version
-    EquivalentAddressGroup eagToUse = null;
-    for (EquivalentAddressGroup currEag : resolvedAddresses.getAddresses()) {
-      if (endpointKey.equals(new Endpoint(currEag))) {
-        eagToUse = currEag;
-        break;
-      }
-    }
-
-    checkNotNull(eagToUse, key + " no longer present in load balancer children");
-
-    return resolvedAddresses.toBuilder()
-        .setAddresses(Collections.singletonList(eagToUse))
-        .setAttributes(Attributes.newBuilder().set(IS_PETIOLE_POLICY, true).build())
-        .setLoadBalancingPolicyConfig(null)
-        .build();
-  }
-
-  /**
    * Handle the name resolution error.
    *
    * <p/>Override if you need special handling.
@@ -192,41 +158,31 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       ResolvedAddresses resolvedAddresses) {
     logger.log(Level.FINE, "Received resolution result: {0}", resolvedAddresses);
 
-    // Subclass handles any special manipulation to create appropriate types of keyed ChildLbStates
-    Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
+    Map<Object, ResolvedAddresses> newChildAddresses = createChildAddressesMap(resolvedAddresses);
 
     // Handle error case
-    if (newChildren.isEmpty()) {
+    if (newChildAddresses.isEmpty()) {
       Status unavailableStatus = Status.UNAVAILABLE.withDescription(
           "NameResolver returned no usable address. " + resolvedAddresses);
       handleNameResolutionError(unavailableStatus);
       return new AcceptResolvedAddrRetVal(unavailableStatus, null);
     }
 
-    addMissingChildren(newChildren);
+    updateChildrenWithResolvedAddresses(newChildAddresses);
 
-    updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
-
-    return new AcceptResolvedAddrRetVal(Status.OK, getRemovedChildren(newChildren.keySet()));
+    return new AcceptResolvedAddrRetVal(Status.OK, getRemovedChildren(newChildAddresses.keySet()));
   }
 
-  private void addMissingChildren(Map<Object, ChildLbState> newChildren) {
-    // Do adds and identify reused children
-    for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
-      final Object key = entry.getKey();
-      if (!childLbStates.containsKey(key)) {
-        childLbStates.put(key, entry.getValue());
-      }
-    }
-  }
-
-  private void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
-                                                     Map<Object, ChildLbState> newChildren) {
-    for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
+  private void updateChildrenWithResolvedAddresses(
+      Map<Object, ResolvedAddresses> newChildAddresses) {
+    for (Map.Entry<Object, ResolvedAddresses> entry : newChildAddresses.entrySet()) {
       ChildLbState childLbState = childLbStates.get(entry.getKey());
-      ResolvedAddresses childAddresses = getChildAddresses(entry.getKey(), resolvedAddresses);
-      childLbState.setResolvedAddresses(childAddresses); // update child
-      childLbState.lb.handleResolvedAddresses(childAddresses); // update child LB
+      if (childLbState == null) {
+        childLbState = createChildLbState(entry.getKey());
+        childLbStates.put(entry.getKey(), childLbState);
+      }
+      childLbState.setResolvedAddresses(entry.getValue()); // update child
+      childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
     }
   }
 
