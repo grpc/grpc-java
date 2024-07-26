@@ -231,7 +231,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new AcceptResolvedAddrRetVal(Status.OK, getRemovedChildren(newChildren.keySet()));
   }
 
-  protected final void addMissingChildren(Map<Object, ChildLbState> newChildren) {
+  private void addMissingChildren(Map<Object, ChildLbState> newChildren) {
     // Do adds and identify reused children
     for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
       final Object key = entry.getKey();
@@ -241,7 +241,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
   }
 
-  protected final void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
+  private void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
                                                      Map<Object, ChildLbState> newChildren) {
     for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
       Object childConfig = entry.getValue().getConfig();
@@ -256,7 +256,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   /**
    * Identifies which children have been removed (are not part of the newChildKeys).
    */
-  protected final List<ChildLbState> getRemovedChildren(Set<Object> newChildKeys) {
+  private List<ChildLbState> getRemovedChildren(Set<Object> newChildKeys) {
     List<ChildLbState> removedChildren = new ArrayList<>();
     // Do removals
     for (Object key : ImmutableList.copyOf(childLbStates.keySet())) {
