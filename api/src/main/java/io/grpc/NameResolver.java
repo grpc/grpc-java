@@ -730,8 +730,7 @@ public abstract class NameResolver {
 
       /**
        * Sets the addresses resolved by name resolution or the error in doing so.  This field is required.
-       * @param addresses
-       * @return
+       * @param addresses Resolved addresses or an error in resolving addresses
        */
       public Builder setAddressesOrError(StatusOr<List<EquivalentAddressGroup>> addresses) {
         this.addresses = addresses;
