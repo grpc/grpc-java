@@ -411,13 +411,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return currentPicker;
     }
 
-    protected final Subchannel getSubchannels(PickSubchannelArgs args) {
-      if (getCurrentPicker() == null) {
-        return null;
-      }
-      return getCurrentPicker().pickSubchannel(args).getSubchannel();
-    }
-
     public final ConnectivityState getCurrentState() {
       return currentState;
     }
