@@ -26,12 +26,9 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
@@ -73,7 +70,7 @@ public class ClusterManagerLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
-    Map<String, PolicySelection> parsedChildPolicies = new LinkedHashMap<>();
+    Map<String, Object> parsedChildPolicies = new LinkedHashMap<>();
     try {
       Map<String, ?> childPolicies = JsonUtil.getObject(rawConfig, "childPolicy");
       if (childPolicies == null || childPolicies.isEmpty()) {
@@ -86,27 +83,19 @@ public class ClusterManagerLoadBalancerProvider extends LoadBalancerProvider {
           return ConfigOrError.fromError(Status.INTERNAL.withDescription(
               "No config for child " + name + " in cluster_manager LB policy: " + rawConfig));
         }
-        List<LbConfig> childConfigCandidates =
-            ServiceConfigUtil.unwrapLoadBalancingConfigList(
-                JsonUtil.getListOfObjects(childPolicy, "lbPolicy"));
-        if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
-          return ConfigOrError.fromError(Status.INTERNAL.withDescription(
-              "No config specified for child " + name + " in cluster_manager Lb policy: "
-                  + rawConfig));
-        }
         LoadBalancerRegistry registry =
             lbRegistry != null ? lbRegistry : LoadBalancerRegistry.getDefaultRegistry();
-        ConfigOrError selectedConfig =
-            ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, registry);
-        if (selectedConfig.getError() != null) {
-          Status error = selectedConfig.getError();
+        ConfigOrError childConfig = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+            JsonUtil.getListOfObjects(childPolicy, "lbPolicy"), registry);
+        if (childConfig.getError() != null) {
+          Status error = childConfig.getError();
           return ConfigOrError.fromError(
               Status.INTERNAL
                   .withCause(error.getCause())
                   .withDescription(error.getDescription())
-                  .augmentDescription("Failed to select config for child " + name));
+                  .augmentDescription("Failed to parse config for child " + name));
         }
-        parsedChildPolicies.put(name, (PolicySelection) selectedConfig.getConfig());
+        parsedChildPolicies.put(name, childConfig.getConfig());
       }
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
@@ -122,9 +111,9 @@ public class ClusterManagerLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   static class ClusterManagerConfig {
-    final Map<String, PolicySelection> childPolicies;
+    final Map<String, Object> childPolicies;
 
-    ClusterManagerConfig(Map<String, PolicySelection> childPolicies) {
+    ClusterManagerConfig(Map<String, Object> childPolicies) {
       this.childPolicies = Collections.unmodifiableMap(childPolicies);
     }
 
