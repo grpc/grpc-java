@@ -4479,8 +4479,8 @@ public class ManagedChannelImplTest {
   @Test
   public void testApplyDefaultServiceConfigIfInitialNameResolutionFails() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
-    channelBuilder.maxTraceEvents(10);
     timer.forwardNanos(1234);
+    channelBuilder.maxTraceEvents(10);
     try {
       FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory
               .Builder(expectedUri).setServers(Collections.singletonList(new
@@ -4495,16 +4495,30 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
       Status resolutionError = Status.UNAVAILABLE
               .withDescription("Initial Name Resolution error, using default service config");
+
       resolver.listener.onError(resolutionError);
       verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
       int prevSize = getStats(channel).channelTrace.events.size();
+
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
-              .setDescription("Initial Name Resolution error, using default service config")
-              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
-              .setTimestampNanos(timer.getTicker().read())
-              .build());
+                      .setDescription("Initial Name Resolution error, using default service config")
+                      .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
+                      .setTimestampNanos(timer.getTicker().read())
+                      .build());
+
+      resolver = nameResolverFactory.resolvers.get(0);
+      resolver.listener.onError(resolutionError);
+      prevSize = getStats(channel).channelTrace.events.size();
+
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+      assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
+              .isEqualTo(new ChannelTrace.Event.Builder()
+                      .setDescription("Initial Name Resolution error, using default service config")
+                      .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
+                      .setTimestampNanos(timer.getTicker().read())
+                      .build());
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
     }
