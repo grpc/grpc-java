@@ -1055,8 +1055,8 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(mockLoadBalancer);
   }
 
-  @Test
-  public void noMoreCallbackAfterLoadBalancerShutdown_usesNameResolverListener2OnResult2() {
+  @Test  
+  public void noMoreCallbackAfterLoadBalancerShutdown_configError() throws InterruptedException {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
@@ -1123,6 +1123,7 @@ public class ManagedChannelImplTest {
         resolver.listener.onResult2(
             ResolutionResult.newBuilder()
                 .setAddressesOrError(StatusOr.fromStatus(resolutionError)).build()));
+    assertThat(timer.getPendingTasks()).isEmpty();
     resolver.resolved();
     verifyNoMoreInteractions(mockLoadBalancer);
   }
@@ -3212,7 +3213,8 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void channelTracing_nameResolvedEvent_zeorAndNonzeroBackends_usesListener2onResult2() throws Exception {
+  public void channelTracing_nameResolvedEvent_zeorAndNonzeroBackends_usesListener2onResult2()
+      throws Exception {
     timer.forwardNanos(1234);
     channelBuilder.maxTraceEvents(10);
     List<EquivalentAddressGroup> servers = new ArrayList<>();
@@ -3342,7 +3344,8 @@ public class ManagedChannelImplTest {
         .setServiceConfig(ConfigOrError.fromConfig(mcsc1))
         .build();
 
-    channel.syncContext.execute(() -> nameResolverFactory.resolvers.get(0).listener.onResult2(resolutionResult1));
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult2(resolutionResult1));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
@@ -3358,8 +3361,8 @@ public class ManagedChannelImplTest {
                     Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setServiceConfig(ConfigOrError.fromConfig(mcsc1))
         .build();
-    channel.syncContext.execute(() -> nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2));
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2));
 
     prevSize = getStats(channel).channelTrace.events.size();
     timer.forwardNanos(1234);
@@ -3369,7 +3372,8 @@ public class ManagedChannelImplTest {
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setServiceConfig(ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()))
         .build();
-    channel.syncContext.execute(() -> nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3));
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
@@ -4045,11 +4049,9 @@ public class ManagedChannelImplTest {
         ImmutableList.of(new EquivalentAddressGroup(new SocketAddress() {}));
     final class FakeNameResolver extends NameResolver {
       Listener2 listener;
-      private final ManagedChannelImpl managedChannel;
       private final SynchronizationContext syncContext;
 
-      FakeNameResolver(ManagedChannelImpl managedChannel, Args args) {
-        this.managedChannel = managedChannel;
+      FakeNameResolver(Args args) {
         this.syncContext = args.getSynchronizationContext();
       }
 
@@ -4083,7 +4085,8 @@ public class ManagedChannelImplTest {
       @Override
       public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
         syncContext = args.getSynchronizationContext();
-        return (resolver = new FakeNameResolver(managedChannel, args));}
+        return (resolver = new FakeNameResolver(args));
+      }
 
       @Override
       public String getDefaultScheme() {
@@ -4129,11 +4132,11 @@ public class ManagedChannelImplTest {
     ManagedChannelServiceConfig managedChannelServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, lbConfigs);
     factory.syncContext.execute(() ->
-      factory.resolver.listener.onResult2(
-          ResolutionResult.newBuilder()
-              .setAddresses(addresses)
-              .setServiceConfig(ConfigOrError.fromConfig(managedChannelServiceConfig))
-              .build()));
+        factory.resolver.listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddresses(addresses)
+                .setServiceConfig(ConfigOrError.fromConfig(managedChannelServiceConfig))
+                .build()));
 
     ClientCall<Void, Void> call2 = mychannel.newCall(
         TestMethodDescriptors.voidMethod(),

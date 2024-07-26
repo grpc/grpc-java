@@ -105,12 +105,10 @@ final class RetryingNameResolver extends ForwardingNameResolver {
     @Override
     public Status onResult2(ResolutionResult resolutionResult) {
       Status status = delegateListener.onResult2(resolutionResult);
-      if (status != null) { // null indicates LB had been shut down.
-        if (status == Status.OK) {
-          retryScheduler.reset();
-        } else {
-          retryScheduler.schedule(new DelayedNameResolverRefresh());
-        }
+      if (status.isOk()) {
+        retryScheduler.reset();
+      } else {
+        retryScheduler.schedule(new DelayedNameResolverRefresh());
       }
       return status;
     }

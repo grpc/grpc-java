@@ -2,7 +2,7 @@ module(
     name = "grpc-java",
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
-    version = "0",
+    version = "1.66.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
 )
 
 # GRPC_DEPS_START
@@ -62,7 +62,6 @@ use_repo(
     non_module_deps,
     "com_github_cncf_xds",
     "envoy_api",
-    "com_google_protobuf_javalite",
 )
 
 grpc_repo_deps_ext = use_extension("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_repo_deps_ext")
@@ -203,5 +202,3 @@ maven.override(
 switched_rules = use_extension("@com_google_googleapis//:extensions.bzl", "switched_rules")
 
 switched_rules.use_languages(java = True)
-
-use_repo(switched_rules, "com_google_googleapis_imports")

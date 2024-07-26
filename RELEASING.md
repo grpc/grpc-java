@@ -18,8 +18,10 @@ them before continuing, and set them again when resuming.
 ```bash
 MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
 VERSION_FILES=(
+  MODULE.bazel
   build.gradle
   core/src/main/java/io/grpc/internal/GrpcUtil.java
+  examples/MODULE.bazel
   examples/build.gradle
   examples/pom.xml
   examples/android/clientcache/app/build.gradle

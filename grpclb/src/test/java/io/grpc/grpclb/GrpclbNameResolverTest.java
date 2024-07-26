@@ -152,7 +152,7 @@ public class GrpclbNameResolverTest {
     resolver.start(mockListener);
     assertThat(fakeClock.runDueTasks()).isEqualTo(1);
 
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     ResolutionResult result = resultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
     assertThat(result.getAttributes()).isEqualTo(Attributes.EMPTY);
@@ -192,7 +192,7 @@ public class GrpclbNameResolverTest {
 
     resolver.start(mockListener);
     assertThat(fakeClock.runDueTasks()).isEqualTo(1);
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     ResolutionResult result = resultCaptor.getValue();
     InetSocketAddress resolvedBackendAddr =
         (InetSocketAddress) Iterables.getOnlyElement(
@@ -225,7 +225,7 @@ public class GrpclbNameResolverTest {
 
     resolver.start(mockListener);
     assertThat(fakeClock.runDueTasks()).isEqualTo(1);
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     ResolutionResult result = resultCaptor.getValue();
     assertThat(result.getAddresses())
         .containsExactly(
@@ -272,7 +272,7 @@ public class GrpclbNameResolverTest {
 
     resolver.start(mockListener);
     assertThat(fakeClock.runDueTasks()).isEqualTo(1);
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     ResolutionResult result = resultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
     EquivalentAddressGroup resolvedBalancerAddr =
@@ -306,7 +306,7 @@ public class GrpclbNameResolverTest {
 
     resolver.start(mockListener);
     assertThat(fakeClock.runDueTasks()).isEqualTo(1);
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     ResolutionResult result = resultCaptor.getValue();
 
     InetSocketAddress resolvedBackendAddr =

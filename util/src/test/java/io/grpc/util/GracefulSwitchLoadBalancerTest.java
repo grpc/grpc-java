@@ -86,6 +86,7 @@ public class GracefulSwitchLoadBalancerTest {
   // OLD TESTS
 
   @Test
+  @Deprecated
   public void switchTo_canHandleEmptyAddressListFromNameResolutionForwardedToLatestPolicy() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -115,6 +116,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_handleResolvedAddressesAndNameResolutionErrorForwardedToLatestPolicy() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -155,6 +157,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_acceptResolvedAddressesAndNameResolutionErrorForwardedToLatestPolicy() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -195,6 +198,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_shutdownTriggeredWhenSwitchAndForwardedWhenSwitchLbShutdown() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -226,6 +230,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_requestConnectionForwardedToLatestPolicies() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -263,6 +268,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_createSubchannelForwarded() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -289,6 +295,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_updateBalancingStateIsGraceful() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -340,6 +347,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_switchWhileOldPolicyIsNotReady() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -368,6 +376,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_switchWhileOldPolicyGoesFromReadyToNotReady() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -398,6 +407,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_switchWhileOldPolicyGoesFromReadyToNotReadyWhileNewPolicyStillIdle() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -428,6 +438,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_newPolicyNameTheSameAsPendingPolicy_shouldHaveNoEffect() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -445,6 +456,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void switchTo_newPolicyNameTheSameAsCurrentPolicy_shouldShutdownPendingLb() {
     gracefulSwitchLb.switchTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
@@ -468,6 +480,7 @@ public class GracefulSwitchLoadBalancerTest {
 
 
   @Test
+  @Deprecated
   public void switchTo_newLbFactoryEqualToOldOneShouldHaveNoEffect() {
     final List<LoadBalancer> balancers = new ArrayList<>();
 

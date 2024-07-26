@@ -598,13 +598,15 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (numWeightedChannels > 0) {
         unscaledMeanWeight = sumWeight / numWeightedChannels;
         unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
-        usesRoundRobin = false;
       } else {
-        // Fall back to round robin if all values are non-positives
-        usesRoundRobin = true;
+        // Fall back to round robin if all values are non-positives. Note that
+        // numWeightedChannels == 1 also behaves like RR because the weights are all the same, but
+        // the weights aren't 1, so it doesn't go through this path.
         unscaledMeanWeight = 1;
         unscaledMaxWeight = 1;
       }
+      // We need at least two weights for WRR to be distinguishable from round_robin.
+      usesRoundRobin = numWeightedChannels < 2;
 
       // Scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly.
       // Note that, since we cap the weights to stay within K_MAX_RATIO, meanWeight might not

@@ -62,7 +62,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "com.google.protobuf:protobuf-java": "@com_google_protobuf//:protobuf_java",
     "com.google.protobuf:protobuf-java-util": "@com_google_protobuf//:protobuf_java_util",
-    "com.google.protobuf:protobuf-javalite": "@com_google_protobuf_javalite//:protobuf_javalite",
+    "com.google.protobuf:protobuf-javalite": "@com_google_protobuf//:protobuf_javalite",
     "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
     "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
     "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
@@ -107,8 +107,6 @@ def grpc_java_repositories(bzlmod = False):
         )
     if not bzlmod and not native.existing_rule("com_google_protobuf"):
         com_google_protobuf()
-    if not native.existing_rule("com_google_protobuf_javalite"):
-        com_google_protobuf_javalite()
     if not bzlmod and not native.existing_rule("com_google_googleapis"):
         http_archive(
             name = "com_google_googleapis",
@@ -148,15 +146,6 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "9bd87b8280ef720d3240514f884e56a712f2218f0d693b48050c836028940a42",
-        strip_prefix = "protobuf-25.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz"],
-    )
-
-def com_google_protobuf_javalite():
-    # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
-    http_archive(
-        name = "com_google_protobuf_javalite",
         sha256 = "9bd87b8280ef720d3240514f884e56a712f2218f0d693b48050c836028940a42",
         strip_prefix = "protobuf-25.1",
         urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz"],
