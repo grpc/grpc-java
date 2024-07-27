@@ -3363,6 +3363,7 @@ public class ManagedChannelImplTest {
         .build();
     channel.syncContext.execute(() ->
         nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2));
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
     timer.forwardNanos(1234);

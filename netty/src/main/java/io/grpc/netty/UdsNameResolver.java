@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.Preconditions;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.util.ArrayList;
@@ -60,8 +61,9 @@ final class UdsNameResolver extends NameResolver {
     ResolutionResult.Builder resolutionResultBuilder = ResolutionResult.newBuilder();
     List<EquivalentAddressGroup> servers = new ArrayList<>(1);
     servers.add(new EquivalentAddressGroup(new DomainSocketAddress(authority)));
-    resolutionResultBuilder.setAddresses(Collections.unmodifiableList(servers));
-    listener.onResult2(resolutionResultBuilder.build());
+    resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(servers));
+    syncContext.execute(() ->
+        listener.onResult2(resolutionResultBuilder.build()));
   }
 
   @Override
