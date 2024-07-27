@@ -4065,13 +4065,13 @@ public class ManagedChannelImplTest {
       public void start(Listener2 listener) {
         this.listener = listener;
         syncContext.execute(() ->
-          listener.onResult2(
-              ResolutionResult.newBuilder()
-                  .setAddresses(addresses)
-                  .setServiceConfig(
-                      ConfigOrError.fromError(
-                          Status.INTERNAL.withDescription("kaboom is invalid")))
-                  .build()));
+            listener.onResult2(
+                ResolutionResult.newBuilder()
+                    .setAddresses(addresses)
+                    .setServiceConfig(
+                        ConfigOrError.fromError(
+                            Status.INTERNAL.withDescription("kaboom is invalid")))
+                    .build()));
       }
 
       @Override
@@ -4082,6 +4082,7 @@ public class ManagedChannelImplTest {
       FakeNameResolver resolver;
       ManagedChannelImpl managedChannel;
       SynchronizationContext syncContext;
+
       @Nullable
       @Override
       public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {

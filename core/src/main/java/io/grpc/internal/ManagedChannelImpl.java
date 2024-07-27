@@ -1694,7 +1694,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return Status.OK;
       }
 
-      StatusOr<List<EquivalentAddressGroup>> serversOrError = resolutionResult.getAddressesOrError();
+      StatusOr<List<EquivalentAddressGroup>> serversOrError =
+          resolutionResult.getAddressesOrError();
       if (serversOrError != null && serversOrError.hasValue()) {
         channelLogger.log(
             ChannelLogLevel.DEBUG,
@@ -1703,7 +1704,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             resolutionResult.getAttributes());
 
         if (lastResolutionState != ResolutionState.SUCCESS) {
-          channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", serversOrError.value());
+          channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}",
+              serversOrError.value());
           lastResolutionState = ResolutionState.SUCCESS;
         }
       } else if (serversOrError != null && !serversOrError.hasValue()) {

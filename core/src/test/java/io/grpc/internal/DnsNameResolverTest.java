@@ -49,7 +49,6 @@ import io.grpc.ProxyDetector;
 import io.grpc.StaticTestingClassLoader;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.DnsNameResolver.ResourceResolver;

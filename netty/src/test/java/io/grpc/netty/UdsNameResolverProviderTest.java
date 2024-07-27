@@ -70,6 +70,7 @@ public class UdsNameResolverProviderTest {
       .setChannelLogger(mock(ChannelLogger.class))
       .setScheduledExecutorService(fakeExecutor.getScheduledExecutorService())
       .build();
+
   @Test
   public void testUnixRelativePath() {
     UdsNameResolver udsNameResolver =

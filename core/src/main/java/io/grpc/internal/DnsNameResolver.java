@@ -314,15 +314,16 @@ public class DnsNameResolver extends NameResolver {
           if (logger.isLoggable(Level.FINER)) {
             logger.finer("Using proxy address " + proxiedAddr);
           }
-          resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(Collections.singletonList(proxiedAddr)));
+          resolutionResultBuilder.setAddressesOrError(
+              StatusOr.fromValue(Collections.singletonList(proxiedAddr)));
         } else {
           result = doResolve(false);
           if (result.error != null) {
             InternalResolutionResult finalResult = result;
             syncContext.execute(() ->
-            savedListener.onResult2(ResolutionResult.newBuilder()
-                .setAddressesOrError(StatusOr.fromStatus(finalResult.error))
-                .build()));
+                savedListener.onResult2(ResolutionResult.newBuilder()
+                    .setAddressesOrError(StatusOr.fromStatus(finalResult.error))
+                    .build()));
             return;
           }
           if (result.addresses != null) {
@@ -340,11 +341,11 @@ public class DnsNameResolver extends NameResolver {
         });
       } catch (IOException e) {
         syncContext.execute(() ->
-        savedListener.onResult2(ResolutionResult.newBuilder()
-            .setAddressesOrError(
-                StatusOr.fromStatus(
-                    Status.UNAVAILABLE.withDescription(
-                        "Unable to resolve host " + host).withCause(e))).build()));
+            savedListener.onResult2(ResolutionResult.newBuilder()
+                .setAddressesOrError(
+                    StatusOr.fromStatus(
+                        Status.UNAVAILABLE.withDescription(
+                            "Unable to resolve host " + host).withCause(e))).build()));
       } finally {
         final boolean succeed = result != null && result.error == null;
         syncContext.execute(new Runnable() {

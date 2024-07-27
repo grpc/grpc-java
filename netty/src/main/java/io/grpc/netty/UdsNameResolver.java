@@ -26,7 +26,6 @@ import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 final class UdsNameResolver extends NameResolver {

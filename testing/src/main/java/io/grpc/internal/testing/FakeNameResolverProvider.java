@@ -84,7 +84,8 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
       } else {
         listener.onResult2(
             ResolutionResult.newBuilder()
-                .setAddressesOrError(StatusOr.fromValue(ImmutableList.of(new EquivalentAddressGroup(address))))
+                .setAddressesOrError(
+                    StatusOr.fromValue(ImmutableList.of(new EquivalentAddressGroup(address))))
                 .build());
       }
     }

@@ -93,7 +93,8 @@ public abstract class NameResolver {
 
           @Override
           public void onResult(ResolutionResult resolutionResult) {
-            listener.onAddresses(resolutionResult.getAddressesOrError().value(), resolutionResult.getAttributes());
+            listener.onAddresses(resolutionResult.getAddressesOrError().value(),
+                resolutionResult.getAttributes());
           }
       });
     }
