@@ -3,7 +3,9 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-/** Either a Status or a value. */
+/**
+ * Either a Status or a value.
+ */
 public class StatusOr<T> {
   private StatusOr() {}
 

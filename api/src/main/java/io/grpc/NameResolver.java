@@ -223,12 +223,14 @@ public abstract class NameResolver {
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
       // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
       onResult2(
-          ResolutionResult.newBuilder().setAddressesOrError(StatusOr.fromValue(servers)).setAttributes(attributes).build());
+          ResolutionResult.newBuilder().setAddressesOrError(
+              StatusOr.fromValue(servers)).setAttributes(attributes).build());
     }
 
     /**
      * Handles updates on resolved addresses and attributes.  If
-     * {@link ResolutionResult#getAddressesOrError()} is empty, {@link #onError(Status)} will be called.
+     * {@link ResolutionResult#getAddressesOrError()} is empty, {@link #onError(Status)} will be
+     * called.
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
@@ -727,7 +729,8 @@ public abstract class NameResolver {
       }
 
       /**
-       * Sets the addresses resolved by name resolution or the error in doing so.  This field is required.
+       * Sets the addresses resolved by name resolution or the error in doing so. This field is
+       * required.
        * @param addresses Resolved addresses or an error in resolving addresses
        */
       public Builder setAddressesOrError(StatusOr<List<EquivalentAddressGroup>> addresses) {
