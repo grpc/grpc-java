@@ -173,26 +173,9 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     if (currentConnectivityState != READY)  {
-      helper.updateBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
-  }
-
-  /**
-   * Handle the name resolution error only for the specified child.
-   *
-   * <p/>Override if you need special handling.
-   */
-  protected void handleNameResolutionError(ChildLbState child, Status error) {
-    child.lb.handleNameResolutionError(error);
-  }
-
-  /**
-   * Creates a new picker representing an error status.
-   *
-   * <p/>Override to produce a custom picker when there are errors.
-   */
-  protected SubchannelPicker getErrorPicker(Status error)  {
-    return new FixedResultPicker(PickResult.withError(error));
   }
 
   @Override
