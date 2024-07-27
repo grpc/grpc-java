@@ -232,9 +232,7 @@ public abstract class NameResolver {
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
-     * @deprecated Will be superseded by onResult2.
      */
-    @Deprecated
     public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
