@@ -414,7 +414,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
           final SubchannelPicker newPicker) {
-        if (!childLbStates.containsKey(key)) {
+        if (currentState == SHUTDOWN) {
           return;
         }
 

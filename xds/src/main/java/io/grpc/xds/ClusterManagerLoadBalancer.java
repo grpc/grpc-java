@@ -260,9 +260,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
                                        final SubchannelPicker newPicker) {
-        // If we are already in the process of resolving addresses, the overall balancing state
-        // will be updated at the end of it, and we don't need to trigger that update here.
-        if (getChildLbState(getKey()) == null) {
+        if (getCurrentState() == ConnectivityState.SHUTDOWN) {
           return;
         }
 
@@ -270,6 +268,8 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
         // when the child instance exits deactivated state.
         setCurrentState(newState);
         setCurrentPicker(newPicker);
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
         if (deletionTimer == null && !resolvingAddresses) {
           updateOverallBalancingState();
         }
