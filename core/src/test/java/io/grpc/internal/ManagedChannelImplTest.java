@@ -4496,29 +4496,16 @@ public class ManagedChannelImplTest {
       Status resolutionError = Status.UNAVAILABLE
               .withDescription("Initial Name Resolution error, using default service config");
 
+      int prevSize = getStats(channel).channelTrace.events.size();
       resolver.listener.onError(resolutionError);
       verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
-      int prevSize = getStats(channel).channelTrace.events.size();
 
-      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
-      assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
-              .isEqualTo(new ChannelTrace.Event.Builder()
-                      .setDescription("Initial Name Resolution error, using default service config")
-                      .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
-                      .setTimestampNanos(timer.getTicker().read())
-                      .build());
-
-      resolver = nameResolverFactory.resolvers.get(0);
-      resolver.listener.onError(resolutionError);
-      prevSize = getStats(channel).channelTrace.events.size();
-
-      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
-      assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
-              .isEqualTo(new ChannelTrace.Event.Builder()
-                      .setDescription("Initial Name Resolution error, using default service config")
-                      .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
-                      .setTimestampNanos(timer.getTicker().read())
-                      .build());
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
+      assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+              .setDescription("Failed to resolve name: " + resolutionError)
+              .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
+              .setTimestampNanos(timer.getTicker().read())
+              .build());
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
     }
