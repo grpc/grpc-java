@@ -95,11 +95,15 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -166,15 +170,22 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
+  private URI targetUri;
 
   @Before
   public void setUp() {
+    try {
+      targetUri = new URI(AUTHORITY);
+    } catch (URISyntaxException e) {
+      targetUri = null;
+    }
+
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
     FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
         new FaultFilter(mockRandom, new AtomicLong()),
         RouterFilter.INSTANCE);
-    resolver = new XdsNameResolver(null, AUTHORITY, null,
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, filterRegistry, null);
   }
@@ -199,16 +210,22 @@ public class XdsNameResolverTest {
 
       @Override
       @Nullable
-      public ObjectPool<XdsClient> get() {
+      public ObjectPool<XdsClient> get(String target) {
         throw new UnsupportedOperationException("Should not be called");
       }
 
       @Override
-      public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+      public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
+
+      @Override
+      public List<String> getTargets() {
+        return null;
+      }
     };
-    resolver = new XdsNameResolver(null, AUTHORITY, null,
+
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -221,7 +238,7 @@ public class XdsNameResolverTest {
 
   @Test
   public void resolving_withTargetAuthorityNotFound() {
-    resolver = new XdsNameResolver(
+    resolver = new XdsNameResolver(targetUri,
         "notfound.google.com", AUTHORITY, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -243,7 +260,7 @@ public class XdsNameResolverTest {
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
     expectedLdsResourceName = "[::FFFF:129.144.52.38]:80/id=1";
     resolver = new XdsNameResolver(
-        null, serviceAuthority, null, serviceConfigParser, syncContext,
+        targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext,
         scheduler, xdsClientPoolFactory,
         mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -264,7 +281,7 @@ public class XdsNameResolverTest {
         "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
             + "%5B::FFFF:129.144.52.38%5D:80?id=1";
     resolver = new XdsNameResolver(
-        null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
+        targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
@@ -284,7 +301,7 @@ public class XdsNameResolverTest {
         "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
             + "path/to/service?id=1";
     resolver = new XdsNameResolver(
-        null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
+        targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
 
 
@@ -311,7 +328,7 @@ public class XdsNameResolverTest {
         .build();
     expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
-    resolver = new XdsNameResolver(
+    resolver = new XdsNameResolver(targetUri,
         "xds.authority.com", serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -343,7 +360,7 @@ public class XdsNameResolverTest {
         .clientDefaultListenerResourceNameTemplate("test-%s")
         .node(Node.newBuilder().build())
         .build();
-    resolver = new XdsNameResolver(null, AUTHORITY, null,
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     // use different ldsResourceName and service authority. The virtualhost lookup should use
@@ -524,7 +541,7 @@ public class XdsNameResolverTest {
             Collections.singletonList(route),
             ImmutableMap.of());
 
-    resolver = new XdsNameResolver(null, AUTHORITY, "random",
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, "random",
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -547,7 +564,7 @@ public class XdsNameResolverTest {
             Collections.singletonList(route),
             ImmutableMap.of());
 
-    resolver = new XdsNameResolver(null, AUTHORITY, "random",
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, "random",
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -558,7 +575,7 @@ public class XdsNameResolverTest {
 
   @Test
   public void resolving_matchingVirtualHostNotFoundForOverrideAuthority() {
-    resolver = new XdsNameResolver(null, AUTHORITY, AUTHORITY,
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, AUTHORITY,
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -643,8 +660,8 @@ public class XdsNameResolverTest {
   public void retryPolicyInPerMethodConfigGeneratedByResolverIsValid() {
     ServiceConfigParser realParser = new ScParser(
         true, 5, 5, new AutoConfiguredLoadBalancerFactory("pick-first"));
-    resolver = new XdsNameResolver(null, AUTHORITY, null, realParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, realParser, syncContext,
+        scheduler, xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     RetryPolicy retryPolicy = RetryPolicy.create(
@@ -847,7 +864,7 @@ public class XdsNameResolverTest {
     resolver.shutdown();
     reset(mockListener);
     when(mockRandom.nextLong()).thenReturn(123L);
-    resolver = new XdsNameResolver(null, AUTHORITY, null, serviceConfigParser,
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
@@ -1896,17 +1913,20 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
+    Set<String> targets = new HashSet<>();
+
     @Override
     public void setBootstrapOverride(Map<String, ?> bootstrap) {}
 
     @Override
     @Nullable
-    public ObjectPool<XdsClient> get() {
+    public ObjectPool<XdsClient> get(String target) {
       throw new UnsupportedOperationException("Should not be called");
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+    public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
+      targets.add(target);
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -1918,6 +1938,16 @@ public class XdsNameResolverTest {
           return null;
         }
       };
+    }
+
+    @Override
+    public List<String> getTargets() {
+      if (targets.isEmpty()) {
+        List<String> targetList = new ArrayList<>();
+        targetList.add(targetUri.toString());
+        return targetList;
+      }
+      return new ArrayList<>(targets);
     }
   }
 
