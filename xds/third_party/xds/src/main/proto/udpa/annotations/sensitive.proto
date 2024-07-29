@@ -8,7 +8,7 @@ package udpa.annotations;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/cncf/xds/go/annotations";
+option go_package = "github.com/cncf/xds/go/udpa/annotations";
 
 extend google.protobuf.FieldOptions {
   // Magic number is the 28 most significant bits in the sha256sum of "udpa.annotations.sensitive".

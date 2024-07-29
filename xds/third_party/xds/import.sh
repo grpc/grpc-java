@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from one of the google internal CLs
-VERSION=e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7
+VERSION=024c85f92f20cab567a83acc50934c7f9711d124
 DOWNLOAD_URL="https://github.com/cncf/xds/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="xds-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}"
