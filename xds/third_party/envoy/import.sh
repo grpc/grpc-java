@@ -74,6 +74,7 @@ envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
+envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
 envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
@@ -95,6 +96,7 @@ envoy/service/rate_limit_quota/v3/rlqs.proto
 envoy/service/status/v3/csds.proto
 envoy/type/http/v3/path_transformation.proto
 envoy/type/matcher/v3/filter_state.proto
+envoy/type/matcher/v3/http_inputs.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
 envoy/type/matcher/v3/number.proto
@@ -106,6 +108,7 @@ envoy/type/matcher/v3/value.proto
 envoy/type/metadata/v3/metadata.proto
 envoy/type/tracing/v3/custom_tag.proto
 envoy/type/v3/http.proto
+envoy/type/v3/http_status.proto
 envoy/type/v3/percent.proto
 envoy/type/v3/range.proto
 envoy/type/v3/ratelimit_strategy.proto
