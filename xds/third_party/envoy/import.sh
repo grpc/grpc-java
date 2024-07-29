@@ -91,6 +91,7 @@ envoy/extensions/transport_sockets/tls/v3/tls.proto
 envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v3/lrs.proto
+envoy/service/rate_limit_quota/v3/rlqs.proto
 envoy/service/status/v3/csds.proto
 envoy/type/http/v3/path_transformation.proto
 envoy/type/matcher/v3/filter_state.proto
@@ -107,7 +108,10 @@ envoy/type/tracing/v3/custom_tag.proto
 envoy/type/v3/http.proto
 envoy/type/v3/percent.proto
 envoy/type/v3/range.proto
+envoy/type/v3/ratelimit_strategy.proto
+envoy/type/v3/ratelimit_unit.proto
 envoy/type/v3/semantic_version.proto
+envoy/type/v3/token_bucket.proto
 )
 
 pushd "$(git rev-parse --show-toplevel)/xds/third_party/envoy" > /dev/null
