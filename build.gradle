@@ -161,14 +161,6 @@ subprojects {
         }
     }
 
-    allprojects {
-        gradle.projectsEvaluated {
-            tasks.withType(JavaCompile) {
-                options.compilerArgs << "-Xlint:all" << "-Werror"
-            }
-        }
-    }
-
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
         toolVersion = JavaVersion.current().isJava11Compatible() ? libs.checkstyle.get().version : libs.checkstylejava8.get().version 

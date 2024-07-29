@@ -710,7 +710,8 @@ public abstract class NameResolver {
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     public static final class Builder {
-      private StatusOr<List<EquivalentAddressGroup>> addresses = StatusOr.fromValue(Collections.emptyList());
+      private StatusOr<List<EquivalentAddressGroup>> addresses =
+          StatusOr.fromValue(Collections.emptyList());
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
       private ConfigOrError serviceConfig;

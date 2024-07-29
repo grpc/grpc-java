@@ -51,7 +51,7 @@ public class StatusOr<T> {
 
   /** Returns the status. If there is a value, returns OK. */
   public Status status() {
-    return value != null? Status.OK : status;
+    return value != null ? Status.OK : status;
   }
 
   private final Status status;
