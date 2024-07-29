@@ -21,36 +21,39 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 /** Either a Status or a value. */
 public class StatusOr<T> {
-  private StatusOr() {}
+  private StatusOr(Status status, T value) {
+    this.status = status;
+    this.value = value;
+  }
 
+  /** Construct from a value. */
   public static <T> StatusOr<T> fromValue(T value) {
-    StatusOr<T> result = new StatusOr<T>();
-    result.hasValue = true;
-    result.value = checkNotNull(value, "value");
+    StatusOr<T> result = new StatusOr<T>(null, checkNotNull(value, "value"));
     return result;
   }
 
+  /** Construct from a non-Ok status. */
   public static <T> StatusOr<T> fromStatus(Status status) {
-    StatusOr<T> result = new StatusOr<T>();
-    result.status  = checkNotNull(status, "status");
+    StatusOr<T> result = new StatusOr<T>(checkNotNull(status, "status"), null);
     checkArgument(!status.isOk(), "cannot use OK status: %s", status);
-    result.hasValue = false;
     return result;
   }
 
+  /** Returns whether there is a value. */
   public boolean hasValue() {
-    return hasValue;
+    return status == null;
   }
 
+  /** Returns the value if set, or null in case of a non-OK status. */
   public T value() {
     return value;
   }
 
+  /** Returns the status. If there is a value, returns OK. */
   public Status status() {
-    return status;
+    return value != null? Status.OK : status;
   }
 
-  private Status status;
-  private T value;
-  private boolean hasValue;
+  private final Status status;
+  private final T value;
 }

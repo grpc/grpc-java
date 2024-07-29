@@ -26,6 +26,7 @@ import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -709,7 +710,7 @@ public abstract class NameResolver {
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     public static final class Builder {
-      private StatusOr<List<EquivalentAddressGroup>> addresses;
+      private StatusOr<List<EquivalentAddressGroup>> addresses = StatusOr.fromValue(Collections.emptyList());
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
       private ConfigOrError serviceConfig;
