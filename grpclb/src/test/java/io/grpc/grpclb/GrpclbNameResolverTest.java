@@ -245,8 +245,8 @@ public class GrpclbNameResolverTest {
 
     resolver.start(mockListener);
     assertThat(fakeClock.runDueTasks()).isEqualTo(1);
-    verify(mockListener).onError(errorCaptor.capture());
-    Status errorStatus = errorCaptor.getValue();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    Status errorStatus = resultCaptor.getValue().getAddressesOrError().status();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
   }
@@ -335,8 +335,8 @@ public class GrpclbNameResolverTest {
 
     resolver.start(mockListener);
     assertThat(fakeClock.runDueTasks()).isEqualTo(1);
-    verify(mockListener).onError(errorCaptor.capture());
-    Status errorStatus = errorCaptor.getValue();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    Status errorStatus = resultCaptor.getValue().getAddressesOrError().status();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     verify(mockAddressResolver).resolveAddress(hostName);
     verify(mockResourceResolver, never()).resolveTxt("_grpc_config." + hostName);
