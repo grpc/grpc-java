@@ -96,7 +96,6 @@ public class GrpclbNameResolverTest {
   }
 
   @Captor private ArgumentCaptor<ResolutionResult> resultCaptor;
-  @Captor private ArgumentCaptor<Status> errorCaptor;
   @Mock private ServiceConfigParser serviceConfigParser;
   @Mock private NameResolver.Listener2 mockListener;
 
