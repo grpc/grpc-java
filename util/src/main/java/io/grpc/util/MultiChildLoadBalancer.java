@@ -26,7 +26,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -279,11 +278,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   protected final Helper getHelper() {
     return helper;
-  }
-
-  @VisibleForTesting
-  public final ImmutableMap<Object, ChildLbState> getImmutableChildMap() {
-    return ImmutableMap.copyOf(childLbStates);
   }
 
   @VisibleForTesting
