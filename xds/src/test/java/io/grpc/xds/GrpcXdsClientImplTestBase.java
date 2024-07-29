@@ -2781,6 +2781,7 @@ public abstract class GrpcXdsClientImplTestBase {
     // trigger an EDS resource unsubscription.
     xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
+    call.verifyRequest(EDS, Arrays.asList(), VERSION_1, "0000", NODE);
 
     // When re-subscribing, the version and nonce were properly forgotten, so the request is the
     // same as the initial request
