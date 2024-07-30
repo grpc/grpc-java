@@ -118,6 +118,7 @@ import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.mockito.verification.VerificationMode;
 
 /**
  * Tests for {@link XdsClientImpl} with protocol version v3.
@@ -205,8 +206,8 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
     @Override
     protected void verifyRequest(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
-        EnvoyProtoData.Node node) {
-      verify(requestObserver, Mockito.timeout(2000)).onNext(argThat(new DiscoveryRequestMatcher(
+        EnvoyProtoData.Node node, VerificationMode verificationMode) {
+      verify(requestObserver, verificationMode).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce, null, null)));
     }
 
