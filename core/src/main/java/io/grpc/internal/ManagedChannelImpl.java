@@ -1822,11 +1822,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         public void run() {
           handleErrorInSyncContext(error);
-          if (defaultServiceConfig != null) {
-            realChannel.updateConfigSelector(defaultServiceConfig.getDefaultConfigSelector());
-            channelLogger.log(ChannelLogLevel.ERROR,
-                    "Initial Name Resolution error, using default service config");
-          }
         }
       }
 
@@ -1835,7 +1830,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
-          new Object[] {getLogId(), error});
+              new Object[]{getLogId(), error});
       realChannel.onConfigError();
       if (lastResolutionState != ResolutionState.ERROR) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
@@ -1844,6 +1839,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
       if (NameResolverListener.this.helper != ManagedChannelImpl.this.lbHelper) {
         return;
+      }
+      // Apply Default Service Config if initial name resolution fails.
+      if (defaultServiceConfig != null) {
+        realChannel.updateConfigSelector(defaultServiceConfig.getDefaultConfigSelector());
+        channelLogger.log(ChannelLogLevel.ERROR,
+                "Initial Name Resolution error, using default service config");
       }
 
       helper.lb.handleNameResolutionError(error);
