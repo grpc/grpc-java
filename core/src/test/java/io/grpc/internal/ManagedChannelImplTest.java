@@ -4506,6 +4506,16 @@ public class ManagedChannelImplTest {
               .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
               .setTimestampNanos(timer.getTicker().read())
               .build());
+
+      prevSize = getStats(channel).channelTrace.events.size();
+      resolver.listener.onError(resolutionError);
+
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+      assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+              .setDescription("Failed to resolve name: " + resolutionError)
+              .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
+              .setTimestampNanos(timer.getTicker().read())
+              .build());
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
     }
