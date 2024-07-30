@@ -47,6 +47,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
+# CEL Spec may be removed when cncf/xds MODULE is no longer using protobuf 27.x
+bazel_dep(name = "cel-spec", repo_name = "dev_cel", version = "0.15.0")
 bazel_dep(name = "grpc", repo_name = "com_github_grpc_grpc", version = "1.56.3.bcr.1")
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
 bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
