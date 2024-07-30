@@ -1841,8 +1841,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return;
       }
       // Apply Default Service Config if initial name resolution fails.
-      if (defaultServiceConfig != null) {
+      if (lastServiceConfig != EMPTY_SERVICE_CONFIG && defaultServiceConfig != null) {
         realChannel.updateConfigSelector(defaultServiceConfig.getDefaultConfigSelector());
+        lastServiceConfig = defaultServiceConfig;
         channelLogger.log(ChannelLogLevel.ERROR,
                 "Initial Name Resolution error, using default service config");
       }
