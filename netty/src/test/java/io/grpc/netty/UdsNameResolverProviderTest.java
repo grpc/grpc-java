@@ -97,7 +97,7 @@ public class UdsNameResolverProviderTest {
         udsNameResolverProvider.newNameResolver(URI.create("unix:/sock.sock"), args);
     assertThat(udsNameResolver).isNotNull();
     udsNameResolver.start(mockListener);
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     NameResolver.ResolutionResult result = resultCaptor.getValue();
     List<EquivalentAddressGroup> list = result.getAddressesOrError().value();
     assertThat(list).isNotNull();
@@ -117,7 +117,7 @@ public class UdsNameResolverProviderTest {
         udsNameResolverProvider.newNameResolver(URI.create("unix:///sock.sock"), args);
     assertThat(udsNameResolver).isNotNull();
     udsNameResolver.start(mockListener);
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     NameResolver.ResolutionResult result = resultCaptor.getValue();
     List<EquivalentAddressGroup> list = result.getAddressesOrError().value();
     assertThat(list).isNotNull();
