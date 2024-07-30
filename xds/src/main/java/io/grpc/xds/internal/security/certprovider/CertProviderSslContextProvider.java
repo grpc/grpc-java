@@ -37,7 +37,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable private final CertificateProviderStore.Handle certHandle;
   @Nullable private final CertificateProviderStore.Handle rootCertHandle;
   @Nullable private final CertificateProviderInstance certInstance;
-  @Nullable private final CertificateProviderInstance rootCertInstance;
+  @Nullable protected final CertificateProviderInstance rootCertInstance;
   @Nullable protected PrivateKey savedKey;
   @Nullable protected List<X509Certificate> savedCertChain;
   @Nullable protected List<X509Certificate> savedTrustedRoots;
