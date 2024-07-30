@@ -17,6 +17,7 @@
 package io.grpc.opentelemetry;
 
 
+import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata;
 import io.opentelemetry.context.propagation.TextMapSetter;
 import java.util.logging.Level;
@@ -43,8 +44,16 @@ final class MetadataSetter implements TextMapSetter<Metadata> {
       logger.log(Level.FINE, "Carrier is null, setting no data");
       return;
     }
-    assert !key.endsWith("bin");
-    carrier.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
+    try {
+      if (key.equals("grpc-trace-bin")) {
+        carrier.put(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER),
+            BaseEncoding.base64().decode(value));
+      } else {
+        carrier.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
+      }
+    } catch (Exception e) {
+      logger.log(Level.INFO, String.format("Failed to set metadata, key=%s", key), e);
+    }
   }
 
   void set(@Nullable Metadata carrier, String key, byte[] value) {
@@ -52,10 +61,14 @@ final class MetadataSetter implements TextMapSetter<Metadata> {
       logger.log(Level.FINE, "Carrier is null, setting no data");
       return;
     }
-    assert key.endsWith("bin");
     if (!key.equals("grpc-trace-bin")) {
-      throw new IllegalArgumentException("Only support 'grpc-trace-bin' binary header");
+      logger.log(Level.INFO, "Only support 'grpc-trace-bin' binary header. Set no data");
+      return;
     }
-    carrier.put(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), value);
+    try {
+      carrier.put(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), value);
+    } catch (Exception e) {
+      logger.log(Level.INFO, String.format("Failed to set metadata key=%s", key), e);
+    }
   }
 }

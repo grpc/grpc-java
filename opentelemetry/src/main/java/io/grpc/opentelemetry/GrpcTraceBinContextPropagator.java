@@ -18,6 +18,7 @@ package io.grpc.opentelemetry;
 
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
@@ -52,16 +53,16 @@ import javax.annotation.Nullable;
 public final class GrpcTraceBinContextPropagator implements TextMapPropagator {
   private static final Logger log = Logger.getLogger(GrpcTraceBinContextPropagator.class.getName());
   public static final String GRPC_TRACE_BIN_HEADER = "grpc-trace-bin";
-  private final BinaryFormat binaryFormat;
+  private final Metadata.BinaryMarshaller<SpanContext> binaryFormat;
   private static final GrpcTraceBinContextPropagator INSTANCE =
-      new GrpcTraceBinContextPropagator(BinaryFormatImpl.getInstance());
+      new GrpcTraceBinContextPropagator(BinaryFormat.getInstance());
 
   public static GrpcTraceBinContextPropagator defaultInstance() {
     return INSTANCE;
   }
 
   @VisibleForTesting
-  GrpcTraceBinContextPropagator(BinaryFormat binaryFormat) {
+  GrpcTraceBinContextPropagator(Metadata.BinaryMarshaller<SpanContext> binaryFormat) {
     this.binaryFormat = checkNotNull(binaryFormat, "binaryFormat");
   }
 
@@ -80,11 +81,11 @@ public final class GrpcTraceBinContextPropagator implements TextMapPropagator {
       return;
     }
     try {
-      byte[] b = binaryFormat.toByteArray(spanContext);
+      byte[] b = binaryFormat.toBytes(spanContext);
       if (setter instanceof MetadataSetter) {
         ((MetadataSetter) setter).set((Metadata) carrier, GRPC_TRACE_BIN_HEADER, b);
       } else {
-        setter.set(carrier, GRPC_TRACE_BIN_HEADER, BaseEncoding.base64().encode(b));
+        setter.set(carrier, GRPC_TRACE_BIN_HEADER, BASE64_ENCODING_OMIT_PADDING.encode(b));
       }
     } catch (Exception e) {
       log.log(Level.FINE, "Set grpc-trace-bin spanContext failed", e);
@@ -101,28 +102,39 @@ public final class GrpcTraceBinContextPropagator implements TextMapPropagator {
     }
     byte[] b;
     if (getter instanceof MetadataGetter) {
-      b = ((MetadataGetter) getter).getBinary((Metadata) carrier, GRPC_TRACE_BIN_HEADER);
-      if (b == null) {
-        log.log(Level.FINE, "No grpc-trace-bin present in carrier");
+      try {
+        b = ((MetadataGetter) getter).getBinary((Metadata) carrier, GRPC_TRACE_BIN_HEADER);
+        if (b == null) {
+          log.log(Level.FINE, "No grpc-trace-bin present in carrier");
+          return context;
+        }
+      } catch (Exception e) {
+        log.log(Level.FINE, "Get 'grpc-trace-bin' from MetadataGetter failed", e);
         return context;
       }
     } else {
-      String value = getter.get(carrier, GRPC_TRACE_BIN_HEADER);
-      if (value == null) {
-        log.log(Level.FINE, "No grpc-trace-bin present in carrier");
+      String value;
+      try {
+        value = getter.get(carrier, GRPC_TRACE_BIN_HEADER);
+        if (value == null) {
+          log.log(Level.FINE, "No grpc-trace-bin present in carrier");
+          return context;
+        }
+      } catch (Exception e) {
+        log.log(Level.FINE, "Get 'grpc-trace-bin' from getter failed", e);
         return context;
       }
       try {
         b = BaseEncoding.base64().decode(value);
       } catch (Exception e) {
-        log.log(Level.FINE, "Base64-decode spanContext bytes failed");
+        log.log(Level.FINE, "Base64-decode spanContext bytes failed", e);
         return context;
       }
     }
 
     SpanContext spanContext;
     try {
-      spanContext = binaryFormat.fromByteArray(b);
+      spanContext = binaryFormat.parseBytes(b);
     } catch (Exception e) {
       log.log(Level.FINE, "Failed to parse tracing header", e);
       return context;

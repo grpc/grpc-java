@@ -17,10 +17,10 @@
 package io.grpc.opentelemetry;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
@@ -112,10 +112,15 @@ public class GrpcTraceBinContextPropagatorTest {
   @Test
   public void inject_map_invalidBinaryFormat() {
     GrpcTraceBinContextPropagator propagator = new GrpcTraceBinContextPropagator(
-        new BinaryFormat() {
+        new Metadata.BinaryMarshaller<SpanContext>() {
           @Override
-          public byte[] toByteArray(SpanContext spanContext) {
+          public byte[] toBytes(SpanContext value) {
             throw new IllegalArgumentException("failed to byte");
+          }
+
+          @Override
+          public SpanContext parseBytes(byte[] serialized) {
+            return null;
           }
         });
     Map<String, String> carrier = new HashMap<>();
@@ -262,9 +267,14 @@ public class GrpcTraceBinContextPropagatorTest {
   @Test
   public void extract_metadata_invalidBinaryFormat() {
     GrpcTraceBinContextPropagator propagator = new GrpcTraceBinContextPropagator(
-        new BinaryFormat() {
+        new Metadata.BinaryMarshaller<SpanContext>() {
           @Override
-          public SpanContext fromByteArray(byte[] bytes) {
+          public byte[] toBytes(SpanContext value) {
+            return new byte[0];
+          }
+
+          @Override
+          public SpanContext parseBytes(byte[] serialized) {
             throw new IllegalArgumentException("failed to byte");
           }
         });
@@ -288,7 +298,7 @@ public class GrpcTraceBinContextPropagatorTest {
   }
 
   private static String encode(String hex) {
-    return BaseEncoding.base64().encode(hexStringToByteArray(hex));
+    return BASE64_ENCODING_OMIT_PADDING.encode(hexStringToByteArray(hex));
   }
 
   private static byte[] hexStringToByteArray(String s) {

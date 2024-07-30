@@ -16,12 +16,13 @@
 
 package io.grpc.opentelemetry;
 
+import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNull;
 
 import io.grpc.Metadata;
 import java.nio.charset.Charset;
-import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,16 +38,17 @@ public class MetadataSetterTest {
     Metadata.Key<byte[]> grpc_trace_bin_key =
         Metadata.Key.of("grpc-trace-bin", Metadata.BINARY_BYTE_MARSHALLER);
     metadataSetter.set(metadata, "grpc-trace-bin", b);
-    assertTrue(Arrays.equals(b, metadata.get(grpc_trace_bin_key)));
+    assertArrayEquals(b, metadata.get(grpc_trace_bin_key));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void setOtherBinaryKey() {
     Metadata metadata = new Metadata();
     byte[] b = "generated".getBytes(Charset.defaultCharset());
     Metadata.Key<byte[]> other_key =
-        Metadata.Key.of("for-test", Metadata.BINARY_BYTE_MARSHALLER);
+        Metadata.Key.of("for-test-bin", Metadata.BINARY_BYTE_MARSHALLER);
     metadataSetter.set(metadata, other_key.name(), b);
+    assertNull(metadata.get(other_key));
   }
 
   @Test
@@ -57,5 +59,25 @@ public class MetadataSetterTest {
         Metadata.Key.of("text-key", Metadata.ASCII_STRING_MARSHALLER);
     metadataSetter.set(metadata, textKey.name(), v);
     assertEquals(metadata.get(textKey), v);
+  }
+
+  @Test
+  public void setTextBin() {
+    Metadata metadata = new Metadata();
+    Metadata.Key<byte[]> other_key =
+        Metadata.Key.of("for-test-bin", Metadata.BINARY_BYTE_MARSHALLER);
+    metadataSetter.set(metadata, other_key.name(), "generated");
+    assertNull(metadata.get(other_key));
+  }
+
+  @Test
+  public void setTextGrpcTraceBin() {
+    Metadata metadata = new Metadata();
+    byte[] b = "generated".getBytes(Charset.defaultCharset());
+    metadataSetter.set(metadata, "grpc-trace-bin", BASE64_ENCODING_OMIT_PADDING.encode(b));
+
+    Metadata.Key<byte[]> grpc_trace_bin_key =
+        Metadata.Key.of("grpc-trace-bin", Metadata.BINARY_BYTE_MARSHALLER);
+    assertArrayEquals(metadata.get(grpc_trace_bin_key), b);
   }
 }

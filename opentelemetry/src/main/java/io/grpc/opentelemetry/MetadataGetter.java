@@ -17,6 +17,8 @@
 package io.grpc.opentelemetry;
 
 
+import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
+
 import io.grpc.Metadata;
 import io.opentelemetry.context.propagation.TextMapGetter;
 import java.util.logging.Level;
@@ -31,7 +33,6 @@ import javax.annotation.Nullable;
  */
 final class MetadataGetter implements TextMapGetter<Metadata> {
   private static final Logger logger = Logger.getLogger(MetadataGetter.class.getName());
-
   private static final MetadataGetter INSTANCE = new MetadataGetter();
 
   public static MetadataGetter getInstance() {
@@ -50,7 +51,20 @@ final class MetadataGetter implements TextMapGetter<Metadata> {
       logger.log(Level.FINE, "Carrier is null, getting no data");
       return null;
     }
-    return carrier.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
+    try {
+      if (key.equals("grpc-trace-bin")) {
+        byte[] value = carrier.get(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER));
+        if (value == null) {
+          return null;
+        }
+        return BASE64_ENCODING_OMIT_PADDING.encode(value);
+      } else {
+        return carrier.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
+      }
+    } catch (Exception e) {
+      logger.log(Level.FINE, String.format("Failed to get metadata key %s", key), e);
+      return null;
+    }
   }
 
   @Nullable
@@ -59,6 +73,15 @@ final class MetadataGetter implements TextMapGetter<Metadata> {
       logger.log(Level.FINE, "Carrier is null, getting no data");
       return null;
     }
-    return carrier.get(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER));
+    if (!key.equals("grpc-trace-bin")) {
+      logger.log(Level.FINE, "Only support 'grpc-trace-bin' binary header. Get no data");
+      return null;
+    }
+    try {
+      return carrier.get(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER));
+    } catch (Exception e) {
+      logger.log(Level.FINE, String.format("Failed to get metadata key %s", key), e);
+      return null;
+    }
   }
 }
