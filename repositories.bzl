@@ -87,7 +87,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 
 def grpc_java_repositories(bzlmod = False):
     """Imports dependencies for grpc-java."""
-    if not native.existing_rule("dev_cel"):
+    if not bzlmod and not native.existing_rule("dev_cel"):
         http_archive(
             name = "dev_cel",
             strip_prefix = "cel-spec-0.15.0",
