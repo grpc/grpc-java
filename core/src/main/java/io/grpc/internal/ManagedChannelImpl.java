@@ -1828,9 +1828,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.execute(new NameResolverErrorHandler());
     }
 
+    @SuppressWarnings("ReferenceEquality")
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
-              new Object[]{getLogId(), error});
+            new Object[] {getLogId(), error});
       realChannel.onConfigError();
       if (lastResolutionState != ResolutionState.ERROR) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
@@ -1841,7 +1842,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return;
       }
       // Apply Default Service Config if initial name resolution fails.
-      if (!lastServiceConfig.equals(EMPTY_SERVICE_CONFIG) && defaultServiceConfig != null) {
+      if (lastServiceConfig != EMPTY_SERVICE_CONFIG && defaultServiceConfig != null) {
         realChannel.updateConfigSelector(defaultServiceConfig.getDefaultConfigSelector());
         lastServiceConfig = defaultServiceConfig;
         channelLogger.log(ChannelLogLevel.ERROR,

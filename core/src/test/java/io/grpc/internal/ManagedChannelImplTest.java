@@ -4532,10 +4532,8 @@ public class ManagedChannelImplTest {
             new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
-    Status resolutionError = Status.UNAVAILABLE
-            .withDescription("Initial Name Resolution error, using default service config");
-
     int prevSize = getStats(channel).channelTrace.events.size();
+    // EMPTY_SERVICE_CONFIG will be applied here as we are not passing the same
     ResolutionResult resolutionResult = ResolutionResult.newBuilder()
             .setAddresses(Collections.singletonList(
                     new EquivalentAddressGroup(Arrays.asList(new SocketAddress() {
@@ -4546,6 +4544,9 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
+    Status resolutionError = Status.UNAVAILABLE
+            .withDescription("Initial Name Resolution error, using default service config");
+
     nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
