@@ -4521,6 +4521,40 @@ public class ManagedChannelImplTest {
     }
   }
 
+  @Test
+  public void testTraceEventsOnResultsCallFollowedByOnErrorCallWithAppliedServiceConfig()
+          throws Exception {
+    timer.forwardNanos(1234);
+    channelBuilder.maxTraceEvents(10);
+    List<EquivalentAddressGroup> servers = new ArrayList<>();
+    servers.add(new EquivalentAddressGroup(socketAddress));
+    FakeNameResolverFactory nameResolverFactory =
+            new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+    Status resolutionError = Status.UNAVAILABLE
+            .withDescription("Initial Name Resolution error, using default service config");
+
+    int prevSize = getStats(channel).channelTrace.events.size();
+    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
+            .setAddresses(Collections.singletonList(
+                    new EquivalentAddressGroup(Arrays.asList(new SocketAddress() {
+                    }, new SocketAddress() {
+                    })))).build();
+    nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult);
+
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+
+    prevSize = getStats(channel).channelTrace.events.size();
+    nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
+
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+    assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+            .setDescription("Failed to resolve name: " + resolutionError)
+            .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
+            .setTimestampNanos(timer.getTicker().read())
+            .build());
+  }
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
