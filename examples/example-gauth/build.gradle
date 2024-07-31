@@ -25,7 +25,7 @@ java {
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.66.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.25.1'
+def protobufVersion = '3.25.3'
 def protocVersion = protobufVersion
 
 
@@ -34,7 +34,7 @@ dependencies {
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-auth:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-    implementation "com.google.auth:google-auth-library-oauth2-http:1.4.0"
+    implementation "com.google.auth:google-auth-library-oauth2-http:1.23.0"
     implementation "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 }
@@ -71,6 +71,8 @@ task googleAuthClient(type: CreateStartScripts) {
 application {
     applicationDistribution.into('bin') {
         from(googleAuthClient)
-        fileMode = 0755
+        filePermissions {
+            unix(0755)
+        }
     }
 }

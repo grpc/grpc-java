@@ -474,7 +474,13 @@ def isAcceptableVersion(ModuleComponentIdentifier candidate) {
         return true
     if (group == 'io.netty' && version.contains('Final'))
         return true
+    if (group == 'io.undertow' && version.contains('Final'))
+        return true
     if (module == 'android-api-level-19')
+        return true
+    if (module == 'opentelemetry-exporter-prometheus')
+        return true
+    if (module == 'opentelemetry-gcp-resources')
         return true
     return version ==~ /^[0-9]+(\.[0-9]+)+$/
 }

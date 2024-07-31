@@ -57,7 +57,7 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    undertowTestImplementation libraries.undertow.servlet
+    undertowTestImplementation libraries.undertow.servlet22
 
     tomcatTestImplementation libraries.tomcat.embed.core9
 

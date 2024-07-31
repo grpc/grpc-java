@@ -14,8 +14,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <grpc.version>1.66.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protobuf.version>3.25.1</protobuf.version>
-    <protoc.version>3.25.1</protoc.version>
+    <protobuf.version>3.25.3</protobuf.version>
+    <protoc.version>3.25.3</protoc.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
@@ -60,7 +60,7 @@
     <dependency>
       <groupId>com.google.auth</groupId>
       <artifactId>google-auth-library-oauth2-http</artifactId>
-      <version>1.18.0</version>
+      <version>1.23.0</version>
     </dependency>
     <dependency>
       <groupId>org.apache.tomcat</groupId>

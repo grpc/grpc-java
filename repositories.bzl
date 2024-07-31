@@ -13,17 +13,17 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
     "com.google.api.grpc:proto-google-common-protos:2.29.0",
-    "com.google.auth:google-auth-library-credentials:1.22.0",
-    "com.google.auth:google-auth-library-oauth2-http:1.22.0",
-    "com.google.auto.value:auto-value-annotations:1.10.4",
-    "com.google.auto.value:auto-value:1.10.4",
+    "com.google.auth:google-auth-library-credentials:1.23.0",
+    "com.google.auth:google-auth-library-oauth2-http:1.23.0",
+    "com.google.auto.value:auto-value-annotations:1.11.0",
+    "com.google.auto.value:auto-value:1.11.0",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.10.1",
-    "com.google.errorprone:error_prone_annotations:2.23.0",
+    "com.google.code.gson:gson:2.11.0",
+    "com.google.errorprone:error_prone_annotations:2.28.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:32.1.3-android",
+    "com.google.guava:guava:33.2.1-android",
     "com.google.re2j:re2j:1.7",
-    "com.google.truth:truth:1.1.5",
+    "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
     "io.netty:netty-buffer:4.1.100.Final",
@@ -42,10 +42,10 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-transport:4.1.100.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
-    "io.perfmark:perfmark-api:0.26.0",
+    "io.perfmark:perfmark-api:0.27.0",
     "junit:junit:4.13.2",
     "org.apache.tomcat:annotations-api:6.0.53",
-    "org.codehaus.mojo:animal-sniffer-annotations:1.23",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.24",
 ]
 # GRPC_DEPS_END
 
@@ -87,16 +87,6 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 
 def grpc_java_repositories(bzlmod = False):
     """Imports dependencies for grpc-java."""
-    if not native.existing_rule("com_github_cncf_udpa"):
-        http_archive(
-            name = "com_github_cncf_udpa",
-            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
-            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
-            urls = [
-                "https://storage.googleapis.com/grpc-bazel-mirror/github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
-                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
-            ],
-        )
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",

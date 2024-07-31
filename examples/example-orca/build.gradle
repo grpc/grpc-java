@@ -19,7 +19,7 @@ java {
 }
 
 def grpcVersion = '1.66.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.1'
+def protocVersion = '3.25.3'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
@@ -60,6 +60,8 @@ application {
     applicationDistribution.into('bin') {
         from(CustomBackendMetricsClient)
         from(CustomBackendMetricsServer)
-        fileMode = 0755
+        filePermissions {
+            unix(0755)
+        }
     }
 }
