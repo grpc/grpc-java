@@ -4490,6 +4490,7 @@ public class ManagedChannelImplTest {
               parseConfig("{\"methodConfig\":[{"
                       + "\"name\":[{\"service\":\"SimpleService1\"}],"
                       + "\"waitForReady\":true}]}");
+
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
       createChannel();
       FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
@@ -4532,6 +4533,7 @@ public class ManagedChannelImplTest {
     servers.add(new EquivalentAddressGroup(socketAddress));
     FakeNameResolverFactory nameResolverFactory =
             new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
+
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
     int prevSize = getStats(channel).channelTrace.events.size();
