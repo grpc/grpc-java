@@ -95,22 +95,10 @@ final class RetryingNameResolver extends ForwardingNameResolver {
             "RetryingNameResolver can only be used once to wrap a NameResolver");
       }
 
-      // To have retry behavior for name resolvers that haven't migrated to onResult2.
       delegateListener.onResult(resolutionResult.toBuilder().setAttributes(
               resolutionResult.getAttributes().toBuilder()
                   .set(RESOLUTION_RESULT_LISTENER_KEY, new ResolutionResultListener()).build())
           .build());
-    }
-
-    @Override
-    public Status onResult2(ResolutionResult resolutionResult) {
-      Status status = delegateListener.onResult2(resolutionResult);
-      if (status.isOk()) {
-        retryScheduler.reset();
-      } else {
-        retryScheduler.schedule(new DelayedNameResolverRefresh());
-      }
-      return status;
     }
 
     @Override

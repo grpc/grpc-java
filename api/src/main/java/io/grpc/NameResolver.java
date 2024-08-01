@@ -246,16 +246,6 @@ public abstract class NameResolver {
      */
     @Override
     public abstract void onError(Status error);
-
-    /**
-     * Handles updates on resolved addresses and attributes.
-     *
-     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
-     * @since 1.66
-     */
-    public Status onResult2(ResolutionResult resolutionResult) {
-      throw new UnsupportedOperationException("Not implemented.");
-    }
   }
 
   /**
