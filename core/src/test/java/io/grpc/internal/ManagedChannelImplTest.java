@@ -4501,9 +4501,10 @@ public class ManagedChannelImplTest {
       verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
 
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
-      assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-              .setDescription("Failed to resolve name: " + resolutionError)
-              .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
+      assertThat(getStats(channel).channelTrace.events.get(prevSize - 2))
+              .isEqualTo(new ChannelTrace.Event.Builder()
+              .setDescription("Received no service config, using default service config")
+              .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
               .setTimestampNanos(timer.getTicker().read())
               .build());
 
@@ -4511,9 +4512,10 @@ public class ManagedChannelImplTest {
       resolver.listener.onError(resolutionError);
 
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
-      assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-              .setDescription("Failed to resolve name: " + resolutionError)
-              .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
+      assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
+              .isEqualTo(new ChannelTrace.Event.Builder()
+              .setDescription("Initial Name Resolution error, using default service config")
+              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
               .setTimestampNanos(timer.getTicker().read())
               .build());
     } finally {
