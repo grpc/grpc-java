@@ -4493,21 +4493,19 @@ public class ManagedChannelImplTest {
 
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
       createChannel();
-      FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-      Status resolutionError = Status.UNAVAILABLE
-              .withDescription("Initial Name Resolution error, using default service config");
-
       int prevSize = getStats(channel).channelTrace.events.size();
-      resolver.listener.onError(resolutionError);
-      verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
 
-      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
-      assertThat(getStats(channel).channelTrace.events.get(prevSize - 2))
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+      assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
-              .setDescription("Received no service config, using default service config")
+              .setDescription("Service config changed")
               .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
               .setTimestampNanos(timer.getTicker().read())
               .build());
+
+      FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+      Status resolutionError = Status.UNAVAILABLE
+              .withDescription("Initial Name Resolution error, using default service config");
 
       prevSize = getStats(channel).channelTrace.events.size();
       resolver.listener.onError(resolutionError);
@@ -4515,8 +4513,8 @@ public class ManagedChannelImplTest {
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
-              .setDescription("Initial Name Resolution error, using default service config")
-              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
+              .setDescription("Service config changed")
+              .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
               .setTimestampNanos(timer.getTicker().read())
               .build());
     } finally {
@@ -4535,15 +4533,14 @@ public class ManagedChannelImplTest {
             new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
 
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    Map<String, Object> defaultServiceConfig =
+            parseConfig("{\"methodConfig\":[{"
+                    + "\"name\":[{\"service\":\"SimpleService1\"}],"
+                    + "\"waitForReady\":true}]}");
+
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
     createChannel();
     int prevSize = getStats(channel).channelTrace.events.size();
-    // EMPTY_SERVICE_CONFIG will be applied here as we are not passing the same
-    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
-            .setAddresses(Collections.singletonList(
-                    new EquivalentAddressGroup(Arrays.asList(new SocketAddress() {
-                    }, new SocketAddress() {
-                    })))).build();
-    nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult);
 
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
