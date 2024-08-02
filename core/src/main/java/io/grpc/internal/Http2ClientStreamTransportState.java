@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
@@ -24,6 +23,7 @@ import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import javax.annotation.Nullable;
 
 /**
@@ -62,7 +62,7 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
   /** When non-{@code null}, {@link #transportErrorMetadata} must also be non-{@code null}. */
   private Status transportError;
   private Metadata transportErrorMetadata;
-  private Charset errorCharset = Charsets.UTF_8;
+  private Charset errorCharset = StandardCharsets.UTF_8;
   private boolean headersReceived;
 
   protected Http2ClientStreamTransportState(
@@ -241,7 +241,7 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
         // Ignore and assume UTF-8
       }
     }
-    return Charsets.UTF_8;
+    return StandardCharsets.UTF_8;
   }
 
   /**
