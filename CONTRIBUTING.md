@@ -46,7 +46,7 @@ How to get your contributions merged smoothly and quickly.
   commit description makes a good PR description and is auto-copied by GitHub if
   you have a single commit when creating the PR.
 
-  If your change is mostly for a single module (other module changes are
+  If your change is mostly for a single module (e.g., other module changes are
   trivial), prefix your commit summary with the module name changed. Instead of
   "Add HTTP/2 faster-than-light support to gRPC Netty" it is more terse as
   "netty: Add faster-than-light support".
