@@ -42,7 +42,7 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
-import io.grpc.util.RoundRobinLoadBalancer;
+import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.orca.OrcaOobUtil;
 import io.grpc.xds.orca.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
@@ -64,9 +64,33 @@ import java.util.logging.Logger;
  * A {@link LoadBalancer} that provides weighted-round-robin load-balancing over the
  * {@link EquivalentAddressGroup}s from the {@link NameResolver}. The subchannel weights are
  * determined by backend metrics using ORCA.
+ * To use WRR, users may configure through channel serviceConfig. Example config:
+ * <pre> {@code
+ *       String wrrConfig = "{\"loadBalancingConfig\":" +
+ *           "[{\"weighted_round_robin\":{\"enableOobLoadReport\":true, " +
+ *           "\"blackoutPeriod\":\"10s\"," +
+ *           "\"oobReportingPeriod\":\"10s\"," +
+ *           "\"weightExpirationPeriod\":\"180s\"," +
+ *           "\"errorUtilizationPenalty\":\"1.0\"," +
+ *           "\"weightUpdatePeriod\":\"1s\"}}]}";
+ *        serviceConfig = (Map<String, ?>) JsonParser.parse(wrrConfig);
+ *        channel = ManagedChannelBuilder.forTarget("test:///lb.test.grpc.io")
+ *            .defaultServiceConfig(serviceConfig)
+ *            .build();
+ *  }
+ *  </pre>
+ *  Users may also configure through xDS control plane via custom lb policy. But that is much more
+ *  complex to set up. Example config:
+ *  <pre>
+ *  localityLbPolicies:
+ *   - customPolicy:
+ *       name: weighted_round_robin
+ *       data: '{ "enableOobLoadReport": true }'
+ *  </pre>
+ *  See related documentation: https://cloud.google.com/service-mesh/legacy/load-balancing-apis/proxyless-configure-advanced-traffic-management#custom-lb-config
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
-final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
+final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   private static final LongCounterMetricInstrument RR_FALLBACK_COUNTER;
   private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER;
@@ -83,6 +107,7 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
   private final long infTime;
   private final Ticker ticker;
   private String locality = "";
+  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
   // The metric instruments are only registered once and shared by all instances of this LB.
   static {
@@ -185,11 +210,49 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
     return acceptRetVal.status;
   }
 
+  /**
+   * Updates picker with the list of active subchannels (state == READY).
+   */
   @Override
-  public SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
+  protected void updateOverallBalancingState() {
+    List<ChildLbState> activeList = getReadyChildren();
+    if (activeList.isEmpty()) {
+      // No READY subchannels
+
+      // MultiChildLB will request connection immediately on subchannel IDLE.
+      boolean isConnecting = false;
+      for (ChildLbState childLbState : getChildLbStates()) {
+        ConnectivityState state = childLbState.getCurrentState();
+        if (state == ConnectivityState.CONNECTING || state == ConnectivityState.IDLE) {
+          isConnecting = true;
+          break;
+        }
+      }
+
+      if (isConnecting) {
+        updateBalancingState(
+            ConnectivityState.CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+      } else {
+        updateBalancingState(
+            ConnectivityState.TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
+      }
+    } else {
+      updateBalancingState(ConnectivityState.READY, createReadyPicker(activeList));
+    }
+  }
+
+  private SubchannelPicker createReadyPicker(Collection<ChildLbState> activeList) {
     return new WeightedRoundRobinPicker(ImmutableList.copyOf(activeList),
         config.enableOobLoadReport, config.errorUtilizationPenalty, sequence, getHelper(),
         locality);
+  }
+
+  private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+    if (state != currentConnectivityState || !picker.equals(currentPicker)) {
+      getHelper().updateBalancingState(state, picker);
+      currentConnectivityState = state;
+      currentPicker = picker;
+    }
   }
 
   @VisibleForTesting
@@ -574,13 +637,15 @@ final class WeightedRoundRobinLoadBalancer extends RoundRobinLoadBalancer {
       if (numWeightedChannels > 0) {
         unscaledMeanWeight = sumWeight / numWeightedChannels;
         unscaledMaxWeight = Math.min(unscaledMaxWeight, (float) (K_MAX_RATIO * unscaledMeanWeight));
-        usesRoundRobin = false;
       } else {
-        // Fall back to round robin if all values are non-positives
-        usesRoundRobin = true;
+        // Fall back to round robin if all values are non-positives. Note that
+        // numWeightedChannels == 1 also behaves like RR because the weights are all the same, but
+        // the weights aren't 1, so it doesn't go through this path.
         unscaledMeanWeight = 1;
         unscaledMaxWeight = 1;
       }
+      // We need at least two weights for WRR to be distinguishable from round_robin.
+      usesRoundRobin = numWeightedChannels < 2;
 
       // Scales weights s.t. max(weights) == K_MAX_WEIGHT, meanWeight is scaled accordingly.
       // Note that, since we cap the weights to stay within K_MAX_RATIO, meanWeight might not

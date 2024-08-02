@@ -29,7 +29,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
@@ -97,12 +96,12 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
     // Drop configurations.
     final List<DropOverload> dropCategories;
     // Provides the direct child policy and its config.
-    final PolicySelection childPolicy;
+    final Object childConfig;
     final Map<String, Struct> filterMetadata;
 
     ClusterImplConfig(String cluster, @Nullable String edsServiceName,
         @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-        List<DropOverload> dropCategories, PolicySelection childPolicy,
+        List<DropOverload> dropCategories, Object childConfig,
         @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata) {
       this.cluster = checkNotNull(cluster, "cluster");
       this.edsServiceName = edsServiceName;
@@ -112,7 +111,7 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
       this.filterMetadata = ImmutableMap.copyOf(filterMetadata);
       this.dropCategories = Collections.unmodifiableList(
           new ArrayList<>(checkNotNull(dropCategories, "dropCategories")));
-      this.childPolicy = checkNotNull(childPolicy, "childPolicy");
+      this.childConfig = checkNotNull(childConfig, "childConfig");
     }
 
     @Override
@@ -124,7 +123,7 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
           .add("maxConcurrentRequests", maxConcurrentRequests)
           // Exclude tlsContext as its string representation is cumbersome.
           .add("dropCategories", dropCategories)
-          .add("childPolicy", childPolicy)
+          .add("childConfig", childConfig)
           .toString();
     }
   }

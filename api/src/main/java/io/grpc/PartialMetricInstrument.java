@@ -89,4 +89,9 @@ abstract class PartialMetricInstrument implements MetricInstrument {
   public boolean isEnableByDefault() {
     return enableByDefault;
   }
+
+  @Override
+  public String toString() {
+    return getClass().getName() + "(" + getName() + ")";
+  }
 }

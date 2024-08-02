@@ -16,6 +16,7 @@
 
 package io.grpc.stub;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -89,5 +90,17 @@ abstract class BaseAbstractStubTest<T extends AbstractStub<T>> {
     callOptions = stub.getCallOptions();
 
     assertEquals(callOptions.getExecutor(), executor);
+  }
+
+  @Test
+  public void withOnReadyThreshold() {
+    T stub = create(channel);
+    CallOptions callOptions = stub.getCallOptions();
+    assertNull(callOptions.getOnReadyThreshold());
+
+    int onReadyThreshold = 1024;
+    stub = stub.withOnReadyThreshold(onReadyThreshold);
+    callOptions = stub.getCallOptions();
+    assertThat(callOptions.getOnReadyThreshold()).isEqualTo(onReadyThreshold);
   }
 }

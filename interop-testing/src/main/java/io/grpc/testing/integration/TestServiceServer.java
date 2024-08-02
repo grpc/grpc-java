@@ -22,14 +22,20 @@ import io.grpc.BindableService;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
+import io.grpc.netty.NettyServerBuilder;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -73,6 +79,7 @@ public class TestServiceServer {
   private ScheduledExecutorService executor;
   private Server server;
   private int localHandshakerPort = -1;
+  private Util.AddressType addressType = Util.AddressType.IPV4_IPV6;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -103,6 +110,8 @@ public class TestServiceServer {
         useAlts = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
+      } else if ("address_type".equals(key)) {
+        addressType = Util.AddressType.valueOf(value.toUpperCase(Locale.ROOT));
       } else if ("grpc_version".equals(key)) {
         if (!"2".equals(value)) {
           System.err.println("Only grpc version 2 is supported");
@@ -130,11 +139,14 @@ public class TestServiceServer {
               + "\n  --local_handshaker_port=PORT"
               + "\n                        Use local ALTS handshaker service on the specified port "
               + "\n                        for testing. Only effective when --use_alts=true."
+              + "\n  --address_type=IPV4|IPV6|IPV4_IPV6"
+              + "\n                        What type of addresses to listen on. Default IPV4_IPV6"
       );
       System.exit(1);
     }
   }
 
+  @SuppressWarnings("AddressSelection")
   @VisibleForTesting
   void start() throws Exception {
     executor = Executors.newSingleThreadScheduledExecutor();
@@ -156,7 +168,36 @@ public class TestServiceServer {
     MetricRecorder metricRecorder = MetricRecorder.newInstance();
     BindableService orcaOobService =
         OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
-    server = Grpc.newServerBuilderForPort(port, serverCreds)
+
+    // Create ServerBuilder with appropriate addresses
+    // - IPV4_IPV6: bind to wildcard which covers all addresses on all interfaces of both families
+    // - IPV4: bind to v4 address for local hostname + v4 localhost
+    // - IPV6: bind to all v6 addresses for local hostname + v6 localhost
+    ServerBuilder<?> serverBuilder;
+    switch (addressType) {
+      case IPV4_IPV6:
+        serverBuilder = Grpc.newServerBuilderForPort(port, serverCreds);
+        break;
+      case IPV4:
+        SocketAddress v4Address = Util.getV4Address(port);
+        serverBuilder =
+            NettyServerBuilder.forAddress(new InetSocketAddress("127.0.0.1", port), serverCreds);
+        if (v4Address == null) {
+          ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
+        }
+        break;
+      case IPV6:
+        List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
+        serverBuilder =
+            NettyServerBuilder.forAddress(new InetSocketAddress("::1", port), serverCreds);
+        for (SocketAddress address : v6Addresses) {
+          ((NettyServerBuilder)serverBuilder).addListenAddress(address);
+        }
+        break;
+      default:
+        throw new AssertionError("Unknown address type: " + addressType);
+    }
+    server = serverBuilder
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .addService(
             ServerInterceptors.intercept(
@@ -187,4 +228,5 @@ public class TestServiceServer {
       server.awaitTermination();
     }
   }
+
 }

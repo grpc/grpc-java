@@ -50,8 +50,6 @@ public final class ParcelableUtils {
    */
   public static <P extends Parcelable> Metadata.Key<P> metadataKeyForImmutableType(
       String name, Parcelable.Creator<P> creator) {
-    return Metadata.Key.of(
-        name, new MetadataHelper.ParcelableMetadataMarshaller<P>(creator, true));
+    return Metadata.Key.of(name, new MetadataHelper.ParcelableMetadataMarshaller<P>(creator, true));
   }
 }
-

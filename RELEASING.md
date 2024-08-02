@@ -18,8 +18,10 @@ them before continuing, and set them again when resuming.
 ```bash
 MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
 VERSION_FILES=(
+  MODULE.bazel
   build.gradle
   core/src/main/java/io/grpc/internal/GrpcUtil.java
+  examples/MODULE.bazel
   examples/build.gradle
   examples/pom.xml
   examples/android/clientcache/app/build.gradle
@@ -202,31 +204,47 @@ Tagging the Release
 12. Add [Release Notes](https://github.com/grpc/grpc-java/releases) for the new tag.
     *Make sure that any backports are reflected in the release notes.*
 
+13. Notify the Community. Post a release announcement to
+    [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
+    (`grpc-io@googlegroups.com`) with the title `gRPC-Java v$MAJOR.$MINOR.$PATCH
+    Released`. The email content should link to the GitHub release notes and
+    include a copy of them.
 
-Update README.md
-----------------
-After waiting ~1 day and verifying that the release is indexed on [Maven
-Central](https://search.maven.org/search?q=g:io.grpc), cherry-pick the commit
-that updated the README into the master branch.
+14. Update README.md. Cherry-pick the commit that updated the README.md into the
+    master branch.
+
+    ```bash
+    git checkout -b bump-readme master
+    git cherry-pick v$MAJOR.$MINOR.$PATCH^
+    git push --set-upstream origin bump-readme
+    ```
+
+    Create a PR and go through the review process
+
+15. Update version referenced by tutorials. Update `params.grpc_vers.java` in
+    [config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml) of
+    the grpc.io repository. Create a PR and go through the review process.
+
+Post-release upgrades
+---------------------
+Upgrade dependencies after the release so they can be well-tested before the
+next release.
+
+Upgrade the Gradle plugins in `settings.gradle` and the Gradle version in
+`gradle/wrapper/gradle-wrapper.properties`. Make sure to read the release notes
+for each dependency upgraded. Test by doing a regular build.
+
+Upgrade the regular dependencies in `gradle/libs.versions.toml`, except for
+Netty and netty-tcnative. To find available upgrades:
 
 ```bash
-git checkout -b bump-readme master
-git cherry-pick v$MAJOR.$MINOR.$PATCH^
-git push --set-upstream origin bump-readme
+./gradlew checkForUpdates
 ```
 
-Create a PR and go through the review process
+Test by doing a regular build. For each step, if a dependency cannot be
+upgraded, add a comment. Create issues in other projects for breakages, and in
+gRPC for things that will need a migration effort.
 
-Update version referenced by tutorials
---------------------------------------
-
-Update `params.grpc_vers.java` in
-[config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml)
-of the grpc.io repository.
-
-Notify the Community
---------------------
-Post a release announcement to [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
-(`grpc-io@googlegroups.com`) with the title `gRPC-Java v$MAJOR.$MINOR.$PATCH
-Released`. The email content should link to the GitHub release notes and include
-a copy of them.
+When happy with the dependency upgrades, update the versions in `MODULE.bazel`,
+`repositories.bzl`, and the various `pom.xml` and `build.gradle` files in
+`examples/`.

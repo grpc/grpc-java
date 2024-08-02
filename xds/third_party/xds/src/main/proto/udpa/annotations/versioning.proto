@@ -8,7 +8,7 @@ package udpa.annotations;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/cncf/xds/go/annotations";
+option go_package = "github.com/cncf/xds/go/udpa/annotations";
 
 extend google.protobuf.MessageOptions {
   // Magic number derived from 0x78 ('x') 0x44 ('D') 0x53 ('S')
