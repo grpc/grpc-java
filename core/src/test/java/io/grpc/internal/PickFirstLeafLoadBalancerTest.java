@@ -125,11 +125,11 @@ public class PickFirstLeafLoadBalancerTest {
   private ArgumentCaptor<SubchannelStateListener> stateListenerCaptor;
   private Helper mockHelper;
   private FakeSubchannel mockSubchannel1;
-  private FakeSubchannel mockSubchannel1_2;
+  private FakeSubchannel mockSubchannel1n2;
   private FakeSubchannel mockSubchannel2;
-  private FakeSubchannel mockSubchannel2_2;
+  private FakeSubchannel mockSubchannel2n2;
   private FakeSubchannel mockSubchannel3;
-  private FakeSubchannel mockSubchannel3_2;
+  private FakeSubchannel mockSubchannel3n2;
   private FakeSubchannel mockSubchannel4;
   private FakeSubchannel mockSubchannel5;
   @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
@@ -150,15 +150,15 @@ public class PickFirstLeafLoadBalancerTest {
     }
     mockSubchannel1 = mock(FakeSubchannel.class, delegatesTo(
         new FakeSubchannel(Arrays.asList(servers.get(0)), Attributes.EMPTY)));
-    mockSubchannel1_2 = mock(FakeSubchannel.class, delegatesTo(
+    mockSubchannel1n2 = mock(FakeSubchannel.class, delegatesTo(
         new FakeSubchannel(Arrays.asList(servers.get(0)), Attributes.EMPTY)));
     mockSubchannel2 = mock(FakeSubchannel.class, delegatesTo(
         new FakeSubchannel(Arrays.asList(servers.get(1)), Attributes.EMPTY)));
-    mockSubchannel2_2 = mock(FakeSubchannel.class, delegatesTo(
+    mockSubchannel2n2 = mock(FakeSubchannel.class, delegatesTo(
         new FakeSubchannel(Arrays.asList(servers.get(1)), Attributes.EMPTY)));
     mockSubchannel3 = mock(FakeSubchannel.class, delegatesTo(
         new FakeSubchannel(Arrays.asList(servers.get(2)), Attributes.EMPTY)));
-    mockSubchannel3_2 = mock(FakeSubchannel.class, delegatesTo(
+    mockSubchannel3n2 = mock(FakeSubchannel.class, delegatesTo(
         new FakeSubchannel(Arrays.asList(servers.get(2)), Attributes.EMPTY)));
     mockSubchannel4 = mock(FakeSubchannel.class, delegatesTo(
         new FakeSubchannel(Arrays.asList(servers.get(3)), Attributes.EMPTY)));
@@ -166,9 +166,9 @@ public class PickFirstLeafLoadBalancerTest {
         new FakeSubchannel(Arrays.asList(servers.get(4)), Attributes.EMPTY)));
 
     mockHelper = mock(Helper.class, delegatesTo(new MockHelperImpl(Arrays.asList(
-        mockSubchannel1, mockSubchannel1_2,
-        mockSubchannel2, mockSubchannel2_2,
-        mockSubchannel3, mockSubchannel3_2,
+        mockSubchannel1, mockSubchannel1n2,
+        mockSubchannel2, mockSubchannel2n2,
+        mockSubchannel3, mockSubchannel3n2,
         mockSubchannel4, mockSubchannel5))));
     loadBalancer = new PickFirstLeafLoadBalancer(mockHelper);
   }
@@ -730,7 +730,7 @@ public class PickFirstLeafLoadBalancerTest {
   @Test
   public void nameResolutionTemporaryError() {
     List<EquivalentAddressGroup> newServers = Lists.newArrayList(servers.get(0));
-    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel1_2);
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel1n2);
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
@@ -747,14 +747,14 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    inOrder.verify(mockSubchannel1_2).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel1n2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
 
     assertNull(pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
 
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertEquals(mockSubchannel1_2,
+    assertEquals(mockSubchannel1n2,
         pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
   }
 
@@ -1031,7 +1031,7 @@ public class PickFirstLeafLoadBalancerTest {
   @Test
   public void updateAddresses_disjoint_ready_twice() {
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
-        mockSubchannel3, mockSubchannel4, mockSubchannel1_2, mockSubchannel2_2);
+        mockSubchannel3, mockSubchannel4, mockSubchannel1n2, mockSubchannel2n2);
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0), servers.get(1));
     SubchannelStateListener stateListener2 = null;
@@ -1130,7 +1130,7 @@ public class PickFirstLeafLoadBalancerTest {
         ResolvedAddresses.newBuilder().setAddresses(newestServers).setAttributes(affinity).build());
     inOrder.verify(mockSubchannel3).shutdown();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    inOrder.verify(mockSubchannel1_2).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel1n2).start(stateListenerCaptor.capture());
     stateListener = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     picker = pickerCaptor.getValue();
@@ -1139,7 +1139,7 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(picker.pickSubchannel(mockArgs), picker.pickSubchannel(mockArgs));
 
     // But the picker calls requestConnection() only once
-    inOrder.verify(mockSubchannel1_2).requestConnection();
+    inOrder.verify(mockSubchannel1n2).requestConnection();
     assertEquals(PickResult.withNoResult(), pickerCaptor.getValue().pickSubchannel(mockArgs));
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
@@ -1155,7 +1155,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Starting connection attempt to address 2
     FakeSubchannel mockSubchannel2Attempt =
-        enableHappyEyeballs ? mockSubchannel2_2 : mockSubchannel2;
+        enableHappyEyeballs ? mockSubchannel2n2 : mockSubchannel2;
     inOrder.verify(mockSubchannel2Attempt).start(stateListenerCaptor.capture());
     stateListener2 = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel2Attempt).requestConnection();
@@ -1163,7 +1163,7 @@ public class PickFirstLeafLoadBalancerTest {
     // Connection attempt to address 2 is successful
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
-    inOrder.verify(mockSubchannel1_2).shutdown();
+    inOrder.verify(mockSubchannel1n2).shutdown();
 
     // Successful connection shuts down other subchannel
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -2053,7 +2053,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
-        mockSubchannel3, mockSubchannel4, mockSubchannel1_2); // captor: captures
+        mockSubchannel3, mockSubchannel4, mockSubchannel1n2); // captor: captures
 
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> addrs =
@@ -2089,9 +2089,9 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Calling pickSubchannel() requests a connection.
     assertEquals(picker.pickSubchannel(mockArgs), picker.pickSubchannel(mockArgs));
-    inOrder.verify(mockSubchannel1_2).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel1n2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
-    inOrder.verify(mockSubchannel1_2).requestConnection();
+    inOrder.verify(mockSubchannel1n2).requestConnection();
     when(mockSubchannel1.getAllAddresses()).thenReturn(Lists.newArrayList(servers.get(0)));
 
     // gives the same result when called twice
@@ -2106,7 +2106,7 @@ public class PickFirstLeafLoadBalancerTest {
     // second subchannel connection attempt succeeds
     inOrder.verify(mockSubchannel2).requestConnection();
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(mockSubchannel1_2).shutdown();
+    inOrder.verify(mockSubchannel1n2).shutdown();
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
 
@@ -2151,7 +2151,7 @@ public class PickFirstLeafLoadBalancerTest {
   public void ready_then_transient_failure_again() {
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
-        mockSubchannel3, mockSubchannel4, mockSubchannel1_2); // captor: captures
+        mockSubchannel3, mockSubchannel4, mockSubchannel1n2); // captor: captures
 
     // Creating first set of endpoints/addresses
     List<EquivalentAddressGroup> addrs =
@@ -2188,9 +2188,9 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Calling pickSubchannel() requests a connection, gives the same result when called twice.
     assertEquals(picker.pickSubchannel(mockArgs), picker.pickSubchannel(mockArgs));
-    inOrder.verify(mockSubchannel1_2).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel1n2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
-    inOrder.verify(mockSubchannel1_2).requestConnection();
+    inOrder.verify(mockSubchannel1n2).requestConnection();
     when(mockSubchannel3.getAllAddresses()).thenReturn(Lists.newArrayList(servers.get(0)));
     stateListener3.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
@@ -2206,7 +2206,7 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
 
     // verify that picker returns correct subchannel
-    inOrder.verify(mockSubchannel1_2).shutdown();
+    inOrder.verify(mockSubchannel1n2).shutdown();
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     picker = pickerCaptor.getValue();
     assertEquals(PickResult.withSubchannel(mockSubchannel2), picker.pickSubchannel(mockArgs));
@@ -2315,7 +2315,7 @@ public class PickFirstLeafLoadBalancerTest {
     Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3,
-        mockSubchannel2_2, mockSubchannel3_2);
+        mockSubchannel2n2, mockSubchannel3n2);
     Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
 
     List<EquivalentAddressGroup> addrs =
@@ -2379,10 +2379,10 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
 
     listeners[0].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
-    inOrder.verify(mockSubchannel2_2).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel2n2).start(stateListenerCaptor.capture());
     stateListenerCaptor.getValue().onSubchannelState(
         ConnectivityStateInfo.forTransientFailure(error));
-    inOrder.verify(mockSubchannel3_2).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel3n2).start(stateListenerCaptor.capture());
     stateListenerCaptor.getValue().onSubchannelState(
         ConnectivityStateInfo.forTransientFailure(error));
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
