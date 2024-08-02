@@ -98,7 +98,7 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials
   public void applyRequestMetadata(
       RequestInfo info, Executor appExecutor, final MetadataApplier applier) {
     SecurityLevel security = info.getSecurityLevel();
-    if (requirePrivacy && security != SecurityLevel.PRIVACY_AND_INTEGRITY) {
+    if (requirePrivacy && !allowedSecurityLevel(info, SecurityLevel.PRIVACY_AND_INTEGRITY)) {
       applier.fail(Status.UNAUTHENTICATED
           .withDescription("Credentials require channel with PRIVACY_AND_INTEGRITY security level. "
               + "Observed security level: " + security));
