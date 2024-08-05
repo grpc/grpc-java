@@ -4505,9 +4505,9 @@ public class ManagedChannelImplTest {
               .build());
 
       FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+      resolver.listener.onError(resolutionError);
 
       prevSize = getStats(channel).channelTrace.events.size();
-      resolver.listener.onError(resolutionError);
 
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
