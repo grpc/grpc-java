@@ -4507,8 +4507,7 @@ public class ManagedChannelImplTest {
               .setTimestampNanos(timer.getTicker().read())
               .build());
 
-      FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-      resolver.listener.onError(resolutionError);
+      nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
       prevSize = getStats(channel).channelTrace.events.size();
 
