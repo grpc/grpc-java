@@ -975,6 +975,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
