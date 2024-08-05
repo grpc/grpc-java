@@ -22,7 +22,6 @@ import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Optional;
-import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -42,6 +41,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -720,7 +720,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       private boolean closed;
       @GuardedBy("this")
       private int outboundSeqNo;
-      private byte[] payload;
 
       InProcessClientStream(
           CallOptions callOptions, StatsTraceContext statsTraceContext) {
@@ -791,15 +790,28 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
-          if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
-            try {
-              payload = ByteStreams.toByteArray(message);
-              message = new ByteArrayInputStream(payload);
-            } catch (IOException ex) {
-              throw new RuntimeException(ex);
-            }
+
+          long messageLength = -1;
+          try {
+            messageLength = getKnownLength(message);
+          } catch (IOException e) {
+            throw Status.INTERNAL
+                    .withDescription("Failed to calculate size")
+                    .withCause(e)
+                    .asRuntimeException();
+          } catch (StatusRuntimeException e) {
+            throw e;
+          } catch (RuntimeException e) {
+            throw Status.INTERNAL
+                    .withDescription("Failed to calculate size")
+                    .withCause(e)
+                    .asRuntimeException();
           }
-          statsTraceCtx.outboundWireSize(payload.length);
+          statsTraceCtx.outboundUncompressedSize(messageLength);
+          statsTraceCtx.outboundWireSize(messageLength);
+          // messageLength should be same at receiver's end as no actual wire is involved.
+          serverStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+          serverStream.statsTraceCtx.inboundWireSize(messageLength);
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (serverRequested > 0) {
@@ -810,6 +822,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           }
         }
         syncContext.drain();
+      }
+
+      private int getKnownLength(InputStream inputStream) throws IOException {
+        if (inputStream instanceof KnownLength || inputStream instanceof ByteArrayInputStream) {
+          return inputStream.available();
+        }
+        return -1;
       }
 
       @Override

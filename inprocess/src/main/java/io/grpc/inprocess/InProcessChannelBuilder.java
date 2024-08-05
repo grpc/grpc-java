@@ -117,10 +117,6 @@ public final class InProcessChannelBuilder extends
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
     managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
-
-    // By default, In-process transport should not be retriable as that leaks memory.  Since
-    // there is no wire, bytes aren't calculated so buffer limit isn't respected
-    managedChannelImplBuilder.disableRetry();
   }
 
   @Internal
