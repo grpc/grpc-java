@@ -4497,7 +4497,6 @@ public class ManagedChannelImplTest {
       createChannel(true);
       int prevSize = getStats(channel).channelTrace.events.size();
 
-      //assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
               .setDescription("Initial Name Resolution error, using default service config")
