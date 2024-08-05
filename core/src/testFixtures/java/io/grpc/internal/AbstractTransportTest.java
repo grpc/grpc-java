@@ -139,9 +139,6 @@ public abstract class AbstractTransportTest {
   /**
    * Returns true (which is default) if the transport reports message sizes to StreamTracers.
    */
-  protected boolean sizesReported() {
-    return true;
-  }
 
   protected final Attributes eagAttrs() {
     return EAG_ATTRS;
@@ -857,27 +854,16 @@ public abstract class AbstractTransportTest {
     message.close();
     assertThat(clientStreamTracer1.nextOutboundEvent())
         .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
-    // Ensuring outboundWireSize is non-zero after message write, addressing the potential 
-    // memory leak issue with retries in InProcessTransport (#8712)
     assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
-    if (sizesReported()) {
-      assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
-    }
+    assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
     assertThat(serverStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
     assertNull("no additional message expected", serverStreamListener.messageQueue.poll());
 
     clientStream.halfClose();
     assertTrue(serverStreamListener.awaitHalfClosed(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-    if (sizesReported()) {
-      assertThat(serverStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
-      assertThat(serverStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(serverStreamTracer1.getInboundWireSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getInboundUncompressedSize()).isEqualTo(0L);
-    }
+    assertThat(serverStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
+    assertThat(serverStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
     assertThat(serverStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
 
@@ -908,25 +894,15 @@ public abstract class AbstractTransportTest {
     assertNotNull("message expected", message);
     assertThat(serverStreamTracer1.nextOutboundEvent())
         .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
-    if (sizesReported()) {
-      assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
-      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(serverStreamTracer1.getOutboundWireSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
-    }
+    assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
+    assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
     assertTrue(clientStreamTracer1.getInboundHeaders());
     assertThat(clientStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
     assertEquals("Hi. Who are you?", methodDescriptor.parseResponse(message));
     assertThat(clientStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
-    if (sizesReported()) {
-      assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
-      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(clientStreamTracer1.getInboundWireSize()).isEqualTo(0L);
-      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isEqualTo(0L);
-    }
+    assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
+    assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
 
     message.close();
     assertNull("no additional message expected", clientStreamListener.messageQueue.poll());
@@ -1286,17 +1262,10 @@ public abstract class AbstractTransportTest {
     serverStream.close(Status.OK, new Metadata());
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertTrue(clientStreamTracer1.getInboundHeaders());
-    if (sizesReported()) {
-      assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
-      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-      assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
-      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(clientStreamTracer1.getInboundWireSize()).isEqualTo(0L);
-      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getOutboundWireSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
-    }
+    assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
+    assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
+    assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
+    assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
     assertNull(clientStreamTracer1.getInboundTrailers());
     assertSame(status, clientStreamTracer1.getStatus());
     // There is a race between client cancelling and server closing.  The final status seen by the
