@@ -4487,7 +4487,9 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory
               .Builder(expectedUri).setServers(Collections.singletonList(new
               EquivalentAddressGroup(socketAddress))).setError(resolutionError).build();
+
       channelBuilder.nameResolverFactory(nameResolverFactory);
+
       Map<String, Object> defaultServiceConfig =
               parseConfig("{\"methodConfig\":[{"
                       + "\"name\":[{\"service\":\"SimpleService1\"}],"
@@ -4495,6 +4497,7 @@ public class ManagedChannelImplTest {
 
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
       createChannel(true);
+
       int prevSize = getStats(channel).channelTrace.events.size();
 
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
