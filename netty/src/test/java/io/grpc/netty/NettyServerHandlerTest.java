@@ -355,6 +355,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -377,6 +378,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -405,6 +407,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
         isA(ByteBuf.class), any(ChannelPromise.class));
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -417,6 +420,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Once https://github.com/netty/netty/issues/4316 is resolved, we should also verify that
     // any open streams are closed properly.
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -759,12 +763,10 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verify(spyKeepAliveManager).onDataReceived(); // received headers
 
     channelRead(grpcDataFrame(STREAM_ID, false, contentAsArray()));
-    channel().releaseOutbound();
 
     verify(spyKeepAliveManager, times(2)).onDataReceived();
 
     channelRead(grpcDataFrame(STREAM_ID, false, contentAsArray()));
-    channel().releaseOutbound();
 
     verify(spyKeepAliveManager, times(3)).onDataReceived();
     verify(spyKeepAliveManager, never()).onTransportTermination();
@@ -841,6 +843,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardNanos(keepAliveTimeoutInNanos);
 
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1006,6 +1009,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1050,6 +1054,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1094,6 +1099,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1148,6 +1154,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1179,6 +1186,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1209,6 +1217,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel not closed yet
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1247,6 +1256,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1287,6 +1297,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1305,6 +1316,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     manualSetUp();
     assertThrows(ClosedChannelException.class, () -> rapidReset(maxRstCount + 1));
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   private void rapidReset(int burstSize) throws Exception {
@@ -1322,8 +1334,10 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         streamId += 2;
         fakeClock().forwardNanos(rpcTimeNanos);
       }
+      channel().releaseOutbound();
       while (channel().readOutbound() != null) {}
       fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
+
     }
   }
 
