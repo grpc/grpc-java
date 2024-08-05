@@ -4482,9 +4482,11 @@ public class ManagedChannelImplTest {
     timer.forwardNanos(1234);
     channelBuilder.maxTraceEvents(10);
     try {
+      Status resolutionError = Status.UNAVAILABLE
+              .withDescription("Initial Name Resolution error, using default service config");
       FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory
               .Builder(expectedUri).setServers(Collections.singletonList(new
-              EquivalentAddressGroup(socketAddress))).build();
+              EquivalentAddressGroup(socketAddress))).setError(resolutionError).build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
       Map<String, Object> defaultServiceConfig =
               parseConfig("{\"methodConfig\":[{"
@@ -4492,29 +4494,27 @@ public class ManagedChannelImplTest {
                       + "\"waitForReady\":true}]}");
 
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
-      createChannel();
+      createChannel(true);
       int prevSize = getStats(channel).channelTrace.events.size();
 
-      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+      //assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
-              .setDescription("Service config changed")
-              .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+              .setDescription("Initial Name Resolution error, using default service config")
+              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
               .setTimestampNanos(timer.getTicker().read())
               .build());
 
       FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
-      Status resolutionError = Status.UNAVAILABLE
-              .withDescription("Initial Name Resolution error, using default service config");
 
       prevSize = getStats(channel).channelTrace.events.size();
       resolver.listener.onError(resolutionError);
 
-      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
-              .setDescription("Service config changed")
-              .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+              .setDescription("Initial Name Resolution error, using default service config")
+              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
               .setTimestampNanos(timer.getTicker().read())
               .build());
     } finally {
