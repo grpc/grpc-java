@@ -24,23 +24,24 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public class LoadBalanceServer {
     private static final Logger logger = Logger.getLogger(LoadBalanceServer.class.getName());
-    static public final int serverCount = 3;
-    static public final int startPort = 50051;
-    private Server[] servers;
+    static public final int[] SERVER_PORTS = {50051, 50052, 50053};
+    private List<Server> servers;
 
     private void start() throws IOException {
-        servers = new Server[serverCount];
-        for (int i = 0; i < serverCount; i++) {
-            int port = startPort + i;
-            servers[i] = ServerBuilder.forPort(port)
+        servers = new ArrayList<>();
+        for (int port :SERVER_PORTS) {
+            servers.add(
+                ServerBuilder.forPort(port)
                     .addService(new GreeterImpl(port))
                     .build()
-                    .start();
+                    .start());
             logger.info("Server started, listening on " + port);
         }
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -55,17 +56,17 @@ public class LoadBalanceServer {
     }
 
     private void stop() throws InterruptedException {
-        for (int i = 0; i < serverCount; i++) {
-            if (servers[i] != null) {
-                servers[i].shutdown().awaitTermination(30, TimeUnit.SECONDS);
+        for (Server server : servers) {
+            if (server != null) {
+                server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
             }
         }
     }
 
     private void blockUntilShutdown() throws InterruptedException {
-        for (int i = 0; i < serverCount; i++) {
-            if (servers[i] != null) {
-                servers[i].awaitTermination();
+        for (Server server : servers) {
+            if (server != null) {
+                server.awaitTermination();
             }
         }
     }
@@ -86,7 +87,8 @@ public class LoadBalanceServer {
 
         @Override
         public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-            HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName() + " from server<" + this.port + ">").build();
+            HelloReply reply = HelloReply.newBuilder()
+                .setMessage("Hello " + req.getName() + " from server<" + this.port + ">").build();
             responseObserver.onNext(reply);
             responseObserver.onCompleted();
         }

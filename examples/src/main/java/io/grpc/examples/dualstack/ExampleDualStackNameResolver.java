@@ -16,48 +16,42 @@
 
 package io.grpc.examples.dualstack;
 
+import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleServiceName;
+
 import com.google.common.collect.ImmutableMap;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
-
 import io.grpc.examples.loadbalance.LoadBalanceServer;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleServiceName;
 
 public class ExampleDualStackNameResolver extends NameResolver {
+
+    // This is a fake name resolver, so we just hard code the address here.
+    private static final ImmutableMap<String, List<List<SocketAddress>>> addrStore =
+        ImmutableMap.<String, List<List<SocketAddress>>>builder()
+        .put(exampleServiceName,
+            Arrays.stream(LoadBalanceServer.SERVER_PORTS)
+                .mapToObj(port -> getLocalAddrs(port))
+                .collect(Collectors.toList())
+        )
+        .build();
 
     private Listener2 listener;
 
     private final URI uri;
 
-    private final Map<String,List<List<InetSocketAddress>>> addrStore;
-
     public ExampleDualStackNameResolver(URI targetUri) {
         this.uri = targetUri;
-        // This is a fake name resolver, so we just hard code the address here.
-        addrStore = ImmutableMap.<String,List<List<InetSocketAddress>>>builder()
-            .put(exampleServiceName,
-                Stream.iterate(LoadBalanceServer.startPort, p->p+1)
-                    .limit(LoadBalanceServer.serverCount)
-                    .map(port-> getLocalAddrs(port))
-                    .collect(Collectors.toList())
-            )
-            .build();
     }
 
-    private static List<InetSocketAddress> getLocalAddrs(Integer port) {
+    private static List<SocketAddress> getLocalAddrs(int port) {
         return Arrays.asList(
             new InetSocketAddress("127.0.0.1", port),
             new InetSocketAddress("::1", port));
@@ -88,54 +82,19 @@ public class ExampleDualStackNameResolver extends NameResolver {
     }
 
     private void resolve() {
-        List<List<InetSocketAddress>> addresses = addrStore.get(uri.getPath().substring(1));
+        List<List<SocketAddress>> addresses = addrStore.get(uri.getPath().substring(1));
         try {
             List<EquivalentAddressGroup> eagList = new ArrayList<>();
-            for (List<InetSocketAddress> endpoint : addresses) {
-                // convert to socket address
-                List<SocketAddress> socketAddresses = endpoint.stream()
-                    .map(this::toSocketAddress)
-                    .collect(Collectors.toList());
+            for (List<SocketAddress> endpoint : addresses) {
                 // every server is an EquivalentAddressGroup, so they can be accessed randomly
-                eagList.add(addrToEquivalentAddressGroup(socketAddresses));
+                eagList.add(new EquivalentAddressGroup(endpoint));
             }
-            ResolutionResult resolutionResult = ResolutionResult.newBuilder()
-                .setAddresses(eagList)
-                .build();
 
-            this.listener.onResult(resolutionResult);
+            this.listener.onResult(ResolutionResult.newBuilder().setAddresses(eagList).build());
         } catch (Exception e){
             // when error occurs, notify listener
             this.listener.onError(Status.UNAVAILABLE.withDescription("Unable to resolve host ").withCause(e));
         }
     }
 
-    private SocketAddress toSocketAddress(InetSocketAddress address) {
-        return new InetSocketAddress(address.getHostName(), address.getPort());
-    }
-
-    static List<SocketAddress> getV6Addresses(int port) throws UnknownHostException {
-        List<SocketAddress> v6addresses = new ArrayList<>();
-        InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
-        for (InetAddress address : addresses) {
-            if (address.getAddress().length != 4) {
-                v6addresses.add(new java.net.InetSocketAddress(address, port));
-            }
-        }
-        return v6addresses;
-    }
-
-    static SocketAddress getV4Address(int port) throws UnknownHostException {
-        InetAddress[] addresses = InetAddress.getAllByName(InetAddress.getLocalHost().getHostName());
-        for (InetAddress address : addresses) {
-            if (address.getAddress().length == 4) {
-                return new java.net.InetSocketAddress(address, port);
-            }
-        }
-        return null; // means it is v6 only
-    }
-
-    private EquivalentAddressGroup addrToEquivalentAddressGroup(List<SocketAddress> addrList) {
-        return new EquivalentAddressGroup(addrList);
-    }
 }

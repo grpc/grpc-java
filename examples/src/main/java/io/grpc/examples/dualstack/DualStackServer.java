@@ -21,17 +21,19 @@ import io.grpc.ServerBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
+import io.grpc.examples.loadbalance.LoadBalanceServer;
+import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
-
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public class DualStackServer {
-    static public final int serverCount = 3;
-    static public final int startPort = 50051;
     private static final Logger logger = Logger.getLogger(DualStackServer.class.getName());
-    private Server[] servers;
+    private List<Server> servers;
 
     public static void main(String[] args) throws IOException, InterruptedException {
         final DualStackServer server = new DualStackServer();
@@ -40,13 +42,38 @@ public class DualStackServer {
     }
 
     private void start() throws IOException {
-        servers = new Server[serverCount];
-        for (int i = 0; i < serverCount; i++) {
-            int port = startPort + i;
-            servers[i] = ServerBuilder.forPort(port)
-                    .addService(new GreeterImpl(port))
-                    .build()
-                    .start();
+        InetSocketAddress inetSocketAddress;
+
+        servers = new ArrayList<>();
+        for (int i = 0; i < LoadBalanceServer.SERVER_PORTS.length; i++ ) {
+            String addressType;
+            int port = LoadBalanceServer.SERVER_PORTS[i];
+            ServerBuilder<?> serverBuilder;
+            switch (i) {
+                case 0:
+                    serverBuilder = ServerBuilder.forPort(port); // bind to both IPv4 and IPv6
+                    addressType = "both IPv4 and IPv6";
+                    break;
+                case 1:
+                    // bind to IPv4 only
+                    inetSocketAddress = new InetSocketAddress("127.0.0.1", port);
+                    serverBuilder = NettyServerBuilder.forAddress(inetSocketAddress);
+                    addressType = "IPv4 only";
+                    break;
+                case 2:
+                    // bind to IPv6 only
+                    inetSocketAddress = new InetSocketAddress("::1", port);
+                    serverBuilder = NettyServerBuilder.forAddress(inetSocketAddress);
+                    addressType = "IPv6 only";
+                    break;
+                default:
+                    throw new IllegalStateException("Unexpected value: " + i);
+            }
+
+            servers.add(serverBuilder
+                .addService(new GreeterImpl(port, addressType))
+                .build()
+                .start());
             logger.info("Server started, listening on " + port);
         }
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -61,17 +88,17 @@ public class DualStackServer {
     }
 
     private void stop() throws InterruptedException {
-        for (int i = 0; i < serverCount; i++) {
-            if (servers[i] != null) {
-                servers[i].shutdown().awaitTermination(30, TimeUnit.SECONDS);
+        for (Server server : servers) {
+            if (server != null) {
+                server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
             }
         }
     }
 
     private void blockUntilShutdown() throws InterruptedException {
-        for (int i = 0; i < serverCount; i++) {
-            if (servers[i] != null) {
-                servers[i].awaitTermination();
+        for (Server server : servers) {
+            if (server != null) {
+                server.awaitTermination();
             }
         }
     }
@@ -79,14 +106,18 @@ public class DualStackServer {
     static class GreeterImpl extends GreeterGrpc.GreeterImplBase {
 
         int port;
+        String addressType;
 
-        public GreeterImpl(int port) {
+        public GreeterImpl(int port, String addressType) {
             this.port = port;
+            this.addressType = addressType;
         }
 
         @Override
         public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-            HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName() + " from server<" + this.port + ">").build();
+            String msg = String.format("Hello %s from server<%d> type: %s",
+                req.getName(), this.port, addressType);
+            HelloReply reply = HelloReply.newBuilder().setMessage(msg).build();
             responseObserver.onNext(reply);
             responseObserver.onCompleted();
         }

@@ -16,18 +16,20 @@
 
 package io.grpc.examples.dualstack;
 
-import io.grpc.*;
+import io.grpc.Channel;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolverRegistry;
+import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class DualStackClient {
-    public static final String exampleScheme = "example";
-    public static final String exampleServiceName = "lb.example.grpc.io";
+    public static final String channelTarget = "example:///lb.example.grpc.io";
     private static final Logger logger = Logger.getLogger(DualStackClient.class.getName());
     private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
@@ -39,7 +41,7 @@ public class DualStackClient {
         NameResolverRegistry.getDefaultRegistry()
             .register(new ExampleDualStackNameResolverProvider());
 
-        logger.info("Use default DNS resolver");
+        logger.info("\n **** Use default DNS resolver ****");
         ManagedChannel channel = ManagedChannelBuilder.forTarget("localhost:50051")
                 .usePlaintext()
                 .build();
@@ -52,16 +54,15 @@ public class DualStackClient {
             channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
         }
 
-        logger.info("Change to use example name resolver");
+        logger.info("\n  **** Change to use example name resolver ****");
         /*
           Dial to "example:///resolver.example.grpc.io", use {@link ExampleNameResolver} to create connection
           "resolver.example.grpc.io" is converted to {@link java.net.URI.path}
          */
-        channel = ManagedChannelBuilder.forTarget(
-                        String.format("%s:///%s", exampleScheme, exampleServiceName))
-                .defaultLoadBalancingPolicy("round_robin")
-                .usePlaintext()
-                .build();
+        channel = ManagedChannelBuilder.forTarget(channelTarget)
+            .defaultLoadBalancingPolicy("round_robin")
+            .usePlaintext()
+            .build();
         try {
             DualStackClient client = new DualStackClient(channel);
             for (int i = 0; i < 5; i++) {
