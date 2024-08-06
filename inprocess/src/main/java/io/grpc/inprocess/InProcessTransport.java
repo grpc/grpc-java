@@ -841,13 +841,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         syncContext.drain();
       }
 
-      private int getKnownLength(InputStream inputStream) throws IOException {
-        if (inputStream instanceof KnownLength || inputStream instanceof ByteArrayInputStream) {
-          return inputStream.available();
-        }
-        return -1;
-      }
-
       @Override
       public void flush() {}
 
