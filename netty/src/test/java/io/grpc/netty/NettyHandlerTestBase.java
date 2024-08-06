@@ -566,6 +566,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
     readXCopies(1, data1KbBuf); // no ping, too little data
     assertEquals(3, handler.flowControlPing().getPingCount());
+
+    channel().releaseOutbound();
   }
 
   @Test
@@ -587,6 +589,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
       }
     }
     assertEquals(6, handler.flowControlPing().getPingCount());
+
+    channel().releaseOutbound();
   }
 
   @Test
@@ -624,6 +628,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     readPingAck(pingData); // should resize window
     int windowSizeB = localFlowController.initialWindowSize();
     Assert.assertNotEquals(windowSizeA, windowSizeB);
+
+    channel().releaseOutbound();
   }
 
   private void readPingAck(long pingData) throws Exception {
