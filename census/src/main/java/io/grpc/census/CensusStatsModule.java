@@ -18,6 +18,10 @@ package io.grpc.census;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.census.internal.ObservabilityCensusConstants.API_LATENCY_PER_CALL;
+import static io.grpc.census.internal.ObservabilityCensusConstants.INSTRUMENTATION_SOURCE;
+import static io.grpc.census.internal.ObservabilityCensusConstants.INSTRUMENTATION_VERSION;
+import static io.grpc.census.internal.ObservabilityCensusConstants.LIBRARY_NAME;
+import static io.grpc.census.internal.ObservabilityCensusConstants.LIBRARY_VERSION;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -396,6 +400,8 @@ final class CensusStatsModule {
               .tagger
               .toBuilder(startCtx)
               .putLocal(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
+              .putLocal(INSTRUMENTATION_SOURCE, LIBRARY_NAME)
+              .putLocal(INSTRUMENTATION_VERSION, LIBRARY_VERSION)
               .build());
     }
   }
@@ -447,6 +453,8 @@ final class CensusStatsModule {
       TagValue methodTag = TagValue.create(fullMethodName);
       startCtx = module.tagger.toBuilder(parentCtx)
           .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
+          .putLocal(INSTRUMENTATION_SOURCE, LIBRARY_NAME)
+          .putLocal(INSTRUMENTATION_VERSION, LIBRARY_VERSION)
           .build();
       if (module.recordStartedRpcs) {
         // Record here in case newClientStreamTracer() would never be called.
@@ -556,6 +564,8 @@ final class CensusStatsModule {
               .toBuilder(parentCtx)
               .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
               .putLocal(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
+              .putLocal(INSTRUMENTATION_SOURCE, LIBRARY_NAME)
+              .putLocal(INSTRUMENTATION_VERSION, LIBRARY_VERSION)
               .build());
     }
   }
@@ -765,6 +775,8 @@ final class CensusStatsModule {
               .tagger
               .toBuilder(parentCtx)
               .putLocal(RpcMeasureConstants.GRPC_SERVER_STATUS, statusTag)
+              .putLocal(INSTRUMENTATION_SOURCE, LIBRARY_NAME)
+              .putLocal(INSTRUMENTATION_VERSION, LIBRARY_VERSION)
               .build());
     }
 
@@ -787,6 +799,8 @@ final class CensusStatsModule {
           tagger
               .toBuilder(parentCtx)
               .putLocal(RpcMeasureConstants.GRPC_SERVER_METHOD, methodTag)
+              .putLocal(INSTRUMENTATION_SOURCE, LIBRARY_NAME)
+              .putLocal(INSTRUMENTATION_VERSION, LIBRARY_VERSION)
               .build();
       return new ServerTracer(CensusStatsModule.this, parentCtx);
     }
