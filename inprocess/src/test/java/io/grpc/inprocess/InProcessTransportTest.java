@@ -86,13 +86,6 @@ public class InProcessTransportTest extends AbstractTransportTest {
         testAuthority(server), USER_AGENT, eagAttrs(), false);
   }
 
-  @Override
-  protected boolean sizesReportedAtServer() {
-    // TODO(zhangkun83): InProcessTransport doesn't record metrics for now
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    return false;
-  }
-
   @Test
   @Ignore
   @Override

@@ -418,6 +418,31 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
     }
 
+    private int getKnownLength(InputStream inputStream) throws IOException {
+      if (inputStream instanceof KnownLength || inputStream instanceof ByteArrayInputStream) {
+        return inputStream.available();
+      }
+      return -1;
+    }
+
+    private long getMessageLength(InputStream inputStream) {
+      try {
+        return getKnownLength(inputStream);
+      } catch (IOException e) {
+        throw Status.INTERNAL
+                .withDescription("Failed to calculate size")
+                .withCause(e)
+                .asRuntimeException();
+      } catch (StatusRuntimeException e) {
+        throw e;
+      } catch (RuntimeException e) {
+        throw Status.INTERNAL
+                .withDescription("Failed to calculate size")
+                .withCause(e)
+                .asRuntimeException();
+      }
+    }
+
     private class InProcessServerStream implements ServerStream {
       final StatsTraceContext statsTraceCtx;
       // All callbacks must run in syncContext to avoid possibility of deadlock in direct executors
@@ -519,6 +544,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+
+          long messageLength = getMessageLength(message);
+          statsTraceCtx.outboundUncompressedSize(messageLength);
+          statsTraceCtx.outboundWireSize(messageLength);
+          // messageLength should be same at receiver's end as no actual wire is involved.
+          clientStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+          clientStream.statsTraceCtx.inboundWireSize(messageLength);
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (clientRequested > 0) {
@@ -791,22 +823,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
 
-          long messageLength = -1;
-          try {
-            messageLength = getKnownLength(message);
-          } catch (IOException e) {
-            throw Status.INTERNAL
-                    .withDescription("Failed to calculate size")
-                    .withCause(e)
-                    .asRuntimeException();
-          } catch (StatusRuntimeException e) {
-            throw e;
-          } catch (RuntimeException e) {
-            throw Status.INTERNAL
-                    .withDescription("Failed to calculate size")
-                    .withCause(e)
-                    .asRuntimeException();
-          }
+          long messageLength = getMessageLength(message);
           statsTraceCtx.outboundUncompressedSize(messageLength);
           statsTraceCtx.outboundWireSize(messageLength);
           // messageLength should be same at receiver's end as no actual wire is involved.
