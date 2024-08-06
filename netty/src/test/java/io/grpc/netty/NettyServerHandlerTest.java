@@ -828,6 +828,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite(times(2))
         .writePing(eq(ctx()), eq(false), eq(0xDEADL), any(ChannelPromise.class));
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -943,6 +944,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             any(ByteBuf.class),
             any(ChannelPromise.class));
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1118,6 +1120,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             any(ByteBuf.class),
             any(ChannelPromise.class));
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
