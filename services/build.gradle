@@ -31,7 +31,6 @@ dependencies {
             libraries.guava.jre // JRE required by protobuf-java-util
 
     runtimeOnly libraries.errorprone.annotations,
-            libraries.j2objc.annotations, // Explicit dependency to keep in step with version used by guava
             libraries.gson  // to fix checkUpperBoundDeps error here
     compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),
