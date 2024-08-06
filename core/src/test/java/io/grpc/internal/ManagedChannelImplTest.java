@@ -4487,7 +4487,6 @@ public class ManagedChannelImplTest {
       FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory
               .Builder(expectedUri).setServers(Collections.singletonList(new
               EquivalentAddressGroup(socketAddress))).setError(resolutionError).build();
-
       channelBuilder.nameResolverFactory(nameResolverFactory);
 
       Map<String, Object> defaultServiceConfig =
@@ -4509,15 +4508,8 @@ public class ManagedChannelImplTest {
 
       nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-      prevSize = getStats(channel).channelTrace.events.size();
-
+      // no new trace events due to lastResolutionState is already ERROR
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
-      assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
-              .isEqualTo(new ChannelTrace.Event.Builder()
-              .setDescription("Initial Name Resolution error, using default service config")
-              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
-              .setTimestampNanos(timer.getTicker().read())
-              .build());
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
     }
@@ -4551,6 +4543,8 @@ public class ManagedChannelImplTest {
 
     nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
+    // initial service config is already applied,
+    // so it's not reapplied using the default service config here.
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
             .setDescription("Failed to resolve name: " + resolutionError)

@@ -1831,7 +1831,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @SuppressWarnings("ReferenceEquality")
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
-            new Object[] {getLogId(), error});
+          new Object[] {getLogId(), error});
       realChannel.onConfigError();
       if (lastResolutionState != ResolutionState.ERROR) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
