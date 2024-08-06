@@ -115,6 +115,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.StringMarshaller;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
@@ -1054,7 +1055,7 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(mockLoadBalancer);
   }
 
-  @Test
+  @Test  
   public void noMoreCallbackAfterLoadBalancerShutdown_configError() throws InterruptedException {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
@@ -1093,7 +1094,10 @@ public class ManagedChannelImplTest {
     verify(stateListener2).onSubchannelState(stateInfoCaptor.capture());
     assertSame(CONNECTING, stateInfoCaptor.getValue().getState());
 
-    resolver.listener.onError(resolutionError);
+    channel.syncContext.execute(() ->
+        resolver.listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(resolutionError)).build()));
     verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
 
     verifyNoMoreInteractions(mockLoadBalancer);
@@ -1115,13 +1119,10 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(stateListener1, stateListener2);
 
     // No more callback should be delivered to LoadBalancer after it's shut down
-    resolver.listener.onResult(
-        ResolutionResult.newBuilder()
-            .setAddresses(new ArrayList<>())
-            .setServiceConfig(
-                ConfigOrError.fromError(Status.UNAVAILABLE.withDescription("Resolution failed")))
-            .build());
-    Thread.sleep(1100);
+    channel.syncContext.execute(() ->
+        resolver.listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(resolutionError)).build()));
     assertThat(timer.getPendingTasks()).isEmpty();
     resolver.resolved();
     verifyNoMoreInteractions(mockLoadBalancer);
@@ -3235,11 +3236,19 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult2(
+            ResolutionResult.newBuilder()
+              .setAddressesOrError(
+                  StatusOr.fromStatus(Status.INTERNAL)).build()));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(
+                    StatusOr.fromStatus(Status.INTERNAL)).build()));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
@@ -4868,7 +4877,10 @@ public class ManagedChannelImplTest {
 
       void resolved() {
         if (error != null) {
-          listener.onError(error);
+          syncContext.execute(() ->
+              listener.onResult2(
+                  ResolutionResult.newBuilder()
+                      .setAddressesOrError(StatusOr.fromStatus(error)).build()));
           return;
         }
         ResolutionResult.Builder builder =

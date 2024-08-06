@@ -81,6 +81,7 @@ import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
@@ -1693,18 +1694,24 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return Status.OK;
       }
 
-      List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
-      channelLogger.log(
-          ChannelLogLevel.DEBUG,
-          "Resolved address: {0}, config={1}",
-          servers,
-          resolutionResult.getAttributes());
+      StatusOr<List<EquivalentAddressGroup>> serversOrError =
+          resolutionResult.getAddressesOrError();
+      if (serversOrError != null && serversOrError.hasValue()) {
+        channelLogger.log(
+            ChannelLogLevel.DEBUG,
+            "Resolved address: {0}, config={1}",
+            serversOrError,
+            resolutionResult.getAttributes());
 
-      if (lastResolutionState != ResolutionState.SUCCESS) {
-        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
-        lastResolutionState = ResolutionState.SUCCESS;
+        if (lastResolutionState != ResolutionState.SUCCESS) {
+          channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}",
+              serversOrError.value());
+          lastResolutionState = ResolutionState.SUCCESS;
+        }
+      } else if (serversOrError != null && !serversOrError.hasValue()) {
+        handleErrorInSyncContext(serversOrError.status());
+        return serversOrError.status();
       }
-
       ConfigOrError configOrError = resolutionResult.getServiceConfig();
       InternalConfigSelector resolvedConfigSelector =
           resolutionResult.getAttributes().get(InternalConfigSelector.KEY);
@@ -1780,7 +1787,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
 
         try {
-          // TODO(creamsoup): when `servers` is empty and lastResolutionStateCopy == SUCCESS
+          // TODO(creamsoup): when `serversOrError` is empty and lastResolutionStateCopy == SUCCESS
           //  and lbNeedAddress, it shouldn't call the handleServiceConfigUpdate. But,
           //  lbNeedAddress is not deterministic
           serviceConfigUpdated = true;
@@ -1806,12 +1813,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         Attributes attributes = attrBuilder.build();
 
-        return helper.lb.tryAcceptResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(servers)
-                .setAttributes(attributes)
-                .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
-                .build());
+        ResolvedAddresses.Builder resolvedAddresses = ResolvedAddresses.newBuilder();
+        if (serversOrError != null && serversOrError.hasValue()) {
+          resolvedAddresses.setAddresses(serversOrError.value());
+        } else {
+          resolvedAddresses.setAddresses(new ArrayList<>());
+        }
+        resolvedAddresses = resolvedAddresses.setAttributes(attributes)
+            .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig());
+        Status addressAcceptanceStatus = helper.lb.tryAcceptResolvedAddresses(
+            resolvedAddresses.build());
+        return addressAcceptanceStatus;
       }
       return Status.OK;
     }

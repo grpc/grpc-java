@@ -45,6 +45,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
+import io.grpc.StatusOr;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
@@ -877,9 +878,11 @@ public final class ManagedChannelImplBuilder
 
         @Override
         public void start(Listener2 listener) {
-          listener.onResult(
+          listener.onResult2(
               ResolutionResult.newBuilder()
-                  .setAddresses(Collections.singletonList(new EquivalentAddressGroup(address)))
+                  .setAddressesOrError(
+                      StatusOr.fromValue(
+                          Collections.singletonList(new EquivalentAddressGroup(address))))
                   .setAttributes(Attributes.EMPTY)
                   .build());
         }
