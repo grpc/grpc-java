@@ -16,9 +16,9 @@
 
 package io.grpc;
 
-import static com.google.common.base.Charsets.US_ASCII;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
