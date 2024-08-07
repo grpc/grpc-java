@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
@@ -169,37 +170,37 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void executor_normal() {
     Executor executor = mock(Executor.class);
-    assertEquals(builder, builder.executor(executor));
-    assertEquals(executor, builder.executorPool.getObject());
+    assertSame(builder, builder.executor(executor));
+    assertSame(executor, builder.executorPool.getObject());
   }
 
   @Test
   public void executor_null() {
     ObjectPool<? extends Executor> defaultValue = builder.executorPool;
     builder.executor(mock(Executor.class));
-    assertEquals(builder, builder.executor(null));
-    assertEquals(defaultValue, builder.executorPool);
+    assertSame(builder, builder.executor(null));
+    assertSame(defaultValue, builder.executorPool);
   }
 
   @Test
   public void directExecutor() {
-    assertEquals(builder, builder.directExecutor());
+    assertSame(builder, builder.directExecutor());
     assertEquals(MoreExecutors.directExecutor(), builder.executorPool.getObject());
   }
 
   @Test
   public void offloadExecutor_normal() {
     Executor executor = mock(Executor.class);
-    assertEquals(builder, builder.offloadExecutor(executor));
-    assertEquals(executor, builder.offloadExecutorPool.getObject());
+    assertSame(builder, builder.offloadExecutor(executor));
+    assertSame(executor, builder.offloadExecutorPool.getObject());
   }
 
   @Test
   public void offloadExecutor_null() {
     ObjectPool<? extends Executor> defaultValue = builder.offloadExecutorPool;
     builder.offloadExecutor(mock(Executor.class));
-    assertEquals(builder, builder.offloadExecutor(null));
-    assertEquals(defaultValue, builder.offloadExecutorPool);
+    assertSame(builder, builder.offloadExecutor(null));
+    assertSame(defaultValue, builder.offloadExecutorPool);
   }
 
   @Test
@@ -212,7 +213,7 @@ public class ManagedChannelImplBuilderTest {
   public void nameResolverFactory_normal() {
     NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
     doReturn("testscheme").when(nameResolverFactory).getDefaultScheme();
-    assertEquals(builder, builder.nameResolverFactory(nameResolverFactory));
+    assertSame(builder, builder.nameResolverFactory(nameResolverFactory));
     assertNotNull(builder.nameResolverRegistry);
     assertEquals("testscheme", builder.nameResolverRegistry.asFactory().getDefaultScheme());
   }
@@ -242,7 +243,7 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void defaultLoadBalancingPolicy_normal() {
-    assertEquals(builder, builder.defaultLoadBalancingPolicy("magic_balancer"));
+    assertSame(builder, builder.defaultLoadBalancingPolicy("magic_balancer"));
     assertEquals("magic_balancer", builder.defaultLbPolicy);
   }
 
@@ -270,14 +271,14 @@ public class ManagedChannelImplBuilderTest {
   public void decompressorRegistry_normal() {
     DecompressorRegistry decompressorRegistry = DecompressorRegistry.emptyInstance();
     assertNotEquals(decompressorRegistry, builder.decompressorRegistry);
-    assertEquals(builder, builder.decompressorRegistry(decompressorRegistry));
+    assertSame(builder, builder.decompressorRegistry(decompressorRegistry));
     assertEquals(decompressorRegistry, builder.decompressorRegistry);
   }
 
   @Test
   public void decompressorRegistry_null() {
     DecompressorRegistry defaultValue = builder.decompressorRegistry;
-    assertEquals(builder, builder.decompressorRegistry(DecompressorRegistry.emptyInstance()));
+    assertSame(builder, builder.decompressorRegistry(DecompressorRegistry.emptyInstance()));
     assertNotEquals(defaultValue, builder.decompressorRegistry);
     builder.decompressorRegistry(null);
     assertEquals(defaultValue, builder.decompressorRegistry);
@@ -292,8 +293,8 @@ public class ManagedChannelImplBuilderTest {
   public void compressorRegistry_normal() {
     CompressorRegistry compressorRegistry = CompressorRegistry.newEmptyInstance();
     assertNotEquals(compressorRegistry, builder.compressorRegistry);
-    assertEquals(builder, builder.compressorRegistry(compressorRegistry));
-    assertEquals(compressorRegistry, builder.compressorRegistry);
+    assertSame(builder, builder.compressorRegistry(compressorRegistry));
+    assertSame(compressorRegistry, builder.compressorRegistry);
   }
 
   @Test
@@ -301,8 +302,8 @@ public class ManagedChannelImplBuilderTest {
     CompressorRegistry defaultValue = builder.compressorRegistry;
     builder.compressorRegistry(CompressorRegistry.newEmptyInstance());
     assertNotEquals(defaultValue, builder.compressorRegistry);
-    assertEquals(builder, builder.compressorRegistry(null));
-    assertEquals(defaultValue, builder.compressorRegistry);
+    assertSame(builder, builder.compressorRegistry(null));
+    assertSame(defaultValue, builder.compressorRegistry);
   }
 
   @Test
@@ -313,13 +314,13 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void userAgent_normal() {
     String userAgent = "user-agent/1";
-    assertEquals(builder, builder.userAgent(userAgent));
-    assertEquals(userAgent, builder.userAgent);
+    assertSame(builder, builder.userAgent(userAgent));
+    assertSame(userAgent, builder.userAgent);
   }
 
   @Test
   public void userAgent_null() {
-    assertEquals(builder, builder.userAgent(null));
+    assertSame(builder, builder.userAgent(null));
     assertNull(builder.userAgent);
 
     builder.userAgent("user-agent/1");
@@ -402,8 +403,8 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void overrideAuthority_normal() {
     String overrideAuthority = "best-authority";
-    assertEquals(builder, builder.overrideAuthority(overrideAuthority));
-    assertEquals(overrideAuthority, builder.authorityOverride);
+    assertSame(builder, builder.overrideAuthority(overrideAuthority));
+    assertSame(overrideAuthority, builder.authorityOverride);
   }
 
   @Test(expected = NullPointerException.class)

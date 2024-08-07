@@ -1,9 +1,6 @@
 #!/bin/bash
 
 set -exu -o pipefail
-if [[ -f /VERSION ]]; then
-  cat /VERSION
-fi
 
 # Install gRPC and codegen for the Android interop app
 # (a composite gradle build can't find protoc-gen-grpc-java)
@@ -16,7 +13,14 @@ export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
-(yes || true) | "${ANDROID_HOME}/tools/bin/sdkmanager" --licenses
+export ANDROID_HOME=/tmp/Android/Sdk
+mkdir -p "${ANDROID_HOME}/cmdline-tools"
+curl -Ls -o cmdline.zip \
+    "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip"
+unzip -qd "${ANDROID_HOME}/cmdline-tools" cmdline.zip
+rm cmdline.zip
+mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
+(yes || true) | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses
 
 # Proto deps
 buildscripts/make_dependencies.sh

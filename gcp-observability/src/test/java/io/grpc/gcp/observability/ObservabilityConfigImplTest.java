@@ -21,12 +21,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import com.google.common.base.Charsets;
 import io.grpc.gcp.observability.ObservabilityConfig.LogFilter;
 import io.opencensus.trace.Sampler;
 import io.opencensus.trace.samplers.Samplers;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -401,7 +401,8 @@ public class ObservabilityConfigImplTest {
   public void configFileLogFilters() throws Exception {
     File configFile = tempFolder.newFile();
     Files.write(
-        Paths.get(configFile.getAbsolutePath()), CLIENT_LOG_FILTERS.getBytes(Charsets.US_ASCII));
+        Paths.get(configFile.getAbsolutePath()),
+        CLIENT_LOG_FILTERS.getBytes(StandardCharsets.US_ASCII));
     observabilityConfig.parseFile(configFile.getAbsolutePath());
     assertTrue(observabilityConfig.isEnableCloudLogging());
     assertThat(observabilityConfig.getProjectId()).isEqualTo("grpc-testing");

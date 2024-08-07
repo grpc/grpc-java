@@ -55,7 +55,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.util.OutlierDetectionLoadBalancer.EndpointTracker;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
@@ -245,7 +244,7 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(
         new OutlierDetectionLoadBalancerConfig.Builder()
             .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-            .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build(),
+            .setChildConfig(newChildConfig(mockChildLbProvider, null)).build(),
         new EquivalentAddressGroup(mockSocketAddress)));
     loadBalancer.handleNameResolutionError(Status.DEADLINE_EXCEEDED);
 
@@ -260,7 +259,7 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(
         new OutlierDetectionLoadBalancerConfig.Builder()
             .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-            .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build(),
+            .setChildConfig(newChildConfig(mockChildLbProvider, null)).build(),
         new EquivalentAddressGroup(mockSocketAddress)));
     loadBalancer.shutdown();
     verify(mockChildLb).shutdown();
@@ -271,9 +270,10 @@ public class OutlierDetectionLoadBalancerTest {
    */
   @Test
   public void acceptResolvedAddresses() {
+    Object childConfig = "theConfig";
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
+        .setChildConfig(newChildConfig(mockChildLbProvider, childConfig)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
@@ -281,8 +281,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     // Handling of resolved addresses is delegated
     verify(mockChildLb).handleResolvedAddresses(
-        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
-            .build());
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build());
 
     // There is a single pending task to run the outlier detection algorithm
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
@@ -301,7 +300,7 @@ public class OutlierDetectionLoadBalancerTest {
   public void childLbRecreatesSubchannels() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
 
@@ -323,7 +322,7 @@ public class OutlierDetectionLoadBalancerTest {
   public void acceptResolvedAddresses_outlierDetectionDisabled() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
+        .setChildConfig(newChildConfig(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
@@ -334,8 +333,8 @@ public class OutlierDetectionLoadBalancerTest {
     // There is a single pending task to run the outlier detection algorithm
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
 
-    config = new OutlierDetectionLoadBalancerConfig.Builder().setChildPolicy(
-        new PolicySelection(mockChildLbProvider, null)).build();
+    config = new OutlierDetectionLoadBalancerConfig.Builder().setChildConfig(
+        newChildConfig(mockChildLbProvider, null)).build();
     loadBalancer.acceptResolvedAddresses(
         buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
 
@@ -351,7 +350,7 @@ public class OutlierDetectionLoadBalancerTest {
   public void acceptResolvedAddresses_intervalUpdate() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
+        .setChildConfig(newChildConfig(mockChildLbProvider, null)).build();
     ResolvedAddresses resolvedAddresses = buildResolvedAddress(config,
         new EquivalentAddressGroup(mockSocketAddress));
 
@@ -361,7 +360,7 @@ public class OutlierDetectionLoadBalancerTest {
     config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setIntervalNanos(config.intervalNanos * 2)
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(mockChildLbProvider, null)).build();
+        .setChildConfig(newChildConfig(mockChildLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(
         buildResolvedAddress(config, new EquivalentAddressGroup(mockSocketAddress)));
@@ -396,7 +395,7 @@ public class OutlierDetectionLoadBalancerTest {
   public void delegatePick() throws Exception {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
 
@@ -424,7 +423,7 @@ public class OutlierDetectionLoadBalancerTest {
   public void delegatePickTracerFactoryPreserved() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
 
@@ -463,7 +462,7 @@ public class OutlierDetectionLoadBalancerTest {
 
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
         .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
-        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
 
@@ -496,7 +495,7 @@ public class OutlierDetectionLoadBalancerTest {
         .setMaxEjectionPercent(50)
         .setSuccessRateEjection(
             new SuccessRateEjection.Builder().setMinimumHosts(3).setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -520,7 +519,7 @@ public class OutlierDetectionLoadBalancerTest {
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -545,7 +544,7 @@ public class OutlierDetectionLoadBalancerTest {
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -565,12 +564,12 @@ public class OutlierDetectionLoadBalancerTest {
                 .setMinimumHosts(3)
                 .setRequestVolume(10)
                 .setEnforcementPercentage(0).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     // The PickFirstLeafLB has an extra level of indirection because of health
-    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 16 : 12;
+    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 8 : 12;
     generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), expectedStateChanges);
 
     // Move forward in time to a point where the detection timer has fired.
@@ -592,7 +591,7 @@ public class OutlierDetectionLoadBalancerTest {
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -605,7 +604,7 @@ public class OutlierDetectionLoadBalancerTest {
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
 
     // Now we produce more load, but the subchannel has started working and is no longer an outlier.
-    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 16 : 12;
+    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 8 : 12;
     generateLoad(ImmutableMap.of(), expectedStateChanges);
 
     // Move forward in time to a point where the detection timer has fired.
@@ -626,7 +625,7 @@ public class OutlierDetectionLoadBalancerTest {
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(20).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -654,7 +653,7 @@ public class OutlierDetectionLoadBalancerTest {
             new SuccessRateEjection.Builder()
                 .setMinimumHosts(5)
                 .setRequestVolume(20).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -684,7 +683,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10)
                 .setEnforcementPercentage(0)
                 .build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -709,7 +708,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setMinimumHosts(3)
                 .setRequestVolume(10)
                 .setStdevFactor(1).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -738,7 +737,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setMinimumHosts(3)
                 .setRequestVolume(10)
                 .setStdevFactor(1).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -772,7 +771,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -797,7 +796,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -821,7 +820,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(100).build()) // We won't produce this much volume...
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -846,7 +845,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(5)
                 .setRequestVolume(20).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -876,7 +875,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setRequestVolume(10)
                 .setEnforcementPercentage(0)
                 .build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -905,7 +904,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setMinimumHosts(3)
                 .setRequestVolume(1)
                 .build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -942,7 +941,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -986,7 +985,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
     EquivalentAddressGroup manyAddEndpoint = new EquivalentAddressGroup(Arrays.asList(
@@ -1029,7 +1028,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -1073,7 +1072,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -1136,7 +1135,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build())
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -1163,7 +1162,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setMinimumHosts(3)
                 .setRequestVolume(10)
                 .setEnforcementPercentage(0).build()) // Configured, but not enforcing.
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -1192,7 +1191,7 @@ public class OutlierDetectionLoadBalancerTest {
                 .setMinimumHosts(3)
                 .setRequestVolume(10)
                 .setEnforcementPercentage(0).build()) // Configured, but not enforcing.
-        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -1236,7 +1235,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build()) // Configured, but not enforcing.
-        .setChildPolicy(new PolicySelection(roundRobinLbProvider, null)).build();
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -1265,7 +1264,7 @@ public class OutlierDetectionLoadBalancerTest {
             new FailurePercentageEjection.Builder()
                 .setMinimumHosts(3)
                 .setRequestVolume(10).build()) // Configured, but not enforcing.
-        .setChildPolicy(new PolicySelection(fakeLbProvider, null)).build();
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
@@ -1387,6 +1386,10 @@ public class OutlierDetectionLoadBalancerTest {
           .that(entry.getValue().subchannelsEjected())
           .isEqualTo(addresses.contains(entry.getKey()));
     }
+  }
+
+  private Object newChildConfig(LoadBalancerProvider provider, Object config) {
+    return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
   }
 
   /** Round robin like fake load balancer. */
