@@ -76,19 +76,23 @@ public class AdvancedTlsX509KeyManagerTest {
   }
 
   @Test
-  public void credentialSetting() throws Exception {
+  public void updateTrustCredentials_replacesIssuers() throws Exception {
     // Overall happy path checking of public API.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
 
-    serverKeyManager.updateIdentityCredentialsFromFile(clientKey0File, clientCert0File);
+    serverKeyManager.updateIdentityCredentials(clientCert0File, clientKey0File);
     assertEquals(clientKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(clientCert0, serverKeyManager.getCertificateChain(ALIAS));
 
-    serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1,
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File,1,
         TimeUnit.MINUTES, executor);
+    assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
+    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
+
+    serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     assertEquals(serverKey0, serverKeyManager.getPrivateKey(ALIAS));
     assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(ALIAS));
   }
@@ -98,28 +102,28 @@ public class AdvancedTlsX509KeyManagerTest {
     // Checking edge cases of public API parameter setting.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     NullPointerException npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentials(null, serverCert0));
+        .updateIdentityCredentials(serverCert0, null));
     assertEquals("key", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentials(serverKey0, null));
+        .updateIdentityCredentials(null, serverKey0));
     assertEquals("certs", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(null, serverCert0File));
-    assertEquals("keyFile", npe.getMessage());
-
-    npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverKey0File, null));
+        .updateIdentityCredentials(null, serverKey0File));
     assertEquals("certFile", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1, null,
+        .updateIdentityCredentials(serverCert0File, null));
+    assertEquals("keyFile", npe.getMessage());
+
+    npe = assertThrows(NullPointerException.class, () -> serverKeyManager
+        .updateIdentityCredentials(serverCert0File, serverKey0File, 1, null,
             executor));
     assertEquals("unit", npe.getMessage());
 
     npe = assertThrows(NullPointerException.class, () -> serverKeyManager
-        .updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, 1,
+        .updateIdentityCredentials(serverCert0File, serverKey0File, 1,
             TimeUnit.MINUTES, null));
     assertEquals("executor", npe.getMessage());
 
@@ -128,7 +132,7 @@ public class AdvancedTlsX509KeyManagerTest {
     log.addHandler(handler);
     log.setUseParentHandlers(false);
     log.setLevel(Level.FINE);
-    serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File, -1,
+    serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File, -1,
             TimeUnit.SECONDS, executor);
     log.removeHandler(handler);
     for (LogRecord record : handler.getRecords()) {

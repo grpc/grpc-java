@@ -35,18 +35,24 @@ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
 
+load("@envoy_api//bazel:repositories.bzl", "api_dependencies")
+
+api_dependencies()
+
+load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
+
+switched_rules_by_language(
+    name = "com_google_googleapis_imports",
+    java = True,
+)
+
 maven_install(
     artifacts = [
         "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24",
         "com.google.api.grpc:proto-google-cloud-pubsub-v1:0.1.24",
     ] + IO_GRPC_GRPC_JAVA_ARTIFACTS + PROTOBUF_MAVEN_ARTIFACTS,
-    generate_compat_repositories = True,
     override_targets = IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
     repositories = [
         "https://repo.maven.apache.org/maven2/",
     ],
 )
-
-load("@maven//:compat.bzl", "compat_repositories")
-
-compat_repositories()

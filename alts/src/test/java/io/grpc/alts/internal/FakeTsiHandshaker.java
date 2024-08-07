@@ -68,6 +68,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
     SERVER_FINISHED;
 
     // Returns the next State. In order to advance to sendState=N, receiveState must be N-1.
+    @SuppressWarnings("EnumOrdinal")
     public State next() {
       if (ordinal() + 1 < values().length) {
         return values()[ordinal() + 1];

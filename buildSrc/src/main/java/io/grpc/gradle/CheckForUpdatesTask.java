@@ -28,8 +28,10 @@ import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.VersionCatalog;
 import org.gradle.api.artifacts.VersionCatalogsExtension;
+import org.gradle.api.artifacts.result.DependencyResult;
 import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.artifacts.result.ResolvedDependencyResult;
+import org.gradle.api.artifacts.result.UnresolvedDependencyResult;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Nested;
@@ -88,14 +90,20 @@ public abstract class CheckForUpdatesTask extends DefaultTask {
   public void checkForUpdates() {
     for (Library lib : libraries) {
       String name = lib.getName();
-      ModuleVersionIdentifier oldId = ((ResolvedDependencyResult) lib.getOldResult().get()
-          .getDependencies().iterator().next()).getSelected().getModuleVersion();
+      DependencyResult oldResult = lib.getOldResult().get().getDependencies().iterator().next();
+      if (oldResult instanceof UnresolvedDependencyResult) {
+        System.out.println(String.format(
+            "- Current version of libs.%s not resolved", name));
+        continue;
+      }
+      ModuleVersionIdentifier oldId =
+          ((ResolvedDependencyResult) oldResult).getSelected().getModuleVersion();
       ModuleVersionIdentifier newId = ((ResolvedDependencyResult) lib.getNewResult().get()
           .getDependencies().iterator().next()).getSelected().getModuleVersion();
       if (oldId != newId) {
         System.out.println(String.format(
-            "libs.%s = %s:%s %s -> %s",
-            name, newId.getGroup(), newId.getModule(), oldId.getVersion(), newId.getVersion()));
+            "libs.%s = %s %s -> %s",
+            name, newId.getModule(), oldId.getVersion(), newId.getVersion()));
       }
     }
   }

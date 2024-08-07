@@ -281,7 +281,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       @SuppressWarnings("unchecked")
       public void run() {
         ResourceSubscriber<T> subscriber =
-            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
+            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);
         subscriber.removeWatcher(watcher);
         if (!subscriber.isWatched()) {
           subscriber.cancelResourceWatch();

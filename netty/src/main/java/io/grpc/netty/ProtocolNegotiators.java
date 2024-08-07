@@ -160,41 +160,6 @@ final class ProtocolNegotiators {
     }
   }
 
-  public static final class FromChannelCredentialsResult {
-    public final ProtocolNegotiator.ClientFactory negotiator;
-    public final CallCredentials callCredentials;
-    public final String error;
-
-    private FromChannelCredentialsResult(ProtocolNegotiator.ClientFactory negotiator,
-        CallCredentials creds, String error) {
-      this.negotiator = negotiator;
-      this.callCredentials = creds;
-      this.error = error;
-    }
-
-    public static FromChannelCredentialsResult error(String error) {
-      return new FromChannelCredentialsResult(
-          null, null, Preconditions.checkNotNull(error, "error"));
-    }
-
-    public static FromChannelCredentialsResult negotiator(
-        ProtocolNegotiator.ClientFactory factory) {
-      return new FromChannelCredentialsResult(
-          Preconditions.checkNotNull(factory, "factory"), null, null);
-    }
-
-    public FromChannelCredentialsResult withCallCredentials(CallCredentials callCreds) {
-      Preconditions.checkNotNull(callCreds, "callCreds");
-      if (error != null) {
-        return this;
-      }
-      if (this.callCredentials != null) {
-        callCreds = new CompositeCallCredentials(this.callCredentials, callCreds);
-      }
-      return new FromChannelCredentialsResult(negotiator, callCreds, null);
-    }
-  }
-
   public static FromServerCredentialsResult from(ServerCredentials creds) {
     if (creds instanceof TlsServerCredentials) {
       TlsServerCredentials tlsCreds = (TlsServerCredentials) creds;
@@ -270,6 +235,41 @@ final class ProtocolNegotiators {
     } else {
       return FromServerCredentialsResult.error(
           "Unsupported credential type: " + creds.getClass().getName());
+    }
+  }
+
+  public static final class FromChannelCredentialsResult {
+    public final ProtocolNegotiator.ClientFactory negotiator;
+    public final CallCredentials callCredentials;
+    public final String error;
+
+    private FromChannelCredentialsResult(ProtocolNegotiator.ClientFactory negotiator,
+        CallCredentials creds, String error) {
+      this.negotiator = negotiator;
+      this.callCredentials = creds;
+      this.error = error;
+    }
+
+    public static FromChannelCredentialsResult error(String error) {
+      return new FromChannelCredentialsResult(
+          null, null, Preconditions.checkNotNull(error, "error"));
+    }
+
+    public static FromChannelCredentialsResult negotiator(
+        ProtocolNegotiator.ClientFactory factory) {
+      return new FromChannelCredentialsResult(
+          Preconditions.checkNotNull(factory, "factory"), null, null);
+    }
+
+    public FromChannelCredentialsResult withCallCredentials(CallCredentials callCreds) {
+      Preconditions.checkNotNull(callCreds, "callCreds");
+      if (error != null) {
+        return this;
+      }
+      if (this.callCredentials != null) {
+        callCreds = new CompositeCallCredentials(this.callCredentials, callCreds);
+      }
+      return new FromChannelCredentialsResult(negotiator, callCreds, null);
     }
   }
 

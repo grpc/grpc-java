@@ -28,7 +28,7 @@ plugins {
     id "war"
 
     id "ru.vyarus.animalsniffer"
-    id 'com.google.cloud.tools.appengine' version '2.3.0'
+    id 'com.google.cloud.tools.appengine'
 }
 
 description = 'gRPC: gae interop testing (jdk8)'
@@ -39,8 +39,6 @@ repositories {
     maven { // The google mirror is less flaky than mavenCentral()
         url "https://maven-central.storage-download.googleapis.com/maven2/" }
 }
-
-apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
 
 dependencies {
     providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'

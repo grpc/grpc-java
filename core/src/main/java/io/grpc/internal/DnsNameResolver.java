@@ -330,7 +330,9 @@ public class DnsNameResolver extends NameResolver {
             resolutionResultBuilder.setAttributes(result.attributes);
           }
         }
-        savedListener.onResult(resolutionResultBuilder.build());
+        syncContext.execute(() -> {
+          savedListener.onResult2(resolutionResultBuilder.build());
+        });
       } catch (IOException e) {
         savedListener.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));

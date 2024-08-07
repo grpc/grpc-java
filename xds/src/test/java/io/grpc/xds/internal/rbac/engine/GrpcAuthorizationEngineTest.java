@@ -16,8 +16,8 @@
 
 package io.grpc.xds.internal.rbac.engine;
 
-import static com.google.common.base.Charsets.US_ASCII;
 import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;

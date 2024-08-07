@@ -536,8 +536,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue().getClass().getName())
-        .isEqualTo("io.grpc.util.RoundRobinLoadBalancer$EmptyPicker");
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
+        .isEqualTo(PickResult.withNoResult());
     int expectedCount = isEnabledHappyEyeballs() ? servers.size() + 1 : 1;
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo( expectedCount);
   }
@@ -1190,13 +1190,17 @@ public class WeightedRoundRobinLoadBalancerTest {
     verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 2);
     verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 3);
 
-    // Send each child LB state an ORCA update with some valid utilization/qps data so that weights
-    // can be calculated.
+    // Send one child LB state an ORCA update with some valid utilization/qps data so that weights
+    // can be calculated, but it's still essentially round_robin
     Iterator<ChildLbState> childLbStates = wrr.getChildLbStates().iterator();
     ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
         weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
             new HashMap<>(), new HashMap<>()));
+
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+
+    // Now send a second child LB state an ORCA update, so there's real weights
     ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
         weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
@@ -1210,9 +1214,15 @@ public class WeightedRoundRobinLoadBalancerTest {
     // weights were updated
     reset(mockMetricRecorder);
 
-    // We go forward in time past the default 10s blackout period before weights can be considered
-    // for wrr. The eights would get updated as the default update interval is 1s.
-    fakeClock.forwardTime(11, TimeUnit.SECONDS);
+    // We go forward in time past the default 10s blackout period for the first child. The weights
+    // would get updated as the default update interval is 1s.
+    fakeClock.forwardTime(9, TimeUnit.SECONDS);
+
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 1, 1);
+
+    // And after another second the other children have weights
+    reset(mockMetricRecorder);
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
 
     // Since we have weights on all the child LB states, the weight update should not result in
     // further rr_fallback metric entries.

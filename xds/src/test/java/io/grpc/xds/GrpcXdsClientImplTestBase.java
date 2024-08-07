@@ -133,6 +133,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
+import org.mockito.verification.VerificationMode;
 
 /**
  * Tests for {@link XdsClientImpl}.
@@ -2758,6 +2759,37 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  public void edsCleanupNonceAfterUnsubscription() {
+    Assume.assumeFalse(ignoreResourceDeletion());
+
+    // Suppose we have an EDS subscription A.1
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    call.verifyRequest(EDS, "A.1", "", "", NODE);
+
+    // EDS -> {A.1}, version 1
+    List<Message> dropOverloads = ImmutableList.of();
+    List<Message> endpointsV1 = ImmutableList.of(lbEndpointHealthy);
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+            "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)));
+    call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A.1} -> ACK, version 1
+    call.verifyRequest(EDS, "A.1", VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher, times(1)).onChanged(any());
+
+    // trigger an EDS resource unsubscription.
+    xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
+    call.verifyRequest(EDS, Arrays.asList(), VERSION_1, "0000", NODE);
+
+    // When re-subscribing, the version and nonce were properly forgotten, so the request is the
+    // same as the initial request
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    call.verifyRequest(EDS, "A.1", "", "", NODE, Mockito.timeout(2000).times(2));
+  }
+
+  @Test
   public void edsResponseErrorHandling_allResourcesFailedUnpack() {
     DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
         edsResourceWatcher);
@@ -3787,8 +3819,20 @@ public abstract class GrpcXdsClientImplTestBase {
 
     protected void verifyRequest(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
-        Node node) {
+        Node node, VerificationMode verificationMode) {
       throw new UnsupportedOperationException();
+    }
+
+    protected void verifyRequest(
+        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
+        Node node) {
+      verifyRequest(type, resources, versionInfo, nonce, node, Mockito.timeout(2000));
+    }
+
+    protected void verifyRequest(
+        XdsResourceType<?> type, String resource, String versionInfo, String nonce,
+        Node node, VerificationMode verificationMode) {
+      verifyRequest(type, ImmutableList.of(resource), versionInfo, nonce, node, verificationMode);
     }
 
     protected void verifyRequest(
