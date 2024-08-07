@@ -4529,9 +4529,6 @@ public class ManagedChannelImplTest {
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
     createChannel();
     int prevSize = getStats(channel).channelTrace.events.size();
-
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
-    prevSize = getStats(channel).channelTrace.events.size();
     Status resolutionError = Status.UNAVAILABLE
             .withDescription("Initial Name Resolution error, using default service config");
 
