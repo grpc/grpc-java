@@ -37,7 +37,6 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
@@ -127,9 +126,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     if (!Objects.equals(this.config, config)) {
       logger.log(XdsLogLevel.DEBUG, "Config: {0}", config);
-      delegate.switchTo(new ClusterResolverLbStateFactory());
       this.config = config;
-      delegate.handleResolvedAddresses(resolvedAddresses);
+      Object gracefulConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          new ClusterResolverLbStateFactory(), config);
+      delegate.handleResolvedAddresses(
+          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(gracefulConfig).build());
     }
     return Status.OK;
   }
@@ -165,7 +166,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private final Helper helper;
     private final List<String> clusters = new ArrayList<>();
     private final Map<String, ClusterState> clusterStates = new HashMap<>();
-    private PolicySelection endpointLbPolicy;
+    private Object endpointLbConfig;
     private ResolvedAddresses resolvedAddresses;
     private LoadBalancer childLb;
 
@@ -179,7 +180,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       this.resolvedAddresses = resolvedAddresses;
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      endpointLbPolicy = config.lbPolicy;
+      endpointLbConfig = config.lbConfig;
       for (DiscoveryMechanism instance : config.discoveryMechanisms) {
         clusters.add(instance.cluster);
         ClusterState state;
@@ -454,7 +455,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             Map<String, PriorityChildConfig> priorityChildConfigs =
                 generateEdsBasedPriorityChildConfigs(
                     name, edsServiceName, lrsServerInfo, maxConcurrentRequests, tlsContext,
-                    filterMetadata, outlierDetection, endpointLbPolicy, lbRegistry,
+                    filterMetadata, outlierDetection, endpointLbConfig, lbRegistry,
                     prioritizedLocalityWeights, dropOverloads);
             status = Status.OK;
             resolved = true;
@@ -717,15 +718,15 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
       LoadBalancerRegistry lbRegistry, List<DropOverload> dropOverloads) {
     // Override endpoint-level LB policy with pick_first for logical DNS cluster.
-    PolicySelection endpointLbPolicy =
-        new PolicySelection(lbRegistry.getProvider("pick_first"), null);
+    Object endpointLbConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+        lbRegistry.getProvider("pick_first"), null);
     ClusterImplConfig clusterImplConfig =
         new ClusterImplConfig(cluster, null, lrsServerInfo, maxConcurrentRequests,
-            dropOverloads, endpointLbPolicy, tlsContext, filterMetadata);
+            dropOverloads, endpointLbConfig, tlsContext, filterMetadata);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
-    PolicySelection clusterImplPolicy =
-        new PolicySelection(clusterImplLbProvider, clusterImplConfig);
+    Object clusterImplPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+        clusterImplLbProvider, clusterImplConfig);
     return new PriorityChildConfig(clusterImplPolicy, false /* ignoreReresolution*/);
   }
 
@@ -739,25 +740,26 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       String cluster, @Nullable String edsServiceName, @Nullable ServerInfo lrsServerInfo,
       @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
       Map<String, Struct> filterMetadata,
-      @Nullable OutlierDetection outlierDetection, PolicySelection endpointLbPolicy,
+      @Nullable OutlierDetection outlierDetection, Object endpointLbConfig,
       LoadBalancerRegistry lbRegistry, Map<String,
       Map<Locality, Integer>> prioritizedLocalityWeights, List<DropOverload> dropOverloads) {
     Map<String, PriorityChildConfig> configs = new HashMap<>();
     for (String priority : prioritizedLocalityWeights.keySet()) {
       ClusterImplConfig clusterImplConfig =
           new ClusterImplConfig(cluster, edsServiceName, lrsServerInfo, maxConcurrentRequests,
-              dropOverloads, endpointLbPolicy, tlsContext, filterMetadata);
+              dropOverloads, endpointLbConfig, tlsContext, filterMetadata);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
-      PolicySelection priorityChildPolicy =
-          new PolicySelection(clusterImplLbProvider, clusterImplConfig);
+      Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          clusterImplLbProvider, clusterImplConfig);
 
       // If outlier detection has been configured we wrap the child policy in the outlier detection
       // load balancer.
       if (outlierDetection != null) {
         LoadBalancerProvider outlierDetectionProvider = lbRegistry.getProvider(
             "outlier_detection_experimental");
-        priorityChildPolicy = new PolicySelection(outlierDetectionProvider,
+        priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            outlierDetectionProvider,
             buildOutlierDetectionLbConfig(outlierDetection, priorityChildPolicy));
       }
 
@@ -774,11 +776,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * understands.
    */
   private static OutlierDetectionLoadBalancerConfig buildOutlierDetectionLbConfig(
-      OutlierDetection outlierDetection, PolicySelection childPolicy) {
+      OutlierDetection outlierDetection, Object childConfig) {
     OutlierDetectionLoadBalancerConfig.Builder configBuilder
         = new OutlierDetectionLoadBalancerConfig.Builder();
 
-    configBuilder.setChildPolicy(childPolicy);
+    configBuilder.setChildConfig(childConfig);
 
     if (outlierDetection.intervalNanos() != null) {
       configBuilder.setIntervalNanos(outlierDetection.intervalNanos());
