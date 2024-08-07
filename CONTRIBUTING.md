@@ -56,7 +56,7 @@ How to get your contributions merged smoothly and quickly.
   separate PR.
 
 - Unless your PR is trivial, you should expect there will be reviewer comments
-  that you'll need to address before merging. Make review changes as additional
+  that you'll need to address before merging. Address comments with additional
   commits so the reviewer can review just the changes; do not squash reviewed
   commits unless the reviewer agrees. PRs are squashed when merging.
 
