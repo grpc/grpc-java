@@ -33,6 +33,7 @@ import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleServiceName;
 
 public class ExampleNameResolver extends NameResolver {
 
+    static private final int[] SERVER_PORTS = {50051, 50052, 50053};
     private Listener2 listener;
 
     private final URI uri;
@@ -44,7 +45,7 @@ public class ExampleNameResolver extends NameResolver {
         // This is a fake name resolver, so we just hard code the address here.
         addrStore = ImmutableMap.<String,List<InetSocketAddress>>builder()
             .put(exampleServiceName,
-                Arrays.stream(LoadBalanceServer.SERVER_PORTS)
+                Arrays.stream(SERVER_PORTS)
                     .mapToObj(port->new InetSocketAddress("localhost",port))
                     .collect(Collectors.toList())
             )

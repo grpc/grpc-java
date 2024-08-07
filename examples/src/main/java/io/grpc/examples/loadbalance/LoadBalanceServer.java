@@ -31,12 +31,12 @@ import java.util.logging.Logger;
 
 public class LoadBalanceServer {
     private static final Logger logger = Logger.getLogger(LoadBalanceServer.class.getName());
-    static public final int[] SERVER_PORTS = {50051, 50052, 50053};
+    static final int[] SERVER_PORTS = {50051, 50052, 50053};
     private List<Server> servers;
 
     private void start() throws IOException {
         servers = new ArrayList<>();
-        for (int port :SERVER_PORTS) {
+        for (int port : SERVER_PORTS) {
             servers.add(
                 ServerBuilder.forPort(port)
                     .addService(new GreeterImpl(port))
@@ -57,17 +57,13 @@ public class LoadBalanceServer {
 
     private void stop() throws InterruptedException {
         for (Server server : servers) {
-            if (server != null) {
-                server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
-            }
+            server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
         }
     }
 
     private void blockUntilShutdown() throws InterruptedException {
         for (Server server : servers) {
-            if (server != null) {
-                server.awaitTermination();
-            }
+            server.awaitTermination();
         }
     }
 

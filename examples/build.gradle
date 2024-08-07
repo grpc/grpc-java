@@ -31,11 +31,12 @@ dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
-    implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
     // examples/advanced need this for JsonFormat
     implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
+
+    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
     testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
@@ -70,8 +71,8 @@ startScripts.enabled = false
 // the class io.grpc.examples.helloworld.HelloWorldClient, it creates the task
 // helloWorldClient with script name hello-world-client.
 def createStartScripts(String mainClassName) {
-    String bareName = mainClassName.substring(mainClassName.lastIndexOf('.') + 1)
-    String taskName = bareName.uncapitalize()
+    String bareName = mainClassName.substring(mainClassName.lastIndexOf('.') + 1);
+    String taskName = bareName.uncapitalize();
     def newTask = tasks.register(taskName, CreateStartScripts) {
         mainClass = mainClassName
         applicationName = taskName.replaceAll('([A-Z])') { '-' + it[0].uncapitalize() }
@@ -95,8 +96,6 @@ createStartScripts('io.grpc.examples.cancellation.CancellationServer')
 createStartScripts('io.grpc.examples.customloadbalance.CustomLoadBalanceClient')
 createStartScripts('io.grpc.examples.deadline.DeadlineClient')
 createStartScripts('io.grpc.examples.deadline.DeadlineServer')
-createStartScripts('io.grpc.examples.dualstack.DualStackClient')
-createStartScripts('io.grpc.examples.dualstack.DualStackServer')
 createStartScripts('io.grpc.examples.errordetails.ErrorDetailsExample')
 createStartScripts('io.grpc.examples.experimental.CompressingHelloWorldClient')
 createStartScripts('io.grpc.examples.grpcproxy.GrpcProxy')

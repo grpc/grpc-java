@@ -16,8 +16,6 @@
 
 package io.grpc.examples.dualstack;
 
-import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleServiceName;
-
 import com.google.common.collect.ImmutableMap;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -36,7 +34,7 @@ public class ExampleDualStackNameResolver extends NameResolver {
     // This is a fake name resolver, so we just hard code the address here.
     private static final ImmutableMap<String, List<List<SocketAddress>>> addrStore =
         ImmutableMap.<String, List<List<SocketAddress>>>builder()
-        .put(exampleServiceName,
+        .put("lb.example.grpc.io",
             Arrays.stream(SERVER_PORTS)
                 .mapToObj(port -> getLocalAddrs(port))
                 .collect(Collectors.toList())
