@@ -28,6 +28,12 @@ subprojects {
             url "https://maven-central.storage-download.googleapis.com/maven2/" }
         mavenCentral()
         mavenLocal()
+        maven {
+            url "https://oss.sonatype.org/content/repositories/snapshots/"
+            mavenContent {
+                snapshotsOnly()
+            }
+        }
     }
 
     tasks.withType(JavaCompile).configureEach {

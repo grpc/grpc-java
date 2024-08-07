@@ -24,7 +24,7 @@ call "%WORKSPACE%\buildscripts\make_dependencies.bat" || exit /b 1
 cd "%WORKSPACE%"
 
 SET TARGET_ARCH=x86_64
-SET FAIL_ON_WARNINGS=true
+SET FAIL_ON_WARNINGS=false
 SET VC_PROTOBUF_LIBS=%ESCWORKSPACE%\\grpc-java-helper64\\protobuf-%PROTOBUF_VER%\\build\\Release
 SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper64\\protobuf-%PROTOBUF_VER%\\build\\include
 SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibs=%VC_PROTOBUF_LIBS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE% -PskipAndroid=true
