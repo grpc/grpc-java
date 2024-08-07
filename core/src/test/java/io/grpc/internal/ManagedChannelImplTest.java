@@ -4488,15 +4488,12 @@ public class ManagedChannelImplTest {
               .Builder(expectedUri).setServers(Collections.singletonList(new
               EquivalentAddressGroup(socketAddress))).setError(resolutionError).build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
-
       Map<String, Object> defaultServiceConfig =
               parseConfig("{\"methodConfig\":[{"
                       + "\"name\":[{\"service\":\"SimpleService1\"}],"
                       + "\"waitForReady\":true}]}");
-
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
       createChannel(true);
-
       int prevSize = getStats(channel).channelTrace.events.size();
 
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
@@ -4508,7 +4505,7 @@ public class ManagedChannelImplTest {
 
       nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-      // no new trace events due to lastResolutionState is already ERROR
+      // no new trace events due to lastResolutionState already set to ERROR
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -4524,27 +4521,24 @@ public class ManagedChannelImplTest {
     servers.add(new EquivalentAddressGroup(socketAddress));
     FakeNameResolverFactory nameResolverFactory =
             new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
-
     channelBuilder.nameResolverFactory(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
             parseConfig("{\"methodConfig\":[{"
                     + "\"name\":[{\"service\":\"SimpleService1\"}],"
                     + "\"waitForReady\":true}]}");
-
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
     createChannel();
     int prevSize = getStats(channel).channelTrace.events.size();
 
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
-
     prevSize = getStats(channel).channelTrace.events.size();
     Status resolutionError = Status.UNAVAILABLE
             .withDescription("Initial Name Resolution error, using default service config");
 
     nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-    // initial service config is already applied,
-    // so it's not reapplied using the default service config here.
+    // initial service config is already applied so it's not reapplied using the default service
+    // config here.
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
             .setDescription("Failed to resolve name: " + resolutionError)
