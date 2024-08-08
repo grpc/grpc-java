@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -40,7 +39,6 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.services.MetricReport;
-import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.orca.OrcaOobUtil;
@@ -137,12 +135,12 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
   }
 
   public WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker) {
-    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker, new Random());
+    this(helper, ticker, new Random());
   }
 
-  public WeightedRoundRobinLoadBalancer(WrrHelper helper, Ticker ticker, Random random) {
-    super(helper);
-    helper.setLoadBalancer(this);
+  @VisibleForTesting
+  WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker, Random random) {
+    super(OrcaOobUtil.newOrcaReportingHelper(helper));
     this.ticker = checkNotNull(ticker, "ticker");
     this.infTime = ticker.nanoTime() + Long.MAX_VALUE;
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -150,11 +148,6 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     this.updateWeightTask = new UpdateWeightTask();
     this.sequence = new AtomicInteger(random.nextInt());
     log.log(Level.FINE, "weighted_round_robin LB created");
-  }
-
-  @VisibleForTesting
-  WeightedRoundRobinLoadBalancer(Helper helper, Ticker ticker, Random random) {
-    this(new WrrHelper(OrcaOobUtil.newOrcaReportingHelper(helper)), ticker, random);
   }
 
   @Override
@@ -270,6 +263,11 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       super(key, policyProvider, childConfig, initialPicker);
     }
 
+    @Override
+    protected ChildLbStateHelper createChildHelper() {
+      return new WrrChildLbStateHelper();
+    }
+
     private double getWeight(AtomicInteger staleEndpoints, AtomicInteger notYetUsableEndpoints) {
       if (config == null) {
         return 0;
@@ -303,6 +301,13 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
     public void removeSubchannel(WrrSubchannel wrrSubchannel) {
       subchannels.remove(wrrSubchannel);
+    }
+
+    final class WrrChildLbStateHelper extends ChildLbStateHelper {
+      @Override
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        return new WrrSubchannel(super.createSubchannel(args), WeightedChildLbState.this);
+      }
     }
 
     final class OrcaReportListener implements OrcaPerRequestReportListener, OrcaOobReportListener {
@@ -372,32 +377,6 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       weightUpdateTimer.cancel();
     }
     super.shutdown();
-  }
-
-  private static final class WrrHelper extends ForwardingLoadBalancerHelper {
-    private final Helper delegate;
-    private WeightedRoundRobinLoadBalancer wrr;
-
-    WrrHelper(Helper helper) {
-      this.delegate = helper;
-    }
-
-    void setLoadBalancer(WeightedRoundRobinLoadBalancer lb) {
-      this.wrr = lb;
-    }
-
-    @Override
-    protected Helper delegate() {
-      return delegate;
-    }
-
-    @Override
-    public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      checkElementIndex(0, args.getAddresses().size(), "Empty address group");
-      WeightedChildLbState childLbState =
-          (WeightedChildLbState) wrr.getChildLbStateEag(args.getAddresses().get(0));
-      return wrr.new WrrSubchannel(delegate().createSubchannel(args), childLbState);
-    }
   }
 
   @VisibleForTesting
