@@ -30,7 +30,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Deadline.Ticker;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LongCounterMetricInstrument;
@@ -89,7 +88,6 @@ import java.util.logging.Logger;
  *  </pre>
  *  See related documentation: https://cloud.google.com/service-mesh/legacy/load-balancing-apis/proxyless-configure-advanced-traffic-management#custom-lb-config
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   private static final LongCounterMetricInstrument RR_FALLBACK_COUNTER;

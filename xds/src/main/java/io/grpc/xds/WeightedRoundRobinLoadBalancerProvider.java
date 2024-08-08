@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Deadline;
-import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -32,7 +31,6 @@ import java.util.Map;
 /**
  * Provides a {@link WeightedRoundRobinLoadBalancer}.
  * */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9885")
 @Internal
 public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerProvider {
 
