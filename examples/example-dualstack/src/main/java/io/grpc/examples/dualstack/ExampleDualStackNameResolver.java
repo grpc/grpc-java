@@ -28,6 +28,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * A fake name resolver that resolves to a hard-coded list of 3 endpoints (EquivalentAddressGropu)
+ * each with 2 addresses (one IPv4 and one IPv6).
+ */
 public class ExampleDualStackNameResolver extends NameResolver {
     static public final int[] SERVER_PORTS = {50051, 50052, 50053};
 

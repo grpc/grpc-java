@@ -28,6 +28,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * A client that requests greetings from the {@link DualStackServer}.
+ * First it sends 5 requests using the default nameresolver and load balancer.
+ * Then it sends 10 requests using the example nameresolver and round robin load balancer.  These
+ * requests are evenly distributed among the 3 servers rather than favoring the server listening
+ * on both addresses because the ExampleDualStackNameResolver groups the 3 servers as 3 endpoints
+ * each with 2 addresses.
+ */
 public class DualStackClient {
     public static final String channelTarget = "example:///lb.example.grpc.io";
     private static final Logger logger = Logger.getLogger(DualStackClient.class.getName());

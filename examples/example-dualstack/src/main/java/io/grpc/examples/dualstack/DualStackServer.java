@@ -30,6 +30,11 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+/**
+ * Starts 3 different greeter services each on its own port, but all for localhost.
+ * The first service listens on both IPv4 and IPv6,
+ * the second on just IPv4, and the third on just IPv6.
+ */
 public class DualStackServer {
     private static final Logger logger = Logger.getLogger(DualStackServer.class.getName());
     private List<Server> servers;
@@ -89,17 +94,13 @@ public class DualStackServer {
 
     private void stop() throws InterruptedException {
         for (Server server : servers) {
-            if (server != null) {
-                server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
-            }
+            server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
         }
     }
 
     private void blockUntilShutdown() throws InterruptedException {
         for (Server server : servers) {
-            if (server != null) {
-                server.awaitTermination();
-            }
+            server.awaitTermination();
         }
     }
 
