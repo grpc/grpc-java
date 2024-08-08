@@ -61,11 +61,7 @@ public class ExampleDualStackNameResolver extends NameResolver {
 
     @Override
     public String getServiceAuthority() {
-        // Be consistent with behavior in grpc-go, authority is saved in Host field of URI.
-        if (uri.getHost() != null) {
-            return uri.getHost();
-        }
-        return "no host";
+        return uri.getPath().substring(1);
     }
 
     @Override
