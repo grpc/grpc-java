@@ -50,6 +50,12 @@ interface Filter {
    */
   ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
 
+  default void shutdown() {
+    // Implement as needed.
+    // TODO(sergiitk): [DESIGN] important to cover and discuss in the design.
+    // TODO(sergiitk): [QUESTION] should it be in ServerInterceptorBuilder?
+  }
+
   /** Represents an opaque data structure holding configuration for a filter. */
   interface FilterConfig {
     String typeUrl();
@@ -68,6 +74,15 @@ interface Filter {
     @Nullable
     ServerInterceptor buildServerInterceptor(
         FilterConfig config, @Nullable FilterConfig overrideConfig);
+
+    @Nullable
+    default ServerInterceptor buildServerInterceptor(
+        FilterConfig config,
+        @Nullable FilterConfig overrideConfig,
+        ScheduledExecutorService scheduler) {
+      return buildServerInterceptor(config, overrideConfig);
+    }
+
   }
 
   /** Filter config with instance name. */

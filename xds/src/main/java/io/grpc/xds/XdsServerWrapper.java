@@ -455,6 +455,13 @@ final class XdsServerWrapper extends Server {
 
     private void updateSelector() {
       Map<FilterChain, AtomicReference<ServerRoutingConfig>> filterChainRouting = new HashMap<>();
+      // TODO(sergiitk): [QUESTION] is this a good place to reset interceptors?
+      // for (FilterChain filterChain : savedRdsRoutingConfigRef.keySet()) {
+      //   if (!resourceName.equals(filterChain.httpConnectionManager().rdsName())) {
+      //     continue;
+      //   }
+      //
+      // }
       savedRdsRoutingConfigRef.clear();
       for (FilterChain filterChain: filterChains) {
         filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
@@ -512,9 +519,11 @@ final class XdsServerWrapper extends Server {
               FilterConfig filterConfig = namedFilterConfig.filterConfig;
               Filter filter = filterRegistry.get(filterConfig.typeUrl());
               if (filter instanceof ServerInterceptorBuilder) {
-                ServerInterceptor interceptor =
-                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
-                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+                ServerInterceptorBuilder interceptorBuilder = (ServerInterceptorBuilder) filter;
+                ServerInterceptor interceptor = interceptorBuilder.buildServerInterceptor(
+                    filterConfig,
+                    selectedOverrideConfigs.get(namedFilterConfig.name),
+                    timeService);
                 if (interceptor != null) {
                   filterInterceptors.add(interceptor);
                 }
