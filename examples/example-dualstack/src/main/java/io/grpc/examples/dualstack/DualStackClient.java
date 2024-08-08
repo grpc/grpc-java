@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,43 +14,55 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.nameresolve;
+package io.grpc.examples.dualstack;
 
-import io.grpc.*;
+import io.grpc.Channel;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolverRegistry;
+import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class NameResolveClient {
+/**
+ * A client that requests greetings from the {@link DualStackServer}.
+ * First it sends 5 requests using the default nameresolver and load balancer.
+ * Then it sends 10 requests using the example nameresolver and round robin load balancer.  These
+ * requests are evenly distributed among the 3 servers rather than favoring the server listening
+ * on both addresses because the ExampleDualStackNameResolver groups the 3 servers as 3 endpoints
+ * each with 2 addresses.
+ */
+public class DualStackClient {
     public static final String channelTarget = "example:///lb.example.grpc.io";
-    private static final Logger logger = Logger.getLogger(NameResolveClient.class.getName());
+    private static final Logger logger = Logger.getLogger(DualStackClient.class.getName());
     private final GreeterGrpc.GreeterBlockingStub blockingStub;
 
-    public NameResolveClient(Channel channel) {
+    public DualStackClient(Channel channel) {
         blockingStub = GreeterGrpc.newBlockingStub(channel);
     }
 
     public static void main(String[] args) throws Exception {
-        NameResolverRegistry.getDefaultRegistry().register(new ExampleNameResolverProvider());
+        NameResolverRegistry.getDefaultRegistry()
+            .register(new ExampleDualStackNameResolverProvider());
 
-        logger.info("Use default DNS resolver");
+        logger.info("\n **** Use default DNS resolver ****");
         ManagedChannel channel = ManagedChannelBuilder.forTarget("localhost:50051")
                 .usePlaintext()
                 .build();
         try {
-            NameResolveClient client = new NameResolveClient(channel);
+            DualStackClient client = new DualStackClient(channel);
             for (int i = 0; i < 5; i++) {
-                client.greet("request" + i);
+                client.greet("request:" + i);
             }
         } finally {
             channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
         }
 
-        logger.info("Change to use example name resolver");
+        logger.info("\n  **** Change to use example name resolver ****");
         /*
           Dial to "example:///resolver.example.grpc.io", use {@link ExampleNameResolver} to create connection
           "resolver.example.grpc.io" is converted to {@link java.net.URI.path}
@@ -60,9 +72,9 @@ public class NameResolveClient {
             .usePlaintext()
             .build();
         try {
-            NameResolveClient client = new NameResolveClient(channel);
-            for (int i = 0; i < 5; i++) {
-                client.greet("request" + i);
+            DualStackClient client = new DualStackClient(channel);
+            for (int i = 0; i < 10; i++) {
+                client.greet("request:" + i);
             }
         } finally {
             channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
