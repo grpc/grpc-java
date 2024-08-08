@@ -11,6 +11,5 @@ java_library(
         artifact("com.google.auth:google-auth-library-credentials"),
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
     ],
 )

@@ -42,7 +42,6 @@ guava-testlib = "com.google.guava:guava-testlib:33.2.1-android"
 # May be different from the -android version.
 guava-jre = "com.google.guava:guava:33.2.1-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
-j2objc-annotations = " com.google.j2objc:j2objc-annotations:3.0.0"
 jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:5.0.0"
 javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
