@@ -92,8 +92,8 @@ public abstract class AbstractClientStream extends AbstractStream
 
   private final TransportTracer transportTracer;
   private final Framer framer;
-  private boolean shouldBeCountedForInUse;
-  private boolean useGet;
+  private final boolean shouldBeCountedForInUse;
+  private final boolean useGet;
   private Metadata headers;
   /**
    * Whether cancel() has been called. This is not strictly necessary, but removes the delay between
