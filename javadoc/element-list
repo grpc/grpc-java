@@ -13,6 +13,7 @@ io.grpc.opentelemetry
 io.grpc.protobuf
 io.grpc.protobuf.lite
 io.grpc.protobuf.services
+io.grpc.reflection.v1
 io.grpc.reflection.v1alpha
 io.grpc.services
 io.grpc.servlet
