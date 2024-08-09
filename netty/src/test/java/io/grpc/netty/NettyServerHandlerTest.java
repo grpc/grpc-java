@@ -278,7 +278,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyNoMoreInteractions(streamListener);
   }
 
- /* @Test
+  @Test
   public void clientHalfCloseShouldForwardToStreamListener() throws Exception {
     manualSetUp();
     createStream();
@@ -295,7 +295,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verify(streamListener, atLeastOnce()).onReady();
     verifyNoMoreInteractions(streamListener);
   }
-*/
+
   @Test
   public void clientCancelShouldForwardToStreamListener() throws Exception {
     manualSetUp();
@@ -311,7 +311,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertNull("no messages expected", streamListenerMessageQueue.poll());
   }
 
-  /*@Test
+  @Test
   public void streamErrorShouldNotCloseChannel() throws Exception {
     manualSetUp();
     createStream();
@@ -327,14 +327,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Verify that the channel was NOT closed.
     assertTrue(channel().isOpen());
-    channel().releaseOutbound();
 
     // Verify the stream was closed.
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(streamListener).closed(captor.capture());
     assertEquals(e, captor.getValue().asException().getCause());
     assertEquals(Code.UNKNOWN, captor.getValue().getCode());
-  }*/
+  }
 
   @Test
   public void closeShouldGracefullyCloseChannel() throws Exception {
@@ -674,7 +673,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             any(ChannelPromise.class));
   }
 
- /* @Test
+  @Test
   public void headersWithErrAndEndStreamReturnErrorButNotThrowNpe() throws Exception {
     manualSetUp();
     Http2Headers headers = new DefaultHttp2Headers()
@@ -700,7 +699,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             eq(false),
             any(ChannelPromise.class));
 
-  }*/
+  }
 
   @Test
   public void headersWithAuthorityAndHostUsesAuthority() throws Exception {
@@ -1368,7 +1367,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     try {
       return dataFrame(streamId, endStream, buf);
     } finally {
-      buf.release();
+      buf.clear();
     }
   }
 
