@@ -24,8 +24,12 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -140,6 +144,43 @@ public final class MetadataUtils {
           trailersCapture.set(trailers);
           super.onClose(status, trailers);
         }
+      }
+    }
+  }
+
+  /**
+   * Returns a ServerInterceptor that attaches a given set of headers to every response.
+   *
+   * @param extraHeaders the headers to be added to each response. Caller gives up ownership.
+   */
+  public static ServerInterceptor newAttachHeadersServerInterceptor(Metadata extraHeaders) {
+    return new MetadataAttachingServerInterceptor(extraHeaders);
+  }
+
+  private static final class MetadataAttachingServerInterceptor implements ServerInterceptor {
+
+    private final Metadata extraHeaders;
+
+    MetadataAttachingServerInterceptor(Metadata extraHeaders) {
+      this.extraHeaders = extraHeaders;
+    }
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      return next.startCall(new HeaderAttachingServerCall<>(call), headers);
+    }
+
+    final class HeaderAttachingServerCall<ReqT, RespT>
+        extends SimpleForwardingServerCall<ReqT, RespT> {
+      HeaderAttachingServerCall(ServerCall<ReqT, RespT> delegate) {
+        super(delegate);
+      }
+
+      @Override
+      public void sendHeaders(Metadata headers) {
+        headers.merge(extraHeaders);
+        super.sendHeaders(headers);
       }
     }
   }
