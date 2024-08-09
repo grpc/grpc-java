@@ -111,6 +111,7 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
   private final ServerImplBuilder serverImplBuilder;
   final SocketAddress listenAddress;
   int maxInboundMetadataSize = Integer.MAX_VALUE;
+  long assumedMessageSize = -1;
   ObjectPool<ScheduledExecutorService> schedulerPool =
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
@@ -209,5 +210,10 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
 
   void setStatsEnabled(boolean value) {
     this.serverImplBuilder.setStatsEnabled(value);
+  }
+
+  public InProcessServerBuilder assumedMessageSize(long bytes) {
+    this.assumedMessageSize = bytes;
+    return this;
   }
 }

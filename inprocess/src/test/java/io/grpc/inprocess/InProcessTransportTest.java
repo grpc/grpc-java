@@ -83,7 +83,7 @@ public class InProcessTransportTest extends AbstractTransportTest {
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(
         new InProcessSocketAddress(TRANSPORT_NAME), GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-        testAuthority(server), USER_AGENT, eagAttrs(), false);
+        testAuthority(server), USER_AGENT, eagAttrs(), false, -1);
   }
 
   @Test
