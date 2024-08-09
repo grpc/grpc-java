@@ -22,6 +22,7 @@ import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Optional;
+import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -35,6 +36,7 @@ import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
+import io.grpc.KnownLength;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -59,6 +61,8 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
@@ -95,6 +99,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private ServerTransportListener serverTransportListener;
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
+  // These sizes are assumed from the sender' side.
+  private long serverAssumedMessageSize = -1;
+   private long clientAssumedMessageSize = -1;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -160,6 +167,14 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         Optional.<ServerListener>absent(), includeCauseWithStatus);
   }
 
+  public InProcessTransport(
+          SocketAddress address, int maxInboundMetadataSize, String authority, String userAgent,
+          Attributes eagAttrs, boolean includeCauseWithStatus, long assumedMessageSize) {
+    this(address, maxInboundMetadataSize, authority, userAgent, eagAttrs,
+            Optional.<ServerListener>absent(), includeCauseWithStatus);
+            this.clientAssumedMessageSize = assumedMessageSize;
+  }
+
   InProcessTransport(
       String name, int maxInboundMetadataSize, String authority, String userAgent,
       Attributes eagAttrs, ObjectPool<ScheduledExecutorService> serverSchedulerPool,
@@ -188,6 +203,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         serverStreamTracerFactories = server.getStreamTracerFactories();
         // Must be semi-initialized; past this point, can begin receiving requests
         serverTransportListener = server.register(this);
+        serverAssumedMessageSize = server.getAssumedMessageSize();
       }
     }
     if (serverTransportListener == null) {
@@ -414,6 +430,17 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
     }
 
+    private long getMessageLength(InputStream inputStream) {
+      try {
+        return inputStream.available();
+      } catch (IOException | RuntimeException e) {
+        throw Status.INTERNAL
+                .withDescription("Failed to calculate size")
+                .withCause(e)
+                .asRuntimeException();
+      }
+    }
+
     private class InProcessServerStream implements ServerStream {
       final StatsTraceContext statsTraceCtx;
       // All callbacks must run in syncContext to avoid possibility of deadlock in direct executors
@@ -515,6 +542,30 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+
+          /*long messageLength = serverAssumedMessageSize == -1
+                  ? getMessageLength(message) : serverAssumedMessageSize;*/
+          long messageLength = -1;
+          try {
+            if (!(message instanceof KnownLength) && !(message instanceof ByteArrayInputStream)) {
+              InputStream oldMessage = message;
+              byte[] payload = ByteStreams.toByteArray(message);
+              messageLength = payload.length;
+              message = new ByteArrayInputStream(payload);
+              oldMessage.close();
+            }
+            else {
+              messageLength = getMessageLength(message);
+            }
+          } catch (IOException ex) {
+            throw new RuntimeException(ex);
+          }
+
+          statsTraceCtx.outboundUncompressedSize(messageLength);
+          statsTraceCtx.outboundWireSize(messageLength);
+          // messageLength should be same at receiver's end as no actual wire is involved.
+          clientStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+          clientStream.statsTraceCtx.inboundWireSize(messageLength);
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (clientRequested > 0) {
@@ -786,6 +837,29 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+
+          /*long messageLength = clientAssumedMessageSize == -1
+                  ? getMessageLength(message) : clientAssumedMessageSize;*/
+          long messageLength = -1;
+          try {
+            if (!(message instanceof KnownLength) && !(message instanceof ByteArrayInputStream)) {
+              InputStream oldMessage = message;
+              byte[] payload = ByteStreams.toByteArray(message);
+              messageLength = payload.length;
+              message = new ByteArrayInputStream(payload);
+              oldMessage.close();
+            }
+            else {
+              messageLength = getMessageLength(message);
+            }
+          } catch (IOException ex) {
+            throw new RuntimeException(ex);
+          }
+          statsTraceCtx.outboundUncompressedSize(messageLength);
+          statsTraceCtx.outboundWireSize(messageLength);
+          // messageLength should be same at receiver's end as no actual wire is involved.
+          serverStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+          serverStream.statsTraceCtx.inboundWireSize(messageLength);
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (serverRequested > 0) {

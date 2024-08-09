@@ -83,13 +83,6 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
         false);
   }
 
-  @Override
-  protected boolean sizesReported() {
-    // TODO(zhangkun83): InProcessTransport doesn't record metrics for now
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    return false;
-  }
-
   @Test
   @Ignore
   @Override

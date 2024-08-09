@@ -117,10 +117,6 @@ public final class InProcessChannelBuilder extends
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
     managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
-
-    // By default, In-process transport should not be retriable as that leaks memory.  Since
-    // there is no wire, bytes aren't calculated so buffer limit isn't respected
-    managedChannelImplBuilder.disableRetry();
   }
 
   @Internal
@@ -243,6 +239,7 @@ public final class InProcessChannelBuilder extends
     private final int maxInboundMetadataSize;
     private boolean closed;
     private final boolean includeCauseWithStatus;
+    long assumedMessageSize = -1;
 
     private InProcessClientTransportFactory(
         @Nullable ScheduledExecutorService scheduledExecutorService,
@@ -263,7 +260,7 @@ public final class InProcessChannelBuilder extends
       // TODO(carl-mastrangelo): Pass channelLogger in.
       return new InProcessTransport(
           addr, maxInboundMetadataSize, options.getAuthority(), options.getUserAgent(),
-          options.getEagAttributes(), includeCauseWithStatus);
+          options.getEagAttributes(), includeCauseWithStatus, assumedMessageSize);
     }
 
     @Override
@@ -290,6 +287,10 @@ public final class InProcessChannelBuilder extends
     @Override
     public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
       return Arrays.asList(InProcessSocketAddress.class, AnonymousInProcessSocketAddress.class);
+    }
+
+    public void assumedMessageSize(int bytes) {
+      this.assumedMessageSize = bytes;
     }
   }
 }

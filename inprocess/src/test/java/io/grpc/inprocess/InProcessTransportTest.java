@@ -83,14 +83,7 @@ public class InProcessTransportTest extends AbstractTransportTest {
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(
         new InProcessSocketAddress(TRANSPORT_NAME), GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-        testAuthority(server), USER_AGENT, eagAttrs(), false);
-  }
-
-  @Override
-  protected boolean sizesReported() {
-    // TODO(zhangkun83): InProcessTransport doesn't record metrics for now
-    // (https://github.com/grpc/grpc-java/issues/2284)
-    return false;
+        testAuthority(server), USER_AGENT, eagAttrs(), false, -1);
   }
 
   @Test
