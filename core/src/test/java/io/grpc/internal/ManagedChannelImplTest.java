@@ -4768,6 +4768,73 @@ public class ManagedChannelImplTest {
     }
   }
 
+  @Test
+  public void testApplyDefaultServiceConfigIfInitialNameResolutionFails() throws Exception {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
+    timer.forwardNanos(1234);
+    channelBuilder.maxTraceEvents(10);
+    try {
+      Status resolutionError = Status.UNAVAILABLE
+              .withDescription("Initial Name Resolution error, using default service config");
+      FakeNameResolverFactory nameResolverFactory = new FakeNameResolverFactory
+              .Builder(expectedUri).setServers(Collections.singletonList(new
+              EquivalentAddressGroup(socketAddress))).setError(resolutionError).build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+      Map<String, Object> defaultServiceConfig =
+              parseConfig("{\"methodConfig\":[{"
+                      + "\"name\":[{\"service\":\"SimpleService1\"}],"
+                      + "\"waitForReady\":true}]}");
+      channelBuilder.defaultServiceConfig(defaultServiceConfig);
+      createChannel(true);
+      int prevSize = getStats(channel).channelTrace.events.size();
+
+      assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
+              .isEqualTo(new ChannelTrace.Event.Builder()
+              .setDescription("Initial Name Resolution error, using default service config")
+              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
+              .setTimestampNanos(timer.getTicker().read())
+              .build());
+
+      nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
+
+      // no new trace events due to lastResolutionState already set to ERROR
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
+  }
+
+  @Test
+  public void testTraceEventsOnResultsCallFollowedByOnErrorCallWithAppliedServiceConfig()
+          throws Exception {
+    timer.forwardNanos(1234);
+    channelBuilder.maxTraceEvents(10);
+    List<EquivalentAddressGroup> servers = new ArrayList<>();
+    servers.add(new EquivalentAddressGroup(socketAddress));
+    FakeNameResolverFactory nameResolverFactory =
+            new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    Map<String, Object> defaultServiceConfig =
+            parseConfig("{\"methodConfig\":[{"
+                    + "\"name\":[{\"service\":\"SimpleService1\"}],"
+                    + "\"waitForReady\":true}]}");
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
+    createChannel();
+    int prevSize = getStats(channel).channelTrace.events.size();
+    Status resolutionError = Status.UNAVAILABLE
+            .withDescription("Initial Name Resolution error, using default service config");
+
+    nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
+
+    // initial service config is already applied so it's not reapplied using the default service
+    // config here.
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+    assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+            .setDescription("Failed to resolve name: " + resolutionError)
+            .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
+            .setTimestampNanos(timer.getTicker().read())
+            .build());
+  }
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
