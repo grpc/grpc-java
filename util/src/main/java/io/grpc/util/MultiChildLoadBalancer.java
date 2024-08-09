@@ -37,10 +37,10 @@ import io.grpc.Status;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -494,25 +494,27 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   /**
    * Endpoint is an optimization to quickly lookup and compare EquivalentAddressGroup address sets.
-   * Ignores the attributes, orders the addresses in a deterministic manner and converts each
-   * address into a string for easy comparison.  Also caches the hashcode.
-   * Is used as a key for ChildLbState for most load balancers (ClusterManagerLB uses a String).
+   * It ignores the attributes. Is used as a key for ChildLbState for most load balancers
+   * (ClusterManagerLB uses a String).
    */
   protected static class Endpoint {
-    final String[] addrs;
+    final Collection<SocketAddress> addrs;
     final int hashCode;
 
     public Endpoint(EquivalentAddressGroup eag) {
       checkNotNull(eag, "eag");
 
-      addrs = new String[eag.getAddresses().size()];
-      int i = 0;
-      for (SocketAddress address : eag.getAddresses()) {
-        addrs[i++] = address.toString();
+      if (eag.getAddresses().size() < 10) {
+        addrs = eag.getAddresses();
+      } else {
+        // This is expected to be very unlikely in practice
+        addrs = new HashSet<>(eag.getAddresses());
       }
-      Arrays.sort(addrs);
-
-      hashCode = Arrays.hashCode(addrs);
+      int sum = 0;
+      for (SocketAddress address : eag.getAddresses()) {
+        sum += address.hashCode();
+      }
+      hashCode = sum;
     }
 
     @Override
@@ -525,24 +527,21 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (this == other) {
         return true;
       }
-      if (other == null) {
-        return false;
-      }
 
       if (!(other instanceof Endpoint)) {
         return false;
       }
       Endpoint o = (Endpoint) other;
-      if (o.hashCode != hashCode || o.addrs.length != addrs.length) {
+      if (o.hashCode != hashCode || o.addrs.size() != addrs.size()) {
         return false;
       }
 
-      return Arrays.equals(o.addrs, this.addrs);
+      return o.addrs.containsAll(addrs);
     }
 
     @Override
     public String toString() {
-      return Arrays.toString(addrs);
+      return addrs.toString();
     }
   }
 
