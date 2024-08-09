@@ -310,11 +310,12 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     createStream();
 
     // Send a frame and verify that it was written.
+    ByteBuf content = content();
     ChannelFuture future
-        = enqueue(new SendGrpcFrameCommand(streamTransportState, content(), true));
+        = enqueue(new SendGrpcFrameCommand(streamTransportState, content, true));
 
     assertTrue(future.isSuccess());
-    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), eq(content()), eq(0), eq(true),
+    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), same(content), eq(0), eq(true),
         any(ChannelPromise.class));
     verify(mockKeepAliveManager, times(1)).onTransportActive(); // onStreamActive
     verifyNoMoreInteractions(mockKeepAliveManager);
