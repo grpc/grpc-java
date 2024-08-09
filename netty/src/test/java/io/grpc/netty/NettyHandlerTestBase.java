@@ -428,6 +428,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     channelRead(dataFrame(3, false, buff.copy()));
 
     assertEquals(length * 3, handler.flowControlPing().getDataSincePing());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -443,19 +444,19 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     int wireSize = data.length + 5; // 5 is the size of the header
     ByteBuf frame = grpcDataFrame(3, false, data);
     channelRead(frame);
+    frame.release();
     int accumulator = wireSize;
     // 40 is arbitrary, any number large enough to trigger a window update would work
     for (int i = 0; i < 40; i++) {
       channelRead(grpcDataFrame(3, false, data));
-      channel().releaseOutbound();
       accumulator += wireSize;
     }
     long pingData = handler.flowControlPing().payload();
     channelRead(pingFrame(true, pingData));
-    channel().releaseOutbound();
 
     assertEquals(accumulator, handler.flowControlPing().getDataSincePing());
     assertEquals(2 * accumulator, localFlowController.initialWindowSize(connectionStream));
+    channel().releaseOutbound();
   }
 
   @Test
@@ -640,6 +641,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     for (int i = 0; i < copies; i++) {
       channelRead(grpcDataFrame(STREAM_ID, false, data)); // buffer it
       stream().request(1); // consume it
+      channel().releaseOutbound();
     }
   }
 
