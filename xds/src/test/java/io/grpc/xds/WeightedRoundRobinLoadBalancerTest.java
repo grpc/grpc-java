@@ -244,7 +244,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     String weightedPickerStr = weightedPicker.toString();
     assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
     assertThat(weightedPickerStr).contains("errorUtilizationPenalty=1.0");
-    assertThat(weightedPickerStr).contains("list=");
+    assertThat(weightedPickerStr).contains("pickers=");
 
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
