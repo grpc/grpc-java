@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.CallOptions;
-import io.grpc.ClientInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -44,7 +43,7 @@ public class MetadataUtilsTest {
 
   @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
   private static Metadata.Key<String> FOO_KEY =
-      Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key.of("foo-key", Metadata.ASCII_STRING_MARSHALLER);
 
   private final MethodDescriptor<String, String> echoMethod =
       MethodDescriptor.newBuilder(StringMarshaller.INSTANCE, StringMarshaller.INSTANCE)
@@ -62,7 +61,7 @@ public class MetadataUtilsTest {
   @Test
   public void testAttachHeadersServerInterceptor() throws IOException {
     Metadata extraHeaders = new Metadata();
-    extraHeaders.put(FOO_KEY, "foo");
+    extraHeaders.put(FOO_KEY, "foo-value");
 
     ImmutableList<ServerInterceptor> interceptors =
         ImmutableList.of(MetadataUtils.newAttachHeadersServerInterceptor(extraHeaders));
@@ -74,13 +73,19 @@ public class MetadataUtilsTest {
     InProcessServerBuilder server =
         InProcessServerBuilder.forName("test").directExecutor().addService(serviceDef);
     grpcCleanup.register(server.build().start());
-    ManagedChannel channel = InProcessChannelBuilder.forName("test").directExecutor().build();
+
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
-    ClientInterceptors.intercept(
-        channel, MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
+    ManagedChannel channel =
+        InProcessChannelBuilder.forName("test")
+            .directExecutor()
+            .intercept(MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture))
+            .build();
 
-    String response = ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, "hello");
+    String response =
+        ClientCalls.blockingUnaryCall(channel, echoMethod, CallOptions.DEFAULT, "hello");
     assertThat(response).isEqualTo("hello");
+    Metadata headers = headersCapture.get();
+    assertThat(headers.get(FOO_KEY)).isEqualTo("foo-value");
   }
 }
