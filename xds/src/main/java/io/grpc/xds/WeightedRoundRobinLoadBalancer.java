@@ -261,6 +261,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
               ImmutableList.of(locality));
       newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
     }
+
     if (staleEndpoints.get() > 0) {
       helper.getMetricRecorder()
           .addLongCounter(ENDPOINT_WEIGHT_STALE_COUNTER, staleEndpoints.get(),
@@ -272,7 +273,6 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
           .addLongCounter(ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER, notYetUsableEndpoints.get(),
               ImmutableList.of(helper.getChannelTarget()), ImmutableList.of(locality));
     }
-
     boolean weightsEffective = picker.updateWeight(newWeights);
     if (!weightsEffective) {
       helper.getMetricRecorder()
@@ -472,6 +472,9 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
   @VisibleForTesting
   static final class WeightedRoundRobinPicker extends SubchannelPicker {
+    // Parallel lists (column-based storage instead of normal row-based storage of List<Struct>).
+    // The ith element of children corresponds to the ith element of pickers, listeners, and even
+    // updateWeight(float[]).
     private final List<ChildLbState> children; // May only be accessed from sync context
     private final List<SubchannelPicker> pickers;
     private final List<OrcaPerRequestReportListener> reportListeners;
