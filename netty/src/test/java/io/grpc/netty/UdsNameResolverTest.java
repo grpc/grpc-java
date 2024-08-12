@@ -75,7 +75,7 @@ public class UdsNameResolverTest {
     udsNameResolver.start(mockListener);
     verify(mockListener).onResult2(resultCaptor.capture());
     NameResolver.ResolutionResult result = resultCaptor.getValue();
-    List<EquivalentAddressGroup> list = result.getAddressesOrError().value();
+    List<EquivalentAddressGroup> list = result.getAddressesOrError().getValue();
     assertThat(list).isNotNull();
     assertThat(list).hasSize(1);
     EquivalentAddressGroup eag = list.get(0);

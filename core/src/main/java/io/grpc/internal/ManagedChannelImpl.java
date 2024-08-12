@@ -1705,12 +1705,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         if (lastResolutionState != ResolutionState.SUCCESS) {
           channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}",
-              serversOrError.value());
+              serversOrError.getValue());
           lastResolutionState = ResolutionState.SUCCESS;
         }
       } else if (serversOrError != null && !serversOrError.hasValue()) {
-        handleErrorInSyncContext(serversOrError.status());
-        return serversOrError.status();
+        handleErrorInSyncContext(serversOrError.getStatus());
+        return serversOrError.getStatus();
       }
       ConfigOrError configOrError = resolutionResult.getServiceConfig();
       InternalConfigSelector resolvedConfigSelector =
@@ -1815,7 +1815,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         ResolvedAddresses.Builder resolvedAddresses = ResolvedAddresses.newBuilder();
         if (serversOrError != null && serversOrError.hasValue()) {
-          resolvedAddresses.setAddresses(serversOrError.value());
+          resolvedAddresses.setAddresses(serversOrError.getValue());
         } else {
           resolvedAddresses.setAddresses(new ArrayList<>());
         }

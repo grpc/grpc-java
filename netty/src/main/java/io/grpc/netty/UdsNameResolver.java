@@ -60,7 +60,7 @@ final class UdsNameResolver extends NameResolver {
     ResolutionResult.Builder resolutionResultBuilder = ResolutionResult.newBuilder();
     List<EquivalentAddressGroup> servers = new ArrayList<>(1);
     servers.add(new EquivalentAddressGroup(new DomainSocketAddress(authority)));
-    resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(servers));
+    resolutionResultBuilder.setAddressesOrError(StatusOr.of(servers));
     syncContext.execute(() ->
         listener.onResult2(resolutionResultBuilder.build()));
   }

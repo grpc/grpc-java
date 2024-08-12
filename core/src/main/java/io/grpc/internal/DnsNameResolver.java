@@ -315,7 +315,7 @@ public class DnsNameResolver extends NameResolver {
             logger.finer("Using proxy address " + proxiedAddr);
           }
           resolutionResultBuilder.setAddressesOrError(
-              StatusOr.fromValue(Collections.singletonList(proxiedAddr)));
+              StatusOr.of(Collections.singletonList(proxiedAddr)));
         } else {
           result = doResolve(false);
           if (result.error != null) {
@@ -327,7 +327,7 @@ public class DnsNameResolver extends NameResolver {
             return;
           }
           if (result.addresses != null) {
-            resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(result.addresses));
+            resolutionResultBuilder.setAddressesOrError(StatusOr.of(result.addresses));
           }
           if (result.config != null) {
             resolutionResultBuilder.setServiceConfig(result.config);

@@ -19,6 +19,8 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Objects;
+
 /** Either a Status or a value. */
 public class StatusOr<T> {
   private StatusOr(Status status, T value) {
@@ -27,7 +29,7 @@ public class StatusOr<T> {
   }
 
   /** Construct from a value. */
-  public static <T> StatusOr<T> fromValue(T value) {
+  public static <T> StatusOr<T> of(T value) {
     StatusOr<T> result = new StatusOr<T>(null, checkNotNull(value, "value"));
     return result;
   }
@@ -45,13 +47,34 @@ public class StatusOr<T> {
   }
 
   /** Returns the value if set, or null in case of a non-OK status. */
-  public T value() {
+  public T getValue() {
     return value;
   }
 
   /** Returns the status. If there is a value, returns OK. */
-  public Status status() {
+  public Status getStatus() {
     return value != null ? Status.OK : status;
+  }
+
+  @Override
+  @SuppressWarnings("ReferenceEquality")
+  public boolean equals(Object other) {
+    if (!(other instanceof StatusOr)) {
+      return false;
+    }
+    StatusOr<T> otherStatus = (StatusOr) other;
+    if (hasValue() != otherStatus.hasValue()) {
+      return false;
+    }
+    if (hasValue()) {
+      return Objects.equal(value, otherStatus.value);
+    }
+    return status == otherStatus.status;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(status, value);
   }
 
   private final Status status;

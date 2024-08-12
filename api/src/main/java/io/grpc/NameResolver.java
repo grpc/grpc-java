@@ -94,7 +94,7 @@ public abstract class NameResolver {
 
           @Override
           public void onResult(ResolutionResult resolutionResult) {
-            listener.onAddresses(resolutionResult.getAddressesOrError().value(),
+            listener.onAddresses(resolutionResult.getAddressesOrError().getValue(),
                 resolutionResult.getAttributes());
           }
       });
@@ -219,14 +219,14 @@ public abstract class NameResolver {
     @Deprecated
     @InlineMe(
         replacement = "this.onResult2(ResolutionResult.newBuilder().setAddressesOrError("
-            + "StatusOr.fromValue(servers)).setAttributes(attributes).build())",
+            + "StatusOr.of(servers)).setAttributes(attributes).build())",
         imports = {"io.grpc.NameResolver.ResolutionResult", "io.grpc.StatusOr"})
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
       // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
       onResult2(
           ResolutionResult.newBuilder().setAddressesOrError(
-              StatusOr.fromValue(servers)).setAttributes(attributes).build());
+              StatusOr.of(servers)).setAttributes(attributes).build());
     }
 
     /**
@@ -605,7 +605,7 @@ public abstract class NameResolver {
         List<EquivalentAddressGroup> addresses,
         @ResolutionResultAttr Attributes attributes,
         ConfigOrError serviceConfig) {
-      this.addressesOrError = StatusOr.fromValue(addresses);
+      this.addressesOrError = StatusOr.of(addresses);
       this.attributes = checkNotNull(attributes, "attributes");
       this.serviceConfig = serviceConfig;
     }
@@ -639,7 +639,7 @@ public abstract class NameResolver {
      */
     @Deprecated
     public List<EquivalentAddressGroup> getAddresses() {
-      return addressesOrError.value();
+      return addressesOrError.getValue();
     }
 
     /**
@@ -711,7 +711,7 @@ public abstract class NameResolver {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     public static final class Builder {
       private StatusOr<List<EquivalentAddressGroup>> addresses =
-          StatusOr.fromValue(Collections.emptyList());
+          StatusOr.of(Collections.emptyList());
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
       private ConfigOrError serviceConfig;
@@ -727,7 +727,7 @@ public abstract class NameResolver {
        */
       @Deprecated
       public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
-        this.addresses = StatusOr.fromValue(addresses);
+        this.addresses = StatusOr.of(addresses);
         return this;
       }
 

@@ -881,7 +881,7 @@ public final class ManagedChannelImplBuilder
           listener.onResult2(
               ResolutionResult.newBuilder()
                   .setAddressesOrError(
-                      StatusOr.fromValue(
+                      StatusOr.of(
                           Collections.singletonList(new EquivalentAddressGroup(address))))
                   .setAttributes(Attributes.EMPTY)
                   .build());

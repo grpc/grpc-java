@@ -522,7 +522,7 @@ public class XdsSecurityClientServerTest {
 
       void resolved() {
         ResolutionResult.Builder builder = ResolutionResult.newBuilder()
-            .setAddressesOrError(StatusOr.fromValue(servers));
+            .setAddressesOrError(StatusOr.of(servers));
         listener.onResult(builder.build());
       }
 
