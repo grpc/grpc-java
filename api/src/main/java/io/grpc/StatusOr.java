@@ -57,7 +57,7 @@ public class StatusOr<T> {
   }
 
   @Override
-  @SuppressWarnings("ReferenceEquality")
+  @SuppressWarnings({"ReferenceEquality", "unchecked"})
   public boolean equals(Object other) {
     if (!(other instanceof StatusOr)) {
       return false;
