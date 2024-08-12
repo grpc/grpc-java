@@ -250,9 +250,9 @@ public abstract class AbstractTransportTest {
     throw new UnsupportedOperationException();
   }
 
-  protected void additionalInProcessTests(
+  protected void assertInProcessTransportAssumedMessageSize(
           TestStreamTracer streamTracerSender, TestStreamTracer streamTracerReceiver) {
-    // overriden by SizesReportedInProcessTransportTest
+    // implemented by SizesReportedInProcessTransportTest
   }
 
   // TODO(ejona):
@@ -873,7 +873,7 @@ public abstract class AbstractTransportTest {
     assertThat(serverStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
 
-    additionalInProcessTests(clientStreamTracer1, serverStreamTracer1);
+    assertInProcessTransportAssumedMessageSize(clientStreamTracer1, serverStreamTracer1);
     Metadata serverHeaders = new Metadata();
     serverHeaders.put(asciiKey, "server");
     serverHeaders.put(asciiKey, "dupvalue");
@@ -910,7 +910,7 @@ public abstract class AbstractTransportTest {
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
     assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
     assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-    additionalInProcessTests(serverStreamTracer1, clientStreamTracer1);
+    assertInProcessTransportAssumedMessageSize(serverStreamTracer1, clientStreamTracer1);
 
     message.close();
     assertNull("no additional message expected", clientStreamListener.messageQueue.poll());
@@ -1274,7 +1274,7 @@ public abstract class AbstractTransportTest {
     assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
     assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
     assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    additionalInProcessTests(serverStreamTracer1, clientStreamTracer1);
+    assertInProcessTransportAssumedMessageSize(serverStreamTracer1, clientStreamTracer1);
     assertNull(clientStreamTracer1.getInboundTrailers());
     assertSame(status, clientStreamTracer1.getStatus());
     // There is a race between client cancelling and server closing.  The final status seen by the

@@ -31,6 +31,7 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class SizesReportedInProcessTransportTest extends InProcessTransportTest {
+  private static final long TEST_MESSAGE_LENGTH = 100;
   private AnonymousInProcessSocketAddress address = new AnonymousInProcessSocketAddress();
 
   @After
@@ -45,7 +46,7 @@ public class SizesReportedInProcessTransportTest extends InProcessTransportTest 
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     InProcessServerBuilder builder = InProcessServerBuilder.forAddress(address)
               .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE)
-            .assumedMessageSize(100);
+            .assumedMessageSize(TEST_MESSAGE_LENGTH);
     return new InProcessServer(builder, streamTracerFactories);
   }
 
@@ -53,16 +54,15 @@ public class SizesReportedInProcessTransportTest extends InProcessTransportTest 
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(
             address, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            testAuthority(server), USER_AGENT, eagAttrs(), false, 100);
+            testAuthority(server), USER_AGENT, eagAttrs(), false, TEST_MESSAGE_LENGTH);
   }
 
   @Override
-  public void additionalInProcessTests(
+  public void assertInProcessTransportAssumedMessageSize(
           TestStreamTracer streamTracerSender, TestStreamTracer streamTracerReceiver) {
-    Assert.assertEquals(100, streamTracerSender.getOutboundWireSize());
-    Assert.assertEquals(100, streamTracerSender.getOutboundUncompressedSize());
-
-    Assert.assertEquals(100, streamTracerReceiver.getInboundWireSize());
-    Assert.assertEquals(100, streamTracerReceiver.getInboundUncompressedSize());
+    Assert.assertEquals(TEST_MESSAGE_LENGTH, streamTracerSender.getOutboundWireSize());
+    Assert.assertEquals(TEST_MESSAGE_LENGTH, streamTracerSender.getOutboundUncompressedSize());
+    Assert.assertEquals(TEST_MESSAGE_LENGTH, streamTracerReceiver.getInboundWireSize());
+    Assert.assertEquals(TEST_MESSAGE_LENGTH, streamTracerReceiver.getInboundUncompressedSize());
   }
 }

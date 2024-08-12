@@ -100,7 +100,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
   // The size is assumed from the sender's side.
-  private long assumedMessageSize;
+  private long assumedMessageSize = -1;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -850,7 +850,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
               oldMessage.close();
             }
           } catch (IOException e) {
-            throw new RuntimeException("Error processing the message", e);
+            throw new RuntimeException("Error processing the message length", e);
           }
           statsTraceCtx.outboundUncompressedSize(messageLength);
           statsTraceCtx.outboundWireSize(messageLength);
