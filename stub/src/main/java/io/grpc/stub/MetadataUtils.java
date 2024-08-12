@@ -22,6 +22,7 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
@@ -153,6 +154,7 @@ public final class MetadataUtils {
    *
    * @param extraHeaders the headers to be added to each response. Caller gives up ownership.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11462")
   public static ServerInterceptor newAttachHeadersServerInterceptor(Metadata extraHeaders) {
     return new MetadataAttachingServerInterceptor(extraHeaders);
   }
