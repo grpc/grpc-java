@@ -132,6 +132,10 @@ public class XdsSecurityClientServerTest {
   /** TLS channel - no mTLS. */
   @Test
   public void tlsClientServer_noClientAuthentication() throws Exception {
+    System.out.println("java version=" + System.getProperty("java.version"));
+    System.setProperty( "javax.net.ssl.trustStore", "/usr/local/google/home/kannanj/Downloads/jdk-22.0.2/lib/security/cacerts.testca.added" );
+    System.setProperty( "javax.net.ssl.trustStorePassword", "changeit");
+    System.setProperty("javax.net.ssl.trustStoreType", "JKS");
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
