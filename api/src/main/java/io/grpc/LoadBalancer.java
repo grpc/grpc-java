@@ -1526,5 +1526,19 @@ public abstract class LoadBalancer {
     public String toString() {
       return "FixedResultPicker(" + result + ")";
     }
+
+    @Override
+    public int hashCode() {
+      return result.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof FixedResultPicker)) {
+        return false;
+      }
+      FixedResultPicker that = (FixedResultPicker) o;
+      return this.result.equals(that.result);
+    }
   }
 }
