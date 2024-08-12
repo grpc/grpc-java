@@ -38,7 +38,6 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
@@ -279,6 +278,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
         StatsTraceContext.NOOP);
     framer.writePayload(new ByteArrayInputStream(message));
     framer.flush();
+    framer.dispose();
  /*   ChannelHandlerContext ctx = newMockContext();
     new DefaultHttp2FrameWriter().writeData(ctx, streamId, compressionFrame, 0, endStream,
         newPromise());
@@ -567,8 +567,6 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
     readXCopies(1, data1KbBuf); // no ping, too little data
     assertEquals(3, handler.flowControlPing().getPingCount());
-
-    channel().releaseOutbound();
   }
 
   @Test
@@ -590,7 +588,6 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
       }
     }
     assertEquals(6, handler.flowControlPing().getPingCount());
-
     channel().releaseOutbound();
   }
 
@@ -629,12 +626,11 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     readPingAck(pingData); // should resize window
     int windowSizeB = localFlowController.initialWindowSize();
     Assert.assertNotEquals(windowSizeA, windowSizeB);
-
-    channel().releaseOutbound();
   }
 
   private void readPingAck(long pingData) throws Exception {
     channelRead(pingFrame(true, pingData));
+    channel().releaseOutbound();
   }
 
   private void readXCopies(int copies, byte[] data) throws Exception {
