@@ -62,7 +62,7 @@ public class StatusOr<T> {
     if (!(other instanceof StatusOr)) {
       return false;
     }
-    StatusOr<T> otherStatus = (StatusOr) other;
+    StatusOr<T> otherStatus = (StatusOr<T>) other;
     if (hasValue() != otherStatus.hasValue()) {
       return false;
     }
