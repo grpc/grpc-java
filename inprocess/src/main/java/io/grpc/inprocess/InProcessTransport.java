@@ -99,9 +99,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private ServerTransportListener serverTransportListener;
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
-  // These sizes are assumed from the sender' side.
-  private long serverAssumedMessageSize = -1;
-   private long clientAssumedMessageSize = -1;
+  // The size is assumed from the sender's side.
+  private long assumedMessageSize;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -172,7 +171,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           Attributes eagAttrs, boolean includeCauseWithStatus, long assumedMessageSize) {
     this(address, maxInboundMetadataSize, authority, userAgent, eagAttrs,
             Optional.<ServerListener>absent(), includeCauseWithStatus);
-            this.clientAssumedMessageSize = assumedMessageSize;
+    this.assumedMessageSize = assumedMessageSize;
   }
 
   InProcessTransport(
@@ -201,9 +200,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         serverSchedulerPool = server.getScheduledExecutorServicePool();
         serverScheduler = serverSchedulerPool.getObject();
         serverStreamTracerFactories = server.getStreamTracerFactories();
+        assumedMessageSize = server.getAssumedMessageSize();
         // Must be semi-initialized; past this point, can begin receiving requests
         serverTransportListener = server.register(this);
-        serverAssumedMessageSize = server.getAssumedMessageSize();
       }
     }
     if (serverTransportListener == null) {
@@ -430,7 +429,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
     }
 
-    private long getMessageLength(InputStream inputStream) {
+    private long getKnownLength(InputStream inputStream) {
       try {
         return inputStream.available();
       } catch (IOException | RuntimeException e) {
@@ -543,22 +542,21 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
 
-          /*long messageLength = serverAssumedMessageSize == -1
-                  ? getMessageLength(message) : serverAssumedMessageSize;*/
-          long messageLength = -1;
+          long messageLength;
           try {
-            if (!(message instanceof KnownLength) && !(message instanceof ByteArrayInputStream)) {
+            if (assumedMessageSize != -1) {
+              messageLength = assumedMessageSize;
+            } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
+              messageLength = getKnownLength(message);
+            } else {
               InputStream oldMessage = message;
               byte[] payload = ByteStreams.toByteArray(message);
               messageLength = payload.length;
               message = new ByteArrayInputStream(payload);
               oldMessage.close();
             }
-            else {
-              messageLength = getMessageLength(message);
-            }
-          } catch (IOException ex) {
-            throw new RuntimeException(ex);
+          } catch (IOException e) {
+            throw new RuntimeException("Error processing the message length", e);
           }
 
           statsTraceCtx.outboundUncompressedSize(messageLength);
@@ -838,22 +836,21 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
 
-          /*long messageLength = clientAssumedMessageSize == -1
-                  ? getMessageLength(message) : clientAssumedMessageSize;*/
-          long messageLength = -1;
+          long messageLength;
           try {
-            if (!(message instanceof KnownLength) && !(message instanceof ByteArrayInputStream)) {
+            if (assumedMessageSize != -1) {
+              messageLength = assumedMessageSize;
+            } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
+              messageLength = getKnownLength(message);
+            } else {
               InputStream oldMessage = message;
               byte[] payload = ByteStreams.toByteArray(message);
               messageLength = payload.length;
               message = new ByteArrayInputStream(payload);
               oldMessage.close();
             }
-            else {
-              messageLength = getMessageLength(message);
-            }
-          } catch (IOException ex) {
-            throw new RuntimeException(ex);
+          } catch (IOException e) {
+            throw new RuntimeException("Error processing the message", e);
           }
           statsTraceCtx.outboundUncompressedSize(messageLength);
           statsTraceCtx.outboundWireSize(messageLength);

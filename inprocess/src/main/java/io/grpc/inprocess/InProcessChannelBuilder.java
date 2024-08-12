@@ -239,7 +239,7 @@ public final class InProcessChannelBuilder extends
     private final int maxInboundMetadataSize;
     private boolean closed;
     private final boolean includeCauseWithStatus;
-    long assumedMessageSize = -1;
+    private final long assumedMessageSize = -1;
 
     private InProcessClientTransportFactory(
         @Nullable ScheduledExecutorService scheduledExecutorService,
@@ -287,10 +287,6 @@ public final class InProcessChannelBuilder extends
     @Override
     public Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
       return Arrays.asList(InProcessSocketAddress.class, AnonymousInProcessSocketAddress.class);
-    }
-
-    public void assumedMessageSize(int bytes) {
-      this.assumedMessageSize = bytes;
     }
   }
 }

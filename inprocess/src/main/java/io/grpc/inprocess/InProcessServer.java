@@ -62,7 +62,7 @@ final class InProcessServer implements InternalServer {
    */
   private ScheduledExecutorService scheduler;
 
-  private long assumedMessageSize = -1;
+  private final long assumedMessageSize;
 
   InProcessServer(
       InProcessServerBuilder builder,

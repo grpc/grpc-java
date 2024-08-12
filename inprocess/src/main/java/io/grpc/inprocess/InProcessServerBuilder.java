@@ -212,8 +212,8 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
     this.serverImplBuilder.setStatsEnabled(value);
   }
 
-  public InProcessServerBuilder assumedMessageSize(long bytes) {
-    this.assumedMessageSize = bytes;
+  public InProcessServerBuilder assumedMessageSize(long assumedMessageSize) {
+    this.assumedMessageSize = assumedMessageSize;
     return this;
   }
 }
