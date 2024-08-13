@@ -49,7 +49,8 @@ final class ClientSslContextProviderFactory
         upstreamTlsContext.getCommonTlsContext(),
         "upstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasCertProviderInstance(
-        upstreamTlsContext.getCommonTlsContext())) {
+        upstreamTlsContext.getCommonTlsContext())
+    || upstreamTlsContext.getCommonTlsContext().getCombinedValidationContextOrBuilder().getDefaultValidationContext().hasSystemRootCerts()) {
       return certProviderClientSslContextProviderFactory.getProvider(
           upstreamTlsContext,
           bootstrapInfo.node().toEnvoyProtoNode(),

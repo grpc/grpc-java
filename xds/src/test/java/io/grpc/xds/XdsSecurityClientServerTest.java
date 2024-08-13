@@ -150,6 +150,27 @@ public class XdsSecurityClientServerTest {
     assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
+  /** Use system root ca cert for TLS channel - no mTLS. */
+  @Test
+  public void tlsClientServer_useSystemRootCerts() throws Exception {
+    System.out.println("java version=" + System.getProperty("java.version"));
+    System.setProperty( "javax.net.ssl.trustStore", "/usr/local/google/home/kannanj/Downloads/jdk-22.0.2/lib/security/cacerts.testca.added" );
+    System.setProperty( "javax.net.ssl.trustStorePassword", "changeit");
+    System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    // for TLS, client only needs trustCa
+    UpstreamTlsContext upstreamTlsContext =
+        setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
   @Test
   public void requireClientAuth_noClientCert_expectException()
       throws Exception {
@@ -324,6 +345,15 @@ public class XdsSecurityClientServerTest {
             CA_PEM_FILE, null, null, null, null);
     return CommonTlsContextTestsUtil
         .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert);
+  }
+
+  private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(
+      String clientKeyFile,
+      String clientPemFile) {
+    bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
+            CA_PEM_FILE, null, null, null, null);
+    return CommonTlsContextTestsUtil.buildUpstreamTlsContextForUsingSystemRootTrustCerts("google_cloud_private_spiffe-client", "ROOT");
   }
 
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)

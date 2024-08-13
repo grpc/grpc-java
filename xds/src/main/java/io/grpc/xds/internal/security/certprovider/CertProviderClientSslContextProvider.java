@@ -46,7 +46,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         node,
         certProviders,
         certInstance,
-        checkNotNull(rootCertInstance, "Client SSL requires rootCertInstance"),
+        rootCertInstance,
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
@@ -57,13 +57,13 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
           CertificateValidationContext certificateValidationContextdationContext)
       throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
-    /*if (rootCertInstance != null
+    if (rootCertInstance != null
         && !tlsContext.getCommonTlsContext().getValidationContext().hasSystemRootCerts()) {
       sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),
               certificateValidationContextdationContext));
-    }*/
+    }
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }

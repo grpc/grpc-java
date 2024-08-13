@@ -220,6 +220,23 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
+  public static EnvoyServerProtoData.UpstreamTlsContext
+      buildUpstreamTlsContextForUsingSystemRootTrustCerts(String certInstanceName,
+          String certName) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder()
+        .setTlsCertificateCertificateProviderInstance(
+            CommonTlsContext.CertificateProviderInstance.newBuilder()
+                .setInstanceName(certInstanceName)
+                .setCertificateName(certName))
+        .setCombinedValidationContext(CombinedCertificateValidationContext.newBuilder()
+            .setDefaultValidationContext(
+                CertificateValidationContext.newBuilder()
+                    .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.newBuilder().build())
+                    .build())
+            .build());
+    return buildUpstreamTlsContext(builder.build());
+  }
+
   private static CommonTlsContext buildNewCommonTlsContextForCertProviderInstance(
           String certInstanceName,
           String certName,
