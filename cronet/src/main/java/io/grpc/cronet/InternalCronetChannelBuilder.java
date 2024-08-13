@@ -16,7 +16,9 @@
 
 package io.grpc.cronet;
 
+import android.net.Network;
 import io.grpc.Internal;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Internal {@link CronetChannelBuilder} accessor. This is intended for usage internal to the gRPC
@@ -57,5 +59,10 @@ public final class InternalCronetChannelBuilder {
    */
   public static void setTrafficStatsUid(CronetChannelBuilder builder, int uid) {
     builder.setTrafficStatsUid(uid);
+  }
+
+  /** Sets the network {@link android.net.Network} to use when relying traffic by this channel. */
+  public static void bindToNetwork(CronetChannelBuilder builder, @Nullable Network network) {
+    builder.bindToNetwork(network);
   }
 }
