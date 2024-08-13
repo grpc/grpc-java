@@ -78,7 +78,6 @@ public class KeepAliveClient {
     // frames.
     // More details see: https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md
     ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
-        .keepAliveTime(5, TimeUnit.MINUTES)
         .keepAliveTime(10, TimeUnit.SECONDS) // Change to a larger value, e.g. 5min.
         .keepAliveTimeout(1, TimeUnit.SECONDS) // Change to a larger value, e.g. 10s.
         .keepAliveWithoutCalls(true)// You should normally avoid enabling this.
