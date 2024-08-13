@@ -220,6 +220,7 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
+  @SuppressWarnings("deprecation")
   public static EnvoyServerProtoData.UpstreamTlsContext
       buildUpstreamTlsContextForUsingSystemRootTrustCerts(String certInstanceName,
           String certName) {
