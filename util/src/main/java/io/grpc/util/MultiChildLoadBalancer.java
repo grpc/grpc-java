@@ -37,10 +37,10 @@ import io.grpc.Status;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,8 +91,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (existingChildLbState != null) {
         childLbMap.put(endpoint, existingChildLbState);
       } else {
-        childLbMap.put(endpoint,
-            createChildLbState(endpoint, null, getInitialPicker(), resolvedAddresses));
+        childLbMap.put(endpoint, createChildLbState(endpoint, null, resolvedAddresses));
       }
     }
     return childLbMap;
@@ -102,8 +101,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    * Override to create an instance of a subclass.
    */
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
-    return new ChildLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
+      ResolvedAddresses resolvedAddresses) {
+    return new ChildLbState(key, pickFirstLbProvider, policyConfig);
   }
 
   /**
@@ -188,15 +187,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Creates a picker representing the state before any connections have been established.
-   *
-   * <p/>Override to produce a custom picker.
-   */
-  protected SubchannelPicker getInitialPicker() {
-    return new FixedResultPicker(PickResult.withNoResult());
-  }
-
-  /**
    * Creates a new picker representing an error status.
    *
    * <p/>Override to produce a custom picker when there are errors.
@@ -241,7 +231,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return new AcceptResolvedAddrRetVal(Status.OK, getRemovedChildren(newChildren.keySet()));
   }
 
-  protected final void addMissingChildren(Map<Object, ChildLbState> newChildren) {
+  private void addMissingChildren(Map<Object, ChildLbState> newChildren) {
     // Do adds and identify reused children
     for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
       final Object key = entry.getKey();
@@ -251,7 +241,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     }
   }
 
-  protected final void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
+  private void updateChildrenWithResolvedAddresses(ResolvedAddresses resolvedAddresses,
                                                      Map<Object, ChildLbState> newChildren) {
     for (Map.Entry<Object, ChildLbState> entry : newChildren.entrySet()) {
       Object childConfig = entry.getValue().getConfig();
@@ -266,7 +256,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   /**
    * Identifies which children have been removed (are not part of the newChildKeys).
    */
-  protected final List<ChildLbState> getRemovedChildren(Set<Object> newChildKeys) {
+  private List<ChildLbState> getRemovedChildren(Set<Object> newChildKeys) {
     List<ChildLbState> removedChildren = new ArrayList<>();
     // Do removals
     for (Object key : ImmutableList.copyOf(childLbStates.keySet())) {
@@ -365,12 +355,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     private final LoadBalancer lb;
     private ConnectivityState currentState;
-    private SubchannelPicker currentPicker;
+    private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
-    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig,
-          SubchannelPicker initialPicker) {
+    public ChildLbState(Object key, LoadBalancer.Factory policyFactory, Object childConfig) {
       this.key = key;
-      this.currentPicker = initialPicker;
       this.config = childConfig;
       this.lb = policyFactory.newLoadBalancer(createChildHelper());
       this.currentState = CONNECTING;
@@ -409,13 +397,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     @VisibleForTesting
     public final SubchannelPicker getCurrentPicker() {
       return currentPicker;
-    }
-
-    protected final Subchannel getSubchannels(PickSubchannelArgs args) {
-      if (getCurrentPicker() == null) {
-        return null;
-      }
-      return getCurrentPicker().pickSubchannel(args).getSubchannel();
     }
 
     public final ConnectivityState getCurrentState() {
@@ -463,8 +444,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       /**
        * Update current state and picker for this child and then use
        * {@link #updateOverallBalancingState()} for the parent LB.
-       *
-       * <p/>Override this if you don't want to automatically request a connection when in IDLE
        */
       @Override
       public void updateBalancingState(final ConnectivityState newState,
@@ -478,9 +457,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         // If we are already in the process of resolving addresses, the overall balancing state
         // will be updated at the end of it, and we don't need to trigger that update here.
         if (!resolvingAddresses) {
-          if (newState == IDLE) {
-            lb.requestConnection();
-          }
           updateOverallBalancingState();
         }
       }
@@ -494,25 +470,27 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   /**
    * Endpoint is an optimization to quickly lookup and compare EquivalentAddressGroup address sets.
-   * Ignores the attributes, orders the addresses in a deterministic manner and converts each
-   * address into a string for easy comparison.  Also caches the hashcode.
-   * Is used as a key for ChildLbState for most load balancers (ClusterManagerLB uses a String).
+   * It ignores the attributes. Is used as a key for ChildLbState for most load balancers
+   * (ClusterManagerLB uses a String).
    */
   protected static class Endpoint {
-    final String[] addrs;
+    final Collection<SocketAddress> addrs;
     final int hashCode;
 
     public Endpoint(EquivalentAddressGroup eag) {
       checkNotNull(eag, "eag");
 
-      addrs = new String[eag.getAddresses().size()];
-      int i = 0;
-      for (SocketAddress address : eag.getAddresses()) {
-        addrs[i++] = address.toString();
+      if (eag.getAddresses().size() < 10) {
+        addrs = eag.getAddresses();
+      } else {
+        // This is expected to be very unlikely in practice
+        addrs = new HashSet<>(eag.getAddresses());
       }
-      Arrays.sort(addrs);
-
-      hashCode = Arrays.hashCode(addrs);
+      int sum = 0;
+      for (SocketAddress address : eag.getAddresses()) {
+        sum += address.hashCode();
+      }
+      hashCode = sum;
     }
 
     @Override
@@ -525,24 +503,21 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       if (this == other) {
         return true;
       }
-      if (other == null) {
-        return false;
-      }
 
       if (!(other instanceof Endpoint)) {
         return false;
       }
       Endpoint o = (Endpoint) other;
-      if (o.hashCode != hashCode || o.addrs.length != addrs.length) {
+      if (o.hashCode != hashCode || o.addrs.size() != addrs.size()) {
         return false;
       }
 
-      return Arrays.equals(o.addrs, this.addrs);
+      return o.addrs.containsAll(addrs);
     }
 
     @Override
     public String toString() {
-      return Arrays.toString(addrs);
+      return addrs.toString();
     }
   }
 

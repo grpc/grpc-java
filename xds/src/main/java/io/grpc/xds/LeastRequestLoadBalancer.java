@@ -127,8 +127,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
 
   @Override
   protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses unused) {
-    return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
+      ResolvedAddresses unused) {
+    return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig);
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
@@ -321,12 +321,25 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     private final AtomicInteger activeRequests = new AtomicInteger(0);
 
     public LeastRequestLbState(Object key, LoadBalancerProvider policyProvider,
-        Object childConfig, SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+        Object childConfig) {
+      super(key, policyProvider, childConfig);
     }
 
     int getActiveRequests() {
       return activeRequests.get();
+    }
+
+    @Override
+    protected ChildLbStateHelper createChildHelper() {
+      return new ChildLbStateHelper() {
+        @Override
+        public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+          super.updateBalancingState(newState, newPicker);
+          if (!resolvingAddresses && newState == IDLE) {
+            getLb().requestConnection();
+          }
+        }
+      };
     }
   }
 }
