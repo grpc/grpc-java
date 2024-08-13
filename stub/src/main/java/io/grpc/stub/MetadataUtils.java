@@ -175,6 +175,8 @@ public final class MetadataUtils {
 
     final class HeaderAttachingServerCall<ReqT, RespT>
         extends SimpleForwardingServerCall<ReqT, RespT> {
+      boolean headersSent;
+
       HeaderAttachingServerCall(ServerCall<ReqT, RespT> delegate) {
         super(delegate);
       }
@@ -182,7 +184,20 @@ public final class MetadataUtils {
       @Override
       public void sendHeaders(Metadata headers) {
         headers.merge(extraHeaders);
+        headersSent = true;
         super.sendHeaders(headers);
+      }
+
+      @Override
+      public void close(Status status, Metadata trailers) {
+        if (!headersSent) {
+          // It isn't too late to call sendHeaders(): !headersSent implies that it hasn't been
+          // called yet (obviously). But it also implies that no messages have been sent, because
+          // sendMessage() *requires* a preceding call to sendHeaders().
+          headersSent = true;
+          super.sendHeaders(extraHeaders);
+        }
+        super.close(status, trailers);
       }
     }
   }
