@@ -66,14 +66,22 @@ import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import io.netty.handler.ssl.NotSslRecordException;
+import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
@@ -81,6 +89,7 @@ import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -92,6 +101,7 @@ import org.junit.runners.JUnit4;
 public class XdsSecurityClientServerTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule public TestName testName = new TestName();
   private int port;
   private FakeNameResolverFactory fakeNameResolverFactory;
   private Bootstrapper.BootstrapInfo bootstrapInfoForClient = null;
@@ -103,9 +113,12 @@ public class XdsSecurityClientServerTest {
   private static final String OVERRIDE_AUTHORITY = "foo.test.google.fr";
 
   @After
-  public void tearDown() {
+  public void tearDown() throws IOException {
     if (fakeNameResolverFactory != null) {
       NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverFactory);
+    }
+    if (testName.getMethodName().equals("tlsClientServer_useSystemRootCerts")) {
+      Files.deleteIfExists(Paths.get("./cacerts-testca.jks"));
     }
   }
 
@@ -132,10 +145,6 @@ public class XdsSecurityClientServerTest {
   /** TLS channel - no mTLS. */
   @Test
   public void tlsClientServer_noClientAuthentication() throws Exception {
-    System.out.println("java version=" + System.getProperty("java.version"));
-    System.setProperty( "javax.net.ssl.trustStore", "/usr/local/google/home/kannanj/Downloads/jdk-22.0.2/lib/security/cacerts.testca.added" );
-    System.setProperty( "javax.net.ssl.trustStorePassword", "changeit");
-    System.setProperty("javax.net.ssl.trustStoreType", "JKS");
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
@@ -154,7 +163,7 @@ public class XdsSecurityClientServerTest {
   @Test
   public void tlsClientServer_useSystemRootCerts() throws Exception {
     System.out.println("java version=" + System.getProperty("java.version"));
-    System.setProperty( "javax.net.ssl.trustStore", "/usr/local/google/home/kannanj/Downloads/jdk-22.0.2/lib/security/cacerts.testca.added" );
+    System.setProperty( "javax.net.ssl.trustStore", getCacertFilePathForTestCa());
     System.setProperty( "javax.net.ssl.trustStorePassword", "changeit");
     System.setProperty("javax.net.ssl.trustStoreType", "JKS");
     DownstreamTlsContext downstreamTlsContext =
@@ -171,6 +180,16 @@ public class XdsSecurityClientServerTest {
     assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
+  private String getCacertFilePathForTestCa() throws URISyntaxException, IOException {
+    final URI uri = getClass().getResource("/certs/cacerts-testca.jks").toURI();
+    Map<String, String> env = new HashMap<>();
+    env.put("create", "true");
+    FileSystem fileSystem = FileSystems.newFileSystem(uri, env);
+    Path cacertsFile = Paths.get("./cacerts-testca.jks");
+    Files.copy(Paths.get(uri), cacertsFile);
+    fileSystem.close();
+    return cacertsFile.toAbsolutePath().toString();
+  }
   @Test
   public void requireClientAuth_noClientCert_expectException()
       throws Exception {
