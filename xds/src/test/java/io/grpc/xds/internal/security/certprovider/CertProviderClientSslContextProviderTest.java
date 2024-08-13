@@ -337,25 +337,6 @@ public class CertProviderClientSslContextProviderTest {
         .contains("only static certificateValidationContext expected");
   }
 
-  @Test
-  public void testProviderForClient_rootInstanceNull_expectError() throws Exception {
-    final CertificateProvider.DistributorWatcher[] watcherCaptor =
-        new CertificateProvider.DistributorWatcher[1];
-    TestCertificateProvider.createAndRegisterProviderProvider(
-        certificateProviderRegistry, watcherCaptor, "testca", 0);
-    try {
-      getSslContextProvider(
-          /* certInstanceName= */ null,
-          /* rootInstanceName= */ null,
-          CommonBootstrapperTestUtils.getTestBootstrapInfo(),
-          /* alpnProtocols= */ null,
-          /* staticCertValidationContext= */ null);
-      fail("exception expected");
-    } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().contains("Client SSL requires rootCertInstance");
-    }
-  }
-
   static class QueuedExecutor implements Executor {
     /** A list of Runnables to be run in order. */
     @VisibleForTesting final Queue<Runnable> runQueue = new ConcurrentLinkedQueue<>();

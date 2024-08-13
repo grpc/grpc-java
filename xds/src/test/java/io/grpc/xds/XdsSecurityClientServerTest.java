@@ -162,7 +162,6 @@ public class XdsSecurityClientServerTest {
   /** Use system root ca cert for TLS channel - no mTLS. */
   @Test
   public void tlsClientServer_useSystemRootCerts() throws Exception {
-    System.out.println("java version=" + System.getProperty("java.version"));
     System.setProperty( "javax.net.ssl.trustStore", getCacertFilePathForTestCa());
     System.setProperty( "javax.net.ssl.trustStorePassword", "changeit");
     System.setProperty("javax.net.ssl.trustStoreType", "JKS");
@@ -190,6 +189,7 @@ public class XdsSecurityClientServerTest {
     fileSystem.close();
     return cacertsFile.toAbsolutePath().toString();
   }
+
   @Test
   public void requireClientAuth_noClientCert_expectException()
       throws Exception {
@@ -372,7 +372,8 @@ public class XdsSecurityClientServerTest {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null);
-    return CommonTlsContextTestsUtil.buildUpstreamTlsContextForUsingSystemRootTrustCerts("google_cloud_private_spiffe-client", "ROOT");
+    return CommonTlsContextTestsUtil.buildUpstreamTlsContextForUsingSystemRootTrustCerts(
+        "google_cloud_private_spiffe-client", "ROOT");
   }
 
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)

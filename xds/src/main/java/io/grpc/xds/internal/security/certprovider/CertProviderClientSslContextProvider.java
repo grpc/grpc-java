@@ -16,8 +16,6 @@
 
 package io.grpc.xds.internal.security.certprovider;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;

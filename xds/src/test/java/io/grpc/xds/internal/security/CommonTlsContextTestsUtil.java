@@ -231,7 +231,8 @@ public class CommonTlsContextTestsUtil {
         .setCombinedValidationContext(CombinedCertificateValidationContext.newBuilder()
             .setDefaultValidationContext(
                 CertificateValidationContext.newBuilder()
-                    .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.newBuilder().build())
+                    .setSystemRootCerts(
+                        CertificateValidationContext.SystemRootCerts.newBuilder().build())
                     .build())
             .build());
     return buildUpstreamTlsContext(builder.build());
