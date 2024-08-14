@@ -55,6 +55,11 @@
       <artifactId>protobuf-java-util</artifactId>
       <version>${protobuf.version}</version>
     </dependency>
+    <dependency> <!-- Use newer version than in protobuf-java-util -->
+      <groupId>com.google.j2objc</groupId>
+      <artifactId>j2objc-annotations</artifactId>
+      <version>3.0.0</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.tomcat</groupId>
       <artifactId>annotations-api</artifactId>
