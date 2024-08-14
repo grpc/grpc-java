@@ -17,7 +17,7 @@
 package io.grpc.stub;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.stub.MetadataUtils.newAttachHeadersServerInterceptor;
+import static io.grpc.stub.MetadataUtils.newAttachMetadataServerInterceptor;
 import static io.grpc.stub.MetadataUtils.newCaptureMetadataInterceptor;
 import static org.junit.Assert.fail;
 
@@ -78,13 +78,13 @@ public class MetadataUtilsTest {
 
   @Test
   public void shouldAttachHeadersToResponse() throws IOException {
-    Metadata extraHeaders = new Metadata();
-    extraHeaders.put(FOO_KEY, "foo-value");
+    Metadata extras = new Metadata();
+    extras.put(FOO_KEY, "foo-value");
 
     ServerServiceDefinition serviceDef =
         ServerInterceptors.intercept(
             ServerServiceDefinition.builder("test").addMethod(echoMethod, echoCallHandler).build(),
-            ImmutableList.of(newAttachHeadersServerInterceptor(extraHeaders)));
+            ImmutableList.of(newAttachMetadataServerInterceptor(extras)));
 
     grpcCleanup.register(newInProcessServerBuilder().addService(serviceDef).build().start());
     ManagedChannel channel =
@@ -96,14 +96,15 @@ public class MetadataUtilsTest {
     String response =
         ClientCalls.blockingUnaryCall(channel, echoMethod, CallOptions.DEFAULT, "hello");
     assertThat(response).isEqualTo("hello");
-    Metadata headers = headersCapture.get();
-    assertThat(headers.get(FOO_KEY)).isEqualTo("foo-value");
+    assertThat(trailersCapture.get() == null || !trailersCapture.get().containsKey(FOO_KEY))
+        .isTrue();
+    assertThat(headersCapture.get().get(FOO_KEY)).isEqualTo("foo-value");
   }
 
   @Test
-  public void shouldAttachHeadersDespiteNoResponse() throws IOException {
-    Metadata extraHeaders = new Metadata();
-    extraHeaders.put(FOO_KEY, "foo-value");
+  public void shouldAttachTrailersWhenNoResponse() throws IOException {
+    Metadata extras = new Metadata();
+    extras.put(FOO_KEY, "foo-value");
 
     ServerServiceDefinition serviceDef =
         ServerInterceptors.intercept(
@@ -114,7 +115,7 @@ public class MetadataUtilsTest {
                         ServerCalls.asyncUnaryCall(
                             (req, respObserver) -> respObserver.onCompleted())))
                 .build(),
-            ImmutableList.of(newAttachHeadersServerInterceptor(extraHeaders)));
+            ImmutableList.of(newAttachMetadataServerInterceptor(extras)));
     grpcCleanup.register(newInProcessServerBuilder().addService(serviceDef).build().start());
 
     ManagedChannel channel =
@@ -127,14 +128,14 @@ public class MetadataUtilsTest {
         ClientCalls.blockingServerStreamingCall(
             channel, echoServerStreamingMethod, CallOptions.DEFAULT, "hello");
     assertThat(response.hasNext()).isFalse();
-    Metadata headers = headersCapture.get();
-    assertThat(headers.get(FOO_KEY)).isEqualTo("foo-value");
+    assertThat(headersCapture.get() == null || !headersCapture.get().containsKey(FOO_KEY)).isTrue();
+    assertThat(trailersCapture.get().get(FOO_KEY)).isEqualTo("foo-value");
   }
 
   @Test
-  public void shouldAttachHeadersToErrorResponse() throws IOException {
-    Metadata extraHeaders = new Metadata();
-    extraHeaders.put(FOO_KEY, "foo-value");
+  public void shouldAttachTrailersToErrorResponse() throws IOException {
+    Metadata extras = new Metadata();
+    extras.put(FOO_KEY, "foo-value");
 
     ServerServiceDefinition serviceDef =
         ServerInterceptors.intercept(
@@ -145,7 +146,7 @@ public class MetadataUtilsTest {
                         (req, respObserver) ->
                             respObserver.onError(Status.INVALID_ARGUMENT.asRuntimeException())))
                 .build(),
-            ImmutableList.of(newAttachHeadersServerInterceptor(extraHeaders)));
+            ImmutableList.of(newAttachMetadataServerInterceptor(extras)));
     grpcCleanup.register(newInProcessServerBuilder().addService(serviceDef).build().start());
 
     ManagedChannel channel =
@@ -160,8 +161,8 @@ public class MetadataUtilsTest {
       assertThat(e.getStatus()).isNotNull();
       assertThat(e.getStatus().getCode()).isEqualTo(Code.INVALID_ARGUMENT);
     }
-    Metadata headers = headersCapture.get();
-    assertThat(headers.get(FOO_KEY)).isEqualTo("foo-value");
+    assertThat(headersCapture.get() == null || !headersCapture.get().containsKey(FOO_KEY)).isTrue();
+    assertThat(trailersCapture.get().get(FOO_KEY)).isEqualTo("foo-value");
   }
 
   private static InProcessServerBuilder newInProcessServerBuilder() {

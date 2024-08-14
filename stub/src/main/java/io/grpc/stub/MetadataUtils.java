@@ -150,40 +150,50 @@ public final class MetadataUtils {
   }
 
   /**
-   * Returns a ServerInterceptor that attaches a given set of headers to every response.
+   * Returns a ServerInterceptor that adds the specified Metadata to every response stream, one way
+   * or another.
    *
-   * @param extraHeaders the headers to be added to each response. Caller gives up ownership.
+   * <p>If, absent this interceptor, a stream would have headers, 'extras' will be added to those
+   * headers. Otherwise, 'extras' will be sent as trailers. This pattern is useful when you have
+   * some fixed information, server identity say, that should be included no matter how the call
+   * turns out. The fallback to trailers avoids artificially committing clients to error responses
+   * that could otherwise be retried (see https://grpc.io/docs/guides/retry/ for more).
+   *
+   * <p>For correct operation, be sure to arrange for this interceptor to run *before* any others
+   * that might add headers.
+   *
+   * @param extras the Metadata to be added to each stream. Caller gives up ownership.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11462")
-  public static ServerInterceptor newAttachHeadersServerInterceptor(Metadata extraHeaders) {
-    return new MetadataAttachingServerInterceptor(extraHeaders);
+  public static ServerInterceptor newAttachMetadataServerInterceptor(Metadata extras) {
+    return new MetadataAttachingServerInterceptor(extras);
   }
 
   private static final class MetadataAttachingServerInterceptor implements ServerInterceptor {
 
-    private final Metadata extraHeaders;
+    private final Metadata extras;
 
-    MetadataAttachingServerInterceptor(Metadata extraHeaders) {
-      this.extraHeaders = extraHeaders;
+    MetadataAttachingServerInterceptor(Metadata extras) {
+      this.extras = extras;
     }
 
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      return next.startCall(new HeaderAttachingServerCall<>(call), headers);
+      return next.startCall(new MetadataAttachingServerCall<>(call), headers);
     }
 
-    final class HeaderAttachingServerCall<ReqT, RespT>
+    final class MetadataAttachingServerCall<ReqT, RespT>
         extends SimpleForwardingServerCall<ReqT, RespT> {
       boolean headersSent;
 
-      HeaderAttachingServerCall(ServerCall<ReqT, RespT> delegate) {
+      MetadataAttachingServerCall(ServerCall<ReqT, RespT> delegate) {
         super(delegate);
       }
 
       @Override
       public void sendHeaders(Metadata headers) {
-        headers.merge(extraHeaders);
+        headers.merge(extras);
         headersSent = true;
         super.sendHeaders(headers);
       }
@@ -191,10 +201,7 @@ public final class MetadataUtils {
       @Override
       public void close(Status status, Metadata trailers) {
         if (!headersSent) {
-          // It isn't too late to call sendHeaders(): !headersSent implies that it hasn't been
-          // called yet (obviously). But it also implies that no messages have been sent, because
-          // sendMessage() *requires* a preceding call to sendHeaders().
-          sendHeaders(new Metadata());
+          trailers.merge(extras);
         }
         super.close(status, trailers);
       }
