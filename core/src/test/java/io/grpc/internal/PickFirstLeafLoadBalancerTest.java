@@ -662,9 +662,60 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
-  public void nameResolutionAfterSufficientTFs() {
+  public void nameResolutionAfterSufficientTFs_multipleEags() {
     InOrder inOrder = inOrder(mockHelper);
     acceptXSubchannels(3);
+    Status error = Status.UNAVAILABLE.withDescription("boom!");
+
+    // Initial subchannel gets TF, LB is still in CONNECTING
+    verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener1 = stateListenerCaptor.getValue();
+    stateListener1.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+
+    // Second subchannel gets TF, no UpdateBalancingState called
+    verify(mockSubchannel2).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
+
+    // Third subchannel gets TF, LB goes into TRANSIENT_FAILURE and does a refreshNameResolution
+    verify(mockSubchannel3).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
+    stateListener3.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(mockHelper).refreshNameResolution();
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+
+    // Only after we have TFs reported for # of subchannels do we call refreshNameResolution
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).refreshNameResolution();
+
+    // Now that we have refreshed, the count should have been reset
+    // Only after we have TFs reported for # of subchannels do we call refreshNameResolution
+    stateListener1.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+    stateListener3.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).refreshNameResolution();
+  }
+
+  @Test
+  public void nameResolutionAfterSufficientTFs_singleEag() {
+    InOrder inOrder = inOrder(mockHelper);
+    EquivalentAddressGroup eag = new EquivalentAddressGroup(Arrays.asList(
+        new FakeSocketAddress("server1"),
+        new FakeSocketAddress("server2"),
+        new FakeSocketAddress("server3")));
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(Arrays.asList(eag)).build());
     Status error = Status.UNAVAILABLE.withDescription("boom!");
 
     // Initial subchannel gets TF, LB is still in CONNECTING

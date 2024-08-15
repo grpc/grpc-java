@@ -208,7 +208,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
     subchannels.clear();
     if (addressIndex != null) {
-      addressIndex.updateGroups(null);
+      addressIndex.updateGroups(ImmutableList.of());
     }
     rawConnectivityState = TRANSIENT_FAILURE;
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
@@ -566,11 +566,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final class Index {
     private List<EquivalentAddressGroup> addressGroups;
+    private int size;
     private int groupIndex;
     private int addressIndex;
 
     public Index(List<EquivalentAddressGroup> groups) {
-      this.addressGroups = groups != null ? groups : Collections.emptyList();
+      updateGroups(groups);
     }
 
     public boolean isValid() {
@@ -629,9 +630,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     /**
      * Update to new groups, resetting the current index.
      */
-    public void updateGroups(ImmutableList<EquivalentAddressGroup> newGroups) {
-      addressGroups = newGroups != null ? newGroups : Collections.emptyList();
+    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
+      addressGroups = checkNotNull(newGroups, "newGroups");
       reset();
+      int size = 0;
+      for (EquivalentAddressGroup eag : newGroups) {
+        size += eag.getAddresses().size();
+      }
+      this.size = size;
     }
 
     /**
@@ -652,7 +658,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     public int size() {
-      return (addressGroups != null) ? addressGroups.size() : 0;
+      return size;
     }
   }
 
