@@ -19,7 +19,6 @@ package io.grpc.googleapis;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -41,6 +40,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -263,7 +263,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       if (con.getResponseCode() != 200) {
         return "";
       }
-      try (Reader reader = new InputStreamReader(con.getInputStream(), Charsets.UTF_8)) {
+      try (Reader reader = new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8)) {
         respBody = CharStreams.toString(reader);
       }
     } finally {

@@ -142,7 +142,11 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   /**
    * Gracefully switch to a new policy defined by the given factory, if the given factory isn't
    * equal to the current one.
+   *
+   * @deprecated Use {@code parseLoadBalancingPolicyConfig()} and pass the configuration to
+   *     {@link io.grpc.LoadBalancer.ResolvedAddresses.Builder#setLoadBalancingPolicyConfig}
    */
+  @Deprecated
   public void switchTo(LoadBalancer.Factory newBalancerFactory) {
     switchToCalled = true;
     switchToInternal(newBalancerFactory);

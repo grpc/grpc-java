@@ -26,20 +26,20 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.100.Final",
-    "io.netty:netty-codec-http2:4.1.100.Final",
-    "io.netty:netty-codec-http:4.1.100.Final",
-    "io.netty:netty-codec-socks:4.1.100.Final",
-    "io.netty:netty-codec:4.1.100.Final",
-    "io.netty:netty-common:4.1.100.Final",
-    "io.netty:netty-handler-proxy:4.1.100.Final",
-    "io.netty:netty-handler:4.1.100.Final",
-    "io.netty:netty-resolver:4.1.100.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.61.Final",
-    "io.netty:netty-tcnative-classes:2.0.61.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.100.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.100.Final",
-    "io.netty:netty-transport:4.1.100.Final",
+    "io.netty:netty-buffer:4.1.110.Final",
+    "io.netty:netty-codec-http2:4.1.110.Final",
+    "io.netty:netty-codec-http:4.1.110.Final",
+    "io.netty:netty-codec-socks:4.1.110.Final",
+    "io.netty:netty-codec:4.1.110.Final",
+    "io.netty:netty-common:4.1.110.Final",
+    "io.netty:netty-handler-proxy:4.1.110.Final",
+    "io.netty:netty-handler:4.1.110.Final",
+    "io.netty:netty-resolver:4.1.110.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.65.Final",
+    "io.netty:netty-tcnative-classes:2.0.65.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.110.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.110.Final",
+    "io.netty:netty-transport:4.1.110.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
@@ -62,7 +62,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "com.google.protobuf:protobuf-java": "@com_google_protobuf//:protobuf_java",
     "com.google.protobuf:protobuf-java-util": "@com_google_protobuf//:protobuf_java_util",
-    "com.google.protobuf:protobuf-javalite": "@com_google_protobuf_javalite//:protobuf_javalite",
+    "com.google.protobuf:protobuf-javalite": "@com_google_protobuf//:protobuf_javalite",
     "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
     "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
     "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
@@ -87,13 +87,22 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 
 def grpc_java_repositories(bzlmod = False):
     """Imports dependencies for grpc-java."""
+    if not bzlmod and not native.existing_rule("dev_cel"):
+        http_archive(
+            name = "dev_cel",
+            strip_prefix = "cel-spec-0.15.0",
+            sha256 = "3ee09eb69dbe77722e9dee23dc48dc2cd9f765869fcf5ffb1226587c81791a0b",
+            urls = [
+                "https://github.com/google/cel-spec/archive/refs/tags/v0.15.0.tar.gz",
+            ],
+        )
     if not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
-            strip_prefix = "xds-e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7",
-            sha256 = "0d33b83f8c6368954e72e7785539f0d272a8aba2f6e2e336ed15fd1514bc9899",
+            strip_prefix = "xds-024c85f92f20cab567a83acc50934c7f9711d124",
+            sha256 = "5f403aa681711500ca8e62387be3e37d971977db6e88616fc21862a406430649",
             urls = [
-                "https://github.com/cncf/xds/archive/e9ce68804cb4e64cab5a52e3c8baf840d4ff87b7.tar.gz",
+                "https://github.com/cncf/xds/archive/024c85f92f20cab567a83acc50934c7f9711d124.tar.gz",
             ],
         )
     if not bzlmod and not native.existing_rule("com_github_grpc_grpc"):
@@ -107,8 +116,6 @@ def grpc_java_repositories(bzlmod = False):
         )
     if not bzlmod and not native.existing_rule("com_google_protobuf"):
         com_google_protobuf()
-    if not native.existing_rule("com_google_protobuf_javalite"):
-        com_google_protobuf_javalite()
     if not bzlmod and not native.existing_rule("com_google_googleapis"):
         http_archive(
             name = "com_google_googleapis",
@@ -132,14 +139,11 @@ def grpc_java_repositories(bzlmod = False):
     if not native.existing_rule("envoy_api"):
         http_archive(
             name = "envoy_api",
-            sha256 = "c4c9c43903e413924b0cb08e9747f3c3a0727ad221a3c446a326db32def18c60",
-            strip_prefix = "data-plane-api-1611a7304794e13efe2d26f8480a2d2473a528c5",
+            sha256 = "cb7cd388eaa297320d392c872ceb82571dee71f4b6f1c4546b0c0a399636f523",
+            strip_prefix = "data-plane-api-874e3aa8c3aa5086b6bffa2166e0e0077bb32f71",
             urls = [
-                "https://storage.googleapis.com/grpc-bazel-mirror/github.com/envoyproxy/data-plane-api/archive/1611a7304794e13efe2d26f8480a2d2473a528c5.tar.gz",
-                "https://github.com/envoyproxy/data-plane-api/archive/1611a7304794e13efe2d26f8480a2d2473a528c5.tar.gz",
+                "https://github.com/envoyproxy/data-plane-api/archive/874e3aa8c3aa5086b6bffa2166e0e0077bb32f71.tar.gz",
             ],
-            patch_args = ["-p1"],
-            patches = ["@io_grpc_grpc_java//:buildscripts/data-plane-api-no-envoy.patch"],
         )
 
 def com_google_protobuf():
@@ -148,15 +152,6 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "9bd87b8280ef720d3240514f884e56a712f2218f0d693b48050c836028940a42",
-        strip_prefix = "protobuf-25.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz"],
-    )
-
-def com_google_protobuf_javalite():
-    # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
-    http_archive(
-        name = "com_google_protobuf_javalite",
         sha256 = "9bd87b8280ef720d3240514f884e56a712f2218f0d693b48050c836028940a42",
         strip_prefix = "protobuf-25.1",
         urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz"],

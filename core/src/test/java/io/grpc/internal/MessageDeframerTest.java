@@ -31,7 +31,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import com.google.common.base.Charsets;
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
 import io.grpc.Codec;
@@ -46,6 +45,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -347,7 +347,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_readByteBelowLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
 
@@ -360,7 +360,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_readByteAtLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
 
@@ -373,7 +373,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_readByteAboveLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
@@ -390,7 +390,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_readBelowLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
       byte[] buf = new byte[10];
@@ -404,7 +404,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_readAtLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
       byte[] buf = new byte[10];
@@ -418,7 +418,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_readAboveLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
       byte[] buf = new byte[10];
@@ -435,7 +435,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_skipBelowLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
 
@@ -449,7 +449,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_skipAtLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
 
@@ -462,7 +462,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_skipAboveLimit() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
@@ -478,7 +478,7 @@ public class MessageDeframerTest {
 
     @Test
     public void sizeEnforcingInputStream_markReset() throws IOException {
-      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
       SizeEnforcingInputStream stream =
               new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
       // stream currently looks like: |foo

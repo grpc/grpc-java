@@ -265,3 +265,13 @@ java_binary(
         ":examples",
     ],
 )
+
+# grpc-xds requires some WORKSPACE/MODULE deps that aren't needed by the other
+# targets. This just makes sure the example WORKSPACE/MODULE works with
+# grpc-xds.
+java_library(
+    name = "test_grpc_xds_compiles",
+    runtime_deps = [
+        "@io_grpc_grpc_java//xds",
+    ],
+)

@@ -2,7 +2,7 @@ module(
     name = "grpc-java",
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
-    version = "0",
+    version = "1.67.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
 )
 
 # GRPC_DEPS_START
@@ -22,20 +22,20 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.100.Final",
-    "io.netty:netty-codec-http2:4.1.100.Final",
-    "io.netty:netty-codec-http:4.1.100.Final",
-    "io.netty:netty-codec-socks:4.1.100.Final",
-    "io.netty:netty-codec:4.1.100.Final",
-    "io.netty:netty-common:4.1.100.Final",
-    "io.netty:netty-handler-proxy:4.1.100.Final",
-    "io.netty:netty-handler:4.1.100.Final",
-    "io.netty:netty-resolver:4.1.100.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.61.Final",
-    "io.netty:netty-tcnative-classes:2.0.61.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.100.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.100.Final",
-    "io.netty:netty-transport:4.1.100.Final",
+    "io.netty:netty-buffer:4.1.110.Final",
+    "io.netty:netty-codec-http2:4.1.110.Final",
+    "io.netty:netty-codec-http:4.1.110.Final",
+    "io.netty:netty-codec-socks:4.1.110.Final",
+    "io.netty:netty-codec:4.1.110.Final",
+    "io.netty:netty-common:4.1.110.Final",
+    "io.netty:netty-handler-proxy:4.1.110.Final",
+    "io.netty:netty-handler:4.1.110.Final",
+    "io.netty:netty-resolver:4.1.110.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.65.Final",
+    "io.netty:netty-tcnative-classes:2.0.65.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.110.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.110.Final",
+    "io.netty:netty-transport:4.1.110.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
@@ -47,6 +47,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
+# CEL Spec may be removed when cncf/xds MODULE is no longer using protobuf 27.x
+bazel_dep(name = "cel-spec", repo_name = "dev_cel", version = "0.15.0")
 bazel_dep(name = "grpc", repo_name = "com_github_grpc_grpc", version = "1.56.3.bcr.1")
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
 bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
@@ -62,7 +64,6 @@ use_repo(
     non_module_deps,
     "com_github_cncf_xds",
     "envoy_api",
-    "com_google_protobuf_javalite",
 )
 
 grpc_repo_deps_ext = use_extension("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_repo_deps_ext")
@@ -203,5 +204,3 @@ maven.override(
 switched_rules = use_extension("@com_google_googleapis//:extensions.bzl", "switched_rules")
 
 switched_rules.use_languages(java = True)
-
-use_repo(switched_rules, "com_google_googleapis_imports")
