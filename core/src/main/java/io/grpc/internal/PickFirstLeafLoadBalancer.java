@@ -61,7 +61,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
-  private Index addressIndex;
+  private final Index addressIndex = new Index(ImmutableList.of());
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
@@ -122,9 +122,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
         ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
 
-    if (addressIndex == null) {
-      addressIndex = new Index(newImmutableAddressGroups);
-    } else if (rawConnectivityState == READY) {
+    if (rawConnectivityState == READY) {
       // If the previous ready subchannel exists in new address list,
       // keep this connection and don't create new subchannels
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
@@ -207,9 +205,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       subchannelData.getSubchannel().shutdown();
     }
     subchannels.clear();
-    if (addressIndex != null) {
-      addressIndex.updateGroups(ImmutableList.of());
-    }
+    addressIndex.updateGroups(ImmutableList.of());
     rawConnectivityState = TRANSIENT_FAILURE;
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
@@ -372,7 +368,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (addressIndex == null || !addressIndex.isValid() || rawConnectivityState == SHUTDOWN ) {
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
       return;
     }
 
@@ -477,8 +473,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private boolean isPassComplete() {
-    if (addressIndex == null || addressIndex.isValid()
-        || subchannels.size() < addressIndex.size()) {
+    if (addressIndex.isValid() || subchannels.size() < addressIndex.size()) {
       return false;
     }
     for (SubchannelData sc : subchannels.values()) {
