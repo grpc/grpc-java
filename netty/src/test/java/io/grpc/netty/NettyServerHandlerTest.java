@@ -262,8 +262,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Create a data frame and then trigger the handler to read it.
     ByteBuf frame = grpcDataFrame(STREAM_ID, endStream, contentAsArray());
     channelRead(frame);
-    channel().releaseOutbound();
     frame.clear();
+    channel().releaseOutbound();
     verify(streamListener, atLeastOnce())
         .messagesAvailable(any(StreamListener.MessageProducer.class));
     InputStream message = streamListenerMessageQueue.poll();
@@ -1337,10 +1337,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     for (int period = 0; period < 3; period++) {
       for (int i = 0; i < burstSize; i++) {
         channelRead(headersFrame(streamId, headers));
+        channel().releaseOutbound();
         channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
+        channel().releaseOutbound();
         streamId += 2;
         fakeClock().forwardNanos(rpcTimeNanos);
-        channel().releaseOutbound();
       }
       while (channel().readOutbound() != null) {}
       fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
