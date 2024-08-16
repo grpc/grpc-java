@@ -1,2 +1,0 @@
-io.grpc.ServiceProvidersTest$UnavailableProvider
-io.grpc.ServiceProvidersTest$Available7Provider

@@ -1,0 +1,18 @@
+syntax = "proto3";
+option java_package = "com.grpc";
+
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+  //string name = 1;
+  bytes key_data = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+  string message = 1;
+}

@@ -1,5 +1,0 @@
-java_library(
-    name = "context",
-    visibility = ["//visibility:public"],
-    exports = ["//api"],
-)
