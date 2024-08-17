@@ -33,7 +33,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -426,16 +425,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    SynchronizationContext synchronizationContext = null;
-    try {
-      synchronizationContext = helper.getSynchronizationContext();
-    } catch (NullPointerException e) {
-      // All helpers should have a sync context, but if one doesn't (ex. user had a custom test)
-      // we don't want to break previously working functionality.
-      return;
-    }
-
-    scheduleConnectionTask = synchronizationContext.schedule(
+    scheduleConnectionTask = helper.getSynchronizationContext().schedule(
         new StartNextConnection(),
         CONNECTION_DELAY_INTERVAL_MS,
         TimeUnit.MILLISECONDS,
