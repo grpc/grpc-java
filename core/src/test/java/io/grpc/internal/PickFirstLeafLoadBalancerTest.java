@@ -1121,10 +1121,17 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
     inOrder.verify(mockSubchannel1).shutdown();
-    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    inOrder.verify(mockSubchannel3, never()).start(stateListenerCaptor.capture());
+
+    // Trigger connection creation
+    picker = pickerCaptor.getValue();
+    assertEquals(PickResult.withNoResult(), picker.pickSubchannel(mockArgs));
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel3).requestConnection();
+    stateListener3.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
     if (enableHappyEyeballs) {
       forwardTimeByConnectionDelay();
@@ -1171,17 +1178,19 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newestServers).setAttributes(affinity).build());
     inOrder.verify(mockSubchannel3).shutdown();
-    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    inOrder.verify(mockSubchannel1n2).start(stateListenerCaptor.capture());
-    stateListener = stateListenerCaptor.getValue();
-    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
     picker = pickerCaptor.getValue();
 
     // Calling pickSubchannel() twice gave the same result
     assertEquals(picker.pickSubchannel(mockArgs), picker.pickSubchannel(mockArgs));
 
     // But the picker calls requestConnection() only once
+    inOrder.verify(mockSubchannel1n2).start(stateListenerCaptor.capture());
+    stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockSubchannel1n2).requestConnection();
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     assertEquals(PickResult.withNoResult(), pickerCaptor.getValue().pickSubchannel(mockArgs));
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 

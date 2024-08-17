@@ -152,20 +152,18 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    if (oldAddrs.size() == 0 || rawConnectivityState == CONNECTING
-        || rawConnectivityState == READY) {
-      // start connection attempt at first address
+    if (oldAddrs.size() == 0) {
+      // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
       updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
-      cancelScheduleTask();
-      requestConnection();
+    }
 
-    } else if (rawConnectivityState == IDLE) {
-      // start connection attempt at first address when requested
-      SubchannelPicker picker = new RequestConnectionPicker(this);
-      updateBalancingState(IDLE, picker);
+    if (rawConnectivityState == READY) {
+      // connect from beginning when prompted
+      rawConnectivityState = IDLE;
+      updateBalancingState(IDLE, new RequestConnectionPicker(this));
 
-    } else if (rawConnectivityState == TRANSIENT_FAILURE) {
+    } else if (rawConnectivityState == CONNECTING || rawConnectivityState == TRANSIENT_FAILURE) {
       // start connection attempt at first address
       cancelScheduleTask();
       requestConnection();
