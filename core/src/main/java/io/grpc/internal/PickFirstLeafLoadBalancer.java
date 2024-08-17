@@ -130,9 +130,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         SubchannelData subchannelData = subchannels.get(previousAddress);
         subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
         return Status.OK;
-      } else {
-        addressIndex.reset(); // Previous ready subchannel not in the new list of addresses
       }
+      // Previous ready subchannel not in the new list of addresses
     } else {
       addressIndex.updateGroups(newImmutableAddressGroups);
     }
