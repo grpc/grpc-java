@@ -395,12 +395,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         addressIndex.increment();
         requestConnection();
         break;
-      case READY: // Shouldn't ever happen
-        log.warning("Requesting a connection even though we have a READY subchannel");
-        break;
-      case SHUTDOWN:
       default:
-        // Makes checkstyle happy
+        // Wait for current subchannel to change state
     }
   }
 
