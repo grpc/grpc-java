@@ -361,11 +361,7 @@ public class PickFirstLeafLoadBalancerTest {
     // Second acceptResolvedAddresses shouldn't do anything
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
-    if (enableHappyEyeballs) {
-      inOrder.verify(mockSubchannel1, never()).requestConnection();
-    } else {
-      inOrder.verify(mockSubchannel1, times(1)).requestConnection();
-    }
+    inOrder.verify(mockSubchannel1, never()).requestConnection();
     inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
   }
 
@@ -862,8 +858,7 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.requestConnection();
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
-    int expectedRequests = enableHappyEyeballs ? 1 : 2;
-    inOrder.verify(mockSubchannel2, times(expectedRequests)).requestConnection();
+    inOrder.verify(mockSubchannel2).requestConnection();
 
     stateListener2.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
 
@@ -871,11 +866,7 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.requestConnection();
     inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
     inOrder.verify(mockSubchannel1, never()).requestConnection();
-    if (enableHappyEyeballs) {
-      inOrder.verify(mockSubchannel2, never()).requestConnection();
-    } else {
-      inOrder.verify(mockSubchannel2).requestConnection();
-    }
+    inOrder.verify(mockSubchannel2, never()).requestConnection();
   }
 
   @Test

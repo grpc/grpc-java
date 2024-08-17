@@ -385,11 +385,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         scheduleNextConnection();
         break;
       case CONNECTING:
-        if (enableHappyEyeballs) {
-          scheduleNextConnection();
-        } else {
-          subchannelData.subchannel.requestConnection();
-        }
+        scheduleNextConnection();
         break;
       case TRANSIENT_FAILURE:
         addressIndex.increment();
