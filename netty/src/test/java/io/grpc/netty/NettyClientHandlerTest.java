@@ -16,7 +16,7 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;

@@ -16,7 +16,7 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
