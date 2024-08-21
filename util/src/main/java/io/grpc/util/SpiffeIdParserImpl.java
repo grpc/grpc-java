@@ -22,49 +22,42 @@ public class SpiffeIdParserImpl implements SpiffeIdParser {
     }
     validateTrustDomain(trustDomain);
     validatePath(path);
+    if (!path.isEmpty()) {
+      path = "/" + path;
+    }
     return new SpiffeIdInfoImpl(trustDomain, path);
   }
 
   private static void validateFormat(String uri) throws IllegalArgumentException {
     checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
-    checkArgument(uri.startsWith(PREFIX), "Spiffe Id must start with " + PREFIX);
+    checkArgument(uri.toLowerCase().startsWith(PREFIX), "Spiffe Id must start with " + PREFIX);
     checkArgument(!uri.contains("#"), "Spiffe Id must not contain query fragments");
     checkArgument(!uri.contains("?"), "Spiffe Id must not contain query parameters");
   }
 
   private static void validateTrustDomain(String trustDomain) throws IllegalArgumentException {
-    if (trustDomain.length() == 0) {
-      throw new IllegalArgumentException("Trust Domain can't be empty");
-    }
-    if (!trustDomain.matches("[a-z0-9._-]+")) {
-      throw new IllegalArgumentException("Trust Domain must contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])");
-    }
+    checkArgument(!trustDomain.isEmpty(), "Trust Domain can't be empty");
+    checkArgument(trustDomain.length() < 256, "Trust Domain maximum length is 255 characters");
+    checkArgument(trustDomain.matches("[a-z0-9._-]+"),
+        "Trust Domain must contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])");
   }
 
   private static void validatePath(String path) {
-    if (path.length() == 0) {
-      throw new IllegalArgumentException("Path can't be empty");
+    if (path.isEmpty()) {
+      return;
     }
-    String pathWithoutPrefix = path.substring(1);
-    for (String segment : pathWithoutPrefix.split("/")) {
-      validatePathSegmentCharacters(segment);
+    checkArgument(!path.endsWith("/"), "Path must not include a trailing '/'");
+    for (String segment : path.split("/")) {
+      validatePathSegment(segment);
     }
   }
 
-  private static void validatePathSegmentCharacters(String pathSegment) {
-    boolean valid =
-      pathSegment
-        .chars()
-        .allMatch(
-            c -> {
-              char ch = (char) c;
-              return (ch >= '0' && ch <= '9')
-                  || (ch >= 'a' && ch <= 'z')
-                  || (ch >= 'A' && ch <= 'Z');
-            });
-    if (!valid) {
-      throw new IllegalArgumentException("Path contains illegal characters");
-    }
+  private static void validatePathSegment(String pathSegment) {
+    checkArgument(!pathSegment.isEmpty(), "Individual path segments must not be empty");
+    checkArgument(!(pathSegment.equals(".") || pathSegment.equals("..")),
+        "Individual path segments must not be relative path modifiers (i.e. ., ..)");
+    checkArgument(pathSegment.matches("[a-zA-Z0-9._-]+"),
+        "Individual path segments must contain only letters, numbers, dots, dashes, and underscores ([a-zA-Z0-9.-_])");
   }
 
   private static class SpiffeIdInfoImpl implements SpiffeIdInfo {
