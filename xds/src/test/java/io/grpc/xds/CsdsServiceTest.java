@@ -458,23 +458,11 @@ public class CsdsServiceTest {
       return null;
     }
 
-    @Nullable
-    @Override
-    public Collection<String> getSubscribedResources(
-        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority) {
-      return null;
-    }
-
     @Override
     public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
       return ImmutableMap.of();
     }
 
-    @Override
-    public void assignResourcesToOwner(XdsResourceType<?> type, Collection<String> resources,
-                                       Object owner) {
-      // No-op.
-    }
   }
 
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
