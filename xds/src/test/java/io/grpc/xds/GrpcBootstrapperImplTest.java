@@ -65,7 +65,6 @@ public class GrpcBootstrapperImplTest {
   @Before
   public void setUp() {
     saveEnvironment();
-    System.setProperty(BootstrapperImpl.GRPC_EXPERIMENTAL_XDS_FALLBACK, "true");
     bootstrapper.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
   }
 

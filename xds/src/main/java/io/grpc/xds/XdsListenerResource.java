@@ -114,11 +114,6 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
   }
 
-  @Override
-  public boolean isSharedName() {
-    return true;
-  }
-
   private LdsUpdate processClientSideListener(Listener listener)
       throws ResourceInvalidException {
     // Unpack HttpConnectionManager from the Listener.

@@ -41,9 +41,6 @@ import java.util.Map;
 @Internal
 public abstract class BootstrapperImpl extends Bootstrapper {
 
-  public static final String GRPC_EXPERIMENTAL_XDS_FALLBACK =
-      "GRPC_EXPERIMENTAL_XDS_FALLBACK";
-
   // Client features.
   @VisibleForTesting
   public static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
@@ -62,17 +59,10 @@ public abstract class BootstrapperImpl extends Bootstrapper {
     logger = XdsLogger.withLogId(InternalLogId.allocate("bootstrapper", null));
   }
 
-  // Delayed initialization of xdsFallbackEnabled to allow for flag initialization.
-  public static boolean isEnabledXdsFallback() {
-    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, false);
-  }
-
   protected abstract String getJsonContent() throws IOException, XdsInitializationException;
 
   protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException;
-
-
 
   /**
    * Reads and parses bootstrap config. The config is expected to be in JSON format.
@@ -112,9 +102,6 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
     List<ServerInfo> servers = parseServerInfos(rawServerConfigs, logger);
-    if (servers.size() > 1 && !isEnabledXdsFallback()) {
-      servers = ImmutableList.of(servers.get(0));
-    }
     builder.servers(servers);
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -221,9 +208,6 @@ public abstract class BootstrapperImpl extends Bootstrapper {
         if (rawAuthorityServers == null || rawAuthorityServers.isEmpty()) {
           authorityServers = servers;
         } else {
-          if (rawAuthorityServers.size() > 1 && !isEnabledXdsFallback()) {
-            rawAuthorityServers = ImmutableList.of(rawAuthorityServers.get(0));
-          }
           authorityServers = parseServerInfos(rawAuthorityServers, logger);
         }
         authorityInfoMapBuilder.put(
