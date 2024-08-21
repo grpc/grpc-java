@@ -86,6 +86,7 @@ public class CsdsServiceTest {
   private static final XdsResourceType<?> CDS = XdsClusterResource.getInstance();
   private static final XdsResourceType<?> RDS = XdsRouteConfigureResource.getInstance();
   private static final XdsResourceType<?> EDS = XdsEndpointResource.getInstance();
+  public static final String FAKE_CLIENT_SCOPE = "fake";
 
   @RunWith(JUnit4.class)
   public static class ServiceTests {
@@ -273,6 +274,7 @@ public class CsdsServiceTest {
       ClientConfig clientConfig = response.getConfig(0);
       verifyClientConfigNode(clientConfig);
       verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+      assertThat(clientConfig.getClientScope()).isEmpty();
     }
 
     private void verifyRequestInvalidResponseStatus(Status status) {
@@ -351,9 +353,11 @@ public class CsdsServiceTest {
           );
         }
       };
-      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient, "fake");
+      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient,
+          FAKE_CLIENT_SCOPE);
 
       verifyClientConfigNode(clientConfig);
+      assertThat(clientConfig.getClientScope()).isEqualTo(FAKE_CLIENT_SCOPE);
 
       // Minimal verification to confirm that the data/metadata XdsClient provides,
       // is propagated to the correct resource types.
@@ -392,9 +396,10 @@ public class CsdsServiceTest {
     @Test
     public void getClientConfigForXdsClient_noSubscribedResources() throws InterruptedException {
       ClientConfig clientConfig =
-          CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES, "fake");
+          CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES, FAKE_CLIENT_SCOPE);
       verifyClientConfigNode(clientConfig);
       verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+      assertThat(clientConfig.getClientScope()).isEqualTo(FAKE_CLIENT_SCOPE);
     }
   }
 
