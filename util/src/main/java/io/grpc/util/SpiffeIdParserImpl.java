@@ -1,5 +1,8 @@
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+
 public class SpiffeIdParserImpl implements SpiffeIdParser {
 
   private final static String PREFIX = "spiffe://";
@@ -17,22 +20,16 @@ public class SpiffeIdParserImpl implements SpiffeIdParser {
       trustDomain = parts[0];
       path = parts[1];
     }
+    validateTrustDomain(trustDomain);
+    validatePath(path);
     return new SpiffeIdInfoImpl(trustDomain, path);
   }
 
   private static void validateFormat(String uri) throws IllegalArgumentException {
-    if (uri == null || uri.length()==0) {
-      throw new IllegalArgumentException("Spiffe Id can't be empty");
-    }
-    if (!uri.startsWith(PREFIX)) {
-      throw new IllegalArgumentException("Spiffe Id must start with " + PREFIX);
-    }
-    if (uri.contains("#")) {
-      throw new IllegalArgumentException("Spiffe Id must not contain query fragments");
-    }
-    if (uri.contains("?")) {
-      throw new IllegalArgumentException("Spiffe Id must not contain query parameters");
-    }
+    checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
+    checkArgument(uri.startsWith(PREFIX), "Spiffe Id must start with " + PREFIX);
+    checkArgument(!uri.contains("#"), "Spiffe Id must not contain query fragments");
+    checkArgument(!uri.contains("?"), "Spiffe Id must not contain query parameters");
   }
 
   private static void validateTrustDomain(String trustDomain) throws IllegalArgumentException {
@@ -40,7 +37,7 @@ public class SpiffeIdParserImpl implements SpiffeIdParser {
       throw new IllegalArgumentException("Trust Domain can't be empty");
     }
     if (!trustDomain.matches("[a-z0-9._-]+")) {
-      throw new IllegalArgumentException("Trust Domain contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])");
+      throw new IllegalArgumentException("Trust Domain must contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])");
     }
   }
 
