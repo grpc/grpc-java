@@ -107,7 +107,7 @@ public class CsdsServiceTest {
       // because true->false return mutation prevents fetchClientStatus from completing the request.
       csdsStub = ClientStatusDiscoveryServiceGrpc
           .newBlockingStub(grpcServerRule.getChannel())
-          .withDeadline(Deadline.after(30, TimeUnit.SECONDS));
+          .withDeadline(Deadline.after(3, TimeUnit.SECONDS));
       csdsAsyncStub = ClientStatusDiscoveryServiceGrpc.newStub(grpcServerRule.getChannel());
     }
 
