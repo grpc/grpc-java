@@ -146,19 +146,15 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
             log.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
           }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          try {
-            xdsClient = new XdsClientImpl(
-                DEFAULT_XDS_TRANSPORT_FACTORY,
-                bootstrapInfo,
-                scheduler,
-                BACKOFF_POLICY_PROVIDER,
-                GrpcUtil.STOPWATCH_SUPPLIER,
-                TimeProvider.SYSTEM_TIME_PROVIDER,
-                MessagePrinter.INSTANCE,
-                new TlsContextManagerImpl(bootstrapInfo));
-          } catch (Exception e) {
-            throw new RuntimeException(e);
-          }
+          xdsClient = new XdsClientImpl(
+              DEFAULT_XDS_TRANSPORT_FACTORY,
+              bootstrapInfo,
+              scheduler,
+              BACKOFF_POLICY_PROVIDER,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              TimeProvider.SYSTEM_TIME_PROVIDER,
+              MessagePrinter.INSTANCE,
+              new TlsContextManagerImpl(bootstrapInfo));
         }
         refCount++;
         return xdsClient;
