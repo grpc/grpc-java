@@ -79,7 +79,7 @@ public final class ShadingTest {
     InputStream inputStream = NettyChannelBuilder.class.getClassLoader()
         .getResourceAsStream(
             "META-INF/native-image/io.grpc.netty.shaded.io.netty/netty-transport/"
-                + "reflection-config.json");
+                + "reflect-config.json");
     assertThat(inputStream).isNotNull();
 
     Scanner s = new Scanner(inputStream, StandardCharsets.UTF_8.name()).useDelimiter("\\A");

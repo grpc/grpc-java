@@ -16,8 +16,8 @@
 
 package io.grpc;
 
-import static com.google.common.base.Charsets.US_ASCII;
-import static com.google.common.base.Charsets.UTF_8;
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
