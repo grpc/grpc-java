@@ -38,8 +38,6 @@ import io.grpc.xds.internal.security.certprovider.CertificateProviderProvider;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderRegistry;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderStore;
 import io.grpc.xds.internal.security.certprovider.TestCertificateProvider;
-import java.io.IOException;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;

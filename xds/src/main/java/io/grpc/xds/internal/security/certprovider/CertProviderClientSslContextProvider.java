@@ -63,7 +63,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
               savedTrustedRoots.toArray(new X509Certificate[0]),
               certificateValidationContextdationContext));
     }
-    if (certKeyAndTrustedRootsNeeded()) {
+    if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }
     return sslContextBuilder;

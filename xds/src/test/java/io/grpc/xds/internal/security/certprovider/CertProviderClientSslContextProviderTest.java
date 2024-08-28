@@ -338,7 +338,8 @@ public class CertProviderClientSslContextProviderTest {
   }
 
   @Test
-  public void testProviderForClient_rootInstanceNull_and_notUsingSystemRootCerts_expectError() throws Exception {
+  public void testProviderForClient_rootInstanceNull_and_notUsingSystemRootCerts_expectError()
+      throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
@@ -352,12 +353,14 @@ public class CertProviderClientSslContextProviderTest {
           /* staticCertValidationContext= */ null);
       fail("exception expected");
     } catch (UnsupportedOperationException expected) {
-      assertThat(expected).hasMessageThat().contains("Unsupported configurations in UpstreamTlsContext!");
+      assertThat(expected).hasMessageThat().contains("Unsupported configurations in "
+          + "UpstreamTlsContext!");
     }
   }
 
   @Test
-  public void testProviderForClient_rootInstanceNull_but_isUsingSystemRootCerts_valid() throws Exception {
+  public void testProviderForClient_rootInstanceNull_but_isUsingSystemRootCerts_valid()
+      throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(

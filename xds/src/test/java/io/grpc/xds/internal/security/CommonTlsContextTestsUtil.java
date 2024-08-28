@@ -288,7 +288,7 @@ public class CommonTlsContextTestsUtil {
       combined = combined.setDefaultValidationContext(staticCertValidationContext);
     }
     if (combined.hasValidationContextCertificateProviderInstance()
-    || combined.hasDefaultValidationContext()) {
+        || combined.hasDefaultValidationContext()) {
       builder = builder.setCombinedValidationContext(combined.build());
     }
     return builder;
@@ -308,7 +308,8 @@ public class CommonTlsContextTestsUtil {
               .setInstanceName(rootInstanceName)
               .setCertificateName(rootCertName)
               .build();
-      validationContextBuilder = validationContextBuilder.setCaCertificateProviderInstance(providerInstance);
+      validationContextBuilder = validationContextBuilder.setCaCertificateProviderInstance(
+          providerInstance);
     }
     return builder.setValidationContext(validationContextBuilder);
   }

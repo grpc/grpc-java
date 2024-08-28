@@ -61,7 +61,7 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
     SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(savedKey, savedCertChain);
     setClientAuthValues(
         sslContextBuilder,
-        trustedRootsNeeded()
+        isMtls()
             ? new XdsTrustManagerFactory(
                 savedTrustedRoots.toArray(new X509Certificate[0]),
                 certificateValidationContextdationContext)

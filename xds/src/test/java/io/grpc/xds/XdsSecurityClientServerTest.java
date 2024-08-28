@@ -67,22 +67,25 @@ import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import io.netty.handler.ssl.NotSslRecordException;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
@@ -90,7 +93,6 @@ import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -162,15 +164,13 @@ public class XdsSecurityClientServerTest {
    */
   @Test
   public void tlsClientServer_useSystemRootCerts_useCombinedValidationContext() throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
-      System.setProperty("javax.net.ssl.trustStore", getCacertFilePathForTestCa());
-      System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
-      System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
       DownstreamTlsContext downstreamTlsContext =
           setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
       buildServerWithTlsContext(downstreamTlsContext);
 
-      // for TLS, client only needs trustCa
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
               CLIENT_PEM_FILE, true);
@@ -179,7 +179,8 @@ public class XdsSecurityClientServerTest {
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
       assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
     } finally {
-      Files.deleteIfExists(Paths.get("./cacerts-testca.jks"));
+      Files.deleteIfExists(trustStoreFilePath);
+      clearTrustStoreSystemProperties();
     }
   }
 
@@ -189,15 +190,13 @@ public class XdsSecurityClientServerTest {
    */
   @Test
   public void tlsClientServer_useSystemRootCerts_validationContext() throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa().toAbsolutePath();
     try {
-      System.setProperty( "javax.net.ssl.trustStore", getCacertFilePathForTestCa());
-      System.setProperty( "javax.net.ssl.trustStorePassword", "changeit");
-      System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
       DownstreamTlsContext downstreamTlsContext =
           setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
       buildServerWithTlsContext(downstreamTlsContext);
 
-      // for TLS, client only needs trustCa
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
               CLIENT_PEM_FILE, false);
@@ -206,19 +205,50 @@ public class XdsSecurityClientServerTest {
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
       assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
     } finally {
-      Files.deleteIfExists(Paths.get("./cacerts-testca.jks"));
+      Files.deleteIfExists(trustStoreFilePath.toAbsolutePath());
+      clearTrustStoreSystemProperties();
     }
   }
 
-  private String getCacertFilePathForTestCa() throws URISyntaxException, IOException {
-    final URI uri = getClass().getResource("/certs/cacerts-testca.jks").toURI();
-    Map<String, String> env = new HashMap<>();
-    env.put("create", "true");
-    FileSystem fileSystem = FileSystems.newFileSystem(uri, env);
-    Path cacertsFile = Paths.get("./cacerts-testca.jks");
-    Files.copy(Paths.get(uri), cacertsFile);
-    fileSystem.close();
-    return cacertsFile.toAbsolutePath().toString();
+  /**
+   * Use system root ca cert for TLS channel - mTLS.
+   * Uses common_tls_context.combined_validation_context in upstream_tls_context.
+   */
+  @Test
+  public void tlsClientServer_useSystemRootCerts_requireClientAuth() throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa().toAbsolutePath();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, true);
+
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+      assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath.toAbsolutePath());
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  private Path getCacertFilePathForTestCa()
+      throws IOException, KeyStoreException, CertificateException, NoSuchAlgorithmException {
+    KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keystore.load(null, null);
+    InputStream caCertStream = getClass().getResource("/certs/ca.pem").openStream();
+    keystore.setCertificateEntry("testca", CertificateFactory.getInstance("X.509")
+        .generateCertificate(caCertStream));
+    caCertStream.close();
+    File trustStoreFile = File.createTempFile("testca-truststore", "jks");
+    FileOutputStream out = new FileOutputStream(trustStoreFile);
+    keystore.store(out, "changeit".toCharArray());
+    out.close();
+    return trustStoreFile.toPath();
   }
 
   @Test
@@ -546,6 +576,18 @@ public class XdsSecurityClientServerTest {
     });
     xdsClient.ldsResource.get(8000, TimeUnit.MILLISECONDS);
     return settableFuture;
+  }
+
+  private void setTrustStoreSystemProperties(String trustStoreFilePath) {
+    System.setProperty("javax.net.ssl.trustStore", trustStoreFilePath);
+    System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
+    System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+  }
+
+  private void clearTrustStoreSystemProperties() {
+    System.clearProperty("javax.net.ssl.trustStore");
+    System.clearProperty("javax.net.ssl.trustStorePassword");
+    System.clearProperty("javax.net.ssl.trustStoreType");
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

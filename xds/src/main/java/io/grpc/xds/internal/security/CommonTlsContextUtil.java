@@ -68,7 +68,8 @@ public final class CommonTlsContextUtil {
 
   public static boolean isUsingSystemRootCerts(CommonTlsContext commonTlsContext) {
     if (commonTlsContext.hasCombinedValidationContext()) {
-      return commonTlsContext.getCombinedValidationContext().getDefaultValidationContext().hasSystemRootCerts();
+      return commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()
+          .hasSystemRootCerts();
     }
     if (commonTlsContext.hasValidationContext()) {
       return commonTlsContext.getValidationContext().hasSystemRootCerts();

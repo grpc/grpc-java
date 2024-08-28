@@ -2503,7 +2503,8 @@ public class GrpcXdsClientImplDataTest {
             .setValidationContext(CertificateValidationContext.getDefaultInstance())
             .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required in upstream-tls-context");
+    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required "
+        + "in upstream-tls-context");
     XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -2706,7 +2707,8 @@ public class GrpcXdsClientImplDataTest {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required in upstream-tls-context");
+    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required "
+        + "in upstream-tls-context");
     XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -2719,7 +2721,8 @@ public class GrpcXdsClientImplDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "ca_certificate_provider_instance or system_root_certs is required in upstream-tls-context");
+        "ca_certificate_provider_instance or system_root_certs is required in "
+            + "upstream-tls-context");
     XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 

@@ -41,6 +41,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable protected PrivateKey savedKey;
   @Nullable protected List<X509Certificate> savedCertChain;
   @Nullable protected List<X509Certificate> savedTrustedRoots;
+  private final boolean isUsingSystemRootCerts;
 
   protected CertProviderSslContextProvider(
       Node node,
@@ -83,6 +84,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     } else {
       rootCertHandle = null;
     }
+    this.isUsingSystemRootCerts = CommonTlsContextUtil.isUsingSystemRootCerts(
+        tlsContext.getCommonTlsContext());
   }
 
   private static CertificateProviderInfo getCertProviderConfig(
@@ -150,17 +153,17 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   private void updateSslContextWhenReady() {
-    if (certKeyAndTrustedRootsNeeded()) {
-      if (savedKey != null && savedTrustedRoots != null) {
+    if (isMtls()) {
+      if (savedKey != null && (savedTrustedRoots != null || isUsingSystemRootCerts)) {
         updateSslContext();
         clearKeysAndCerts();
       }
-    } else if (trustedRootsNeeded()) {
+    } else if (isClientSideTls()) {
       if (savedTrustedRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
-    } else if (certKeyNeeded()) {
+    } else if (isServerSideTls()) {
       if (savedKey != null) {
         updateSslContext();
         clearKeysAndCerts();
@@ -174,15 +177,15 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     savedCertChain = null;
   }
 
-  protected final boolean certKeyAndTrustedRootsNeeded() {
-    return certInstance != null && rootCertInstance != null;
+  protected final boolean isMtls() {
+    return certInstance != null && (rootCertInstance != null || isUsingSystemRootCerts);
   }
 
-  protected final boolean trustedRootsNeeded() {
+  protected final boolean isClientSideTls() {
     return rootCertInstance != null && certInstance == null;
   }
 
-  protected final boolean certKeyNeeded() {
+  protected final boolean isServerSideTls() {
     return certInstance != null && rootCertInstance == null;
   }
 
