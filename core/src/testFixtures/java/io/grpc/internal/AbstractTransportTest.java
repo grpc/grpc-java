@@ -252,7 +252,7 @@ public abstract class AbstractTransportTest {
 
   /**
    * Specific test for {@link InProcessTransport} to verify assumedMessageSize.
-   * For more goto: {@link #11406}
+   * For more goto: <a href="#11406">link</a>
    */
   protected void assertInProcessTransportAssumedMessageSize(
           TestStreamTracer streamTracerSender, TestStreamTracer streamTracerReceiver) {
