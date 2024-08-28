@@ -269,23 +269,25 @@ public class CommonTlsContextTestsUtil {
       String rootInstanceName,
       String rootCertName,
       CertificateValidationContext staticCertValidationContext) {
+    CertificateProviderInstance providerInstance = null;
     if (rootInstanceName != null) {
-      CertificateProviderInstance providerInstance =
-          CertificateProviderInstance.newBuilder()
-              .setInstanceName(rootInstanceName)
-              .setCertificateName(rootCertName)
-              .build();
-      if (staticCertValidationContext != null) {
-        CombinedCertificateValidationContext combined =
-            CombinedCertificateValidationContext.newBuilder()
-                .setDefaultValidationContext(staticCertValidationContext)
-                .setValidationContextCertificateProviderInstance(providerInstance)
-                .build();
-        return builder.setCombinedValidationContext(combined);
-      }
-      builder = builder.setValidationContextCertificateProviderInstance(providerInstance);
+      providerInstance = CertificateProviderInstance.newBuilder()
+          .setInstanceName(rootInstanceName)
+          .setCertificateName(rootCertName)
+          .build();
     }
-    return builder;
+    if (providerInstance != null) {
+      return builder.setValidationContextCertificateProviderInstance(providerInstance);
+    }
+    CombinedCertificateValidationContext.Builder combined =
+        CombinedCertificateValidationContext.newBuilder();
+    if (providerInstance != null) {
+      combined = combined.setValidationContextCertificateProviderInstance(providerInstance);
+    }
+    if (staticCertValidationContext != null) {
+      combined = combined.setDefaultValidationContext(staticCertValidationContext);
+    }
+    return builder.setCombinedValidationContext(combined.build());
   }
 
   private static CommonTlsContext.Builder addNewCertificateValidationContext(
@@ -293,19 +295,18 @@ public class CommonTlsContextTestsUtil {
           String rootInstanceName,
           String rootCertName,
           CertificateValidationContext staticCertValidationContext) {
+    CertificateValidationContext.Builder validationContextBuilder =
+        staticCertValidationContext != null ? staticCertValidationContext.toBuilder()
+            : CertificateValidationContext.newBuilder();
     if (rootInstanceName != null) {
       CertificateProviderPluginInstance providerInstance =
           CertificateProviderPluginInstance.newBuilder()
               .setInstanceName(rootInstanceName)
               .setCertificateName(rootCertName)
               .build();
-      CertificateValidationContext.Builder validationContextBuilder =
-          staticCertValidationContext != null ? staticCertValidationContext.toBuilder()
-              : CertificateValidationContext.newBuilder();
-      return builder.setValidationContext(
-          validationContextBuilder.setCaCertificateProviderInstance(providerInstance));
+      validationContextBuilder = validationContextBuilder.setCaCertificateProviderInstance(providerInstance);
     }
-    return builder;
+    return builder.setValidationContext(validationContextBuilder);
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */

@@ -285,22 +285,6 @@ public class ClientSslContextProviderFactoryTest {
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
 
-  @Test
-  public void createNullCommonTlsContext_exception() throws IOException {
-    clientSslContextProviderFactory =
-            new ClientSslContextProviderFactory(
-                    null, certProviderClientSslContextProviderFactory);
-    UpstreamTlsContext upstreamTlsContext = new UpstreamTlsContext(null);
-    try {
-      clientSslContextProviderFactory.create(upstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (NullPointerException expected) {
-      assertThat(expected)
-              .hasMessageThat()
-              .isEqualTo("upstreamTlsContext should have CommonTlsContext");
-    }
-  }
-
   static void createAndRegisterProviderProvider(
       CertificateProviderRegistry certificateProviderRegistry,
       final CertificateProvider.DistributorWatcher[] watcherCaptor,

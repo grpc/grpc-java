@@ -31,6 +31,7 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
@@ -372,8 +373,12 @@ public class XdsSecurityClientServerTest {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null);
-    return CommonTlsContextTestsUtil.buildUpstreamTlsContextForUsingSystemRootTrustCerts(
-        "google_cloud_private_spiffe-client", "ROOT");
+    return CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
+        "google_cloud_private_spiffe-client", "ROOT", null,
+        null, null, CertificateValidationContext.newBuilder()
+            .setSystemRootCerts(
+                CertificateValidationContext.SystemRootCerts.newBuilder().build())
+            .build());
   }
 
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)

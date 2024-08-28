@@ -44,18 +44,9 @@ final class ClientSslContextProviderFactory
   /** Creates an SslContextProvider from the given UpstreamTlsContext. */
   @Override
   public SslContextProvider create(UpstreamTlsContext upstreamTlsContext) {
-    checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-    checkNotNull(
-        upstreamTlsContext.getCommonTlsContext(),
-        "upstreamTlsContext should have CommonTlsContext");
-    if (CommonTlsContextUtil.hasCertProviderInstance(upstreamTlsContext.getCommonTlsContext())
-        || upstreamTlsContext.getCommonTlsContext().getCombinedValidationContextOrBuilder()
-            .getDefaultValidationContext().hasSystemRootCerts()) {
-      return certProviderClientSslContextProviderFactory.getProvider(
-          upstreamTlsContext,
-          bootstrapInfo.node().toEnvoyProtoNode(),
-          bootstrapInfo.certProviders());
-    }
-    throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");
+    return certProviderClientSslContextProviderFactory.getProvider(
+        upstreamTlsContext,
+        bootstrapInfo.node().toEnvoyProtoNode(),
+        bootstrapInfo.certProviders());
   }
 }

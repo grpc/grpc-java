@@ -46,6 +46,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -430,9 +431,10 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
     String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
     if (rootCaInstanceName == null) {
-      if (!server) {
+      if (!server && !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext)) {
         throw new ResourceInvalidException(
-            "ca_certificate_provider_instance is required in upstream-tls-context");
+            "ca_certificate_provider_instance or system_root_certs is required in "
+                + "upstream-tls-context");
       }
     } else {
       if (certProviderInstances == null || !certProviderInstances.contains(rootCaInstanceName)) {
