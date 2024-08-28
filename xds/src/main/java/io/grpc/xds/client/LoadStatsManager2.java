@@ -91,7 +91,7 @@ public final class LoadStatsManager2 {
       String cluster, @Nullable String edsServiceName) {
     checkState(allDropStats.containsKey(cluster)
             && allDropStats.get(cluster).containsKey(edsServiceName),
-        "stats for cluster %s, edsServiceName %s not exits", cluster, edsServiceName);
+        "stats for cluster %s, edsServiceName %s not exist", cluster, edsServiceName);
     ReferenceCounted<ClusterDropStats> ref = allDropStats.get(cluster).get(edsServiceName);
     ref.release();
   }

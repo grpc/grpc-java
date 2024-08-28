@@ -157,6 +157,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
   private Status shutdownReason;
 
+  private volatile Attributes connectedAddressAttributes;
+
   InternalSubchannel(List<EquivalentAddressGroup> addressGroups, String authority, String userAgent,
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
@@ -525,6 +527,13 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     return channelStatsFuture;
   }
 
+  /**
+   * Return attributes for server address connected by sub channel.
+   */
+  public Attributes getConnectedAddressAttributes() {
+    return connectedAddressAttributes;
+  }
+
   ConnectivityState getState() {
     return state.getState();
   }
@@ -568,6 +577,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           } else if (pendingTransport == transport) {
             activeTransport = transport;
             pendingTransport = null;
+            connectedAddressAttributes = addressIndex.getCurrentEagAttributes();
             gotoNonErrorState(READY);
           }
         }
