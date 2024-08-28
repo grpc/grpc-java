@@ -212,7 +212,16 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
     this.serverImplBuilder.setStatsEnabled(value);
   }
 
+  /**
+   * Sets whether to include the provided messageSize or not and is propagated
+   * forward to InProcessTransport. This was added to not calculate messageSize
+   * if already provided while calling builder.
+   *
+   * @param assumedMessageSize length of InProcess transport's messageSize
+   * @return this
+   */
   public InProcessServerBuilder assumedMessageSize(long assumedMessageSize) {
+    Preconditions.checkArgument(assumedMessageSize >= 0, "assumedMessageSize must be >= 0");
     this.assumedMessageSize = assumedMessageSize;
     return this;
   }

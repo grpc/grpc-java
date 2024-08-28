@@ -62,7 +62,6 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
@@ -429,17 +428,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
     }
 
-    private long getKnownLength(InputStream inputStream) {
-      try {
-        return inputStream.available();
-      } catch (IOException | RuntimeException e) {
-        throw Status.INTERNAL
-                .withDescription("Failed to calculate size")
-                .withCause(e)
-                .asRuntimeException();
-      }
-    }
-
     private class InProcessServerStream implements ServerStream {
       final StatsTraceContext statsTraceCtx;
       // All callbacks must run in syncContext to avoid possibility of deadlock in direct executors
@@ -533,6 +521,22 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
+        long messageLength;
+        try {
+          if (assumedMessageSize != -1) {
+            messageLength = assumedMessageSize;
+          } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
+            messageLength = message.available();
+          } else {
+            InputStream oldMessage = message;
+            byte[] payload = ByteStreams.toByteArray(message);
+            messageLength = payload.length;
+            message = new ByteArrayInputStream(payload);
+            oldMessage.close();
+          }
+        } catch (Exception e) {
+          throw new RuntimeException("Error processing the message length", e);
+        }
         synchronized (this) {
           if (closed) {
             return;
@@ -541,24 +545,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
-
-          long messageLength;
-          try {
-            if (assumedMessageSize != -1) {
-              messageLength = assumedMessageSize;
-            } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
-              messageLength = getKnownLength(message);
-            } else {
-              InputStream oldMessage = message;
-              byte[] payload = ByteStreams.toByteArray(message);
-              messageLength = payload.length;
-              message = new ByteArrayInputStream(payload);
-              oldMessage.close();
-            }
-          } catch (IOException e) {
-            throw new RuntimeException("Error processing the message length", e);
-          }
-
           statsTraceCtx.outboundUncompressedSize(messageLength);
           statsTraceCtx.outboundWireSize(messageLength);
           // messageLength should be same at receiver's end as no actual wire is involved.
@@ -827,6 +813,22 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
+        long messageLength;
+        try {
+          if (assumedMessageSize != -1) {
+            messageLength = assumedMessageSize;
+          } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
+            messageLength = message.available();
+          } else {
+            InputStream oldMessage = message;
+            byte[] payload = ByteStreams.toByteArray(message);
+            messageLength = payload.length;
+            message = new ByteArrayInputStream(payload);
+            oldMessage.close();
+          }
+        } catch (Exception e) {
+          throw new RuntimeException("Error processing the message length", e);
+        }
         synchronized (this) {
           if (closed) {
             return;
@@ -835,23 +837,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
-
-          long messageLength;
-          try {
-            if (assumedMessageSize != -1) {
-              messageLength = assumedMessageSize;
-            } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
-              messageLength = getKnownLength(message);
-            } else {
-              InputStream oldMessage = message;
-              byte[] payload = ByteStreams.toByteArray(message);
-              messageLength = payload.length;
-              message = new ByteArrayInputStream(payload);
-              oldMessage.close();
-            }
-          } catch (IOException e) {
-            throw new RuntimeException("Error processing the message length", e);
-          }
           statsTraceCtx.outboundUncompressedSize(messageLength);
           statsTraceCtx.outboundWireSize(messageLength);
           // messageLength should be same at receiver's end as no actual wire is involved.

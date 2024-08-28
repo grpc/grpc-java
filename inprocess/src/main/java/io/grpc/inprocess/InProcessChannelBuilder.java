@@ -94,6 +94,7 @@ public final class InProcessChannelBuilder extends
   private ScheduledExecutorService scheduledExecutorService;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
   private boolean transportIncludeStatusCause = false;
+  private long assumedMessageSize = -1;
 
   private InProcessChannelBuilder(@Nullable SocketAddress directAddress, @Nullable String target) {
 
@@ -221,9 +222,23 @@ public final class InProcessChannelBuilder extends
     return this;
   }
 
+  /**
+   * Sets whether to include the provided messageSize or not and is propagated
+   * forward to InProcessTransport. This was added to not calculate messageSize
+   * if already provided while calling builder.
+   *
+   * @param assumedMessageSize length of InProcess transport's messageSize
+   * @return this
+   */
+  public InProcessChannelBuilder assumedMessageSize(long assumedMessageSize) {
+    checkArgument(assumedMessageSize >= 0, "assumedMessageSize must be >= 0");
+    this.assumedMessageSize = assumedMessageSize;
+    return this;
+  }
+
   ClientTransportFactory buildTransportFactory() {
-    return new InProcessClientTransportFactory(
-        scheduledExecutorService, maxInboundMetadataSize, transportIncludeStatusCause);
+    return new InProcessClientTransportFactory(scheduledExecutorService,
+            maxInboundMetadataSize, transportIncludeStatusCause, assumedMessageSize);
   }
 
   void setStatsEnabled(boolean value) {
@@ -239,16 +254,17 @@ public final class InProcessChannelBuilder extends
     private final int maxInboundMetadataSize;
     private boolean closed;
     private final boolean includeCauseWithStatus;
-    private final long assumedMessageSize = -1;
+    private long assumedMessageSize;
 
     private InProcessClientTransportFactory(
         @Nullable ScheduledExecutorService scheduledExecutorService,
-        int maxInboundMetadataSize, boolean includeCauseWithStatus) {
+        int maxInboundMetadataSize, boolean includeCauseWithStatus, long assumedMessageSize) {
       useSharedTimer = scheduledExecutorService == null;
       timerService = useSharedTimer
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : scheduledExecutorService;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
       this.includeCauseWithStatus = includeCauseWithStatus;
+      this.assumedMessageSize = assumedMessageSize;
     }
 
     @Override

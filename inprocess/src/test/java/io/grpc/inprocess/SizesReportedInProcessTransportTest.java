@@ -29,6 +29,9 @@ import org.junit.Assert;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+/**
+ * Unit test for {@link InProcessTransport} with assumedMessageLength forwarded to transport.
+ */
 @RunWith(JUnit4.class)
 public class SizesReportedInProcessTransportTest extends InProcessTransportTest {
   private static final long TEST_MESSAGE_LENGTH = 100;
@@ -42,18 +45,16 @@ public class SizesReportedInProcessTransportTest extends InProcessTransportTest 
   }
 
   @Override
-  protected InternalServer newServer(
-      List<ServerStreamTracer.Factory> streamTracerFactories) {
+  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     InProcessServerBuilder builder = InProcessServerBuilder.forAddress(address)
               .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE)
-            .assumedMessageSize(TEST_MESSAGE_LENGTH);
+              .assumedMessageSize(TEST_MESSAGE_LENGTH);
     return new InProcessServer(builder, streamTracerFactories);
   }
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
-    return new InProcessTransport(
-            address, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+    return new InProcessTransport(address, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
             testAuthority(server), USER_AGENT, eagAttrs(), false, TEST_MESSAGE_LENGTH);
   }
 

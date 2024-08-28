@@ -250,6 +250,10 @@ public abstract class AbstractTransportTest {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Specific test for {@link InProcessTransport} to verify assumedMessageSize.
+   * For more goto: {@link #11406}
+   */
   protected void assertInProcessTransportAssumedMessageSize(
           TestStreamTracer streamTracerSender, TestStreamTracer streamTracerReceiver) {
     // implemented by SizesReportedInProcessTransportTest
