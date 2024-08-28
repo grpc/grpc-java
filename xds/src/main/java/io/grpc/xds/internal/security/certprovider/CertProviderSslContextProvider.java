@@ -150,17 +150,17 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   private void updateSslContextWhenReady() {
-    if (isMtls()) {
+    if (certKeyAndTrustedRootsNeeded()) {
       if (savedKey != null && savedTrustedRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
-    } else if (isClientSideTls()) {
+    } else if (trustedRootsNeeded()) {
       if (savedTrustedRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
-    } else if (isServerSideTls()) {
+    } else if (certKeyNeeded()) {
       if (savedKey != null) {
         updateSslContext();
         clearKeysAndCerts();
@@ -174,15 +174,15 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     savedCertChain = null;
   }
 
-  protected final boolean isMtls() {
+  protected final boolean certKeyAndTrustedRootsNeeded() {
     return certInstance != null && rootCertInstance != null;
   }
 
-  protected final boolean isClientSideTls() {
+  protected final boolean trustedRootsNeeded() {
     return rootCertInstance != null && certInstance == null;
   }
 
-  protected final boolean isServerSideTls() {
+  protected final boolean certKeyNeeded() {
     return certInstance != null && rootCertInstance == null;
   }
 

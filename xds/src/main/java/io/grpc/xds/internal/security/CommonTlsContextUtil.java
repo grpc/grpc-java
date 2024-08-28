@@ -67,11 +67,11 @@ public final class CommonTlsContextUtil {
   }
 
   public static boolean isUsingSystemRootCerts(CommonTlsContext commonTlsContext) {
-    if (commonTlsContext.hasValidationContext()) {
-      return commonTlsContext.getValidationContext().hasSystemRootCerts();
-    }
     if (commonTlsContext.hasCombinedValidationContext()) {
       return commonTlsContext.getCombinedValidationContext().getDefaultValidationContext().hasSystemRootCerts();
+    }
+    if (commonTlsContext.hasValidationContext()) {
+      return commonTlsContext.getValidationContext().hasSystemRootCerts();
     }
     return false;
   }
