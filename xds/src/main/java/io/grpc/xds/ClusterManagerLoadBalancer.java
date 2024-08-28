@@ -183,11 +183,12 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     for (ChildLbState state : getChildLbStates()) {
       if (((ClusterManagerLbState) state).deletionTimer == null) {
         gotoTransientFailure = false;
-        handleNameResolutionError(state, error);
+        state.getLb().handleNameResolutionError(error);
       }
     }
     if (gotoTransientFailure) {
-      getHelper().updateBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
+      getHelper().updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 

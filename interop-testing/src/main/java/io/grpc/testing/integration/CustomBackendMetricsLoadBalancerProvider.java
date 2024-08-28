@@ -16,8 +16,8 @@
 
 package io.grpc.testing.integration;
 
-import static io.grpc.testing.integration.AbstractInteropTest.ORCA_OOB_REPORT_KEY;
-import static io.grpc.testing.integration.AbstractInteropTest.ORCA_RPC_REPORT_KEY;
+import static io.grpc.testing.integration.TestServiceClient.ORCA_OOB_REPORT_KEY;
+import static io.grpc.testing.integration.TestServiceClient.ORCA_RPC_REPORT_KEY;
 
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;

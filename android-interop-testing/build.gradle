@@ -69,7 +69,6 @@ dependencies {
 
     implementation project(':grpc-android'),
             project(':grpc-core'),
-            project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-okhttp'),
             project(':grpc-protobuf-lite'),
@@ -80,10 +79,6 @@ dependencies {
             libraries.truth,
             libraries.androidx.test.rules,
             libraries.opencensus.contrib.grpc.metrics
-
-    implementation (libraries.google.auth.oauth2Http) {
-        exclude group: 'org.apache.httpcomponents'
-    }
 
     implementation (project(':grpc-services')) {
         exclude group: 'com.google.protobuf'

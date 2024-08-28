@@ -27,11 +27,10 @@ dependencies {
     implementation project(':grpc-core'),
             project(':grpc-protobuf'),
             project(':grpc-util'),
-            libraries.protobuf.java.util,
-            libraries.guava.jre // JRE required by protobuf-java-util
+            libraries.guava.jre, // JRE required by protobuf-java-util
+            libraries.protobuf.java.util
 
     runtimeOnly libraries.errorprone.annotations,
-            libraries.j2objc.annotations, // Explicit dependency to keep in step with version used by guava
             libraries.gson  // to fix checkUpperBoundDeps error here
     compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),

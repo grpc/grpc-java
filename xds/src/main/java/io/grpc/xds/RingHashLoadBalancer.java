@@ -27,7 +27,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultiset;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multiset;
 import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
@@ -42,6 +41,7 @@ import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -213,7 +213,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = TRANSIENT_FAILURE;
     }
 
-    RingHashPicker picker = new RingHashPicker(syncContext, ring, getImmutableChildMap());
+    RingHashPicker picker = new RingHashPicker(syncContext, ring, getChildLbStates());
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
   }
@@ -345,13 +345,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
-        ImmutableMap<Object, ChildLbState> subchannels) {
+        Collection<ChildLbState> children) {
       this.syncContext = syncContext;
       this.ring = ring;
-      pickableSubchannels = new HashMap<>(subchannels.size());
-      for (Map.Entry<Object, ChildLbState> entry : subchannels.entrySet()) {
-        ChildLbState childLbState = entry.getValue();
-        pickableSubchannels.put((Endpoint)entry.getKey(),
+      pickableSubchannels = new HashMap<>(children.size());
+      for (ChildLbState childLbState : children) {
+        pickableSubchannels.put((Endpoint)childLbState.getKey(),
             new SubchannelView(childLbState, childLbState.getCurrentState()));
       }
     }
