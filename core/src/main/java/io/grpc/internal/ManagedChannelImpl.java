@@ -1837,7 +1837,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.execute(new NameResolverErrorHandler());
     }
 
-    @SuppressWarnings("ReferenceEquality")
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
