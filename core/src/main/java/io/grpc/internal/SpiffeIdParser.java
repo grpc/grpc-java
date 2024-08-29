@@ -10,12 +10,13 @@ public class SpiffeIdParser {
   private SpiffeIdParser(){};
 
   public static SpiffeId parse(String uri) {
-    validateFormat(uri);
+    doInitialUriValidation(uri);
     String domainAndPath = uri.substring(PREFIX.length());
     String trustDomain;
-    String path = "";
+    String path;
     if (!domainAndPath.contains("/")) {
       trustDomain = domainAndPath;
+      path =  "";
     } else {
       String[] parts = domainAndPath.split("/", 2);
       trustDomain = parts[0];
@@ -29,7 +30,7 @@ public class SpiffeIdParser {
     return new SpiffeId(trustDomain, path);
   }
 
-  private static void validateFormat(String uri) throws IllegalArgumentException {
+  private static void doInitialUriValidation(String uri) throws IllegalArgumentException {
     checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
     checkArgument(uri.toLowerCase().startsWith(PREFIX), "Spiffe Id must start with " + PREFIX);
     checkArgument(!uri.contains("#"), "Spiffe Id must not contain query fragments");
