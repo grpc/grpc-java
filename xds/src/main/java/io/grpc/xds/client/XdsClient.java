@@ -419,21 +419,18 @@ public abstract class XdsClient {
   }
 
   public interface ResourceStore {
+
     /**
-     * Returns the collection of resources currently subscribing to or {@code null} if not
-     * subscribing to any resources for the given type.
+     * Returns the collection of resources currently subscribing to with the specified authority
+     * or {@code null} if not subscribing to any resources for this authority for the given type.
      *
      * <p>Note an empty collection indicates subscribing to resources of the given type with
      * wildcard mode.
-     */
-    // Must be synchronized.
-    @Nullable
-    Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                                              XdsResourceType<? extends ResourceUpdate> type);
-
-    /**
-     * Like {@link #getSubscribedResources(ServerInfo, XdsResourceType)}, but limits the results to
-     * those matching the given authority.
+     *
+     * @param serverInfo the xds server to get the resources from
+     * @param type the type of the resources that should be retrieved
+     * @param authority the authority of the resources that should be retrieved.  If null or empty,
+     *                  then all resources for the given type should be returned.
      */
     @Nullable
     Collection<String> getSubscribedResources(

@@ -26,6 +26,7 @@ import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -204,15 +205,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   @Nullable
   @Override
   public Collection<String> getSubscribedResources(
-      ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type) {
-    return getSubscribedResources(serverInfo, type, null, false);
-  }
-
-  @Nullable
-  @Override
-  public Collection<String> getSubscribedResources(
       ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority) {
-    return getSubscribedResources(serverInfo, type, authority, true);
+    return getSubscribedResources(serverInfo, type, authority, !Strings.isNullOrEmpty(authority));
   }
 
   private Collection<String> getSubscribedResources(ServerInfo serverInfo, XdsResourceType<?

@@ -183,7 +183,7 @@ final class ControlPlaneClient {
     versions.put(type, versionInfo);
     logger.log(XdsLogLevel.INFO, "Sending ACK for {0} update, nonce: {1}, current version: {2}",
         type.typeName(), nonce, versionInfo);
-    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
+    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type, null);
     if (resources == null) {
       resources = Collections.emptyList();
     }
@@ -199,7 +199,7 @@ final class ControlPlaneClient {
     String versionInfo = versions.getOrDefault(type, "");
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
         type.typeName(), nonce, versionInfo);
-    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
+    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type, null);
     if (resources == null) {
       resources = Collections.emptyList();
     }

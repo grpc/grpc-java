@@ -56,7 +56,6 @@ import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsResourceType;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -494,13 +493,6 @@ public class CsdsServiceTest {
     @Override
     public BootstrapInfo getBootstrapInfo() {
       return BOOTSTRAP_INFO;
-    }
-
-    @Nullable
-    @Override
-    public Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                  XdsResourceType<? extends ResourceUpdate> type) {
-      return null;
     }
 
     @Nullable
