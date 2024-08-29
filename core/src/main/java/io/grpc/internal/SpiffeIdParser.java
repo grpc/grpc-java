@@ -3,6 +3,9 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Splitter;
+import java.util.Locale;
+
 public class SpiffeIdParser {
 
   private final static String PREFIX = "spiffe://";
@@ -32,7 +35,7 @@ public class SpiffeIdParser {
 
   private static void doInitialUriValidation(String uri) throws IllegalArgumentException {
     checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
-    checkArgument(uri.toLowerCase().startsWith(PREFIX), "Spiffe Id must start with " + PREFIX);
+    checkArgument(uri.toLowerCase(Locale.US).startsWith(PREFIX), "Spiffe Id must start with " + PREFIX);
     checkArgument(!uri.contains("#"), "Spiffe Id must not contain query fragments");
     checkArgument(!uri.contains("?"), "Spiffe Id must not contain query parameters");
   }
@@ -49,7 +52,7 @@ public class SpiffeIdParser {
       return;
     }
     checkArgument(!path.endsWith("/"), "Path must not include a trailing '/'");
-    for (String segment : path.split("/")) {
+    for (String segment : Splitter.on("/").split(path)) {
       validatePathSegment(segment);
     }
   }
