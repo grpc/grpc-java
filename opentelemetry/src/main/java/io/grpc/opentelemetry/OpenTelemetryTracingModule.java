@@ -50,7 +50,7 @@ final class OpenTelemetryTracingModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryTracingModule.class.getName());
 
   @VisibleForTesting
-  static final String OTEL_TRACING_SCOPE_NAME = "grpc-opentelemetry-tracing";
+  static final String OTEL_TRACING_SCOPE_NAME = "grpc-java";
   @Nullable
   private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
   @Nullable
@@ -377,7 +377,7 @@ final class OpenTelemetryTracingModule {
 
   private String generateErrorStatusDescription(io.grpc.Status status) {
     if (status.getDescription() != null) {
-      return status.getCode() + ". " + status.getDescription();
+      return status.getCode() + ": " + status.getDescription();
     } else {
       return status.getCode().toString();
     }

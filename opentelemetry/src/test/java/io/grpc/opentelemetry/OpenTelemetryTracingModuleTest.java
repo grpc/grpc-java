@@ -138,7 +138,7 @@ public class OpenTelemetryTracingModuleTest {
   @Mock
   private Span mockClientSpan;
   @Mock
-  private Span mockAttempSpan;
+  private Span mockAttemptSpan;
   @Mock
   private ServerCall.Listener<String> mockServerCallListener;
   @Mock
@@ -159,7 +159,7 @@ public class OpenTelemetryTracingModuleTest {
     tracerRule = openTelemetryRule.getOpenTelemetry().getTracer(OTEL_TRACING_SCOPE_NAME);
     when(mockOpenTelemetry.getTracer(OTEL_TRACING_SCOPE_NAME)).thenReturn(mockTracer);
     when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(mockPropagator));
-    when(mockSpanBuilder.startSpan()).thenReturn(mockAttempSpan);
+    when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan);
     when(mockSpanBuilder.setParent(any())).thenReturn(mockSpanBuilder);
     when(mockTracer.spanBuilder(any())).thenReturn(mockSpanBuilder);
   }
@@ -178,7 +178,7 @@ public class OpenTelemetryTracingModuleTest {
     verify(mockTracer).spanBuilder(eq("Attempt.package1.service2.method3"));
     verify(mockPropagator).inject(any(), eq(headers), eq(MetadataSetter.getInstance()));
     verify(mockClientSpan, never()).end();
-    verify(mockAttempSpan, never()).end();
+    verify(mockAttemptSpan, never()).end();
 
     clientStreamTracer.outboundMessage(0);
     clientStreamTracer.outboundMessageSent(0, 882, -1);
@@ -190,14 +190,14 @@ public class OpenTelemetryTracingModuleTest {
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
-    InOrder inOrder = inOrder(mockClientSpan, mockAttempSpan);
-    inOrder.verify(mockAttempSpan)
+    InOrder inOrder = inOrder(mockClientSpan, mockAttemptSpan);
+    inOrder.verify(mockAttemptSpan)
         .setAttribute("previous-rpc-attempts", 0);
-    inOrder.verify(mockAttempSpan)
+    inOrder.verify(mockAttemptSpan)
         .setAttribute("transparent-retry", false);
     inOrder.verify(mockClientSpan).addEvent("Delayed name resolution complete");
-    inOrder.verify(mockAttempSpan).addEvent("Delayed LB pick complete");
-    inOrder.verify(mockAttempSpan, times(3)).addEvent(
+    inOrder.verify(mockAttemptSpan).addEvent("Delayed LB pick complete");
+    inOrder.verify(mockAttemptSpan, times(3)).addEvent(
         eventNameCaptor.capture(), attributesCaptor.capture()
     );
     List<String> events = eventNameCaptor.getAllValues();
@@ -232,8 +232,8 @@ public class OpenTelemetryTracingModuleTest {
             .build(),
         attributes.get(2));
 
-    inOrder.verify(mockAttempSpan).setStatus(StatusCode.OK);
-    inOrder.verify(mockAttempSpan).end();
+    inOrder.verify(mockAttemptSpan).setStatus(StatusCode.OK);
+    inOrder.verify(mockAttemptSpan).end();
     inOrder.verify(mockClientSpan).setStatus(StatusCode.OK);
     inOrder.verify(mockClientSpan).end();
     inOrder.verifyNoMoreInteractions();
@@ -442,11 +442,11 @@ public class OpenTelemetryTracingModuleTest {
     assertEquals(attemptSpan.getParentSpanContext(), clientSpan.getSpanContext());
     assertTrue(clientSpan.hasEnded());
     assertEquals(clientSpan.getStatus().getStatusCode(), StatusCode.ERROR);
-    assertEquals(clientSpan.getStatus().getDescription(), "PERMISSION_DENIED. No you don't");
+    assertEquals(clientSpan.getStatus().getDescription(), "PERMISSION_DENIED: No you don't");
     assertTrue(attemptSpan.hasEnded());
     assertTrue(attemptSpan.hasEnded());
     assertEquals(attemptSpan.getStatus().getStatusCode(), StatusCode.ERROR);
-    assertEquals(attemptSpan.getStatus().getDescription(), "PERMISSION_DENIED. No you don't");
+    assertEquals(attemptSpan.getStatus().getDescription(), "PERMISSION_DENIED: No you don't");
   }
 
   @Test
@@ -458,7 +458,7 @@ public class OpenTelemetryTracingModuleTest {
     callTracer.callEnded(Status.DEADLINE_EXCEEDED.withDescription("3 seconds"));
     verify(mockClientSpan).end();
     verify(mockClientSpan).setStatus(eq(StatusCode.ERROR),
-        eq("DEADLINE_EXCEEDED. 3 seconds"));
+        eq("DEADLINE_EXCEEDED: 3 seconds"));
     verifyNoMoreInteractions(mockClientSpan);
   }
 
