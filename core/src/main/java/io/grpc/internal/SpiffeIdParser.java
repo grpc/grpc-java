@@ -1,14 +1,15 @@
-package io.grpc.util;
+package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class SpiffeIdParserImpl implements SpiffeIdParser {
+public class SpiffeIdParser {
 
   private final static String PREFIX = "spiffe://";
 
-  @Override
-  public SpiffeIdInfo parse(String uri) {
+  private SpiffeIdParser(){};
+
+  public static SpiffeId parse(String uri) {
     validateFormat(uri);
     String domainAndPath = uri.substring(PREFIX.length());
     String trustDomain;
@@ -25,7 +26,7 @@ public class SpiffeIdParserImpl implements SpiffeIdParser {
     if (!path.isEmpty()) {
       path = "/" + path;
     }
-    return new SpiffeIdInfoImpl(trustDomain, path);
+    return new SpiffeId(trustDomain, path);
   }
 
   private static void validateFormat(String uri) throws IllegalArgumentException {
@@ -60,23 +61,20 @@ public class SpiffeIdParserImpl implements SpiffeIdParser {
         "Individual path segments must contain only letters, numbers, dots, dashes, and underscores ([a-zA-Z0-9.-_])");
   }
 
-  private static class SpiffeIdInfoImpl implements SpiffeIdInfo {
+  public static class SpiffeId {
 
     private final String trustDomain;
     private final String path;
 
-    private SpiffeIdInfoImpl(String trustDomain, String path) {
+    private SpiffeId(String trustDomain, String path) {
       this.trustDomain = trustDomain;
       this.path = path;
     }
 
-
-    @Override
     public String getTrustDomain() {
       return trustDomain;
     }
 
-    @Override
     public String getPath() {
       return path;
     }
