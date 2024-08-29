@@ -126,9 +126,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      ResolvedAddresses unused) {
-    return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig);
+  protected ChildLbState createChildLbState(Object key) {
+    return new LeastRequestLbState(key, pickFirstLbProvider);
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
@@ -320,9 +319,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   protected class LeastRequestLbState extends ChildLbState {
     private final AtomicInteger activeRequests = new AtomicInteger(0);
 
-    public LeastRequestLbState(Object key, LoadBalancerProvider policyProvider,
-        Object childConfig) {
-      super(key, policyProvider, childConfig);
+    public LeastRequestLbState(Object key, LoadBalancerProvider policyProvider) {
+      super(key, policyProvider);
     }
 
     int getActiveRequests() {

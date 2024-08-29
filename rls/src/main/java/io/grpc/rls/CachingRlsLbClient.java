@@ -329,7 +329,7 @@ final class CachingRlsLbClient {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
       if (cacheEntry == null) {
-        logger.log(ChannelLogLevel.DEBUG, "No cache entry found, making a new lrs request");
+        logger.log(ChannelLogLevel.DEBUG, "No cache entry found, making a new RLS request");
         PendingCacheEntry pendingEntry = pendingCallCache.get(request);
         if (pendingEntry != null) {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
@@ -988,7 +988,7 @@ final class CachingRlsLbClient {
           new Object[]{serviceName, methodName, args.getHeaders(), response});
 
       if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
-        logger.log(ChannelLogLevel.DEBUG, "Updating LRS metadata from the LRS response headers");
+        logger.log(ChannelLogLevel.DEBUG, "Updating RLS metadata from the RLS response headers");
         Metadata headers = args.getHeaders();
         headers.discardAll(RLS_DATA_KEY);
         headers.put(RLS_DATA_KEY, response.getHeaderData());
@@ -997,7 +997,7 @@ final class CachingRlsLbClient {
       logger.log(ChannelLogLevel.DEBUG, "defaultTarget = {0}", defaultTarget);
       boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
-        logger.log(ChannelLogLevel.DEBUG, "LRS response has data, proceed with selecting a picker");
+        logger.log(ChannelLogLevel.DEBUG, "RLS response has data, proceed with selecting a picker");
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
         SubchannelPicker picker =
             (childPolicyWrapper != null) ? childPolicyWrapper.getPicker() : null;
