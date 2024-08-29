@@ -52,6 +52,9 @@ public class SpiffeIdParserTest {
               "/ns/staging/sa/default"},
           { "spiffe://example.com/9eebccd2-12bf-40a6-b262-65fe0487d453", "example.com",
               "/9eebccd2-12bf-40a6-b262-65fe0487d453"},
+          { "spiffe://trustdomain/abc0123.-_", "trustdomain", "/abc0123.-_"},
+          { "spiffe://trustdomain/.a..", "trustdomain", "/.a.."},
+          { "spiffe://trustdomain0123456789/path", "trustdomain0123456789", "/path"},
       });
     }
   }
@@ -67,10 +70,19 @@ public class SpiffeIdParserTest {
     }
 
     @Parameters(name = "spiffeId={0}")
-    public static Collection<String[]> data() {
-      return Arrays.asList(new String[][] {
-          {"spiffe://e!xample.com"},
-      });
+    public static Collection<String> data() {
+      return Arrays.asList(
+          "spiffe:///",
+          "spiffe://example!com",
+          "spiffe://exampleя.com/workload-1",
+          "spiffe://example.com/us/florida/miamiя",
+          "spiffe:/trustdomain/path",
+          "spiffe:///path",
+          "spiffe://trust%20domain/path",
+          "spiffe://user@trustdomain/path",
+          "spiffe:// /",
+          "spiffe://trust.domain/../path"
+          );
     }
   }
 
@@ -102,23 +114,7 @@ public class SpiffeIdParserTest {
       assertEquals("Trust Domain can't be empty", iae.getMessage());
 
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe:///"));
-      assertEquals("Trust Domain can't be empty", iae.getMessage());
-
-      iae = assertThrows(IllegalArgumentException.class, () ->
           SpiffeIdParser.parse("spiffe://eXample.com"));
-      assertEquals(
-          "Trust Domain must contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])",
-          iae.getMessage());
-
-      iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example!com"));
-      assertEquals(
-          "Trust Domain must contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])",
-          iae.getMessage());
-
-      iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://exampleя.com/workload-1"));
       assertEquals(
           "Trust Domain must contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])",
           iae.getMessage());
@@ -151,12 +147,6 @@ public class SpiffeIdParserTest {
           SpiffeIdParser.parse("spiffe://example.com/us!"));
       assertEquals("Individual path segments must contain only letters, numbers, dots, dashes, and "
           + "underscores ([a-zA-Z0-9.-_])", iae.getMessage());
-
-      iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example.com/us/florida/miamiя"));
-      assertEquals("Individual path segments must contain only letters, numbers, dots, dashes, and "
-          + "underscores ([a-zA-Z0-9.-_])", iae.getMessage());
-
     }
   }
 }
