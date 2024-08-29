@@ -4788,14 +4788,20 @@ public class ManagedChannelImplTest {
       createChannel(true);
       int prevSize = getStats(channel).channelTrace.events.size();
 
+      nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
+
+      assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+              .setDescription("Initial Name Resolution error, using default service config")
+              .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
+              .setTimestampNanos(timer.getTicker().read())
+              .build());
+
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
               .setDescription("Failed to resolve name: " + resolutionError)
               .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
               .setTimestampNanos(timer.getTicker().read())
               .build());
-
-      nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
       // no new trace events due to lastResolutionState already set to ERROR
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
@@ -4835,6 +4841,7 @@ public class ManagedChannelImplTest {
             .setTimestampNanos(timer.getTicker().read())
             .build());
   }
+
 
   private static final class FakeBackoffPolicyProvider implements BackoffPolicy.Provider {
     @Override
