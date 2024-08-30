@@ -988,7 +988,7 @@ public class ClusterImplLoadBalancerTest {
     private final List<EquivalentAddressGroup> eags;
     private final Attributes attrs;
     private SubchannelStateListener listener;
-    private Attributes connectedAtrributes;
+    private Attributes connectedAttributes;
 
     private FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attrs) {
       this.eags = eags;
@@ -1024,7 +1024,7 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public Attributes getConnectedAddressAttributes() {
-      return connectedAtrributes;
+      return connectedAttributes;
     }
 
     public void updateState(ConnectivityStateInfo newState) {
@@ -1032,7 +1032,7 @@ public class ClusterImplLoadBalancerTest {
     }
 
     public void setConnectedEagIndex(int eagIndex) {
-      this.connectedAtrributes = eags.get(eagIndex).getAttributes();
+      this.connectedAttributes = eags.get(eagIndex).getAttributes();
     }
   }
 
