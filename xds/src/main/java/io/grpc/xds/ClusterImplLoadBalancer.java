@@ -79,8 +79,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
 
-  private static final Attributes.Key<AtomicReference<ClusterLocality>>
-      ATTR_CLUSTER_LOCALITY =
+  private static final Attributes.Key<AtomicReference<ClusterLocality>> ATTR_CLUSTER_LOCALITY =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocality");
 
   private final XdsLogger logger;
