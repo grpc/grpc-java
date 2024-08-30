@@ -249,9 +249,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
         @Override
         public void shutdown() {
-          if (localityAtomicReference.get() != null) {
-            localityAtomicReference.get().release();
-          }
+          localityAtomicReference.get().release();
           delegate().shutdown();
         }
 
@@ -482,7 +480,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Represents the locality attributes of a cluster.
+   * Represents the {@link ClusterLocalityStats} and network locality name of a cluster.
    */
   static final class ClusterLocality {
     private final ClusterLocalityStats clusterLocalityStats;

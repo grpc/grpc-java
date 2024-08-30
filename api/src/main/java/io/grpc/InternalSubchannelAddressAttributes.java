@@ -19,10 +19,10 @@ package io.grpc;
 /**
  * An internal class. Do not use.
  *
- * <p>An interface to provide the address connected by subchannel.
+ * <p>An interface to provide the attributes for address connected by subchannel.
  */
 @Internal
-public interface InternalSubchannelAddress {
+public interface InternalSubchannelAddressAttributes {
 
   /**
    * Return attributes of the server address connected by sub channel.
