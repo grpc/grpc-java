@@ -40,6 +40,14 @@ publishing {
         dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
         dependencyNode.appendNode('version', project.version)
         dependencyNode.appendNode('type', 'pom')
+
+        // protobuf-bom
+        dependencyNode = dependencies.appendNode('dependency')
+        dependencyNode.appendNode('groupId', 'com.google.protobuf')
+        dependencyNode.appendNode('artifactId', 'protobuf-bom')
+        dependencyNode.appendNode('version', libraries.versions.protobuf.get())
+        dependencyNode.appendNode('type', 'pom')
+        dependencyNode.appendNode('scope', 'import')
       }
     }
   }
