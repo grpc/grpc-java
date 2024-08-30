@@ -22,12 +22,24 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.Splitter;
 import java.util.Locale;
 
-public class SpiffeIdParser {
+/**
+ * Parses URI to SPIFFE ID if it matches SPIFFE ID standard.
+ * <p>
+ * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">standard</a>
+ */
+public final class SpiffeIdParser {
 
   private static final String PREFIX = "spiffe://";
 
   private SpiffeIdParser() {}
 
+  /**
+   * Parses a URI string, applies validation rules described in SPIFFE standard, and, in case of
+   * success, returns {@link SpiffeId} containing Trust Domain and Path of SPIFFE ID.
+   *
+   * @param uri a String representing a SPIFFE ID
+   * @return {@link SpiffeId} containing Trust Domain and Path of SPIFFE ID
+   */
   public static SpiffeId parse(String uri) {
     doInitialUriValidation(uri);
     String domainAndPath = uri.substring(PREFIX.length());
@@ -49,7 +61,7 @@ public class SpiffeIdParser {
     return new SpiffeId(trustDomain, path);
   }
 
-  private static void doInitialUriValidation(String uri) throws IllegalArgumentException {
+  private static void doInitialUriValidation(String uri) {
     checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
     checkArgument(uri.toLowerCase(Locale.US).startsWith(PREFIX), "Spiffe Id must start with "
         + PREFIX);
@@ -57,7 +69,7 @@ public class SpiffeIdParser {
     checkArgument(!uri.contains("?"), "Spiffe Id must not contain query parameters");
   }
 
-  private static void validateTrustDomain(String trustDomain) throws IllegalArgumentException {
+  private static void validateTrustDomain(String trustDomain) {
     checkArgument(!trustDomain.isEmpty(), "Trust Domain can't be empty");
     checkArgument(trustDomain.length() < 256, "Trust Domain maximum length is 255 characters");
     checkArgument(trustDomain.matches("[a-z0-9._-]+"),
@@ -84,6 +96,11 @@ public class SpiffeIdParser {
             + " ([a-zA-Z0-9.-_])");
   }
 
+  /**
+   * Represents a SPIFFE ID as defined in the SPIFFE standard.
+   * <p>
+   * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">standard</a>
+   */
   public static class SpiffeId {
 
     private final String trustDomain;
