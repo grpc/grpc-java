@@ -1,3 +1,19 @@
+/*
+ * Copyright 2024 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -8,9 +24,9 @@ import java.util.Locale;
 
 public class SpiffeIdParser {
 
-  private final static String PREFIX = "spiffe://";
+  private static final String PREFIX = "spiffe://";
 
-  private SpiffeIdParser(){};
+  private SpiffeIdParser() {}
 
   public static SpiffeId parse(String uri) {
     doInitialUriValidation(uri);
@@ -44,7 +60,8 @@ public class SpiffeIdParser {
     checkArgument(!trustDomain.isEmpty(), "Trust Domain can't be empty");
     checkArgument(trustDomain.length() < 256, "Trust Domain maximum length is 255 characters");
     checkArgument(trustDomain.matches("[a-z0-9._-]+"),
-        "Trust Domain must contain only letters, numbers, dots, dashes, and underscores ([a-z0-9.-_])");
+        "Trust Domain must contain only letters, numbers, dots, dashes, and underscores"
+            + " ([a-z0-9.-_])");
   }
 
   private static void validatePath(String path) {
@@ -62,7 +79,8 @@ public class SpiffeIdParser {
     checkArgument(!(pathSegment.equals(".") || pathSegment.equals("..")),
         "Individual path segments must not be relative path modifiers (i.e. ., ..)");
     checkArgument(pathSegment.matches("[a-zA-Z0-9._-]+"),
-        "Individual path segments must contain only letters, numbers, dots, dashes, and underscores ([a-zA-Z0-9.-_])");
+        "Individual path segments must contain only letters, numbers, dots, dashes, and underscores"
+            + " ([a-zA-Z0-9.-_])");
   }
 
   public static class SpiffeId {
