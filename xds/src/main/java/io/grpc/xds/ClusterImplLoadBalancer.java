@@ -214,10 +214,13 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       List<EquivalentAddressGroup> addresses = withAdditionalAttributes(args.getAddresses());
-      // This clusterLocality ideally should not be utilized. We derive locality
-      // information from the first address, even prior to the subchannel becoming ready.
-      // This is primarily for the purpose of facilitating load reporting in the pre-READY
-      // state of the subchannel.
+      // This value for  ClusterLocality is not recommended for general use.
+      // Currently, we extract locality data from the first address, even before the subchannel is
+      // READY.
+      // This is mainly to accommodate scenarios where a Load Balancing API (like "pick first")
+      // might return the subchannel before it is READY. Typically, we wouldn't report load for such
+      // selections because the channel will disregard the chosen (not-ready) subchannel.
+      // However, we needed to ensure this case is handled.
       ClusterLocality clusterLocality = createClusterLocalityFromAttributes(
           args.getAddresses().get(0).getAttributes());
       AtomicReference<ClusterLocality> localityAtomicReference = new AtomicReference<>(
@@ -390,20 +393,23 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                   "Cluster max concurrent requests limit exceeded"));
             }
           }
-          final ClusterLocalityStats stats =
-              result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY).get()
-                  .getClusterLocalityStats();
-          if (stats != null) {
-            String localityName =
-                result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY).get()
-                    .getClusterLocalityName();
-            args.getPickDetailsConsumer().addOptionalLabel("grpc.lb.locality", localityName);
+          final AtomicReference<ClusterLocality> clusterLocality =
+              result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY);
 
-            ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
-                stats, inFlights, result.getStreamTracerFactory());
-            ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
-                .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
-            return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
+          if (clusterLocality != null) {
+            ClusterLocalityStats stats = clusterLocality.get().getClusterLocalityStats();
+            if (stats != null) {
+              String localityName =
+                  result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY).get()
+                      .getClusterLocalityName();
+              args.getPickDetailsConsumer().addOptionalLabel("grpc.lb.locality", localityName);
+
+              ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
+                  stats, inFlights, result.getStreamTracerFactory());
+              ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
+                  .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
+              return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
+            }
           }
         }
         return result;
