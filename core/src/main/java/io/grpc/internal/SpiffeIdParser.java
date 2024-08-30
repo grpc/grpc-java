@@ -51,7 +51,8 @@ public class SpiffeIdParser {
 
   private static void doInitialUriValidation(String uri) throws IllegalArgumentException {
     checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
-    checkArgument(uri.toLowerCase(Locale.US).startsWith(PREFIX), "Spiffe Id must start with " + PREFIX);
+    checkArgument(uri.toLowerCase(Locale.US).startsWith(PREFIX), "Spiffe Id must start with "
+        + PREFIX);
     checkArgument(!uri.contains("#"), "Spiffe Id must not contain query fragments");
     checkArgument(!uri.contains("?"), "Spiffe Id must not contain query parameters");
   }
