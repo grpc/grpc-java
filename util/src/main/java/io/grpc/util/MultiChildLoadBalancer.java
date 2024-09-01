@@ -241,12 +241,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   public final ChildLbState getChildLbState(Object key) {
-    if (key == null) {
-      return null;
-    }
-    if (key instanceof EquivalentAddressGroup) {
-      key = new Endpoint((EquivalentAddressGroup) key);
-    }
     return childLbStates.get(key);
   }
 
