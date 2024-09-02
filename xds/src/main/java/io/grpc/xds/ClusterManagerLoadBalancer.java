@@ -23,11 +23,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
 import io.grpc.xds.client.XdsLogger;
@@ -70,30 +70,28 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
-      Object childConfig) {
-    return resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
+  protected ChildLbState createChildLbState(Object key) {
+    return new ClusterManagerLbState(key, GracefulSwitchLoadBalancerFactory.INSTANCE);
   }
 
   @Override
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
+  protected Map<Object, ResolvedAddresses> createChildAddressesMap(
+      ResolvedAddresses resolvedAddresses) {
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
-    Map<Object, ChildLbState> newChildPolicies = new HashMap<>();
+    Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
     if (config != null) {
-      for (Entry<String, PolicySelection> entry : config.childPolicies.entrySet()) {
-        ChildLbState child = getChildLbState(entry.getKey());
-        if (child == null) {
-          child = new ClusterManagerLbState(entry.getKey(),
-              entry.getValue().getProvider(), entry.getValue().getConfig(), getInitialPicker());
-        }
-        newChildPolicies.put(entry.getKey(), child);
+      for (Map.Entry<String, Object> childPolicy : config.childPolicies.entrySet()) {
+        ResolvedAddresses addresses = resolvedAddresses.toBuilder()
+            .setLoadBalancingPolicyConfig(childPolicy.getValue())
+            .build();
+        childAddresses.put(childPolicy.getKey(), addresses);
       }
     }
     logger.log(
         XdsLogLevel.INFO,
-        "Received cluster_manager lb config: child names={0}", newChildPolicies.keySet());
-    return newChildPolicies;
+        "Received cluster_manager lb config: child names={0}", childAddresses.keySet());
+    return childAddresses;
   }
 
   /**
@@ -108,8 +106,8 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
           resolvedAddresses.getLoadBalancingPolicyConfig();
       ClusterManagerConfig lastConfig = (ClusterManagerConfig)
           lastResolvedAddresses.getLoadBalancingPolicyConfig();
-      Map<String, PolicySelection> adjChildPolicies = new HashMap<>(config.childPolicies);
-      for (Entry<String, PolicySelection> entry : lastConfig.childPolicies.entrySet()) {
+      Map<String, Object> adjChildPolicies = new HashMap<>(config.childPolicies);
+      for (Entry<String, Object> entry : lastConfig.childPolicies.entrySet()) {
         ClusterManagerLbState state = (ClusterManagerLbState) getChildLbState(entry.getKey());
         if (adjChildPolicies.containsKey(entry.getKey())) {
           if (state.deletionTimer != null) {
@@ -183,11 +181,12 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     for (ChildLbState state : getChildLbStates()) {
       if (((ClusterManagerLbState) state).deletionTimer == null) {
         gotoTransientFailure = false;
-        handleNameResolutionError(state, error);
+        state.getLb().handleNameResolutionError(error);
       }
     }
     if (gotoTransientFailure) {
-      getHelper().updateBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
+      getHelper().updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
@@ -201,9 +200,8 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     @Nullable
     ScheduledHandle deletionTimer;
 
-    public ClusterManagerLbState(Object key, LoadBalancerProvider policyProvider,
-        Object childConfig, SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+    public ClusterManagerLbState(Object key, LoadBalancer.Factory policyFactory) {
+      super(key, policyFactory);
     }
 
     @Override
@@ -236,8 +234,8 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
         public void run() {
           ClusterManagerConfig config = (ClusterManagerConfig)
               lastResolvedAddresses.getLoadBalancingPolicyConfig();
-          Map<String, PolicySelection> childPolicies = new HashMap<>(config.childPolicies);
-          PolicySelection removed = childPolicies.remove(getKey());
+          Map<String, Object> childPolicies = new HashMap<>(config.childPolicies);
+          Object removed = childPolicies.remove(getKey());
           assert removed != null;
           config = new ClusterManagerConfig(childPolicies);
           lastResolvedAddresses =
@@ -259,9 +257,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
                                        final SubchannelPicker newPicker) {
-        // If we are already in the process of resolving addresses, the overall balancing state
-        // will be updated at the end of it, and we don't need to trigger that update here.
-        if (getChildLbState(getKey()) == null) {
+        if (getCurrentState() == ConnectivityState.SHUTDOWN) {
           return;
         }
 
@@ -269,10 +265,21 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
         // when the child instance exits deactivated state.
         setCurrentState(newState);
         setCurrentPicker(newPicker);
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
         if (deletionTimer == null && !resolvingAddresses) {
           updateOverallBalancingState();
         }
       }
+    }
+  }
+
+  static final class GracefulSwitchLoadBalancerFactory extends LoadBalancer.Factory {
+    static final LoadBalancer.Factory INSTANCE = new GracefulSwitchLoadBalancerFactory();
+
+    @Override
+    public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+      return new GracefulSwitchLoadBalancer(helper);
     }
   }
 }

@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -144,7 +145,8 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
         assertThat(adsEnded.get()).isTrue();  // ensure previous call was ended
         adsEnded.set(false);
         @SuppressWarnings("unchecked")
-        StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
+        StreamObserver<DiscoveryRequest> requestObserver =
+            mock(StreamObserver.class, delegatesTo(new MockStreamObserver()));
         DiscoveryRpcCall call = new DiscoveryRpcCallV3(requestObserver, responseObserver);
         resourceDiscoveryCalls.offer(call);
         Context.current().addListener(
@@ -874,6 +876,19 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
       }
       return node.equals(argument.getNode());
     }
+
+    @Override
+    public String toString() {
+      return "DiscoveryRequestMatcher{"
+          + "node=" + node
+          + ", versionInfo='" + versionInfo + '\''
+          + ", typeUrl='" + typeUrl + '\''
+          + ", resources=" + resources
+          + ", responseNonce='" + responseNonce + '\''
+          + ", errorCode=" + errorCode
+          + ", errorMessages=" + errorMessages
+          + '}';
+    }
   }
 
   /**
@@ -899,6 +914,25 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
       }
       Collections.sort(actual);
       return actual.equals(expected);
+    }
+  }
+
+  private static class MockStreamObserver implements StreamObserver<DiscoveryRequest> {
+    private final List<DiscoveryRequest> requests = new ArrayList<>();
+
+    @Override
+    public void onNext(DiscoveryRequest value) {
+      requests.add(value);
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      // Ignore
+    }
+
+    @Override
+    public void onCompleted() {
+      // Ignore
     }
   }
 }
