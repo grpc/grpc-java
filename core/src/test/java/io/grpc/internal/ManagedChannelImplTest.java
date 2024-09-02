@@ -4785,10 +4785,18 @@ public class ManagedChannelImplTest {
                       + "\"name\":[{\"service\":\"SimpleService1\"}],"
                       + "\"waitForReady\":true}]}");
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(defaultServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
+
       createChannel(true);
       int prevSize = getStats(channel).channelTrace.events.size();
 
       nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
+
+      assertThat(channel.getConfigSelector()).isNotSameInstanceAs(
+          managedChannelServiceConfig.getDefaultConfigSelector());
 
       assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
               .setDescription("Initial Name Resolution error, using default service config")
@@ -4825,12 +4833,19 @@ public class ManagedChannelImplTest {
                     + "\"name\":[{\"service\":\"SimpleService1\"}],"
                     + "\"waitForReady\":true}]}");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(defaultServiceConfig, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
     createChannel();
     int prevSize = getStats(channel).channelTrace.events.size();
     Status resolutionError = Status.UNAVAILABLE
             .withDescription("Initial Name Resolution error, using default service config");
 
     nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
+
+    assertThat(channel.getConfigSelector()).isNotSameInstanceAs(
+        managedChannelServiceConfig.getDefaultConfigSelector());
 
     // initial service config is already applied so it's not reapplied using the default service
     // config here.
