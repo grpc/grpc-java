@@ -600,6 +600,32 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // ClientFrameHandler need to be started after connectionPreface / settings, otherwise it
         // may send goAway immediately.
         executor.execute(clientFrameHandler);
+
+        executor.execute(new Runnable() {
+          @Override
+          public void run() {
+            synchronized (lock) {
+              lock.notify();
+            }
+          }
+        });
+
+        long waitStartTime = System.currentTimeMillis();
+        synchronized (lock) {
+          try {
+            lock.wait(1000);
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+        }
+
+        long waitEndTime = System.currentTimeMillis();
+        if (waitEndTime - waitStartTime >= 1000) { // never got notified
+          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
+              .withDescription("Handshake timed out due to insufficient threads"));
+          return;
+        }
+
         synchronized (lock) {
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
