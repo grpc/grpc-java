@@ -247,6 +247,32 @@ public class OkHttpClientTransportTest {
     assertTrue("Unexpected: " + s, s.contains(address.toString()));
   }
 
+  @Test
+  public void testTransportExecutorWithTooFewThreads() throws Exception {
+    ExecutorService fixedPoolExecutor = Executors.newFixedThreadPool(1);
+    channelBuilder.transportExecutor(fixedPoolExecutor);
+    InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
+    clientTransport = new OkHttpClientTransport(
+        channelBuilder.buildTransportFactory(),
+        address,
+        "hostname",
+        null,
+        EAG_ATTRS,
+        NO_PROXY,
+        tooManyPingsRunnable);
+
+    // Start the transport
+    clientTransport.start(transportListener);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture());
+
+    // Verify that the description of the captured Status is as expected
+    Status capturedStatus = statusCaptor.getValue();
+    System.out.println(capturedStatus);
+    assertEquals("Handshake timed out due to insufficient threads",
+        capturedStatus.getDescription());
+  }
+
   /**
    * Test logging is functioning correctly for client received Http/2 frames. Not intended to test
    * actual frame content being logged.
