@@ -69,8 +69,12 @@ public class SpiffeIdParserTest {
               "/ns/staging/sa/default"},
           {"spiffe://example.com/9eebccd2-12bf-40a6-b262-65fe0487d453", "example.com",
               "/9eebccd2-12bf-40a6-b262-65fe0487d453"},
-          {"spiffe://trustdomain/abc0123.-_", "trustdomain", "/abc0123.-_"},
           {"spiffe://trustdomain/.a..", "trustdomain", "/.a.."},
+          {"spiffe://trustdomain/...", "trustdomain", "/..."},
+          {"spiffe://trustdomain/abcdefghijklmnopqrstuvwxyz", "trustdomain",
+              "/abcdefghijklmnopqrstuvwxyz"},
+          {"spiffe://trustdomain/abc0123.-_", "trustdomain", "/abc0123.-_"},
+          {"spiffe://trustdomain/0123456789", "trustdomain", "/0123456789"},
           {"spiffe://trustdomain0123456789/path", "trustdomain0123456789", "/path"},
       });
     }
@@ -98,6 +102,16 @@ public class SpiffeIdParserTest {
           "spiffe://trust%20domain/path",
           "spiffe://user@trustdomain/path",
           "spiffe:// /",
+          "",
+          "http://trustdomain/path",
+          "//trustdomain/path",
+          "://trustdomain/path",
+          "piffe://trustdomain/path",
+          "://",
+          "://trustdomain",
+          "spiff",
+          "spiffe",
+          "spiffe:////",
           "spiffe://trust.domain/../path"
           );
     }

@@ -35,7 +35,7 @@ public final class SpiffeIdParser {
 
   /**
    * Parses a URI string, applies validation rules described in SPIFFE standard, and, in case of
-   * success, returns {@link SpiffeId} containing Trust Domain and Path of SPIFFE ID.
+   * success, returns {@link SpiffeId}.
    *
    * @param uri a String representing a SPIFFE ID
    * @return {@link SpiffeId} containing Trust Domain and Path of SPIFFE ID
