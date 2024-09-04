@@ -19,10 +19,12 @@ package io.grpc.xds.internal.matchers;
 
 import com.google.auto.value.AutoValue;
 import io.grpc.Metadata;
+import io.grpc.ServerCall;
 
 @AutoValue
 public abstract class HttpMatchInput {
   public abstract Metadata headers();
+
   // TODO(sergiitk): [IMPL] consider
-  // public abstract ServerCall<?, ?> serverCall();
+  public abstract ServerCall<?, ?> serverCall();
 }

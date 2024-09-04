@@ -25,6 +25,11 @@ import dev.cel.compiler.CelCompiler;
 import dev.cel.compiler.CelCompilerFactory;
 import dev.cel.runtime.CelEvaluationException;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.NoopServerCall;
+import io.grpc.ServerCall;
+import io.grpc.StringMarshaller;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,9 +40,12 @@ public class CelMatcherTest {
   // Construct the compilation and runtime environments.
   // These instances are immutable and thus trivially thread-safe and amenable to caching.
   private static final CelCompiler CEL_COMPILER =
-      CelCompilerFactory.standardCelCompilerBuilder().addVar("my_var", SimpleType.STRING).build();
+      CelCompilerFactory.standardCelCompilerBuilder()
+          .addVar("request", SimpleType.ANY)
+          .setResultType(SimpleType.BOOL)
+          .build();
   private static final CelValidationResult celProg1 =
-      CEL_COMPILER.compile("type(my_var) == string");
+      CEL_COMPILER.compile("request.method == \"POST\"");
 
   CelAbstractSyntaxTree ast1;
   CelMatcher matcher1;
@@ -46,6 +54,22 @@ public class CelMatcherTest {
     @Override
     public Metadata headers() {
       return new Metadata();
+    }
+
+    @Override public ServerCall<?, ?> serverCall() {
+      final MethodDescriptor<String, String> method =
+          MethodDescriptor.<String, String>newBuilder()
+              .setType(MethodType.UNKNOWN)
+              .setFullMethodName("service/method")
+              .setRequestMarshaller(new StringMarshaller())
+              .setResponseMarshaller(new StringMarshaller())
+              .build();
+      return new NoopServerCall<String, String>() {
+        @Override
+        public MethodDescriptor<String, String> getMethodDescriptor() {
+          return method;
+        }
+      };
     }
   };
 
