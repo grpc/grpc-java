@@ -18,23 +18,18 @@ package io.grpc.xds.internal.matchers;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.collect.ImmutableMap;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.runtime.CelEvaluationException;
-import dev.cel.runtime.CelRuntime;
-import dev.cel.runtime.CelRuntimeFactory;
 import java.util.function.Predicate;
 
 /** Unified Matcher API: xds.type.matcher.v3.CelMatcher. */
 public class CelMatcher implements Predicate<HttpMatchInput> {
-  private static final CelRuntime CEL_RUNTIME =
-      CelRuntimeFactory.standardCelRuntimeBuilder().build();
 
-  private final CelRuntime.Program program;
+  private final GrpcCelEnvironment program;
   private final String description;
 
   private CelMatcher(CelAbstractSyntaxTree ast, String description) throws CelEvaluationException {
-    this.program = CEL_RUNTIME.createProgram(checkNotNull(ast));
+    this.program = new GrpcCelEnvironment(checkNotNull(ast));
     this.description = description != null ? description : "";
   }
 
@@ -57,11 +52,6 @@ public class CelMatcher implements Predicate<HttpMatchInput> {
     //   return false;
     // }
     // TODO(sergiitk): [IMPL] convert headers to cel args
-    try {
-      return (boolean) program.eval(ImmutableMap.of("my_var", "Hello World"));
-    } catch (CelEvaluationException e) {
-      // TODO(sergiitk): [IMPL] log cel error?
-      return false;
-    }
+    return program.eval(httpMatchInput.serverCall(), httpMatchInput.headers());
   }
 }
