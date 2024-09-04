@@ -17,6 +17,7 @@
 package io.grpc.examples.csmobservability;
 
 import io.grpc.Channel;
+import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
@@ -25,9 +26,11 @@ import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.gcp.csm.observability.CsmObservability;
+import io.grpc.xds.XdsChannelCredentials;
 import io.opentelemetry.exporter.prometheus.PrometheusHttpServer;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
@@ -72,14 +75,22 @@ public class CsmObservabilityClient {
     // The port on which prometheus metrics will be exposed.
     int prometheusPort = 9464;
     AtomicBoolean sendRpcs = new AtomicBoolean(true);
+    ChannelCredentials credentials = InsecureChannelCredentials.create();
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
-        System.err.println("Usage: [name [target [prometheusPort]]]");
+        System.err.println("Usage: [--xds-creds [name [target [prometheusPort]]]]");
         System.err.println("");
+        System.err.println("  --xds-creds  Use credentials provided by xDS. Defaults to insecure");
         System.err.println("  name    The name you wish to be greeted by. Defaults to " + user);
         System.err.println("  target  The server to connect to. Defaults to " + target);
         System.err.println("  prometheusPort  The port to expose prometheus metrics. Defaults to " + prometheusPort);
         System.exit(1);
+      } else if ("--xds-creds".equals(args[0])) {
+        // The xDS credentials use the security configured by the xDS server when available. When
+        // xDS is not used or when xDS does not provide security configuration, the xDS credentials
+        // fall back to other credentials (in this case, InsecureChannelCredentials).
+        credentials = XdsChannelCredentials.create(InsecureChannelCredentials.create());
+        args = Arrays.copyOfRange(args, 1, args.length);
       }
       user = args[0];
     }
@@ -127,7 +138,7 @@ public class CsmObservabilityClient {
     observability.registerGlobal();
 
     // Create a communication channel to the server, known as a Channel.
-    ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
+    ManagedChannel channel = Grpc.newChannelBuilder(target, credentials)
         .build();
     CsmObservabilityClient client = new CsmObservabilityClient(channel);
 
