@@ -415,6 +415,7 @@ public final class ReadableBuffers {
     public InputStream detach() {
       ReadableBuffer detachedBuffer = buffer;
       buffer = buffer.readBytes(0);
+      detachedBuffer.touch();
       return new BufferInputStream(detachedBuffer);
     }
 
