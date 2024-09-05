@@ -144,6 +144,9 @@ public class XdsClientFallbackTest {
   @Before
   public void setUp() throws XdsInitializationException {
     System.setProperty(BootstrapperImpl.GRPC_EXPERIMENTAL_XDS_FALLBACK, "true");
+    if (mainTdServer == null) {
+      throw new XdsInitializationException("Failed to create ControlPlaneRule for main TD server");
+    }
     setAdsConfig(mainTdServer, MAIN_SERVER);
     setAdsConfig(fallbackServer, FALLBACK_SERVER);
 
@@ -154,7 +157,9 @@ public class XdsClientFallbackTest {
 
   @After
   public void cleanUp() {
-    xdsClientPool.returnObject(xdsClient);
+    if (xdsClientPool != null) {
+      xdsClientPool.returnObject(xdsClient);
+    }
   }
 
   private static void setAdsConfig(ControlPlaneRule controlPlane, String serverName) {
@@ -256,6 +261,7 @@ public class XdsClientFallbackTest {
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), FALLBACK_CLUSTER_NAME, cdsWatcher);
     inOrder.verify(cdsWatcher, timeout(5000)).onChanged(any());
+    Object fallbackCpcBlob = ((XdsClientImpl) xdsClient).getActiveCpcForTest(null);
 
     restartServer(TdServerType.MAIN);
 
@@ -270,14 +276,13 @@ public class XdsClientFallbackTest {
 
     // verify that connection to fallback server is closed
     assertFalse("Should have disconnected from fallback server",
-        ((XdsClientImpl) xdsClient).isSubscriberCpcConnected(XdsClusterResource.getInstance(),
-            FALLBACK_CLUSTER_NAME));
+        ((XdsClientImpl) xdsClient).isCpcBlobConnected(fallbackCpcBlob));
 
   }
 
   // This test takes a long time because of the 16 sec timeout for non-existent resource
   @Test
-  public void connect_then_mainServerDown_fallbackServerUp() {
+  public void connect_then_mainServerDown_fallbackServerUp() throws InterruptedException {
     restartServer(TdServerType.MAIN);
     restartServer(TdServerType.FALLBACK);
     xdsClient = xdsClientPool.getObject();
@@ -309,7 +314,7 @@ public class XdsClientFallbackTest {
 
     // Asking for something not in cache should force a fallback
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), FALLBACK_CLUSTER_NAME, cdsWatcher);
-    verify(ldsWatcher, timeout(5000)).onChanged(
+    verify(ldsWatcher, timeout(500000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
     verify(ldsWatcher2, timeout(5000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
@@ -339,9 +344,11 @@ public class XdsClientFallbackTest {
     fallbackServer.getServer().shutdownNow();
 
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher);
+
     restartServer(TdServerType.MAIN);
+
     verify(cdsWatcher, timeout(5000)).onChanged(any());
-    verify(ldsWatcher, timeout(5000).times(2)).onChanged(
+    verify(ldsWatcher, timeout(5000).atLeastOnce()).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
   }
 

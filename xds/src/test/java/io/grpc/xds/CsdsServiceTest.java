@@ -498,7 +498,7 @@ public class CsdsServiceTest {
     @Nullable
     @Override
     public Collection<String> getSubscribedResources(
-        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority) {
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type) {
       return null;
     }
 
@@ -507,11 +507,16 @@ public class CsdsServiceTest {
       return ImmutableMap.of();
     }
 
+    @Override
+    public void assignOwner(XdsResourceType<?> resourceType, Collection<String> resources,
+                            ServerInfo serverInfo) {
+      // No-op.
+    }
 
     @Override
-    public void assignResourcesToOwner(XdsResourceType<?> type, Collection<String> resources,
-                                       Object owner) {
-      // No-op.
+    public boolean hasSubscribers(XdsResourceType<? extends ResourceUpdate> type,
+                                  String authority) {
+      return true;
     }
   }
 

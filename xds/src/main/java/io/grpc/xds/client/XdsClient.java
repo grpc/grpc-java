@@ -299,14 +299,6 @@ public abstract class XdsClient {
   }
 
   /**
-   * For all subscriber's for the specified server, if the resource hasn't yet been
-   * resolved then start a timer for it.
-   */
-  protected void startSubscriberTimersIfNeeded(ServerInfo serverInfo) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
    * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
    * they are at the moment of the call.
    *
@@ -407,7 +399,7 @@ public abstract class XdsClient {
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
-    void handleStreamClosed(Status error);
+    void handleStreamClosed(Status error, boolean inRetry, ControlPlaneClient cpcThatClosed);
 
     /** Called when the ADS stream has established communication with the xds server.
      * Is expected do manage the ControlPlanClients and cache updates associated with
@@ -428,25 +420,17 @@ public abstract class XdsClient {
      * wildcard mode.
      *
      * @param serverInfo the xds server to get the resources from
-     * @param type the type of the resources that should be retrieved
-     * @param authority the authority of the resources that should be retrieved.  If null or empty,
-     *                  then all resources for the given type should be returned.
+     * @param type       the type of the resources that should be retrieved
      */
     @Nullable
     Collection<String> getSubscribedResources(
-        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type, String authority);
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type);
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
 
-    /**
-     * Assigns the given resources to the given owner.  Generally, the owner is a ControlPlaneClient
-     * @param type the type of the resources
-     * @param resources the names of the resources
-     * @param owner the object that should take over ownership of the resources
-     */
-    default void assignResourcesToOwner(XdsResourceType<?> type, Collection<String> resources,
-                                        Object owner) {
-      // Default is a no-op implemention which is useful for test cases where everything is mocked
-    }
+    boolean hasSubscribers(XdsResourceType<? extends ResourceUpdate> type, String authority);
+
+    void assignOwner(XdsResourceType<?> resourceType, Collection<String> resources,
+                     ServerInfo serverInfo);
   }
 }
