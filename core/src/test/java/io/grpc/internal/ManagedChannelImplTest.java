@@ -1128,6 +1128,31 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void addressResolutionError_noPriorNameResolution_usesDefaultServiceConfig()
+      throws Exception {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setResolvedAtStart(false)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    Map<String, Object> defaultServiceConfig =
+        parseConfig("{\"methodConfig\":[{"
+            + "\"name\":[{\"service\":\"SimpleService1\"}],"
+            + "\"waitForReady\":true}]}");
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
+    Status resolutionError = Status.UNAVAILABLE.withDescription("Resolution failed");
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+
+    resolver.listener.onError(resolutionError);
+
+    InternalConfigSelector configSelector = channel.getConfigSelector();
+    ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) configSelector.selectConfig(null).getConfig();
+    config.getMethodConfig()
+  }
+
+  @Test
   public void interceptor() throws Exception {
     final AtomicLong atomic = new AtomicLong();
     ClientInterceptor interceptor = new ClientInterceptor() {
