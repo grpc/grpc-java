@@ -69,6 +69,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private ConnectivityState concludedState = IDLE;
   private final boolean enableHappyEyeballs =
       PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  private boolean notAPetiolePolicy = true;
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -79,6 +80,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (rawConnectivityState == SHUTDOWN) {
       return Status.FAILED_PRECONDITION.withDescription("Already shut down");
     }
+
+    // Cache whether or not this is a petiole policy, which is based off of an address attribute
+    Boolean isPetiolePolicy = resolvedAddresses.getAttributes().get(IS_PETIOLE_POLICY);
+    this.notAPetiolePolicy = isPetiolePolicy == null || !isPetiolePolicy;
 
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
 
@@ -303,7 +308,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (subchannelData.state != READY) {
       return;
     }
-    if (subchannelData.getHealthState() == READY) {
+
+    if (notAPetiolePolicy || subchannelData.getHealthState() == READY) {
       updateBalancingState(READY,
           new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel)));
     } else if (subchannelData.getHealthState() == TRANSIENT_FAILURE) {
@@ -468,6 +474,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     @Override
     public void onSubchannelState(ConnectivityStateInfo newState) {
+      if (notAPetiolePolicy) {
+        log.log(Level.WARNING,
+            "Ignoring health status {0} for subchannel {1} as this is not a petiole policy",
+            new Object[]{newState, subchannelData.subchannel});
+        return;
+      }
+
       log.log(Level.FINE, "Received health status {0} for subchannel {1}",
           new Object[]{newState, subchannelData.subchannel});
       subchannelData.healthStateInfo = newState;
