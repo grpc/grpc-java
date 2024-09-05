@@ -282,7 +282,7 @@ public class XdsClientFallbackTest {
 
   // This test takes a long time because of the 16 sec timeout for non-existent resource
   @Test
-  public void connect_then_mainServerDown_fallbackServerUp() throws InterruptedException {
+  public void connect_then_mainServerDown_fallbackServerUp() {
     restartServer(TdServerType.MAIN);
     restartServer(TdServerType.FALLBACK);
     xdsClient = xdsClientPool.getObject();
@@ -314,7 +314,7 @@ public class XdsClientFallbackTest {
 
     // Asking for something not in cache should force a fallback
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), FALLBACK_CLUSTER_NAME, cdsWatcher);
-    verify(ldsWatcher, timeout(500000)).onChanged(
+    verify(ldsWatcher, timeout(5000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
     verify(ldsWatcher2, timeout(5000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
