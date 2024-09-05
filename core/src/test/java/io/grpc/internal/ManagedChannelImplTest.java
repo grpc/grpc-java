@@ -1149,7 +1149,7 @@ public class ManagedChannelImplTest {
 
     InternalConfigSelector configSelector = channel.getConfigSelector();
     ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) configSelector.selectConfig(null).getConfig();
-    config.getMethodConfig()
+    config.getMethodConfig(MethodDescriptor.newBuilder().set)
   }
 
   @Test
