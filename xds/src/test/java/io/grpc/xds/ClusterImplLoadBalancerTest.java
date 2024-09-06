@@ -440,15 +440,15 @@ public class ClusterImplLoadBalancerTest {
     streamTracer2.streamClosed(Status.UNAVAILABLE);
 
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    UpstreamLocalityStats localityStats1 = Iterables.get(clusterStats.upstreamLocalityStatsList(),
-        0);
-    assertThat(localityStats1.locality()).isEqualTo(locality1);
+    List<UpstreamLocalityStats> upstreamLocalityStatsList =
+        clusterStats.upstreamLocalityStatsList();
+    UpstreamLocalityStats localityStats1 = Iterables.find(upstreamLocalityStatsList,
+        upstreamLocalityStats -> upstreamLocalityStats.locality().equals(locality1));
     assertThat(localityStats1.totalIssuedRequests()).isEqualTo(0L);
     assertThat(localityStats1.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats1.totalErrorRequests()).isEqualTo(0L);
-    UpstreamLocalityStats localityStats2 = Iterables.get(clusterStats.upstreamLocalityStatsList(),
-        1);
-    assertThat(localityStats2.locality()).isEqualTo(locality2);
+    UpstreamLocalityStats localityStats2 = Iterables.find(upstreamLocalityStatsList,
+        upstreamLocalityStats -> upstreamLocalityStats.locality().equals(locality2));
     assertThat(localityStats2.totalIssuedRequests()).isEqualTo(1L);
     assertThat(localityStats2.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats2.totalErrorRequests()).isEqualTo(1L);
