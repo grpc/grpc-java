@@ -28,6 +28,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.ForwardingServerCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
@@ -315,8 +316,58 @@ final class OpenTelemetryTracingModule {
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       Span span = otelSpan.get(io.grpc.Context.current());
-      try (Scope scope = Context.current().with(span).makeCurrent()) {
+      if (span == null) {
+        logger.log(Level.FINE, "Server span not found. ServerTracerFactory for server "
+            + "tracing must be set.");
         return next.startCall(call, headers);
+      }
+      try (Scope scope = Context.current().with(span).makeCurrent()) {
+        return new AttachSpanServerCallListener<>(next.startCall(call, headers), span);
+      }
+    }
+  }
+
+  private static class AttachSpanServerCallListener<ReqT> extends
+      ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
+    private final Span span;
+
+    protected AttachSpanServerCallListener(ServerCall.Listener<ReqT> delegate, Span span) {
+      super(delegate);
+      this.span = checkNotNull(span, "span");
+    }
+
+    @Override
+    public void onMessage(ReqT message) {
+      try (Scope scope = Context.current().with(span).makeCurrent()) {
+        delegate().onMessage(message);
+      }
+    }
+
+    @Override
+    public void onHalfClose() {
+      try (Scope scope = Context.current().with(span).makeCurrent()) {
+        delegate().onHalfClose();
+      }
+    }
+
+    @Override
+    public void onCancel() {
+      try (Scope scope = Context.current().with(span).makeCurrent()) {
+        delegate().onCancel();
+      }
+    }
+
+    @Override
+    public void onComplete() {
+      try (Scope scope = Context.current().with(span).makeCurrent()) {
+        delegate().onComplete();
+      }
+    }
+
+    @Override
+    public void onReady() {
+      try (Scope scope = Context.current().with(span).makeCurrent()) {
+        delegate().onReady();
       }
     }
   }

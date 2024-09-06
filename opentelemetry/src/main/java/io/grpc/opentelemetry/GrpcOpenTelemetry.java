@@ -68,6 +68,7 @@ public final class GrpcOpenTelemetry {
   private final boolean disableDefault;
   private final OpenTelemetryMetricsResource resource;
   private final OpenTelemetryMetricsModule openTelemetryMetricsModule;
+  private final OpenTelemetryTracingModule openTelemetryTracingModule;
   private final List<String> optionalLabels;
   private final MetricSink sink;
 
@@ -88,6 +89,7 @@ public final class GrpcOpenTelemetry {
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
         STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
+    this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
 
@@ -152,6 +154,7 @@ public final class GrpcOpenTelemetry {
     InternalManagedChannelBuilder.addMetricSink(builder, sink);
     InternalManagedChannelBuilder.interceptWithTarget(
         builder, openTelemetryMetricsModule::getClientInterceptor);
+    builder.intercept(openTelemetryTracingModule.getClientInterceptor());
   }
 
   /**
@@ -161,6 +164,9 @@ public final class GrpcOpenTelemetry {
    */
   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
     serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
+    serverBuilder.addStreamTracerFactory(
+        openTelemetryTracingModule.getServerTracerFactory());
+    serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
   }
 
   @VisibleForTesting
