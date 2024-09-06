@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
+import static io.grpc.LoadBalancer.IS_PETIOLE_POLICY;
 import static io.grpc.internal.PickFirstLeafLoadBalancer.CONNECTION_DELAY_INTERVAL_MS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -390,14 +391,43 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void healthCheck_nonPetiolePolicy() {
+    when(mockSubchannel1.getAttributes()).thenReturn(
+        Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
+
+    // Initialize with one server loadbalancer and both health and state listeners
+    List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0));
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(oneServer)
+        .setAttributes(Attributes.EMPTY).build());
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    SubchannelStateListener healthListener = createArgsCaptor.getValue()
+        .getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
+
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), any()); // health listener ignored
+
+    healthListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.INTERNAL));
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any(SubchannelPicker.class));
+  }
+
+  @Test
   public void healthCheckFlow() {
     when(mockSubchannel1.getAttributes()).thenReturn(
         Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
     when(mockSubchannel2.getAttributes()).thenReturn(
         Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
+
     List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0), servers.get(1));
     loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(oneServer)
-        .setAttributes(Attributes.EMPTY).build());
+        .setAttributes(Attributes.newBuilder().set(IS_PETIOLE_POLICY, true).build()).build());
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2);
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
@@ -413,13 +443,13 @@ public class PickFirstLeafLoadBalancerTest {
     // subchannel2 | IDLE      | IDLE
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
-    inOrder.verify(mockHelper, times(0)).updateBalancingState(any(), any());
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
 
     // subchannel  |  state    |   health
     // subchannel1 | READY     | CONNECTING
     // subchannel2 | IDLE      | IDLE
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(mockHelper, times(0)).updateBalancingState(any(), any());
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
 
     // subchannel  |  state    |   health
     // subchannel1 | READY     | READY
