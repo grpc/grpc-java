@@ -69,7 +69,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private ConnectivityState concludedState = IDLE;
   private final boolean enableHappyEyeballs =
       PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
-  private boolean notAPetiolePolicy = true;
+  private boolean notAPetiolePolicy = true; // means not under a petiole policy
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -450,7 +450,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     hcListener.subchannelData = subchannelData;
     subchannels.put(addr, subchannelData);
     Attributes scAttrs = subchannel.getAttributes();
-    if (scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
+    if (notAPetiolePolicy || scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
       subchannelData.healthStateInfo = ConnectivityStateInfo.forNonError(READY);
     }
     subchannel.start(stateInfo -> processSubchannelState(subchannelData, stateInfo));
@@ -476,7 +476,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     public void onSubchannelState(ConnectivityStateInfo newState) {
       if (notAPetiolePolicy) {
         log.log(Level.WARNING,
-            "Ignoring health status {0} for subchannel {1} as this is not a petiole policy",
+            "Ignoring health status {0} for subchannel {1} as this is not under a petiole policy",
             new Object[]{newState, subchannelData.subchannel});
         return;
       }
