@@ -62,7 +62,7 @@ public class S2AStubTest {
     IOException expected =
         assertThrows(IOException.class, () -> newStub.send(SessionReq.getDefaultInstance()));
 
-    assertThat(expected).hasMessageThat().contains("UNAVAILABLE");
+    assertThat(expected).hasMessageThat().contains("DEADLINE_EXCEEDED");
   }
 
   @Test

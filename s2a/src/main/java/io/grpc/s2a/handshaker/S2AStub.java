@@ -142,7 +142,10 @@ class S2AStub implements AutoCloseable {
   private void createWriterIfNull() {
     if (writer == null) {
       writer =
-          serviceStub.withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS).setUpSession(reader);
+          serviceStub
+              .withWaitForReady()
+              .withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS)
+              .setUpSession(reader);
     }
   }
 
