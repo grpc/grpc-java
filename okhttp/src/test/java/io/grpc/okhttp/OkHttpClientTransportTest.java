@@ -251,25 +251,12 @@ public class OkHttpClientTransportTest {
   public void testTransportExecutorWithTooFewThreads() throws Exception {
     ExecutorService fixedPoolExecutor = Executors.newFixedThreadPool(1);
     channelBuilder.transportExecutor(fixedPoolExecutor);
-    InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
-    clientTransport = new OkHttpClientTransport(
-        channelBuilder.buildTransportFactory(),
-        address,
-        "hostname",
-        null,
-        EAG_ATTRS,
-        NO_PROXY,
-        tooManyPingsRunnable);
-
-    // Start the transport
-    clientTransport.start(transportListener);
+    initTransport();
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture());
-
-    // Verify that the description of the captured Status is as expected
     Status capturedStatus = statusCaptor.getValue();
-    System.out.println(capturedStatus);
-    assertEquals("Handshake timed out due to insufficient threads",
+    assertEquals("Timed out waiting for second handshake thread. "
+        + "The transport executor pool may have run out of threads",
         capturedStatus.getDescription());
   }
 

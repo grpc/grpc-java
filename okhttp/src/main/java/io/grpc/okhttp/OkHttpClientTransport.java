@@ -499,6 +499,29 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       outboundFlow = new OutboundFlowController(this, frameWriter);
     }
     final CountDownLatch latch = new CountDownLatch(1);
+    // This runs con-concurrently with handshake and works as a hack checking enough threads are
+    // available to start the transport.
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        long waitStartTime = System.nanoTime();
+        synchronized (lock) {
+          try {
+            lock.wait(100);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+        }
+        long waitEndTime = System.nanoTime();
+        System.out.println(waitEndTime - waitStartTime);
+        if (waitEndTime - waitStartTime >= 100000000) { // never got notified
+          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
+              .withDescription("Timed out waiting for second handshake thread. "
+                  + "The transport executor pool may have run out of threads"));
+        }
+      }
+    });
+
     // Connecting in the serializingExecutor, so that some stream operations like synStream
     // will be executed after connected.
     serializingExecutor.execute(new Runnable() {
@@ -581,6 +604,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           if (sslSession != null) {
             securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
           }
+          lock.notify();
         }
       }
     });
@@ -600,32 +624,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // ClientFrameHandler need to be started after connectionPreface / settings, otherwise it
         // may send goAway immediately.
         executor.execute(clientFrameHandler);
-
-        executor.execute(new Runnable() {
-          @Override
-          public void run() {
-            synchronized (lock) {
-              lock.notify();
-            }
-          }
-        });
-
-        long waitStartTime = System.currentTimeMillis();
-        synchronized (lock) {
-          try {
-            lock.wait(1000);
-          } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-          }
-        }
-
-        long waitEndTime = System.currentTimeMillis();
-        if (waitEndTime - waitStartTime >= 1000) { // never got notified
-          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
-              .withDescription("Handshake timed out due to insufficient threads"));
-          return;
-        }
-
         synchronized (lock) {
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
