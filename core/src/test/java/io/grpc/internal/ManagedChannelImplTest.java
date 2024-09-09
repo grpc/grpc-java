@@ -84,6 +84,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
@@ -123,6 +124,7 @@ import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
@@ -1138,10 +1140,11 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
         parseConfig("{\"methodConfig\":[{"
-            + "\"name\":[{\"service\":\"SimpleService1\"}],"
+            + "\"name\":[{\"service\":\"service\"}],"
             + "\"waitForReady\":true}]}");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
     Status resolutionError = Status.UNAVAILABLE.withDescription("Resolution failed");
+    channelBuilder.maxTraceEvents(10);
     createChannel();
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
 
@@ -1149,7 +1152,14 @@ public class ManagedChannelImplTest {
 
     InternalConfigSelector configSelector = channel.getConfigSelector();
     ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) configSelector.selectConfig(null).getConfig();
-    config.getMethodConfig(MethodDescriptor.newBuilder().set)
+    MethodInfo methodConfig = config.getMethodConfig(method);
+    assertThat(methodConfig.waitForReady).isTrue();
+    timer.forwardNanos(1234);
+    assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+        .setDescription("Initial Name Resolution error, using default service config")
+        .setSeverity(Severity.CT_ERROR)
+        .setTimestampNanos(0)
+        .build());
   }
 
   @Test
@@ -4620,7 +4630,7 @@ public class ManagedChannelImplTest {
     int size = getStats(channel).channelTrace.events.size();
     assertThat(getStats(channel).channelTrace.events.get(size - 1))
         .isNotEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Using default service config")
+            .setDescription("timer.forwardNanos(1234);")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
