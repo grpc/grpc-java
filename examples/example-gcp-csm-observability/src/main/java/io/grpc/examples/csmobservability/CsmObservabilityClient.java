@@ -78,7 +78,7 @@ public class CsmObservabilityClient {
     ChannelCredentials credentials = InsecureChannelCredentials.create();
     if (args.length > 0) {
       if ("--help".equals(args[0])) {
-        System.err.println("Usage: [--xds-creds [name [target [prometheusPort]]]]");
+        System.err.println("Usage: [--xds-creds] [name [target [prometheusPort]]]");
         System.err.println("");
         System.err.println("  --xds-creds  Use credentials provided by xDS. Defaults to insecure");
         System.err.println("  name    The name you wish to be greeted by. Defaults to " + user);
