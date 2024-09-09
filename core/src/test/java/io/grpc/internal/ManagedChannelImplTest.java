@@ -84,6 +84,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
@@ -1132,11 +1133,19 @@ public class ManagedChannelImplTest {
   @Test
   public void addressResolutionError_noPriorNameResolution_usesDefaultServiceConfig()
       throws Exception {
+    Map<String, Object> rawServiceConfig =
+        parseConfig("{\"methodConfig\":[{"
+            + "\"name\":[{\"service\":\"service\"}],"
+            + "\"waitForReady\":true}]}");
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, null);
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .setResolvedAtStart(false)
             .build();
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
     channelBuilder.nameResolverFactory(nameResolverFactory);
     Map<String, Object> defaultServiceConfig =
         parseConfig("{\"methodConfig\":[{"
@@ -1159,6 +1168,16 @@ public class ManagedChannelImplTest {
         .setDescription("Initial Name Resolution error, using default service config")
         .setSeverity(Severity.CT_ERROR)
         .setTimestampNanos(0)
+        .build());
+
+    // Check that lastServiceConfig has been set above, so a config resolution with the same config
+    // doesn't change it
+    resolver.resolved();
+    timer.forwardNanos(1234);
+    assertThat(getStats(channel).channelTrace.events).doesNotContain(new ChannelTrace.Event.Builder()
+        .setDescription("Service config changed")
+        .setSeverity(Severity.CT_ERROR)
+        .setTimestampNanos(1234)
         .build());
   }
 
