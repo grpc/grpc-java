@@ -45,6 +45,7 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Settings;
@@ -83,6 +84,22 @@ public class S2AProtocolNegotiatorFactoryTest {
   @After
   public void tearDown() {
     fakeS2AServer.shutdown();
+  }
+
+  @Test
+  public void handlerRemoved_success() throws Exception {
+    S2AProtocolNegotiatorFactory.BufferReadsHandler handler1 =
+        new S2AProtocolNegotiatorFactory.BufferReadsHandler();
+    S2AProtocolNegotiatorFactory.BufferReadsHandler handler2 =
+        new S2AProtocolNegotiatorFactory.BufferReadsHandler();
+    EmbeddedChannel channel = new EmbeddedChannel(handler1, handler2);
+    channel.writeInbound("message1");
+    channel.writeInbound("message2");
+    channel.writeInbound("message3");
+    assertThat(handler1.getReads()).hasSize(3);
+    assertThat(handler2.getReads()).isEmpty();
+    channel.pipeline().remove(handler1);
+    assertThat(handler2.getReads()).hasSize(3);
   }
 
   @Test
