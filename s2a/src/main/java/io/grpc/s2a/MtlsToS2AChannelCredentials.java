@@ -76,10 +76,10 @@ public final class MtlsToS2AChannelCredentials {
       File trustBundleFile = new File(trustBundlePath);
 
       AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
-      keyManager.updateIdentityCredentialsFromFile(privateKeyFile, certChainFile);
+      keyManager.updateIdentityCredentials(certChainFile, privateKeyFile);
 
       AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-      trustManager.updateTrustCredentialsFromFile(trustBundleFile);
+      trustManager.updateTrustCredentials(trustBundleFile);
 
       ChannelCredentials channelToS2ACredentials =
           TlsChannelCredentials.newBuilder()
