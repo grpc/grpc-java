@@ -100,11 +100,6 @@ class S2AStub implements AutoCloseable {
       }
       responses.clear();
       if (exception != null) {
-        logger.log(
-            Level.WARNING,
-            "Received an unexpected response from a host at the S2A's address. The S2A might be"
-                + " unavailable. "
-                + exception.getMessage());
         throw new IOException(
             "Received an unexpected response from a host at the S2A's address. The S2A might be"
                 + " unavailable."
@@ -115,7 +110,6 @@ class S2AStub implements AutoCloseable {
     try {
       writer.onNext(req);
     } catch (RuntimeException e) {
-      logger.log(Level.WARNING, "Error occurred while writing to the S2A.", e);
       writer.onError(e);
       responses.offer(Result.createWithThrowable(e));
     }
@@ -172,7 +166,6 @@ class S2AStub implements AutoCloseable {
      */
     @Override
     public void onError(Throwable t) {
-      logger.log(Level.WARNING, "Error occurred while reading from the S2A.", t);
       responses.offer(Result.createWithThrowable(t));
     }
 
