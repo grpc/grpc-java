@@ -502,6 +502,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     // This runs con-concurrently with handshake and works as a hack checking enough threads are
     // available to start the transport.
     executor.execute(new Runnable() {
+      @SuppressWarnings("WaitNotInLoop")
       @Override
       public void run() {
         long waitStartTime = System.nanoTime();
@@ -513,7 +514,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           }
         }
         long waitEndTime = System.nanoTime();
-        System.out.println(waitEndTime - waitStartTime);
         if (waitEndTime - waitStartTime >= 100000000) { // never got notified
           startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
               .withDescription("Timed out waiting for second handshake thread. "
