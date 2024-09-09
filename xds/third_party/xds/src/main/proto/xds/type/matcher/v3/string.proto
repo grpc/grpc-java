@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package xds.type.matcher.v3;
 
+import "xds/core/v3/extension.proto";
 import "xds/type/matcher/v3/regex.proto";
 
 import "validate/validate.proto";
@@ -14,7 +15,7 @@ option go_package = "github.com/cncf/xds/go/xds/type/matcher/v3";
 // [#protodoc-title: String matcher]
 
 // Specifies the way to match a string.
-// [#next-free-field: 8]
+// [#next-free-field: 9]
 message StringMatcher {
   oneof match_pattern {
     option (validate.required) = true;
@@ -52,6 +53,10 @@ message StringMatcher {
     //
     // * *abc* matches the value *xyz.abc.def*
     string contains = 7 [(validate.rules).string = {min_len: 1}];
+
+    // Use an extension as the matcher type.
+    // [#extension-category: envoy.string_matcher]
+    xds.core.v3.TypedExtensionConfig custom = 8;
   }
 
   // If true, indicates the exact/prefix/suffix matching should be case insensitive. This has no

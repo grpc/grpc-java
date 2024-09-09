@@ -23,7 +23,7 @@ import java.util.List;
  */
 @Internal
 public final class DoubleCounterMetricInstrument extends PartialMetricInstrument {
-  DoubleCounterMetricInstrument(long index, String name, String description, String unit,
+  public DoubleCounterMetricInstrument(int index, String name, String description, String unit,
       List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
   }

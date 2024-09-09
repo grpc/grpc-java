@@ -6,14 +6,14 @@
   <packaging>jar</packaging>
   <!-- Feel free to delete the comment at the end of these lines. It is just
        for safely updating the version in our release process. -->
-  <version>1.64.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
+  <version>1.68.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
   <name>example-debug</name>
   <url>https://github.com/grpc/grpc-java</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <grpc.version>1.64.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protoc.version>3.25.1</protoc.version>
+    <grpc.version>1.68.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
+    <protoc.version>3.25.3</protoc.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
@@ -34,15 +34,15 @@
   <dependencies>
     <dependency>
       <groupId>io.grpc</groupId>
+      <artifactId>grpc-services</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
       <artifactId>grpc-protobuf</artifactId>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-services</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.tomcat</groupId>
@@ -54,11 +54,6 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-netty-shaded</artifactId>
       <scope>runtime</scope>
-    </dependency>
-    <dependency> <!-- prevent downgrade of version in protobuf-java-util from grpc-services -->
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>32.1.3-jre</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
@@ -103,7 +98,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
-        <version>1.4.1</version>
+        <version>3.5.0</version>
         <executions>
           <execution>
             <id>enforce</id>

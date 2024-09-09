@@ -52,7 +52,7 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
 
   @Override
   protected int priority() {
-    return 5; // Default
+    return 10; // High priority
   }
 
   @Override

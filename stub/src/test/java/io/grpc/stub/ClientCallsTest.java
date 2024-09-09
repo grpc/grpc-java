@@ -399,7 +399,7 @@ public class ClientCallsTest {
       future.get();
       fail("Should fail");
     } catch (CancellationException e) {
-      // Exepcted
+      // Expected
     }
   }
 

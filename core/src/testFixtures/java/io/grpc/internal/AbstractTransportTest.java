@@ -16,8 +16,8 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -2251,6 +2251,7 @@ public abstract class AbstractTransportTest {
 
     @Override
     public Attributes transportReady(Attributes attributes) {
+      assertFalse(terminated.isDone());
       return Attributes.newBuilder()
           .setAll(attributes)
           .set(ADDITIONAL_TRANSPORT_ATTR_KEY, "additional attribute value")

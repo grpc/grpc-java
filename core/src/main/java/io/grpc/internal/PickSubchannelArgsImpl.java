@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Objects;
 import io.grpc.CallOptions;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -29,15 +30,18 @@ public final class PickSubchannelArgsImpl extends PickSubchannelArgs {
   private final CallOptions callOptions;
   private final Metadata headers;
   private final MethodDescriptor<?, ?> method;
+  private final PickDetailsConsumer pickDetailsConsumer;
 
   /**
    * Creates call args object for given method with its call options, metadata.
    */
   public PickSubchannelArgsImpl(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      PickDetailsConsumer pickDetailsConsumer) {
     this.method = checkNotNull(method, "method");
     this.headers = checkNotNull(headers, "headers");
     this.callOptions = checkNotNull(callOptions, "callOptions");
+    this.pickDetailsConsumer = checkNotNull(pickDetailsConsumer, "pickDetailsConsumer");
   }
 
   @Override
@@ -56,6 +60,11 @@ public final class PickSubchannelArgsImpl extends PickSubchannelArgs {
   }
 
   @Override
+  public PickDetailsConsumer getPickDetailsConsumer() {
+    return pickDetailsConsumer;
+  }
+
+  @Override
   public boolean equals(Object o) {
     if (this == o) {
       return true;
@@ -66,12 +75,13 @@ public final class PickSubchannelArgsImpl extends PickSubchannelArgs {
     PickSubchannelArgsImpl that = (PickSubchannelArgsImpl) o;
     return Objects.equal(callOptions, that.callOptions)
         && Objects.equal(headers, that.headers)
-        && Objects.equal(method, that.method);
+        && Objects.equal(method, that.method)
+        && Objects.equal(pickDetailsConsumer, that.pickDetailsConsumer);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(callOptions, headers, method);
+    return Objects.hashCode(callOptions, headers, method, pickDetailsConsumer);
   }
 
   @Override

@@ -35,7 +35,7 @@ import io.grpc.internal.SharedResourceHolder;
 import io.grpc.testing.TestMethodDescriptors;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
-import org.chromium.net.ExperimentalCronetEngine;
+import org.chromium.net.CronetEngine;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,7 +50,7 @@ import org.robolectric.annotation.Config;
 public final class CronetChannelBuilderTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  @Mock private ExperimentalCronetEngine mockEngine;
+  @Mock private CronetEngine mockEngine;
   @Mock private ChannelLogger channelLogger;
 
   private final ClientStreamTracer[] tracers =

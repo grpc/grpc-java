@@ -18,17 +18,22 @@ package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Converter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
@@ -37,9 +42,12 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder2;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -48,26 +56,38 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.MetricInstrument;
+import io.grpc.MetricRecorder;
+import io.grpc.MetricRecorder.Registration;
+import io.grpc.MetricSink;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.NoopMetricSink;
+import io.grpc.ServerCall;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickSubchannelArgsImpl;
+import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.RlsLoadBalancer.CachingRlsLbClientBuilderProvider;
 import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
 import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
+import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedList;
@@ -84,6 +104,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.AdditionalAnswers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -106,37 +127,41 @@ public class RlsLoadBalancerTest {
           throw new RuntimeException(e);
         }
       });
+  @Mock
+  private MetricRecorder mockMetricRecorder;
+  @Mock
+  private Registration mockGaugeRegistration;
   private final FakeHelper helperDelegate = new FakeHelper();
   private final Helper helper =
       mock(Helper.class, AdditionalAnswers.delegatesTo(helperDelegate));
-  private final FakeRlsServerImpl fakeRlsServerImpl = new FakeRlsServerImpl();
+  private final FakeRlsServerImpl fakeRlsServerImpl = new FakeRlsServerImpl(
+      fakeClock.getScheduledExecutorService());
   private final Deque<FakeSubchannel> subchannels = new LinkedList<>();
   private final FakeThrottler fakeThrottler = new FakeThrottler();
-  @Mock
-  private Marshaller<Object> mockMarshaller;
+  private final String channelTarget = "channelTarget";
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
-  private MethodDescriptor<Object, Object> fakeSearchMethod;
-  private MethodDescriptor<Object, Object> fakeRescueMethod;
+  private MethodDescriptor<Void, Void> fakeSearchMethod;
+  private MethodDescriptor<Void, Void> fakeRescueMethod;
   private RlsLoadBalancer rlsLb;
   private String defaultTarget = "defaultTarget";
-  private PickSubchannelArgsImpl searchSubchannelArgs;
-  private PickSubchannelArgsImpl rescueSubchannelArgs;
+  private PickSubchannelArgs searchSubchannelArgs;
+  private PickSubchannelArgs rescueSubchannelArgs;
 
   @Before
   public void setUp() {
     fakeSearchMethod =
-        MethodDescriptor.newBuilder()
+        MethodDescriptor.<Void, Void>newBuilder()
             .setFullMethodName("com.google/Search")
-            .setRequestMarshaller(mockMarshaller)
-            .setResponseMarshaller(mockMarshaller)
+            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
             .setType(MethodType.CLIENT_STREAMING)
             .build();
     fakeRescueMethod =
-        MethodDescriptor.newBuilder()
+        MethodDescriptor.<Void, Void>newBuilder()
             .setFullMethodName("com.google/Rescue")
-            .setRequestMarshaller(mockMarshaller)
-            .setResponseMarshaller(mockMarshaller)
+            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
             .setType(MethodType.UNARY)
             .build();
     fakeRlsServerImpl.setLookupTable(
@@ -163,12 +188,10 @@ public class RlsLoadBalancerTest {
       }
     };
 
-    Metadata headers = new Metadata();
-    searchSubchannelArgs =
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
-    rescueSubchannelArgs =
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT);
+    searchSubchannelArgs = newPickSubchannelArgs(fakeSearchMethod);
+    rescueSubchannelArgs = newPickSubchannelArgs(fakeRescueMethod);
 
+    when(mockMetricRecorder.registerBatchCallback(any(), any())).thenReturn(mockGaugeRegistration);
   }
 
   @After
@@ -183,9 +206,7 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
-    PickSubchannelArgsImpl fakeSearchMethodArgs =
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT);
+    PickSubchannelArgs fakeSearchMethodArgs = newPickSubchannelArgs(fakeSearchMethod);
     // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().isOk()).isTrue();
@@ -199,6 +220,8 @@ public class RlsLoadBalancerTest {
     subchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     res = picker.pickSubchannel(fakeSearchMethodArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.OK);
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", expectedTimes, 1, "wilderness", "complete");
 
     // Check on conversion
     Throwable cause = new Throwable("cause");
@@ -229,7 +252,10 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
     inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
+    inOrder.verify(helper, atLeast(0)).getMetricRecorder();
+    inOrder.verify(helper, atLeast(0)).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
+
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(subchannels).hasSize(1);
     FakeSubchannel searchSubchannel = subchannels.getLast();
@@ -242,6 +268,8 @@ public class RlsLoadBalancerTest {
     res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
     assertThat(res.getSubchannel()).isSameInstanceAs(searchSubchannel);
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", expectedTimes, 1, "wilderness", "complete");
 
     // rescue should be pending status although the overall channel state is READY
     res = picker.pickSubchannel(rescueSubchannelArgs);
@@ -266,6 +294,99 @@ public class RlsLoadBalancerTest {
     res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "fail");
+  }
+
+  @Test
+  public void fallbackWithDelay_succeeds() throws Exception {
+    fakeRlsServerImpl.setResponseDelay(100, TimeUnit.MILLISECONDS);
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName("fake-bigtable.googleapis.com")
+        .addService(ServerServiceDefinition.builder("com.google")
+          .addMethod(fakeSearchMethod, (call, headers) -> {
+            call.sendHeaders(new Metadata());
+            call.sendMessage(null);
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<Void>() {};
+          })
+          .build())
+        .addService(fakeRlsServerImpl)
+        .directExecutor()
+        .build()
+        .start());
+    ManagedChannel channel = grpcCleanupRule.register(
+        InProcessChannelBuilder.forName("fake-bigtable.googleapis.com")
+        .defaultServiceConfig(parseJson(getServiceConfigJsonStr()))
+        .directExecutor()
+        .build());
+
+    StreamRecorder<Void> recorder = StreamRecorder.create();
+    StreamObserver<Void> requestObserver = ClientCalls.asyncClientStreamingCall(
+        channel.newCall(fakeSearchMethod, CallOptions.DEFAULT), recorder);
+    requestObserver.onCompleted();
+    fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
+    assertThat(recorder.awaitCompletion(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(recorder.getError()).isNull();
+  }
+
+  @Test
+  public void metricsWithRealChannel() throws Exception {
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName("fake-bigtable.googleapis.com")
+        .addService(ServerServiceDefinition.builder("com.google")
+          .addMethod(fakeSearchMethod, (call, headers) -> {
+            call.sendHeaders(new Metadata());
+            call.sendMessage(null);
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<Void>() {};
+          })
+          .build())
+        .addService(fakeRlsServerImpl)
+        .directExecutor()
+        .build()
+        .start());
+    MetricSink metrics = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+    ManagedChannel channel = grpcCleanupRule.register(
+        InternalManagedChannelBuilder.addMetricSink(
+            InProcessChannelBuilder.forName("fake-bigtable.googleapis.com")
+            .defaultServiceConfig(parseJson(getServiceConfigJsonStr()))
+            .directExecutor(),
+        metrics)
+        .build());
+
+    StreamRecorder<Void> recorder = StreamRecorder.create();
+    StreamObserver<Void> requestObserver = ClientCalls.asyncClientStreamingCall(
+        channel.newCall(fakeSearchMethod, CallOptions.DEFAULT), recorder);
+    requestObserver.onCompleted();
+    assertThat(recorder.awaitCompletion(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(recorder.getError()).isNull();
+
+    verify(metrics).addLongCounter(
+        eqMetricInstrumentName("grpc.lb.rls.default_target_picks"),
+        eq(1L),
+        eq(Arrays.asList("directaddress:///fake-bigtable.googleapis.com", "localhost:8972",
+            "defaultTarget", "complete")),
+        eq(Arrays.asList()));
+  }
+
+  @Test
+  public void lb_working_withoutDefaultTarget_noRlsResponse() throws Exception {
+    defaultTarget = "";
+    fakeThrottler.nextResult = true;
+
+    deliverResolvedAddresses();
+    InOrder inOrder = inOrder(helper);
+    inOrder.verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+
+    // With no RLS response and no fallback, we should see a failure
+    PickResult res = picker.pickSubchannel(searchSubchannelArgs); // create subchannel
+    assertThat(res.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
+    inOrder.verifyNoMoreInteractions();
+    verifyFailedPicksCounterAdd(1, 1);
   }
 
   @Test
@@ -285,15 +406,24 @@ public class RlsLoadBalancerTest {
         (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     assertThat(fallbackSubchannel).isNotNull();
     assertThat(subchannelIsReady(fallbackSubchannel)).isTrue();
+    inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
+    int times = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", times, 1,
+        "defaultTarget", "complete");
 
     Subchannel subchannel = picker.pickSubchannel(searchSubchannelArgs).getSubchannel();
     assertThat(subchannelIsReady(subchannel)).isTrue();
     assertThat(subchannel).isSameInstanceAs(fallbackSubchannel);
+    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", ++times, 1, "defaultTarget",
+        "complete");
 
     subchannel = picker.pickSubchannel(searchSubchannelArgs).getSubchannel();
     assertThat(subchannelIsReady(subchannel)).isTrue();
     assertThat(subchannel).isSameInstanceAs(fallbackSubchannel);
+    verifyLongCounterAdd("grpc.lb.rls.default_target_picks", ++times, 1, "defaultTarget",
+        "complete");
 
     // Make sure that when RLS starts communicating that default stops being used
     fakeThrottler.nextResult = false;
@@ -304,6 +434,8 @@ public class RlsLoadBalancerTest {
         (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     assertThat(searchSubchannel).isNotNull();
     assertThat(searchSubchannel).isNotSameInstanceAs(fallbackSubchannel);
+    times = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", times, 1, "wilderness", "complete");
 
     // create rescue subchannel
     picker.pickSubchannel(rescueSubchannelArgs);
@@ -312,6 +444,7 @@ public class RlsLoadBalancerTest {
     assertThat(rescueSubchannel).isNotNull();
     assertThat(rescueSubchannel).isNotSameInstanceAs(fallbackSubchannel);
     assertThat(rescueSubchannel).isNotSameInstanceAs(searchSubchannel);
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "civilization", "complete");
 
     // all channels are failed
     rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
@@ -322,6 +455,7 @@ public class RlsLoadBalancerTest {
         searchSubchannelArgs);
     assertThat(res.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(res.getSubchannel()).isNull();
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "fail");
   }
 
   @Test
@@ -332,7 +466,6 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
     // Warm-up pick; will be queued
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(res.getStatus().isOk()).isTrue();
@@ -344,12 +477,16 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
     inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
     inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
+    inOrder.verify(helper, atLeast(0)).getMetricRecorder();
+    inOrder.verify(helper, atLeast(0)).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
     assertThat(res.getStatus().isOk()).isTrue();
 
     assertThat(subchannels).hasSize(1);
     FakeSubchannel searchSubchannel =
         (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
+    inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
     assertThat(subchannelIsReady(searchSubchannel)).isTrue();
     assertThat(subchannels.getLast()).isSameInstanceAs(searchSubchannel);
@@ -375,16 +512,17 @@ public class RlsLoadBalancerTest {
 
     // search method will fail because there is no fallback target.
     picker = pickerCaptor.getValue();
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     assertThat(res.getStatus().isOk()).isFalse();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", expectedTimes, 1, "wilderness", "complete");
 
-    res = picker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeRescueMethod, headers, CallOptions.DEFAULT));
+    res = picker.pickSubchannel(newPickSubchannelArgs(fakeRescueMethod));
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
     assertThat(res.getSubchannel().getAddresses()).isEqualTo(rescueSubchannel.getAddresses());
     assertThat(res.getSubchannel().getAttributes()).isEqualTo(rescueSubchannel.getAttributes());
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "civilization", "complete");
 
     // all channels are failed
     rescueSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
@@ -392,6 +530,7 @@ public class RlsLoadBalancerTest {
         .updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     inOrder.verify(helper, atLeast(0)).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "fail");
   }
 
   @Test
@@ -401,10 +540,7 @@ public class RlsLoadBalancerTest {
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     SubchannelPicker picker = pickerCaptor.getValue();
-    Metadata headers = new Metadata();
-    PickResult res =
-        picker.pickSubchannel(
-            new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    PickResult res = picker.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
 
@@ -418,13 +554,15 @@ public class RlsLoadBalancerTest {
 
     SubchannelPicker picker2 = pickerCaptor.getValue();
     assertThat(picker2).isEqualTo(picker);
-    res = picker2.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = picker2.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     // verify success. Subchannel is wrapped, so checking attributes.
     assertThat(subchannelIsReady(res.getSubchannel())).isTrue();
     assertThat(res.getSubchannel().getAddresses()).isEqualTo(searchSubchannel.getAddresses());
     assertThat(res.getSubchannel().getAttributes()).isEqualTo(searchSubchannel.getAttributes());
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
+    inOrder.verify(helper).getMetricRecorder();
+    inOrder.verify(helper).getChannelTarget();
     inOrder.verifyNoMoreInteractions();
 
     rlsLb.handleNameResolutionError(Status.UNAVAILABLE);
@@ -432,14 +570,13 @@ public class RlsLoadBalancerTest {
     verify(helper)
         .updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     SubchannelPicker failedPicker = pickerCaptor.getValue();
-    res = failedPicker.pickSubchannel(
-        new PickSubchannelArgsImpl(fakeSearchMethod, headers, CallOptions.DEFAULT));
+    res = failedPicker.pickSubchannel(newPickSubchannelArgs(fakeSearchMethod));
     assertThat(res.getStatus().isOk()).isFalse();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
   }
 
   private PickResult markReadyAndGetPickResult(InOrder inOrder,
-                                               PickSubchannelArgsImpl pickSubchannelArgs) {
+                                               PickSubchannelArgs pickSubchannelArgs) {
     subchannels.getLast().updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     inOrder.verify(helper, atLeast(1))
         .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
@@ -450,7 +587,7 @@ public class RlsLoadBalancerTest {
 
   private void deliverResolvedAddresses() throws Exception {
     ConfigOrError parsedConfigOrError =
-        provider.parseLoadBalancingPolicyConfig(getServiceConfig());
+        provider.parseLoadBalancingPolicyConfig(parseJson(getLbConfigJsonStr()));
     assertThat(parsedConfigOrError.getConfig()).isNotNull();
     rlsLb.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
@@ -460,13 +597,24 @@ public class RlsLoadBalancerTest {
   }
 
   @SuppressWarnings("unchecked")
-  private Map<String, Object> getServiceConfig() throws IOException {
-    String serviceConfig = "{"
+  private Map<String, Object> parseJson(String json) throws IOException {
+    return (Map<String, Object>) JsonParser.parse(json);
+  }
+
+  private String getServiceConfigJsonStr() {
+    return "{"
+        + "  \"loadBalancingConfig\": [{"
+        + "    \"rls_experimental\": " + getLbConfigJsonStr()
+        + "  }]"
+        + "}";
+  }
+
+  private String getLbConfigJsonStr() {
+    return "{"
         + "  \"routeLookupConfig\": " + getRlsConfigJsonStr() + ", "
         + "  \"childPolicy\": [{\"pick_first\": {}}],"
         + "  \"childPolicyConfigTargetFieldName\": \"serviceName\""
         + "}";
-    return (Map<String, Object>) JsonParser.parse(serviceConfig);
   }
 
   private String getRlsConfigJsonStr() {
@@ -502,6 +650,41 @@ public class RlsLoadBalancerTest {
         + "  \"defaultTarget\": \"" + defaultTarget + "\",\n"
         + "  \"requestProcessingStrategy\": \"SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR\"\n"
         + "}";
+  }
+
+  // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
+  // given metric name, the given number of times
+  private void verifyLongCounterAdd(String name, int times, long value,
+      String dataPlaneTargetLabel, String pickResult) {
+    // TODO: support the "grpc.target" label once available.
+    verify(mockMetricRecorder, times(times)).addLongCounter(
+        eqMetricInstrumentName(name), eq(value),
+        eq(Lists.newArrayList(channelTarget, "localhost:8972", dataPlaneTargetLabel, pickResult)),
+        eq(Lists.newArrayList()));
+  }
+
+  // This one is for verifying the failed_pick metric specifically.
+  private void verifyFailedPicksCounterAdd(int times, long value) {
+    // TODO: support the "grpc.target" label once available.
+    verify(mockMetricRecorder, times(times)).addLongCounter(
+        eqMetricInstrumentName("grpc.lb.rls.failed_picks"), eq(value),
+        eq(Lists.newArrayList(channelTarget, "localhost:8972")),
+        eq(Lists.newArrayList()));
+  }
+
+  @SuppressWarnings("TypeParameterUnusedInFormals")
+  private <T extends MetricInstrument> T eqMetricInstrumentName(String name) {
+    return argThat(new ArgumentMatcher<T>() {
+      @Override
+      public boolean matches(T instrument) {
+        return instrument.getName().equals(name);
+      }
+    });
+  }
+
+  private PickSubchannelArgs newPickSubchannelArgs(MethodDescriptor<?, ?> method) {
+    return new PickSubchannelArgsImpl(
+        method, new Metadata(), CallOptions.DEFAULT, new PickDetailsConsumer() {});
   }
 
   private final class FakeHelper extends Helper {
@@ -592,6 +775,16 @@ public class RlsLoadBalancerTest {
     public ChannelLogger getChannelLogger() {
       return mock(ChannelLogger.class);
     }
+
+    @Override
+    public MetricRecorder getMetricRecorder() {
+      return mockMetricRecorder;
+    }
+
+    @Override
+    public String getChannelTarget() {
+      return channelTarget;
+    }
   }
 
   private static final class FakeRlsServerImpl
@@ -602,17 +795,41 @@ public class RlsLoadBalancerTest {
     private static final Converter<RouteLookupResponse, io.grpc.lookup.v1.RouteLookupResponse>
         RESPONSE_CONVERTER = new RouteLookupResponseConverter().reverse();
 
+    private final ScheduledExecutorService scheduler;
+    private long delay;
+    private TimeUnit delayUnit;
+
+    public FakeRlsServerImpl(ScheduledExecutorService scheduler) {
+      this.scheduler = scheduler;
+    }
+
     private Map<RouteLookupRequest, RouteLookupResponse> lookupTable = ImmutableMap.of();
 
     private void setLookupTable(Map<RouteLookupRequest, RouteLookupResponse> lookupTable) {
       this.lookupTable = checkNotNull(lookupTable, "lookupTable");
     }
 
+    void setResponseDelay(long delay, TimeUnit unit) {
+      this.delay = delay;
+      this.delayUnit = unit;
+    }
+
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void routeLookup(io.grpc.lookup.v1.RouteLookupRequest request,
         StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
       RouteLookupResponse response =
           lookupTable.get(REQUEST_CONVERTER.convert(request));
+      Runnable sendResponse = () -> sendResponse(response, responseObserver);
+      if (delay != 0) {
+        scheduler.schedule(sendResponse, delay, delayUnit);
+      } else {
+        sendResponse.run();
+      }
+    }
+
+    private void sendResponse(RouteLookupResponse response,
+        StreamObserver<io.grpc.lookup.v1.RouteLookupResponse> responseObserver) {
       if (response == null) {
         responseObserver.onError(new RuntimeException("not found"));
       } else {

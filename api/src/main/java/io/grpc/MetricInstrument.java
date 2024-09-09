@@ -28,7 +28,7 @@ public interface MetricInstrument {
    *
    * @return the index of the metric instrument.
    */
-  public long getIndex();
+  public int getIndex();
 
   /**
    * Returns the name of the metric.

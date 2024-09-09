@@ -1,6 +1,6 @@
 """Build rule for java_grpc_library."""
 
-load("@rules_java//java:defs.bzl", "java_common", "JavaInfo", "JavaPluginInfo")
+load("@rules_java//java:defs.bzl", "JavaInfo", "JavaPluginInfo", "java_common")
 
 _JavaRpcToolchainInfo = provider(
     fields = [

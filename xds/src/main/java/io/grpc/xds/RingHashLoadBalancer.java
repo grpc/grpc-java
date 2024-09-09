@@ -27,7 +27,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultiset;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multiset;
 import com.google.common.primitives.UnsignedInteger;
 import io.grpc.Attributes;
@@ -35,7 +34,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.util.MultiChildLoadBalancer;
@@ -43,6 +41,7 @@ import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -66,6 +65,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           + " config selector always generates a hash.");
   private static final XxHash64 hashFunc = XxHash64.INSTANCE;
 
+  private final LoadBalancer.Factory lazyLbFactory =
+      new LazyLoadBalancer.Factory(pickFirstLbProvider);
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
   private List<RingEntry> ring;
@@ -88,19 +89,10 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     try {
       resolvingAddresses = true;
-      // Subclass handles any special manipulation to create appropriate types of ChildLbStates
-      Map<Object, ChildLbState> newChildren = createChildLbMap(resolvedAddresses);
-
-      if (newChildren.isEmpty()) {
-        addressValidityStatus = Status.UNAVAILABLE.withDescription(
-            "Ring hash lb error: EDS resolution was successful, but there were no valid addresses");
-        handleNameResolutionError(addressValidityStatus);
-        return addressValidityStatus;
+      AcceptResolvedAddrRetVal acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
+      if (!acceptRetVal.status.isOk()) {
+        return acceptRetVal.status;
       }
-
-      // We don't care about reuse because we don't want to activate them
-      addMissingChildrenAndIdReuse(newChildren);
-      updateChildrenWithResolvedAddresses(resolvedAddresses, newChildren);
 
       // Now do the ringhash specific logic with weights and building the ring
       RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -145,7 +137,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // clusters and resolver can remove them in service config.
       updateOverallBalancingState();
 
-      shutdownRemoved(getRemovedChildren(newChildren.keySet()));
+      shutdownRemoved(acceptRetVal.removedChildren);
     } finally {
       this.resolvingAddresses = false;
     }
@@ -221,16 +213,14 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = TRANSIENT_FAILURE;
     }
 
-    RingHashPicker picker = new RingHashPicker(syncContext, ring, getImmutableChildMap());
+    RingHashPicker picker = new RingHashPicker(syncContext, ring, getChildLbStates());
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
   }
 
   @Override
-  protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses resolvedAddresses) {
-    return new RingHashChildLbState((Endpoint)key,
-        getChildAddresses(key, resolvedAddresses, null));
+  protected ChildLbState createChildLbState(Object key) {
+    return new ChildLbState(key, lazyLbFactory);
   }
 
   private Status validateAddrList(List<EquivalentAddressGroup> addrList) {
@@ -354,13 +344,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
-        ImmutableMap<Object, ChildLbState> subchannels) {
+        Collection<ChildLbState> children) {
       this.syncContext = syncContext;
       this.ring = ring;
-      pickableSubchannels = new HashMap<>(subchannels.size());
-      for (Map.Entry<Object, ChildLbState> entry : subchannels.entrySet()) {
-        RingHashChildLbState childLbState = (RingHashChildLbState) entry.getValue();
-        pickableSubchannels.put((Endpoint)entry.getKey(),
+      pickableSubchannels = new HashMap<>(children.size());
+      for (ChildLbState childLbState : children) {
+        pickableSubchannels.put((Endpoint)childLbState.getKey(),
             new SubchannelView(childLbState, childLbState.getCurrentState()));
       }
     }
@@ -406,7 +395,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       for (int i = 0; i < ring.size(); i++) {
         int index = (targetIndex + i) % ring.size();
         SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
-        RingHashChildLbState childLbState = subchannelView.childLbState;
+        ChildLbState childLbState = subchannelView.childLbState;
 
         if (subchannelView.connectivityState  == READY) {
           return childLbState.getCurrentPicker().pickSubchannel(args);
@@ -420,11 +409,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
         if (subchannelView.connectivityState == IDLE) {
           syncContext.execute(() -> {
-            if (childLbState.isDeactivated()) {
-              childLbState.activate();
-            } else {
-              childLbState.getLb().requestConnection();
-            }
+            childLbState.getLb().requestConnection();
           });
 
           return PickResult.withNoResult(); // Indicates that this should be retried after backoff
@@ -432,7 +417,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       }
 
       // return the pick from the original subchannel hit by hash, which is probably an error
-      RingHashChildLbState originalSubchannel =
+      ChildLbState originalSubchannel =
           pickableSubchannels.get(ring.get(targetIndex).addrKey).childLbState;
       return originalSubchannel.getCurrentPicker().pickSubchannel(args);
     }
@@ -444,10 +429,10 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
    * state changes.
    */
   private static final class SubchannelView {
-    private final RingHashChildLbState childLbState;
+    private final ChildLbState childLbState;
     private final ConnectivityState connectivityState;
 
-    private SubchannelView(RingHashChildLbState childLbState, ConnectivityState state) {
+    private SubchannelView(ChildLbState childLbState, ConnectivityState state) {
       this.childLbState = childLbState;
       this.connectivityState = state;
     }
@@ -492,60 +477,4 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           .toString();
     }
   }
-
-  class RingHashChildLbState extends MultiChildLoadBalancer.ChildLbState {
-
-    public RingHashChildLbState(Endpoint key, ResolvedAddresses resolvedAddresses) {
-      super(key, pickFirstLbProvider, null, EMPTY_PICKER, resolvedAddresses, true);
-    }
-
-    @Override
-    protected ChildLbStateHelper createChildHelper() {
-      return new RingHashChildHelper();
-    }
-
-    @Override
-    protected void reactivate(LoadBalancerProvider policyProvider) {
-      if (!isDeactivated()) {
-        return;
-      }
-      currentConnectivityState = CONNECTING;
-      getLb().switchTo(pickFirstLbProvider);
-      markReactivated();
-      getLb().acceptResolvedAddresses(this.getResolvedAddresses());
-      logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
-    }
-
-    public void activate() {
-      reactivate(pickFirstLbProvider);
-    }
-
-    // Need to expose this to the LB class
-    @Override
-    protected void shutdown() {
-      super.shutdown();
-    }
-
-    private class RingHashChildHelper extends ChildLbStateHelper {
-      @Override
-      public void updateBalancingState(final ConnectivityState newState,
-                                       final SubchannelPicker newPicker) {
-        // Subchannel picker and state are saved, but will only be propagated to the channel
-        // when the child instance exits deactivated state.
-        setCurrentState(newState);
-        setCurrentPicker(newPicker);
-        
-        // If we are already in the process of resolving addresses, the overall balancing state
-        // will be updated at the end of it, and we don't need to trigger that update here.
-        if (getChildLbState(getKey()) == null) {
-          return;
-        }
-
-        if (!isDeactivated() && !resolvingAddresses) {
-          updateOverallBalancingState();
-        }
-      }
-    }
-  }
-
 }

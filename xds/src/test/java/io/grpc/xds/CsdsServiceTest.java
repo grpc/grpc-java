@@ -54,6 +54,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsResourceType;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -85,6 +86,7 @@ public class CsdsServiceTest {
   private static final XdsResourceType<?> CDS = XdsClusterResource.getInstance();
   private static final XdsResourceType<?> RDS = XdsRouteConfigureResource.getInstance();
   private static final XdsResourceType<?> EDS = XdsEndpointResource.getInstance();
+  public static final String FAKE_CLIENT_SCOPE = "fake";
 
   @RunWith(JUnit4.class)
   public static class ServiceTests {
@@ -169,6 +171,9 @@ public class CsdsServiceTest {
       grpcServerRule.getServiceRegistry()
           .addService(new CsdsService(new FakeXdsClientPoolFactory(throwingXdsClient)));
 
+      // Hack to prevent the interrupted exception from propagating through to the client stub.
+      grpcServerRule.getChannel().getState(true);
+
       try {
         ClientStatusResponse response = csdsStub.fetchClientStatus(REQUEST);
         fail("Should've failed, got response: " + response);
@@ -195,13 +200,13 @@ public class CsdsServiceTest {
 
             @Override
             @Nullable
-            public ObjectPool<XdsClient> get() {
+            public ObjectPool<XdsClient> get(String target) {
               // xDS client not ready on the first call, then becomes ready.
               if (!calledOnce) {
                 calledOnce = true;
                 return null;
               } else {
-                return super.get();
+                return super.get(target);
               }
             }
           });
@@ -264,11 +269,51 @@ public class CsdsServiceTest {
       assertThat(responseObserver.getError()).isNull();
     }
 
+    @Test
+    public void multipleXdsClients() {
+      FakeXdsClient xdsClient1 = new FakeXdsClient();
+      FakeXdsClient xdsClient2 = new FakeXdsClient();
+      Map<String, XdsClient> clientMap = new HashMap<>();
+      clientMap.put("target1", xdsClient1);
+      clientMap.put("target2", xdsClient2);
+      FakeXdsClientPoolFactory factory = new FakeXdsClientPoolFactory(clientMap);
+      CsdsService csdsService = new CsdsService(factory);
+      grpcServerRule.getServiceRegistry().addService(csdsService);
+
+      StreamRecorder<ClientStatusResponse> responseObserver = StreamRecorder.create();
+      StreamObserver<ClientStatusRequest> requestObserver =
+          csdsAsyncStub.streamClientStatus(responseObserver);
+
+      requestObserver.onNext(REQUEST);
+      requestObserver.onCompleted();
+
+      List<ClientStatusResponse> responses = responseObserver.getValues();
+      assertThat(responses).hasSize(1);
+      Collection<String> targets = verifyMultiResponse(responses.get(0), 2);
+      assertThat(targets).containsExactly("target1", "target2");
+      responseObserver.onCompleted();
+    }
+
     private void verifyResponse(ClientStatusResponse response) {
       assertThat(response.getConfigCount()).isEqualTo(1);
       ClientConfig clientConfig = response.getConfig(0);
       verifyClientConfigNode(clientConfig);
       verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+      assertThat(clientConfig.getClientScope()).isEmpty();
+    }
+
+    private Collection<String> verifyMultiResponse(ClientStatusResponse response, int numExpected) {
+      assertThat(response.getConfigCount()).isEqualTo(numExpected);
+
+      List<String> clientScopes = new ArrayList<>();
+      for (int i = 0; i < numExpected; i++) {
+        ClientConfig clientConfig = response.getConfig(i);
+        verifyClientConfigNode(clientConfig);
+        verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+        clientScopes.add(clientConfig.getClientScope());
+      }
+
+      return clientScopes;
     }
 
     private void verifyRequestInvalidResponseStatus(Status status) {
@@ -347,9 +392,11 @@ public class CsdsServiceTest {
           );
         }
       };
-      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient);
+      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient,
+          FAKE_CLIENT_SCOPE);
 
       verifyClientConfigNode(clientConfig);
+      assertThat(clientConfig.getClientScope()).isEqualTo(FAKE_CLIENT_SCOPE);
 
       // Minimal verification to confirm that the data/metadata XdsClient provides,
       // is propagated to the correct resource types.
@@ -387,9 +434,11 @@ public class CsdsServiceTest {
 
     @Test
     public void getClientConfigForXdsClient_noSubscribedResources() throws InterruptedException {
-      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES);
+      ClientConfig clientConfig =
+          CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES, FAKE_CLIENT_SCOPE);
       verifyClientConfigNode(clientConfig);
       verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+      assertThat(clientConfig.getClientScope()).isEqualTo(FAKE_CLIENT_SCOPE);
     }
   }
 
@@ -457,22 +506,35 @@ public class CsdsServiceTest {
     public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
       return ImmutableMap.of();
     }
+
   }
 
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
-    @Nullable private final XdsClient xdsClient;
+    private final Map<String, XdsClient> xdsClientMap = new HashMap<>();
+    private boolean isOldStyle
+        ;
 
     private FakeXdsClientPoolFactory(@Nullable XdsClient xdsClient) {
-      this.xdsClient = xdsClient;
+      if (xdsClient != null) {
+        xdsClientMap.put("", xdsClient);
+      }
+      isOldStyle = true;
+    }
+
+    private FakeXdsClientPoolFactory(Map<String,XdsClient> xdsClientMap) {
+      this.xdsClientMap.putAll(xdsClientMap);
+      isOldStyle = false;
     }
 
     @Override
     @Nullable
-    public ObjectPool<XdsClient> get() {
+    public ObjectPool<XdsClient> get(String target) {
+      String targetToUse = isOldStyle ? "" : target;
+
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
-          return xdsClient;
+          return xdsClientMap.get(targetToUse);
         }
 
         @Override
@@ -483,12 +545,17 @@ public class CsdsServiceTest {
     }
 
     @Override
+    public List<String> getTargets() {
+      return new ArrayList<>(xdsClientMap.keySet());
+    }
+
+    @Override
     public void setBootstrapOverride(Map<String, ?> bootstrap) {
       throw new UnsupportedOperationException("Should not be called");
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate() {
+    public ObjectPool<XdsClient> getOrCreate(String target) {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

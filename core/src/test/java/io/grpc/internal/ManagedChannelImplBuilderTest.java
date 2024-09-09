@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
@@ -36,13 +37,16 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
-import io.grpc.InternalGlobalInterceptors;
+import io.grpc.InternalConfigurator;
+import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.StaticTestingClassLoader;
-import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
@@ -109,7 +113,8 @@ public class ManagedChannelImplBuilderTest {
       new StaticTestingClassLoader(
           getClass().getClassLoader(),
           Pattern.compile(
-              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
+              "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
+                  + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
                   + "io\\.grpc\\.internal\\.[^.]+"));
 
   @Before
@@ -165,37 +170,37 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void executor_normal() {
     Executor executor = mock(Executor.class);
-    assertEquals(builder, builder.executor(executor));
-    assertEquals(executor, builder.executorPool.getObject());
+    assertSame(builder, builder.executor(executor));
+    assertSame(executor, builder.executorPool.getObject());
   }
 
   @Test
   public void executor_null() {
     ObjectPool<? extends Executor> defaultValue = builder.executorPool;
     builder.executor(mock(Executor.class));
-    assertEquals(builder, builder.executor(null));
-    assertEquals(defaultValue, builder.executorPool);
+    assertSame(builder, builder.executor(null));
+    assertSame(defaultValue, builder.executorPool);
   }
 
   @Test
   public void directExecutor() {
-    assertEquals(builder, builder.directExecutor());
+    assertSame(builder, builder.directExecutor());
     assertEquals(MoreExecutors.directExecutor(), builder.executorPool.getObject());
   }
 
   @Test
   public void offloadExecutor_normal() {
     Executor executor = mock(Executor.class);
-    assertEquals(builder, builder.offloadExecutor(executor));
-    assertEquals(executor, builder.offloadExecutorPool.getObject());
+    assertSame(builder, builder.offloadExecutor(executor));
+    assertSame(executor, builder.offloadExecutorPool.getObject());
   }
 
   @Test
   public void offloadExecutor_null() {
     ObjectPool<? extends Executor> defaultValue = builder.offloadExecutorPool;
     builder.offloadExecutor(mock(Executor.class));
-    assertEquals(builder, builder.offloadExecutor(null));
-    assertEquals(defaultValue, builder.offloadExecutorPool);
+    assertSame(builder, builder.offloadExecutor(null));
+    assertSame(defaultValue, builder.offloadExecutorPool);
   }
 
   @Test
@@ -208,7 +213,7 @@ public class ManagedChannelImplBuilderTest {
   public void nameResolverFactory_normal() {
     NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
     doReturn("testscheme").when(nameResolverFactory).getDefaultScheme();
-    assertEquals(builder, builder.nameResolverFactory(nameResolverFactory));
+    assertSame(builder, builder.nameResolverFactory(nameResolverFactory));
     assertNotNull(builder.nameResolverRegistry);
     assertEquals("testscheme", builder.nameResolverRegistry.asFactory().getDefaultScheme());
   }
@@ -238,7 +243,7 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void defaultLoadBalancingPolicy_normal() {
-    assertEquals(builder, builder.defaultLoadBalancingPolicy("magic_balancer"));
+    assertSame(builder, builder.defaultLoadBalancingPolicy("magic_balancer"));
     assertEquals("magic_balancer", builder.defaultLbPolicy);
   }
 
@@ -266,14 +271,14 @@ public class ManagedChannelImplBuilderTest {
   public void decompressorRegistry_normal() {
     DecompressorRegistry decompressorRegistry = DecompressorRegistry.emptyInstance();
     assertNotEquals(decompressorRegistry, builder.decompressorRegistry);
-    assertEquals(builder, builder.decompressorRegistry(decompressorRegistry));
+    assertSame(builder, builder.decompressorRegistry(decompressorRegistry));
     assertEquals(decompressorRegistry, builder.decompressorRegistry);
   }
 
   @Test
   public void decompressorRegistry_null() {
     DecompressorRegistry defaultValue = builder.decompressorRegistry;
-    assertEquals(builder, builder.decompressorRegistry(DecompressorRegistry.emptyInstance()));
+    assertSame(builder, builder.decompressorRegistry(DecompressorRegistry.emptyInstance()));
     assertNotEquals(defaultValue, builder.decompressorRegistry);
     builder.decompressorRegistry(null);
     assertEquals(defaultValue, builder.decompressorRegistry);
@@ -288,8 +293,8 @@ public class ManagedChannelImplBuilderTest {
   public void compressorRegistry_normal() {
     CompressorRegistry compressorRegistry = CompressorRegistry.newEmptyInstance();
     assertNotEquals(compressorRegistry, builder.compressorRegistry);
-    assertEquals(builder, builder.compressorRegistry(compressorRegistry));
-    assertEquals(compressorRegistry, builder.compressorRegistry);
+    assertSame(builder, builder.compressorRegistry(compressorRegistry));
+    assertSame(compressorRegistry, builder.compressorRegistry);
   }
 
   @Test
@@ -297,8 +302,8 @@ public class ManagedChannelImplBuilderTest {
     CompressorRegistry defaultValue = builder.compressorRegistry;
     builder.compressorRegistry(CompressorRegistry.newEmptyInstance());
     assertNotEquals(defaultValue, builder.compressorRegistry);
-    assertEquals(builder, builder.compressorRegistry(null));
-    assertEquals(defaultValue, builder.compressorRegistry);
+    assertSame(builder, builder.compressorRegistry(null));
+    assertSame(defaultValue, builder.compressorRegistry);
   }
 
   @Test
@@ -309,13 +314,13 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void userAgent_normal() {
     String userAgent = "user-agent/1";
-    assertEquals(builder, builder.userAgent(userAgent));
-    assertEquals(userAgent, builder.userAgent);
+    assertSame(builder, builder.userAgent(userAgent));
+    assertSame(userAgent, builder.userAgent);
   }
 
   @Test
   public void userAgent_null() {
-    assertEquals(builder, builder.userAgent(null));
+    assertSame(builder, builder.userAgent(null));
     assertNull(builder.userAgent);
 
     builder.userAgent("user-agent/1");
@@ -362,7 +367,7 @@ public class ManagedChannelImplBuilderTest {
     when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
         .thenReturn(mockClientTransportFactory);
     when(mockClientTransportFactory.getSupportedSocketAddressTypes())
-        .thenReturn(Collections.singleton(InProcessSocketAddress.class));
+        .thenReturn(Collections.singleton(CustomSocketAddress.class));
 
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
@@ -398,8 +403,8 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void overrideAuthority_normal() {
     String overrideAuthority = "best-authority";
-    assertEquals(builder, builder.overrideAuthority(overrideAuthority));
-    assertEquals(overrideAuthority, builder.authorityOverride);
+    assertSame(builder, builder.overrideAuthority(overrideAuthority));
+    assertSame(overrideAuthority, builder.authorityOverride);
   }
 
   @Test(expected = NullPointerException.class)
@@ -469,7 +474,7 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void getEffectiveInterceptors_default() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertEquals(3, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0).getClass().getName())
         .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
@@ -482,7 +487,7 @@ public class ManagedChannelImplBuilderTest {
   public void getEffectiveInterceptors_disableStats() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setStatsEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0).getClass().getName())
         .isEqualTo("io.grpc.census.CensusTracingModule$TracingClientInterceptor");
@@ -493,7 +498,7 @@ public class ManagedChannelImplBuilderTest {
   public void getEffectiveInterceptors_disableTracing() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0).getClass().getName())
         .isEqualTo("io.grpc.census.CensusStatsModule$StatsClientInterceptor");
@@ -505,12 +510,12 @@ public class ManagedChannelImplBuilderTest {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setStatsEnabled(false);
     builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors("unused:///");
     assertThat(effectiveInterceptors).containsExactly(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test
-  public void getEffectiveInterceptors_callsGetGlobalInterceptors() throws Exception {
+  public void getEffectiveInterceptors_callsGetConfiguratorRegistry() throws Exception {
     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsGet.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
@@ -525,22 +530,20 @@ public class ManagedChannelImplBuilderTest {
               DUMMY_TARGET,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(DUMMY_PORT));
-      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      List<ClientInterceptor> effectiveInterceptors =
+          builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).hasSize(2);
       try {
-        InternalGlobalInterceptors.setInterceptorsTracers(
-            Arrays.asList(DUMMY_USER_INTERCEPTOR),
-            Collections.emptyList(),
-            Collections.emptyList());
+        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
         fail("exception expected");
       } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Set cannot be called after any get call");
+        assertThat(e).hasMessageThat().contains("Configurators are already set");
       }
     }
   }
 
   @Test
-  public void getEffectiveInterceptors_callsSetGlobalInterceptors() throws Exception {
+  public void getEffectiveInterceptors_callsSetConfiguratorRegistry() throws Exception {
     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsSet.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
   }
@@ -550,23 +553,27 @@ public class ManagedChannelImplBuilderTest {
 
     @Override
     public void run() {
-      InternalGlobalInterceptors.setInterceptorsTracers(
-          Arrays.asList(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1),
-          Collections.emptyList(),
-          Collections.emptyList());
+      InternalConfiguratorRegistry.setConfigurators(
+          Arrays.asList(new InternalConfigurator() {
+            @Override
+            public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+              builder.intercept(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1);
+            }
+          }));
       ManagedChannelImplBuilder builder =
           new ManagedChannelImplBuilder(
               DUMMY_TARGET,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(DUMMY_PORT));
-      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      List<ClientInterceptor> effectiveInterceptors =
+          builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors)
           .containsExactly(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1);
     }
   }
 
   @Test
-  public void getEffectiveInterceptors_setEmptyGlobalInterceptors() throws Exception {
+  public void getEffectiveInterceptors_setEmptyConfiguratorRegistry() throws Exception {
     Class<?> runnable =
         classLoader.loadClass(StaticTestingClassLoaderCallsSetEmpty.class.getName());
     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
@@ -577,16 +584,39 @@ public class ManagedChannelImplBuilderTest {
 
     @Override
     public void run() {
-      InternalGlobalInterceptors.setInterceptorsTracers(
-          Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
       ManagedChannelImplBuilder builder =
           new ManagedChannelImplBuilder(
               DUMMY_TARGET,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(DUMMY_PORT));
-      List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+      List<ClientInterceptor> effectiveInterceptors =
+          builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).isEmpty();
     }
+  }
+
+  @Test
+  public void getEffectiveInterceptors_createsFromInterceptorFactories() throws Exception {
+    String target = "dns:///the-host";
+    builder.setStatsEnabled(false);
+    builder.setTracingEnabled(false);
+
+    builder.intercept(DUMMY_USER_INTERCEPTOR)
+        .interceptWithTarget(new InternalInterceptorFactory() {
+          @Override
+          public ClientInterceptor newInterceptor(String passedTarget) {
+            assertThat(passedTarget).isEqualTo(target);
+            return DUMMY_USER_INTERCEPTOR1;
+          }
+        })
+        .intercept(DUMMY_USER_INTERCEPTOR);
+
+    assertThat(builder.getEffectiveInterceptors(target))
+        .isEqualTo(Arrays.asList(
+            DUMMY_USER_INTERCEPTOR,
+            DUMMY_USER_INTERCEPTOR1,
+            DUMMY_USER_INTERCEPTOR));
   }
 
   @Test
@@ -733,4 +763,25 @@ public class ManagedChannelImplBuilderTest {
     builder.disableServiceConfigLookUp();
     assertThat(builder.lookUpServiceConfig).isFalse();
   }
+
+  @Test
+  public void metricSinks() {
+    MetricSink mocksink = mock(MetricSink.class);
+    builder.addMetricSink(mocksink);
+
+    assertThat(builder.metricSinks).contains(mocksink);
+  }
+
+  @Test
+  public void uriPattern() {
+    Pattern uriPattern = ManagedChannelImplBuilder.URI_PATTERN;
+    assertTrue(uriPattern.matcher("a:/").matches());
+    assertTrue(uriPattern.matcher("Z019+-.:/!@ #~ ").matches());
+    assertFalse(uriPattern.matcher("a/:").matches()); // "/:" not matched
+    assertFalse(uriPattern.matcher("0a:/").matches()); // '0' not matched
+    assertFalse(uriPattern.matcher("a,:/").matches()); // ',' not matched
+    assertFalse(uriPattern.matcher(" a:/").matches()); // space not matched
+  }
+
+  private static class CustomSocketAddress extends SocketAddress {}
 }

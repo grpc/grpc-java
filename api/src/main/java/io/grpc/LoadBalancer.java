@@ -490,6 +490,29 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract MethodDescriptor<?, ?> getMethodDescriptor();
+
+    /**
+     * Gets an object that can be informed about what sort of pick was made.
+     */
+    @Internal
+    public PickDetailsConsumer getPickDetailsConsumer() {
+      return new PickDetailsConsumer() {};
+    }
+  }
+
+  /** Receives information about the pick being chosen. */
+  @Internal
+  public interface PickDetailsConsumer {
+    /**
+     * Optional labels that provide context of how the pick was routed. Particularly helpful for
+     * per-RPC metrics.
+     *
+     * @throws NullPointerException if key or value is {@code null}
+     */
+    default void addOptionalLabel(String key, String value) {
+      checkNotNull(key, "key");
+      checkNotNull(value, "value");
+    }
   }
 
   /**
@@ -691,6 +714,13 @@ public abstract class LoadBalancer {
      */
     public boolean isDrop() {
       return drop;
+    }
+
+    /**
+     * Returns {@code true} if the pick was not created with {@link #withNoResult()}.
+     */
+    public boolean hasResult() {
+      return !(subchannel == null && status.isOk());
     }
 
     @Override
@@ -1163,6 +1193,13 @@ public abstract class LoadBalancer {
     public abstract String getAuthority();
 
     /**
+     * Returns the target string of the channel, guaranteed to include its scheme.
+     */
+    public String getChannelTarget() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
      * Returns the ChannelCredentials used to construct the channel, without bearer tokens.
      *
      * @since 1.35.0
@@ -1218,9 +1255,9 @@ public abstract class LoadBalancer {
      *
      * @since 1.64.0
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
+    @Internal
     public MetricRecorder getMetricRecorder() {
-      throw new UnsupportedOperationException();
+      return new MetricRecorder() {};
     }
   }
 
@@ -1391,6 +1428,18 @@ public abstract class LoadBalancer {
     public Object getInternalSubchannel() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * (Internal use only) returns attributes of the address subchannel is connected to.
+     *
+     * <p>Warning: this is INTERNAL API, is not supposed to be used by external users, and may
+     * change without notice. If you think you must use it, please file an issue and we can consider
+     * removing its "internal" status.
+     */
+    @Internal
+    public Attributes getConnectedAddressAttributes() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -1488,6 +1537,20 @@ public abstract class LoadBalancer {
     @Override
     public String toString() {
       return "FixedResultPicker(" + result + ")";
+    }
+
+    @Override
+    public int hashCode() {
+      return result.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof FixedResultPicker)) {
+        return false;
+      }
+      FixedResultPicker that = (FixedResultPicker) o;
+      return this.result.equals(that.result);
     }
   }
 }

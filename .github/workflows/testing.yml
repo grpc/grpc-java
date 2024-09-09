@@ -21,14 +21,14 @@ jobs:
       fail-fast: false # Should swap to true if we grow a large matrix
 
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-java@v3
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
       with:
         java-version: ${{ matrix.jre }}
         distribution: 'temurin'
 
     - name: Gradle cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.gradle/caches
@@ -37,7 +37,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
     - name: Maven cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.m2/repository
@@ -46,7 +46,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-maven-
     - name: Protobuf cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: /tmp/protobuf-cache
         key: ${{ runner.os }}-maven-${{ hashFiles('buildscripts/make_dependencies.sh') }}
@@ -55,7 +55,7 @@ jobs:
       run: buildscripts/kokoro/unix.sh
     - name: Post Failure Upload Test Reports to Artifacts
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Test Reports (JRE ${{ matrix.jre }})
         path: |
@@ -71,7 +71,9 @@ jobs:
         COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
       run: ./gradlew :grpc-all:coveralls -PskipAndroid=true -x compileJava
     - name: Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
 
   bazel:
     runs-on: ubuntu-latest
@@ -79,7 +81,7 @@ jobs:
       USE_BAZEL_VERSION: 6.0.0
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Check versions match in MODULE.bazel and repositories.bzl
       run: |
@@ -87,7 +89,7 @@ jobs:
                 <(sed -n '/GRPC_DEPS_START/,/GRPC_DEPS_END/ {/GRPC_DEPS_/! p}' repositories.bzl)
 
     - name: Bazel cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/bazel/*/cache
@@ -97,7 +99,17 @@ jobs:
     - name: Run bazel build
       run: bazelisk build //... --enable_bzlmod=false
 
+    - name: Run example bazel build
+      run: bazelisk build //... --enable_bzlmod=false
+      working-directory: ./examples
+
     - name: Run bazel build (bzlmod)
       env:
         USE_BAZEL_VERSION: 7.0.0
       run: bazelisk build //... --enable_bzlmod=true
+
+    - name: Run example bazel build (bzlmod)
+      env:
+        USE_BAZEL_VERSION: 7.0.0
+      run: bazelisk build //... --enable_bzlmod=true
+      working-directory: ./examples

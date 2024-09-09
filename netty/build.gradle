@@ -72,7 +72,7 @@ dependencies {
 import net.ltgt.gradle.errorprone.CheckSeverity
 
 [tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
-    // Netty retuns a lot of futures that we mostly don't care about.
+    // Netty returns a lot of futures that we mostly don't care about.
     options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 

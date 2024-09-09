@@ -748,6 +748,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int streamId = cmd.stream().id();
       Http2Stream stream = connection().stream(streamId);
       if (stream == null) {
+        cmd.release();
         streamGone(streamId, promise);
         return;
       }
@@ -787,9 +788,37 @@ class NettyServerHandler extends AbstractNettyHandler {
       PerfMark.linkIn(cmd.getLink());
       // Notify the listener if we haven't already.
       cmd.stream().transportReportStatus(cmd.reason());
-      // Terminate the stream.
-      encoder().writeRstStream(ctx, cmd.stream().id(), Http2Error.CANCEL.code(), promise);
+
+      // Now we need to decide how we're going to notify the peer that this stream is closed.
+      // If possible, it's nice to inform the peer _why_ this stream was cancelled by sending
+      // a structured headers frame.
+      if (shouldCloseStreamWithHeaders(cmd, connection())) {
+        Metadata md = new Metadata();
+        md.put(InternalStatus.CODE_KEY, cmd.reason());
+        if (cmd.reason().getDescription() != null) {
+          md.put(InternalStatus.MESSAGE_KEY, cmd.reason().getDescription());
+        }
+        Http2Headers headers = Utils.convertServerHeaders(md);
+        encoder().writeHeaders(
+            ctx, cmd.stream().id(), headers, /* padding = */ 0, /* endStream = */ true, promise);
+      } else {
+        // Terminate the stream.
+        encoder().writeRstStream(ctx, cmd.stream().id(), Http2Error.CANCEL.code(), promise);
+      }
     }
+  }
+
+  // Determine whether a CancelServerStreamCommand should try to close the stream with a
+  // HEADERS or a RST_STREAM frame. The caller has some influence over this (they can
+  // configure cmd.wantsHeaders()). The state of the stream also has an influence: we
+  // only try to send HEADERS if the stream exists and hasn't already sent any headers.
+  private static boolean shouldCloseStreamWithHeaders(
+          CancelServerStreamCommand cmd, Http2Connection conn) {
+    if (!cmd.wantsHeaders()) {
+      return false;
+    }
+    Http2Stream stream = conn.stream(cmd.stream().id());
+    return stream != null && !stream.isHeadersSent();
   }
 
   private void gracefulClose(final ChannelHandlerContext ctx, final GracefulServerCloseCommand msg,

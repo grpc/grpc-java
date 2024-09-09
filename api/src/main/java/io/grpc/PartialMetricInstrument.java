@@ -25,7 +25,7 @@ import java.util.List;
  */
 @Internal
 abstract class PartialMetricInstrument implements MetricInstrument {
-  protected final long index;
+  protected final int index;
   protected final String name;
   protected final String description;
   protected final String unit;
@@ -44,7 +44,7 @@ abstract class PartialMetricInstrument implements MetricInstrument {
    * @param optionalLabelKeys a list of optional label keys for the metric
    * @param enableByDefault   whether the metric should be enabled by default
    */
-  protected PartialMetricInstrument(long index, String name, String description, String unit,
+  protected PartialMetricInstrument(int index, String name, String description, String unit,
       List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     this.index = index;
     this.name = name;
@@ -56,7 +56,7 @@ abstract class PartialMetricInstrument implements MetricInstrument {
   }
 
   @Override
-  public long getIndex() {
+  public int getIndex() {
     return index;
   }
 
@@ -88,5 +88,10 @@ abstract class PartialMetricInstrument implements MetricInstrument {
   @Override
   public boolean isEnableByDefault() {
     return enableByDefault;
+  }
+
+  @Override
+  public String toString() {
+    return getClass().getName() + "(" + getName() + ")";
   }
 }

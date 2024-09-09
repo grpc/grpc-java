@@ -16,28 +16,35 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -45,8 +52,10 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.protobuf.ProtoUtils;
+import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -71,9 +80,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -114,8 +125,8 @@ public class ClusterImplLoadBalancerTest {
   private final FakeClock fakeClock = new FakeClock();
   private final Locality locality =
       Locality.create("test-region", "test-zone", "test-subzone");
-  private final PolicySelection roundRobin =
-      new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
+  private final Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+      new FakeLoadBalancerProvider("round_robin"), null);
   private final List<FakeLoadBalancer> downstreamBalancers = new ArrayList<>();
   private final FakeTlsContextManager tlsContextManager = new FakeTlsContextManager();
   private final LoadStatsManager2 loadStatsManager =
@@ -140,7 +151,10 @@ public class ClusterImplLoadBalancerTest {
       return new AtomicLong();
     }
   };
-  private final Helper helper = new FakeLbHelper();
+  private final FakeLbHelper helper = new FakeLbHelper();
+  private PickSubchannelArgs pickSubchannelArgs = new PickSubchannelArgsImpl(
+      TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+      new PickDetailsConsumer() {});
   @Mock
   private ThreadSafeRandom mockRandom;
   private int xdsClientRefs;
@@ -169,7 +183,9 @@ public class ClusterImplLoadBalancerTest {
     Object weightedTargetConfig = new Object();
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -194,7 +210,9 @@ public class ClusterImplLoadBalancerTest {
     ClusterImplConfig configWithWeightedTarget = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
         LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWeightedTarget);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -207,7 +225,9 @@ public class ClusterImplLoadBalancerTest {
     ClusterImplConfig configWithWrrLocality = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME,
         LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(wrrLocalityProvider, wrrLocalityConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            wrrLocalityProvider, wrrLocalityConfig),
+        null, Collections.emptyMap());
     deliverAddressesAndConfig(Collections.singletonList(endpoint), configWithWrrLocality);
     childBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(childBalancer.name).isEqualTo(XdsLbPolicies.WRR_LOCALITY_POLICY_NAME);
@@ -218,7 +238,7 @@ public class ClusterImplLoadBalancerTest {
   public void nameResolutionError_beforeChildPolicyInstantiated_returnErrorPickerToUpstream() {
     loadBalancer.handleNameResolutionError(Status.UNIMPLEMENTED.withDescription("not found"));
     assertThat(currentState).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
     assertThat(result.getStatus().getDescription()).isEqualTo("not found");
@@ -231,7 +251,9 @@ public class ClusterImplLoadBalancerTest {
     Object weightedTargetConfig = new Object();
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -244,21 +266,53 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
+  public void pick_addsLocalityLabel() {
+    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
+    WeightedTargetConfig weightedTargetConfig =
+        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    leafBalancer.createSubChannel();
+    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.setConnectedEagIndex(0);
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
+
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    pickSubchannelArgs = new PickSubchannelArgsImpl(
+      TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT, detailsConsumer);
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
+    assertThat(result.getStatus().isOk()).isTrue();
+    // The value will be determined by the parent policy, so can be different than the value used in
+    // makeAddress() for the test.
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.locality", locality.toString());
+  }
+
+  @Test
   public void recordLoadStats() {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
-    Subchannel subchannel = leafBalancer.helper.createSubchannel(
-        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
-    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    Subchannel subchannel = leafBalancer.createSubChannel();
+    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.setConnectedEagIndex(0);
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
     ClientStreamTracer streamTracer1 = result.getStreamTracerFactory().newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // first RPC call
@@ -311,7 +365,7 @@ public class ClusterImplLoadBalancerTest {
         TOLERANCE).of(0.009);
 
     streamTracer3.streamClosed(Status.OK);
-    subchannel.shutdown();  // stats recorder released
+    subchannel.shutdown(); // stats recorder released
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     // Locality load is reported for one last time in case of loads occurred since the previous
     // load report.
@@ -327,6 +381,95 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.upstreamLocalityStatsList()).isEmpty();  // no longer reported
   }
 
+  // TODO(dnvindhya): This test has been added as a fix to verify
+  // https://github.com/grpc/grpc-java/issues/11434.
+  // Once we update PickFirstLeafLoadBalancer as default LoadBalancer, update the test.
+  @Test
+  public void pickFirstLoadReport_onUpdateAddress() {
+    Locality locality1 =
+        Locality.create("test-region", "test-zone", "test-subzone");
+    Locality locality2 =
+        Locality.create("other-region", "other-zone", "other-subzone");
+
+    LoadBalancerProvider pickFirstProvider = LoadBalancerRegistry
+        .getDefaultRegistry().getProvider("pick_first");
+    Object pickFirstConfig = pickFirstProvider.parseLoadBalancingPolicyConfig(new HashMap<>())
+        .getConfig();
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(pickFirstProvider,
+            pickFirstConfig),
+        null, Collections.emptyMap());
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality1);
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr2", locality2);
+    deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
+
+    // Leaf balancer is created by Pick First. Get FakeSubchannel created to update attributes
+    // A real subchannel would get these attributes from the connected address's EAG locality.
+    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.setConnectedEagIndex(0);
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
+    assertThat(result.getStatus().isOk()).isTrue();
+
+    ClientStreamTracer streamTracer1 = result.getStreamTracerFactory().newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // first RPC call
+    streamTracer1.streamClosed(Status.OK);
+
+    ClusterStats clusterStats = Iterables.getOnlyElement(
+        loadStatsManager.getClusterStatsReports(CLUSTER));
+    UpstreamLocalityStats localityStats = Iterables.getOnlyElement(
+        clusterStats.upstreamLocalityStatsList());
+    assertThat(localityStats.locality()).isEqualTo(locality1);
+    assertThat(localityStats.totalIssuedRequests()).isEqualTo(1L);
+    assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
+    assertThat(localityStats.totalErrorRequests()).isEqualTo(0L);
+
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.IDLE));
+    loadBalancer.requestConnection();
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
+
+    // Faksubchannel mimics update address and returns different locality
+    fakeSubchannel.setConnectedEagIndex(1);
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);
+    assertThat(result.getStatus().isOk()).isTrue();
+    ClientStreamTracer streamTracer2 = result.getStreamTracerFactory().newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // second RPC call
+    streamTracer2.streamClosed(Status.UNAVAILABLE);
+
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    List<UpstreamLocalityStats> upstreamLocalityStatsList =
+        clusterStats.upstreamLocalityStatsList();
+    UpstreamLocalityStats localityStats1 = Iterables.find(upstreamLocalityStatsList,
+        upstreamLocalityStats -> upstreamLocalityStats.locality().equals(locality1));
+    assertThat(localityStats1.totalIssuedRequests()).isEqualTo(0L);
+    assertThat(localityStats1.totalSuccessfulRequests()).isEqualTo(0L);
+    assertThat(localityStats1.totalErrorRequests()).isEqualTo(0L);
+    UpstreamLocalityStats localityStats2 = Iterables.find(upstreamLocalityStatsList,
+        upstreamLocalityStats -> upstreamLocalityStats.locality().equals(locality2));
+    assertThat(localityStats2.totalIssuedRequests()).isEqualTo(1L);
+    assertThat(localityStats2.totalSuccessfulRequests()).isEqualTo(0L);
+    assertThat(localityStats2.totalErrorRequests()).isEqualTo(1L);
+
+    loadBalancer.shutdown();
+    loadBalancer = null;
+    // No more references are held for localityStats1 hence dropped.
+    // Locality load is reported for one last time in case of loads occurred since the previous
+    // load report.
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    localityStats2 = Iterables.getOnlyElement(clusterStats.upstreamLocalityStatsList());
+
+    assertThat(localityStats2.locality()).isEqualTo(locality2);
+    assertThat(localityStats2.totalIssuedRequests()).isEqualTo(0L);
+    assertThat(localityStats2.totalSuccessfulRequests()).isEqualTo(0L);
+    assertThat(localityStats2.totalErrorRequests()).isEqualTo(0L);
+    assertThat(localityStats2.totalRequestsInProgress()).isEqualTo(0L);
+
+    assertThat(loadStatsManager.getClusterStatsReports(CLUSTER)).isEmpty();
+  }
+
   @Test
   public void dropRpcsWithRespectToLbConfigDropCategories() {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
@@ -334,7 +477,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.singletonList(DropOverload.create("throttle", 500_000)),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     when(mockRandom.nextInt(anyInt())).thenReturn(499_999, 999_999, 1_000_000);
@@ -343,11 +488,13 @@ public class ClusterImplLoadBalancerTest {
     assertThat(leafBalancer.name).isEqualTo("round_robin");
     assertThat(Iterables.getOnlyElement(leafBalancer.addresses).getAddresses())
         .isEqualTo(endpoint.getAddresses());
-    Subchannel subchannel = leafBalancer.helper.createSubchannel(
-        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
-    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    leafBalancer.createSubChannel();
+    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.setConnectedEagIndex(0);
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: throttle");
@@ -363,7 +510,9 @@ public class ClusterImplLoadBalancerTest {
     //  Config update updates drop policies.
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, null,
         Collections.singletonList(DropOverload.create("lb", 1_000_000)),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
@@ -373,7 +522,7 @@ public class ClusterImplLoadBalancerTest {
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build());
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: lb");
@@ -386,7 +535,7 @@ public class ClusterImplLoadBalancerTest {
         .isEqualTo(1L);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
 
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
   }
 
@@ -410,7 +559,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
@@ -418,12 +569,14 @@ public class ClusterImplLoadBalancerTest {
     assertThat(leafBalancer.name).isEqualTo("round_robin");
     assertThat(Iterables.getOnlyElement(leafBalancer.addresses).getAddresses())
         .isEqualTo(endpoint.getAddresses());
-    Subchannel subchannel = leafBalancer.helper.createSubchannel(
-        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
-    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    leafBalancer.createSubChannel();
+    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.setConnectedEagIndex(0);
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
     for (int i = 0; i < maxConcurrentRequests; i++) {
-      PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+      PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
       streamTracerFactory.newClientStreamTracer(
@@ -434,7 +587,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
@@ -452,10 +605,12 @@ public class ClusterImplLoadBalancerTest {
     maxConcurrentRequests = 101L;
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         maxConcurrentRequests, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
 
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
     result.getStreamTracerFactory().newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // 101th request
@@ -463,7 +618,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
-    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));  // 102th request
+    result = currentPicker.pickSubchannel(pickSubchannelArgs);  // 102th request
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
@@ -498,7 +653,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
@@ -506,12 +663,14 @@ public class ClusterImplLoadBalancerTest {
     assertThat(leafBalancer.name).isEqualTo("round_robin");
     assertThat(Iterables.getOnlyElement(leafBalancer.addresses).getAddresses())
         .isEqualTo(endpoint.getAddresses());
-    Subchannel subchannel = leafBalancer.helper.createSubchannel(
-        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
-    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    leafBalancer.createSubChannel();
+    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.setConnectedEagIndex(0);
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
     for (int i = 0; i < ClusterImplLoadBalancer.DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS; i++) {
-      PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+      PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
       streamTracerFactory.newClientStreamTracer(
@@ -522,7 +681,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
-    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
@@ -544,7 +703,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     // One locality with two endpoints.
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality);
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr2", locality);
@@ -581,7 +742,9 @@ public class ClusterImplLoadBalancerTest {
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        upstreamTlsContext, Collections.emptyMap());
     // One locality with two endpoints.
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality);
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr2", locality);
@@ -604,7 +767,9 @@ public class ClusterImplLoadBalancerTest {
     // Removes UpstreamTlsContext from the config.
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
     deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
     assertThat(Iterables.getOnlyElement(downstreamBalancers)).isSameInstanceAs(leafBalancer);
     subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
@@ -618,7 +783,9 @@ public class ClusterImplLoadBalancerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe1", true);
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
-        new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext);
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        upstreamTlsContext, Collections.emptyMap());
     deliverAddressesAndConfig(Arrays.asList(endpoint1, endpoint2), config);
     assertThat(Iterables.getOnlyElement(downstreamBalancers)).isSameInstanceAs(leafBalancer);
     subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
@@ -697,7 +864,11 @@ public class ClusterImplLoadBalancerTest {
     }
 
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
-        Attributes.newBuilder().set(InternalXdsAttributes.ATTR_LOCALITY, locality).build());
+        Attributes.newBuilder()
+          .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
+          // Unique but arbitrary string
+          .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, locality.toString())
+          .build());
     return AddressFilter.setPathFilter(eag, Collections.singletonList(locality.toString()));
   }
 
@@ -762,18 +933,23 @@ public class ClusterImplLoadBalancerTest {
       downstreamBalancers.remove(this);
     }
 
-    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
-      SubchannelPicker picker = new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(subchannel);
+    Subchannel createSubChannel() {
+      Subchannel subchannel = helper.createSubchannel(
+          CreateSubchannelArgs.newBuilder().setAddresses(addresses).build());
+      subchannel.start(infoObject -> {
+        if (infoObject.getState() == ConnectivityState.READY) {
+          helper.updateBalancingState(
+              ConnectivityState.READY,
+              new FixedResultPicker(PickResult.withSubchannel(subchannel)));
         }
-      };
-      helper.updateBalancingState(state, picker);
+      });
+      return subchannel;
     }
   }
 
   private final class FakeLbHelper extends LoadBalancer.Helper {
+
+    private final Queue<FakeSubchannel> subchannels = new LinkedList<>();
 
     @Override
     public SynchronizationContext getSynchronizationContext() {
@@ -789,7 +965,9 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return new FakeSubchannel(args.getAddresses(), args.getAttributes());
+      FakeSubchannel subchannel = new FakeSubchannel(args.getAddresses(), args.getAttributes());
+      subchannels.add(subchannel);
+      return subchannel;
     }
 
     @Override
@@ -801,15 +979,25 @@ public class ClusterImplLoadBalancerTest {
     public String getAuthority() {
       return AUTHORITY;
     }
+
+    @Override
+    public void refreshNameResolution() {}
   }
 
   private static final class FakeSubchannel extends Subchannel {
     private final List<EquivalentAddressGroup> eags;
     private final Attributes attrs;
+    private SubchannelStateListener listener;
+    private Attributes connectedAttributes;
 
     private FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attrs) {
       this.eags = eags;
       this.attrs = attrs;
+    }
+
+    @Override
+    public void start(SubchannelStateListener listener) {
+      this.listener = checkNotNull(listener, "listener");
     }
 
     @Override
@@ -832,6 +1020,19 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public void updateAddresses(List<EquivalentAddressGroup> addrs) {
+    }
+
+    @Override
+    public Attributes getConnectedAddressAttributes() {
+      return connectedAttributes;
+    }
+
+    public void updateState(ConnectivityStateInfo newState) {
+      listener.onSubchannelState(newState);
+    }
+
+    public void setConnectedEagIndex(int eagIndex) {
+      this.connectedAttributes = eags.get(eagIndex).getAttributes();
     }
   }
 

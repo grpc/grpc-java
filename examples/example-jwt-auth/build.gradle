@@ -23,8 +23,8 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.64.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.25.1'
+def grpcVersion = '1.68.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.3'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -83,6 +83,8 @@ application {
     applicationDistribution.into('bin') {
         from(hellowWorldJwtAuthServer)
         from(hellowWorldJwtAuthClient)
-        fileMode = 0755
+        filePermissions {
+            unix(0755)
+        }
     }
 }

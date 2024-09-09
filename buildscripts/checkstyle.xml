@@ -202,7 +202,7 @@
             <property name="accessModifiers" value="public"/>
             <property name="allowMissingParamTags" value="true"/>
             <property name="allowMissingReturnTag" value="true"/>
-            <!-- TOOD(ejona): Too restrictive for tests
+            <!-- TODO(ejona): Too restrictive for tests
             <property name="allowedAnnotations" value="Override, Test"/-->
             <property name="allowedAnnotations" value="Override, Test, Before, After, BeforeClass, AfterClass, Setup, TearDown"/>
         </module>

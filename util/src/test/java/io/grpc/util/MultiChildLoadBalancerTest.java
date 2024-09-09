@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -34,6 +33,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.Lists;
+import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -244,37 +244,28 @@ public class MultiChildLoadBalancerTest {
 
   @Test
   public void testEndpoint_equals() {
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1"),
-        createEndpoint(Attributes.EMPTY, "addr1"));
-
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(Attributes.EMPTY, "addr2", "addr1"));
-
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(affinity, "addr2", "addr1"));
-
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2").hashCode(),
-        createEndpoint(affinity, "addr2", "addr1").hashCode());
-
-  }
-
-  @Test
-  public void testEndpoint_notEquals() {
-    assertNotEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(Attributes.EMPTY, "addr1", "addr3"));
-
-    assertNotEquals(
-        createEndpoint(Attributes.EMPTY, "addr1"),
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"));
-
-    assertNotEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(Attributes.EMPTY, "addr1"));
+    new EqualsTester()
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1"),
+            createEndpoint(Attributes.EMPTY, "addr1"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
+            createEndpoint(Attributes.EMPTY, "addr2", "addr1"),
+            createEndpoint(affinity, "addr1", "addr2"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr3"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr10"),
+            createEndpoint(Attributes.EMPTY, "addr2", "addr1", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr10"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr11"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr10", "addr11"))
+        .testEquals();
   }
 
   private String addressesOnlyString(EquivalentAddressGroup eag) {
@@ -358,9 +349,6 @@ public class MultiChildLoadBalancerTest {
       ConnectivityState overallState = null;
       final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
       for (ChildLbState childLbState : getChildLbStates()) {
-        if (childLbState.isDeactivated()) {
-          continue;
-        }
         childPickers.put(childLbState.getKey(), childLbState.getCurrentPicker());
         overallState = aggregateState(overallState, childLbState.getCurrentState());
       }

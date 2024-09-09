@@ -36,9 +36,15 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LongCounterMetricInstrument;
+import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
+import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricRecorder.BatchCallback;
+import io.grpc.MetricRecorder.BatchRecorder;
+import io.grpc.MetricRecorder.Registration;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -58,9 +64,12 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -87,11 +96,20 @@ final class CachingRlsLbClient {
   /** Minimum bytes for a Java Object. */
   public static final int OBJ_OVERHEAD_B = 16;
 
+  private static final LongCounterMetricInstrument DEFAULT_TARGET_PICKS_COUNTER;
+  private static final LongCounterMetricInstrument TARGET_PICKS_COUNTER;
+  private static final LongCounterMetricInstrument FAILED_PICKS_COUNTER;
+  private static final LongGaugeMetricInstrument CACHE_ENTRIES_GAUGE;
+  private static final LongGaugeMetricInstrument CACHE_SIZE_GAUGE;
+  private final Registration gaugeRegistration;
+  private final String metricsInstanceUuid = UUID.randomUUID().toString();
+
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
   // LRU cache based on access order (BACKOFF and actual data will be here)
   @GuardedBy("lock")
   private final RlsAsyncLruCache linkedHashLruCache;
+  private final Future<?> periodicCleaner;
   // any RPC on the fly will cached in this map
   @GuardedBy("lock")
   private final Map<RouteLookupRequest, PendingCacheEntry> pendingCallCache = new HashMap<>();
@@ -111,8 +129,40 @@ final class CachingRlsLbClient {
   private final RouteLookupServiceStub rlsStub;
   private final RlsPicker rlsPicker;
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
+  @GuardedBy("lock")
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
   private final ChannelLogger logger;
+
+  static {
+    MetricInstrumentRegistry metricInstrumentRegistry
+        = MetricInstrumentRegistry.getDefaultRegistry();
+    DEFAULT_TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.rls.default_target_picks",
+        "EXPERIMENTAL. Number of LB picks sent to the default target", "{pick}",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target",
+            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Collections.emptyList(),
+        false);
+    TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.target_picks",
+        "EXPERIMENTAL. Number of LB picks sent to each RLS target. Note that if the default "
+            + "target is also returned by the RLS server, RPCs sent to that target from the cache "
+            + "will be counted in this metric, not in grpc.rls.default_target_picks.", "{pick}",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.data_plane_target",
+            "grpc.lb.pick_result"), Collections.emptyList(),
+        false);
+    FAILED_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.failed_picks",
+        "EXPERIMENTAL. Number of LB picks failed due to either a failed RLS request or the "
+            + "RLS channel being throttled", "{pick}",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target"),
+        Collections.emptyList(), false);
+    CACHE_ENTRIES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_entries",
+        "EXPERIMENTAL. Number of entries in the RLS cache", "{entry}",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_uuid"),
+        Collections.emptyList(), false);
+    CACHE_SIZE_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_size",
+        "EXPERIMENTAL. The current size of the RLS cache", "By",
+        Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_uuid"),
+        Collections.emptyList(), false);
+  }
 
   private CachingRlsLbClient(Builder builder) {
     helper = new RlsLbHelper(checkNotNull(builder.helper, "helper"));
@@ -128,10 +178,10 @@ final class CachingRlsLbClient {
         new RlsAsyncLruCache(
             rlsConfig.cacheSizeBytes(),
             new AutoCleaningEvictionListener(builder.evictionListener),
-            scheduledExecutorService,
             ticker,
-            lock,
             helper);
+    periodicCleaner =
+        scheduledExecutorService.scheduleAtFixedRate(this::periodicClean, 1, 1, TimeUnit.MINUTES);
     logger = helper.getChannelLogger();
     String serverHost = null;
     try {
@@ -146,7 +196,7 @@ final class CachingRlsLbClient {
     }
     RlsRequestFactory requestFactory = new RlsRequestFactory(
         lbPolicyConfig.getRouteLookupConfig(), serverHost);
-    rlsPicker = new RlsPicker(requestFactory);
+    rlsPicker = new RlsPicker(requestFactory, rlsConfig.lookupService());
     // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
     // RLS server using the same authority as the backends, even though the RLS server’s addresses
     // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
@@ -176,11 +226,37 @@ final class CachingRlsLbClient {
             lbPolicyConfig.getLoadBalancingPolicy(), childLbResolvedAddressFactory,
             childLbHelperProvider,
             new BackoffRefreshListener());
+
+    gaugeRegistration = helper.getMetricRecorder()
+        .registerBatchCallback(new BatchCallback() {
+          @Override
+          public void accept(BatchRecorder recorder) {
+            int estimatedSize;
+            long estimatedSizeBytes;
+            synchronized (lock) {
+              estimatedSize = linkedHashLruCache.estimatedSize();
+              estimatedSizeBytes = linkedHashLruCache.estimatedSizeBytes();
+            }
+            recorder.recordLongGauge(CACHE_ENTRIES_GAUGE, estimatedSize,
+                Arrays.asList(helper.getChannelTarget(), rlsConfig.lookupService(),
+                    metricsInstanceUuid), Collections.emptyList());
+            recorder.recordLongGauge(CACHE_SIZE_GAUGE, estimatedSizeBytes,
+                Arrays.asList(helper.getChannelTarget(), rlsConfig.lookupService(),
+                    metricsInstanceUuid), Collections.emptyList());
+          }
+        }, CACHE_ENTRIES_GAUGE, CACHE_SIZE_GAUGE);
+
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
+  void init() {
+    synchronized (lock) {
+      refCountedChildPolicyWrapperFactory.init();
+    }
+  }
+
   /**
-   * Convert the status to UNAVAILBLE and enhance the error message.
+   * Convert the status to UNAVAILABLE and enhance the error message.
    * @param status status as provided by server
    * @param serverName Used for error description
    * @return Transformed status
@@ -190,6 +266,12 @@ final class CachingRlsLbClient {
         String.format("Unable to retrieve RLS targets from RLS server %s.  "
                 + "RLS server returned: %s: %s",
             serverName, status.getCode(), status.getDescription()));
+  }
+
+  private void periodicClean() {
+    synchronized (lock) {
+      linkedHashLruCache.cleanupExpiredEntries();
+    }
   }
 
   /** Populates async cache entry for new request. */
@@ -247,7 +329,7 @@ final class CachingRlsLbClient {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
       if (cacheEntry == null) {
-        logger.log(ChannelLogLevel.DEBUG, "No cache entry found, making a new lrs request");
+        logger.log(ChannelLogLevel.DEBUG, "No cache entry found, making a new RLS request");
         PendingCacheEntry pendingEntry = pendingCallCache.get(request);
         if (pendingEntry != null) {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
@@ -274,12 +356,14 @@ final class CachingRlsLbClient {
   void close() {
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient closed");
     synchronized (lock) {
+      periodicCleaner.cancel(false);
       // all childPolicyWrapper will be returned via AutoCleaningEvictionListener
       linkedHashLruCache.close();
       // TODO(creamsoup) maybe cancel all pending requests
       pendingCallCache.clear();
       rlsChannel.shutdownNow();
       rlsPicker.close();
+      gaugeRegistration.close();
     }
   }
 
@@ -315,7 +399,7 @@ final class CachingRlsLbClient {
       } catch (Exception e) {
         createBackOffEntry(entry.request, Status.fromThrowable(e), entry.backoffPolicy);
         // Cache updated. updateBalancingState() to reattempt picks
-        helper.propagateRlsError();
+        helper.triggerPendingRpcProcessing();
       }
     }
   }
@@ -387,19 +471,8 @@ final class CachingRlsLbClient {
       super.updateBalancingState(newState, newPicker);
     }
 
-    void propagateRlsError() {
-      getSynchronizationContext().execute(new Runnable() {
-        @Override
-        public void run() {
-          if (picker != null) {
-            // Refresh the channel state and let pending RPCs reprocess the picker.
-            updateBalancingState(state, picker);
-          }
-        }
-      });
-    }
-
     void triggerPendingRpcProcessing() {
+      checkState(state != null, "updateBalancingState hasn't yet been called");
       helper.getSynchronizationContext().execute(
           () -> super.updateBalancingState(state, picker));
     }
@@ -527,7 +600,7 @@ final class CachingRlsLbClient {
   }
 
   /** Common cache entry data for {@link RlsAsyncLruCache}. */
-  abstract class CacheEntry {
+  abstract static class CacheEntry {
 
     protected final RouteLookupRequest request;
 
@@ -537,16 +610,12 @@ final class CachingRlsLbClient {
 
     abstract int getSizeBytes();
 
-    final boolean isExpired() {
-      return isExpired(ticker.read());
-    }
-
     abstract boolean isExpired(long now);
 
     abstract void cleanup();
 
-    protected long getMinEvictionTime() {
-      return 0L;
+    protected boolean isOldEnoughToBeEvicted(long now) {
+      return true;
     }
   }
 
@@ -648,8 +717,8 @@ final class CachingRlsLbClient {
     }
 
     @Override
-    protected long getMinEvictionTime() {
-      return minEvictionTime;
+    protected boolean isOldEnoughToBeEvicted(long now) {
+      return minEvictionTime - now <= 0;
     }
 
     @Override
@@ -677,7 +746,7 @@ final class CachingRlsLbClient {
    * Implementation of {@link CacheEntry} contains error. This entry will transition to pending
    * status when the backoff time is expired.
    */
-  private final class BackoffCacheEntry extends CacheEntry {
+  private static final class BackoffCacheEntry extends CacheEntry {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
@@ -776,7 +845,7 @@ final class CachingRlsLbClient {
 
     CachingRlsLbClient build() {
       CachingRlsLbClient client = new CachingRlsLbClient(this);
-      helper.updateBalancingState(ConnectivityState.CONNECTING, client.rlsPicker);
+      client.init();
       return client;
     }
   }
@@ -826,21 +895,14 @@ final class CachingRlsLbClient {
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
-        ScheduledExecutorService ses, Ticker ticker, Object lock, RlsLbHelper helper) {
-      super(
-          maxEstimatedSizeBytes,
-          evictionListener,
-          1,
-          TimeUnit.MINUTES,
-          ses,
-          ticker,
-          lock);
+        Ticker ticker, RlsLbHelper helper) {
+      super(maxEstimatedSizeBytes, evictionListener, ticker);
       this.helper = checkNotNull(helper, "helper");
     }
 
     @Override
     protected boolean isExpired(RouteLookupRequest key, CacheEntry value, long nowNanos) {
-      return value.isExpired();
+      return value.isExpired(nowNanos);
     }
 
     @Override
@@ -850,8 +912,8 @@ final class CachingRlsLbClient {
 
     @Override
     protected boolean shouldInvalidateEldestEntry(
-        RouteLookupRequest eldestKey, CacheEntry eldestValue) {
-      if (eldestValue.getMinEvictionTime() > now()) {
+        RouteLookupRequest eldestKey, CacheEntry eldestValue, long now) {
+      if (!eldestValue.isOldEnoughToBeEvicted(now)) {
         return false;
       }
 
@@ -907,9 +969,11 @@ final class CachingRlsLbClient {
   final class RlsPicker extends SubchannelPicker {
 
     private final RlsRequestFactory requestFactory;
+    private final String lookupService;
 
-    RlsPicker(RlsRequestFactory requestFactory) {
+    RlsPicker(RlsRequestFactory requestFactory, String lookupService) {
       this.requestFactory = checkNotNull(requestFactory, "requestFactory");
+      this.lookupService = checkNotNull(lookupService, "rlsConfig");
     }
 
     @Override
@@ -924,7 +988,7 @@ final class CachingRlsLbClient {
           new Object[]{serviceName, methodName, args.getHeaders(), response});
 
       if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
-        logger.log(ChannelLogLevel.DEBUG, "Updating LRS metadata from the LRS response headers");
+        logger.log(ChannelLogLevel.DEBUG, "Updating RLS metadata from the RLS response headers");
         Metadata headers = args.getHeaders();
         headers.discardAll(RLS_DATA_KEY);
         headers.put(RLS_DATA_KEY, response.getHeaderData());
@@ -933,7 +997,7 @@ final class CachingRlsLbClient {
       logger.log(ChannelLogLevel.DEBUG, "defaultTarget = {0}", defaultTarget);
       boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
-        logger.log(ChannelLogLevel.DEBUG, "LRS response has data, proceed with selecting a picker");
+        logger.log(ChannelLogLevel.DEBUG, "RLS response has data, proceed with selecting a picker");
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
         SubchannelPicker picker =
             (childPolicyWrapper != null) ? childPolicyWrapper.getPicker() : null;
@@ -944,7 +1008,14 @@ final class CachingRlsLbClient {
         }
         // Happy path
         logger.log(ChannelLogLevel.DEBUG, "Returning PickResult");
-        return picker.pickSubchannel(args);
+        PickResult pickResult = picker.pickSubchannel(args);
+        if (pickResult.hasResult()) {
+          helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
+              Arrays.asList(helper.getChannelTarget(), lookupService,
+                  childPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
+              Collections.emptyList());
+        }
+        return pickResult;
       } else if (response.hasError()) {
         logger.log(ChannelLogLevel.DEBUG, "RLS response has errors");
         if (hasFallback) {
@@ -952,6 +1023,8 @@ final class CachingRlsLbClient {
           return useFallback(args);
         }
         logger.log(ChannelLogLevel.DEBUG, "No RLS fallback, returning PickResult with an error");
+        helper.getMetricRecorder().addLongCounter(FAILED_PICKS_COUNTER, 1,
+            Arrays.asList(helper.getChannelTarget(), lookupService), Collections.emptyList());
         return PickResult.withError(
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
@@ -972,7 +1045,24 @@ final class CachingRlsLbClient {
       if (picker == null) {
         return PickResult.withNoResult();
       }
-      return picker.pickSubchannel(args);
+      PickResult pickResult = picker.pickSubchannel(args);
+      if (pickResult.hasResult()) {
+        helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
+            Arrays.asList(helper.getChannelTarget(), lookupService,
+                fallbackChildPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
+            Collections.emptyList());
+      }
+      return pickResult;
+    }
+
+    private String determineMetricsPickResult(PickResult pickResult) {
+      if (pickResult.getStatus().isOk()) {
+        return "complete";
+      } else if (pickResult.isDrop()) {
+        return "drop";
+      } else {
+        return "fail";
+      }
     }
 
     private void startFallbackChildPolicy() {

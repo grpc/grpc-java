@@ -98,7 +98,7 @@ public class SharedResourceHolderTest {
     assertEquals(SharedResourceHolder.DESTROY_DELAY_SECONDS,
         scheduledDestroyTask.getDelay(TimeUnit.SECONDS));
 
-    // Simluate that the destroyer executes the foo destroying task
+    // Simulate that the destroyer executes the foo destroying task
     scheduledDestroyTask.runTask();
     assertTrue(sharedFoo.closed);
 

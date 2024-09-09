@@ -21,6 +21,7 @@ import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WRR_LOCALITY_POLICY_NAME;
+import static java.util.stream.Collectors.toList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -57,7 +58,8 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancerProvider;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
@@ -135,15 +137,16 @@ public class ClusterResolverLoadBalancerTest {
       FailurePercentageEjection.create(100, 100, 100, 100));
   private final DiscoveryMechanism edsDiscoveryMechanism1 =
       DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
-          null);
+          Collections.emptyMap(), null);
   private final DiscoveryMechanism edsDiscoveryMechanism2 =
       DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext,
-          null);
+          Collections.emptyMap(), null);
   private final DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
       DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
-          outlierDetection);
+          Collections.emptyMap(), outlierDetection);
   private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
-      DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null);
+      DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null,
+          Collections.emptyMap());
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -155,14 +158,16 @@ public class ClusterResolverLoadBalancerTest {
   private final FakeClock fakeClock = new FakeClock();
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final NameResolverRegistry nsRegistry = new NameResolverRegistry();
-  private final PolicySelection roundRobin = new PolicySelection(
+  private final Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
       new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-          new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null)));
-  private final PolicySelection ringHash = new PolicySelection(
+          GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+              new FakeLoadBalancerProvider("round_robin"), null)));
+  private final Object ringHash = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
       new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L));
-  private final PolicySelection leastRequest = new PolicySelection(
+  private final Object leastRequest = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
       new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-          new PolicySelection(new FakeLoadBalancerProvider("least_request_experimental"),
+          GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+              new FakeLoadBalancerProvider("least_request_experimental"),
               new LeastRequestConfig(3))));
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final List<FakeNameResolver> resolvers = new ArrayList<>();
@@ -281,14 +286,15 @@ public class ClusterResolverLoadBalancerTest {
     PriorityChildConfig priorityChildConfig =
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
     assertThat(priorityChildConfig.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), "ring_hash_experimental");
-    RingHashConfig ringHashConfig =
-        (RingHashConfig) clusterImplConfig.childPolicy.getConfig();
+    RingHashConfig ringHashConfig = (RingHashConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
     assertThat(ringHashConfig.maxRingSize).isEqualTo(100L);
   }
@@ -321,16 +327,18 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[child1]");
     PriorityChildConfig priorityChildConfig =
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
-    WrrLocalityConfig wrrLocalityConfig =
-        (WrrLocalityConfig) clusterImplConfig.childPolicy.getConfig();
-    assertThat(wrrLocalityConfig.childPolicy.getProvider().getPolicyName()).isEqualTo(
-        "least_request_experimental");
+    WrrLocalityConfig wrrLocalityConfig = (WrrLocalityConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
+    LoadBalancerProvider childProvider =
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(wrrLocalityConfig.childConfig);
+    assertThat(childProvider.getPolicyName()).isEqualTo("least_request_experimental");
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
@@ -367,10 +375,11 @@ public class ClusterResolverLoadBalancerTest {
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
 
     // The child config for priority should be outlier detection.
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo("outlier_detection_experimental");
-    OutlierDetectionLoadBalancerConfig outlierDetectionConfig =
-        (OutlierDetectionLoadBalancerConfig) priorityChildConfig.policySelection.getConfig();
+    OutlierDetectionLoadBalancerConfig outlierDetectionConfig = (OutlierDetectionLoadBalancerConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
 
     // The outlier detection config should faithfully represent what came down from xDS.
     assertThat(outlierDetectionConfig.intervalNanos).isEqualTo(outlierDetection.intervalNanos());
@@ -406,14 +415,15 @@ public class ClusterResolverLoadBalancerTest {
         outlierDetection.failurePercentageEjection().requestVolume());
 
     // The wrapped configuration should not have been tampered with.
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) outlierDetectionConfig.childPolicy.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(outlierDetectionConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
-    WrrLocalityConfig wrrLocalityConfig =
-        (WrrLocalityConfig) clusterImplConfig.childPolicy.getConfig();
-    assertThat(wrrLocalityConfig.childPolicy.getProvider().getPolicyName()).isEqualTo(
-        "least_request_experimental");
+    WrrLocalityConfig wrrLocalityConfig = (WrrLocalityConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
+    LoadBalancerProvider childProvider =
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(wrrLocalityConfig.childConfig);
+    assertThat(childProvider.getPolicyName()).isEqualTo("least_request_experimental");
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
@@ -473,45 +483,48 @@ public class ClusterResolverLoadBalancerTest {
 
     PriorityChildConfig priorityChildConfig1 = priorityLbConfig.childConfigs.get(priority1);
     assertThat(priorityChildConfig1.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig1.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig1.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig1 =
-        (ClusterImplConfig) priorityChildConfig1.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig1 = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig1.childConfig);
     assertClusterImplConfig(clusterImplConfig1, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
-    assertThat(clusterImplConfig1.childPolicy.getConfig()).isInstanceOf(WrrLocalityConfig.class);
-    WrrLocalityConfig wrrLocalityConfig1 =
-        (WrrLocalityConfig) clusterImplConfig1.childPolicy.getConfig();
-    assertThat(wrrLocalityConfig1.childPolicy.getProvider().getPolicyName()).isEqualTo(
-        "round_robin");
+    WrrLocalityConfig wrrLocalityConfig1 = (WrrLocalityConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig1.childConfig);
+    LoadBalancerProvider childProvider1 =
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(wrrLocalityConfig1.childConfig);
+    assertThat(childProvider1.getPolicyName()).isEqualTo("round_robin");
 
     PriorityChildConfig priorityChildConfig2 = priorityLbConfig.childConfigs.get(priority2);
     assertThat(priorityChildConfig2.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig2.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig2.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig2 =
-        (ClusterImplConfig) priorityChildConfig2.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig2 = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig2.childConfig);
     assertClusterImplConfig(clusterImplConfig2, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
-    assertThat(clusterImplConfig2.childPolicy.getConfig()).isInstanceOf(WrrLocalityConfig.class);
-    WrrLocalityConfig wrrLocalityConfig2 =
-        (WrrLocalityConfig) clusterImplConfig1.childPolicy.getConfig();
-    assertThat(wrrLocalityConfig2.childPolicy.getProvider().getPolicyName()).isEqualTo(
-        "round_robin");
+    WrrLocalityConfig wrrLocalityConfig2 = (WrrLocalityConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig1.childConfig);
+    LoadBalancerProvider childProvider2 =
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(wrrLocalityConfig2.childConfig);
+    assertThat(childProvider2.getPolicyName()).isEqualTo("round_robin");
 
     PriorityChildConfig priorityChildConfig3 = priorityLbConfig.childConfigs.get(priority3);
     assertThat(priorityChildConfig3.ignoreReresolution).isTrue();
-    assertThat(priorityChildConfig3.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig3.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig3 =
-        (ClusterImplConfig) priorityChildConfig3.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig3 = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig3.childConfig);
     assertClusterImplConfig(clusterImplConfig3, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
-    assertThat(clusterImplConfig3.childPolicy.getConfig()).isInstanceOf(WrrLocalityConfig.class);
-    WrrLocalityConfig wrrLocalityConfig3 =
-        (WrrLocalityConfig) clusterImplConfig1.childPolicy.getConfig();
-    assertThat(wrrLocalityConfig3.childPolicy.getProvider().getPolicyName()).isEqualTo(
-        "round_robin");
+    WrrLocalityConfig wrrLocalityConfig3 = (WrrLocalityConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig1.childConfig);
+    LoadBalancerProvider childProvider3 =
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(wrrLocalityConfig3.childConfig);
+    assertThat(childProvider3.getPolicyName()).isEqualTo("round_robin");
 
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
       if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality1) {
@@ -772,10 +785,11 @@ public class ClusterResolverLoadBalancerTest {
     String priority = Iterables.getOnlyElement(priorityLbConfig.priorities);
     PriorityChildConfig priorityChildConfig = priorityLbConfig.childConfigs.get(priority);
     assertThat(priorityChildConfig.ignoreReresolution).isFalse();
-    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+          .getPolicyName())
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig =
-        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_INFO, 300L, null,
         Collections.<DropOverload>emptyList(), "pick_first");
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
@@ -909,11 +923,12 @@ public class ClusterResolverLoadBalancerTest {
     assertAddressesEqual(Arrays.asList(endpoint3, endpoint1, endpoint2),
         childBalancer.addresses);  // ordered by cluster then addresses
     assertAddressesEqual(AddressFilter.filter(AddressFilter.filter(
-        childBalancer.addresses, CLUSTER1 + "[child1]"), locality1.toString()),
+        childBalancer.addresses, CLUSTER1 + "[child1]"),
+          "{region=\"test-region-1\", zone=\"test-zone-1\", sub_zone=\"test-subzone-1\"}"),
         Collections.singletonList(endpoint3));
     assertAddressesEqual(AddressFilter.filter(AddressFilter.filter(
         childBalancer.addresses, CLUSTER_DNS + "[child0]"),
-        Locality.create("", "", "").toString()),
+        "{region=\"\", zone=\"\", sub_zone=\"\"}"),
         Arrays.asList(endpoint1, endpoint2));
   }
 
@@ -1136,16 +1151,19 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(config.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
     assertThat(config.tlsContext).isEqualTo(tlsContext);
     assertThat(config.dropCategories).isEqualTo(dropCategories);
-    assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo(childPolicy);
+    assertThat(
+          GracefulSwitchLoadBalancerAccessor.getChildProvider(config.childConfig).getPolicyName())
+        .isEqualTo(childPolicy);
   }
 
   /** Asserts two list of EAGs contains same addresses, regardless of attributes. */
   private static void assertAddressesEqual(
       List<EquivalentAddressGroup> expected, List<EquivalentAddressGroup> actual) {
-    assertThat(actual.size()).isEqualTo(expected.size());
-    for (int i = 0; i < actual.size(); i++) {
-      assertThat(actual.get(i).getAddresses()).isEqualTo(expected.get(i).getAddresses());
-    }
+    List<List<SocketAddress>> expectedAddresses
+        = expected.stream().map(EquivalentAddressGroup::getAddresses).collect(toList());
+    List<List<SocketAddress>> actualAddresses
+        = actual.stream().map(EquivalentAddressGroup::getAddresses).collect(toList());
+    assertThat(actualAddresses).isEqualTo(expectedAddresses);
   }
 
   private static EquivalentAddressGroup makeAddress(final String name) {

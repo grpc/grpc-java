@@ -17,59 +17,59 @@
 package io.grpc;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * An internal interface representing a receiver or aggregator of gRPC metrics data.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/11110")
+@Internal
 public interface MetricSink {
 
   /**
-   * Returns a set of names for the metrics that are currently enabled for this `MetricSink`.
+   * Returns a set of names for the metrics that are currently enabled or disabled.
    *
    * @return A set of enabled metric names.
    */
-  Set<String> getEnabledMetrics();
+  Map<String, Boolean> getEnabledMetrics();
 
   /**
-   * Returns a list of label names that are considered optional for metrics collected by this
-   * `MetricSink`.
+   * Returns a set of optional label names for metrics that the sink actually wants.
    *
-   * @return A list of optional label names.
+   * @return A set of optional label names.
    */
-  List<String> getOptionalLabels();
+  Set<String> getOptionalLabels();
 
   /**
-   * Returns a list of metric measures used to record metric values. These measures are created
+   * Returns size of metric measures used to record metric values. These measures are created
    * based on registered metrics (via MetricInstrumentRegistry) and are ordered according to their
    * registration sequence.
    *
-   * @return A list of metric measures.
+   * @return Size of metric measures.
    */
-  List<Object> getMetricsMeasures();
+  int getMeasuresSize();
 
   /**
-   * Records a value for a double-precision counter associated with specified metric instrument.
+   * Adds a value for a double-precision counter associated with specified metric instrument.
    *
-   * @param metricInstrument The counter metric instrument identifies metric measure to record.
+   * @param metricInstrument The counter metric instrument identifies metric measure to add.
    * @param value The value to record.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
-  default void recordDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
+  default void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
   }
 
   /**
-   * Records a value for a long valued counter metric associated with specified metric instrument.
+   * Adds a value for a long valued counter metric associated with specified metric instrument.
    *
-   * @param metricInstrument The counter metric instrument identifies metric measure to record.
+   * @param metricInstrument The counter metric instrument identifies metric measure to add.
    * @param value The value to record.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
-  default void recordLongCounter(LongCounterMetricInstrument metricInstrument, long value,
+  default void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
   }
 
@@ -98,4 +98,31 @@ public interface MetricSink {
   default void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
       List<String> requiredLabelValues, List<String> optionalLabelValues) {
   }
+
+  /**
+   * Record a long gauge value.
+   *
+   * @param value The value to record.
+   * @param requiredLabelValues A list of required label values for the metric.
+   * @param optionalLabelValues A list of additional, optional label values for the metric.
+   */
+  default void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
+      List<String> requiredLabelValues, List<String> optionalLabelValues){
+  }
+
+  /**
+   * Registers a callback to produce metric values for only the listed instruments. The returned
+   * registration must be closed when no longer needed, which will remove the callback.
+   *
+   * @param callback The callback to call to record.
+   * @param metricInstruments The metric instruments the callback will record against.
+   */
+  default Registration registerBatchCallback(Runnable callback,
+      CallbackMetricInstrument... metricInstruments) {
+    return () -> { };
+  }
+
+  interface Registration extends MetricRecorder.Registration {}
+
+  void updateMeasures(List<MetricInstrument> instruments);
 }

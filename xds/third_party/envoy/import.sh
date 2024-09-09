@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=147e6b9523d8d2ae0d9d2205254d6e633644c6fe
+VERSION=ab911ac2ff971f805ec822ad4d4ff6b42a61cc7c
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
@@ -67,15 +67,14 @@ envoy/config/trace/v3/datadog.proto
 envoy/config/trace/v3/dynamic_ot.proto
 envoy/config/trace/v3/http_tracer.proto
 envoy/config/trace/v3/lightstep.proto
-envoy/config/trace/v3/opencensus.proto
 envoy/config/trace/v3/opentelemetry.proto
 envoy/config/trace/v3/service.proto
-envoy/config/trace/v3/trace.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
+envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
 envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
@@ -93,9 +92,11 @@ envoy/extensions/transport_sockets/tls/v3/tls.proto
 envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v3/lrs.proto
+envoy/service/rate_limit_quota/v3/rlqs.proto
 envoy/service/status/v3/csds.proto
 envoy/type/http/v3/path_transformation.proto
 envoy/type/matcher/v3/filter_state.proto
+envoy/type/matcher/v3/http_inputs.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
 envoy/type/matcher/v3/number.proto
@@ -107,9 +108,13 @@ envoy/type/matcher/v3/value.proto
 envoy/type/metadata/v3/metadata.proto
 envoy/type/tracing/v3/custom_tag.proto
 envoy/type/v3/http.proto
+envoy/type/v3/http_status.proto
 envoy/type/v3/percent.proto
 envoy/type/v3/range.proto
+envoy/type/v3/ratelimit_strategy.proto
+envoy/type/v3/ratelimit_unit.proto
 envoy/type/v3/semantic_version.proto
+envoy/type/v3/token_bucket.proto
 )
 
 pushd "$(git rev-parse --show-toplevel)/xds/third_party/envoy" > /dev/null
@@ -137,7 +142,7 @@ COPIED=0
 for file in "${FILES[@]}"
 do
   mkdir -p "$(dirname "${file}")"
-  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}" && (( COPIED++ ))
+  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}" && (( ++COPIED ))
 done
 popd > /dev/null
 

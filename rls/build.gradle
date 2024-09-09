@@ -28,6 +28,7 @@ dependencies {
             project(':grpc-inprocess'),
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
+            testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core'))
     signature libraries.signature.java
 }

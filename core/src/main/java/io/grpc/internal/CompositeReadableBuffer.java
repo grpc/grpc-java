@@ -122,11 +122,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
         }
       };
 
-  @Override
-  public void readBytes(byte[] dest, int destOffset, int length) {
-    executeNoThrow(BYTE_ARRAY_OP, length, dest, destOffset);
-  }
-
   private static final NoThrowReadOperation<ByteBuffer> BYTE_BUF_OP =
       new NoThrowReadOperation<ByteBuffer>() {
         @Override
@@ -141,11 +136,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
         }
       };
 
-  @Override
-  public void readBytes(ByteBuffer dest) {
-    executeNoThrow(BYTE_BUF_OP, dest.remaining(), dest, 0);
-  }
-
   private static final ReadOperation<OutputStream> STREAM_OP =
       new ReadOperation<OutputStream>() {
         @Override
@@ -155,6 +145,16 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
           return 0;
         }
       };
+
+  @Override
+  public void readBytes(byte[] dest, int destOffset, int length) {
+    executeNoThrow(BYTE_ARRAY_OP, length, dest, destOffset);
+  }
+
+  @Override
+  public void readBytes(ByteBuffer dest) {
+    executeNoThrow(BYTE_BUF_OP, dest.remaining(), dest, 0);
+  }
 
   @Override
   public void readBytes(OutputStream dest, int length) throws IOException {

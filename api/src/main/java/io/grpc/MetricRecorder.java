@@ -16,11 +16,8 @@
 
 package io.grpc;
 
-import io.grpc.DoubleCounterMetricInstrument;
-import io.grpc.DoubleHistogramMetricInstrument;
-import io.grpc.Internal;
-import io.grpc.LongCounterMetricInstrument;
-import io.grpc.LongHistogramMetricInstrument;
+import static com.google.common.base.Preconditions.checkArgument;
+
 import java.util.List;
 
 /**
@@ -30,26 +27,44 @@ import java.util.List;
 @Internal
 public interface MetricRecorder {
   /**
-   * Records a value for a double-precision counter metric instrument.
+   * Adds a value for a double-precision counter metric instrument.
    *
-   * @param metricInstrument The counter metric instrument to record the value against.
-   * @param value The value to record.
+   * @param metricInstrument The counter metric instrument to add the value against.
+   * @param value The value to add.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
-  default void recordDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+  default void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
+  }
 
   /**
-   * Records a value for a long valued counter metric instrument.
+   * Adds a value for a long valued counter metric instrument.
    *
-   * @param metricInstrument The counter metric instrument to record the value against.
-   * @param value The value to record.
+   * @param metricInstrument The counter metric instrument to add the value against.
+   * @param value The value to add.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
-  default void recordLongCounter(LongCounterMetricInstrument metricInstrument, long value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+  default void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
+  }
 
   /**
    * Records a value for a double-precision histogram metric instrument.
@@ -60,7 +75,16 @@ public interface MetricRecorder {
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
   default void recordDoubleHistogram(DoubleHistogramMetricInstrument metricInstrument, double value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
+  }
 
   /**
    * Records a value for a long valued histogram metric instrument.
@@ -71,5 +95,62 @@ public interface MetricRecorder {
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
   default void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
-      List<String> requiredLabelValues, List<String> optionalLabelValues) {}
+      List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
+  }
+
+  /**
+   * Registers a callback to produce metric values for only the listed instruments. The returned
+   * registration must be closed when no longer needed, which will remove the callback.
+   *
+   * @param callback The callback to call to record.
+   * @param metricInstruments The metric instruments the callback will record against.
+   */
+  default Registration registerBatchCallback(BatchCallback callback,
+      CallbackMetricInstrument... metricInstruments) {
+    return () -> { };
+  }
+
+  /** Callback to record gauge values. */
+  interface BatchCallback {
+    /** Records instrument values into {@code recorder}. */
+    void accept(BatchRecorder recorder);
+  }
+
+  /** Recorder for instrument values produced by a batch callback. */
+  interface BatchRecorder {
+    /**
+     * Record a long gauge value.
+     *
+     * @param value The value to record.
+     * @param requiredLabelValues A list of required label values for the metric.
+     * @param optionalLabelValues A list of additional, optional label values for the metric.
+     */
+    default void recordLongGauge(LongGaugeMetricInstrument metricInstrument, long value,
+        List<String> requiredLabelValues, List<String> optionalLabelValues) {
+      checkArgument(requiredLabelValues != null
+              && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+          "Incorrect number of required labels provided. Expected: %s",
+          metricInstrument.getRequiredLabelKeys().size());
+      checkArgument(optionalLabelValues != null
+              && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+          "Incorrect number of optional labels provided. Expected: %s",
+          metricInstrument.getOptionalLabelKeys().size());
+    }
+  }
+
+  /** A handle to a registration, that allows unregistration. */
+  interface Registration extends AutoCloseable {
+    // Redefined to not throw an exception.
+    /** Unregister. */
+    @Override
+    void close();
+  }
 }

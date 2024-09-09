@@ -100,7 +100,7 @@ public class RpcBehaviorLoadBalancerProviderTest {
   @Test
   public void pickerAddsRpcBehaviorMetadata() {
     PickSubchannelArgsImpl args = new PickSubchannelArgsImpl(TestMethodDescriptors.voidMethod(),
-        new Metadata(), CallOptions.DEFAULT);
+        new Metadata(), CallOptions.DEFAULT, new LoadBalancer.PickDetailsConsumer() {});
     new RpcBehaviorPicker(mockPicker, "error-code-15").pickSubchannel(args);
 
     assertThat(args.getHeaders()

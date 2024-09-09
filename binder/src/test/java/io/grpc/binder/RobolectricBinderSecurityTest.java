@@ -21,11 +21,9 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static org.robolectric.Shadows.shadowOf;
 
-import io.grpc.binder.internal.MainThreadScheduledExecutorService;
 import android.app.Application;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import androidx.lifecycle.LifecycleService;
@@ -44,6 +42,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.binder.internal.MainThreadScheduledExecutorService;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
@@ -249,8 +248,5 @@ public final class RobolectricBinderSecurityTest {
     }
 
     /** A future representing a task submitted to a {@link Handler}. */
-
-
   }
-
 }

@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
 import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
 import static io.netty.handler.codec.http2.Http2Exception.connectionError;
@@ -37,6 +36,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ListMultimap;
 import io.grpc.Attributes;
@@ -73,6 +73,8 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link NettyServerStream}. */
 @RunWith(JUnit4.class)
 public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream> {
+  private static final int TEST_MAX_MESSAGE_SIZE = 128;
+
   @Mock
   protected ServerStreamListener serverListener;
 
@@ -380,8 +382,29 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
   public void cancelStreamShouldSucceed() {
     stream().cancel(Status.DEADLINE_EXCEEDED);
     verify(writeQueue).enqueue(
-        new CancelServerStreamCommand(stream().transportState(), Status.DEADLINE_EXCEEDED),
+        CancelServerStreamCommand.withReset(stream().transportState(), Status.DEADLINE_EXCEEDED),
         true);
+  }
+
+  @Test
+  public void oversizedMessagesResultInResourceExhaustedTrailers() throws Exception {
+    @SuppressWarnings("InlineMeInliner") // Requires Java 11
+    String oversizedMsg = Strings.repeat("a", TEST_MAX_MESSAGE_SIZE + 1);
+    stream.request(1);
+    stream.transportState().inboundDataReceived(messageFrame(oversizedMsg), false);
+    assertNull("message should have caused a deframer error", listenerMessageQueue().poll());
+
+    ArgumentCaptor<CancelServerStreamCommand> cancelCmdCap =
+            ArgumentCaptor.forClass(CancelServerStreamCommand.class);
+    verify(writeQueue).enqueue(cancelCmdCap.capture(), eq(true));
+
+    Status status = Status.RESOURCE_EXHAUSTED
+            .withDescription("gRPC message exceeds maximum size 128: 129");
+
+    CancelServerStreamCommand actualCmd = cancelCmdCap.getValue();
+    assertThat(actualCmd.reason().getCode()).isEqualTo(status.getCode());
+    assertThat(actualCmd.reason().getDescription()).isEqualTo(status.getDescription());
+    assertThat(actualCmd.wantsHeaders()).isTrue();
   }
 
   @Override
@@ -391,7 +414,7 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
     TransportTracer transportTracer = new TransportTracer();
     NettyServerStream.TransportState state = new NettyServerStream.TransportState(
-        handler, channel.eventLoop(), http2Stream, DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx,
+        handler, channel.eventLoop(), http2Stream, TEST_MAX_MESSAGE_SIZE, statsTraceCtx,
         transportTracer, "method");
     NettyServerStream stream = new NettyServerStream(channel, state, Attributes.EMPTY,
         "test-authority", statsTraceCtx);

@@ -25,7 +25,7 @@ import java.util.List;
 public final class LongHistogramMetricInstrument extends PartialMetricInstrument {
   private final List<Long> bucketBoundaries;
 
-  LongHistogramMetricInstrument(long index, String name, String description, String unit,
+  public LongHistogramMetricInstrument(int index, String name, String description, String unit,
       List<Long> bucketBoundaries, List<String> requiredLabelKeys, List<String> optionalLabelKeys,
       boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);

@@ -20,26 +20,22 @@ import android.os.IBinder;
 import io.grpc.Internal;
 import io.grpc.binder.internal.BinderTransportSecurity;
 
-/**
- * Helper class to expose IBinderReceiver methods for legacy internal builders.
- */
+/** Helper class to expose IBinderReceiver methods for legacy internal builders. */
 @Internal
 public class BinderInternal {
 
-  /**
-   * Sets the receiver's {@link IBinder} using {@link IBinderReceiver#set(IBinder)}.
-   */
+  /** Sets the receiver's {@link IBinder} using {@link IBinderReceiver#set(IBinder)}. */
   public static void setIBinder(IBinderReceiver receiver, IBinder binder) {
     receiver.set(binder);
   }
 
   /**
-   * Creates a {@link BinderTransportSecurity.ServerPolicyChecker} from a
-   * {@link ServerSecurityPolicy}. This exposes to callers an interface to check security policies
-   * without causing hard dependencies on a specific class.
+   * Creates a {@link BinderTransportSecurity.ServerPolicyChecker} from a {@link
+   * ServerSecurityPolicy}. This exposes to callers an interface to check security policies without
+   * causing hard dependencies on a specific class.
    */
   public static BinderTransportSecurity.ServerPolicyChecker createPolicyChecker(
-          ServerSecurityPolicy securityPolicy) {
+      ServerSecurityPolicy securityPolicy) {
     return securityPolicy::checkAuthorizationForServiceAsync;
   }
 }

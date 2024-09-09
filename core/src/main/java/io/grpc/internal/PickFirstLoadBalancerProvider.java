@@ -33,10 +33,16 @@ import java.util.Map;
  * down the address list and sticks to the first that works.
  */
 public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
+  public static final String GRPC_PF_USE_HAPPY_EYEBALLS = "GRPC_PF_USE_HAPPY_EYEBALLS";
   private static final String SHUFFLE_ADDRESS_LIST_KEY = "shuffleAddressList";
 
-  static boolean enableNewPickFirst =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", true);
+  private static boolean enableNewPickFirst =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", false);
+
+  public static boolean isEnabledHappyEyeballs() {
+
+    return GrpcUtil.getFlag(GRPC_PF_USE_HAPPY_EYEBALLS, false);
+  }
 
   @Override
   public boolean isAvailable() {

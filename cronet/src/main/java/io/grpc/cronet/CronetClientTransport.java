@@ -56,7 +56,7 @@ class CronetClientTransport implements ConnectionClientTransport {
   private final Object lock = new Object();
   @GuardedBy("lock")
   private final Set<CronetClientStream> streams = Collections.newSetFromMap(
-          new IdentityHashMap<CronetClientStream, Boolean>());
+          new IdentityHashMap<>());
   private final Executor executor;
   private final int maxMessageSize;
   private final boolean alwaysUsePut;
@@ -64,6 +64,7 @@ class CronetClientTransport implements ConnectionClientTransport {
   private Attributes attrs;
   private final boolean useGetForSafeMethods;
   private final boolean usePutForIdempotentMethods;
+  private final StreamBuilderFactory streamFactory;
   // Indicates the transport is in go-away state: no new streams will be processed,
   // but existing streams may continue.
   @GuardedBy("lock")
@@ -79,7 +80,6 @@ class CronetClientTransport implements ConnectionClientTransport {
   @GuardedBy("lock")
   // Whether this transport has started.
   private boolean started;
-  private StreamBuilderFactory streamFactory;
 
   CronetClientTransport(
       StreamBuilderFactory streamFactory,
@@ -205,9 +205,9 @@ class CronetClientTransport implements ConnectionClientTransport {
       // streams.remove()
       streamsCopy = new ArrayList<>(streams);
     }
-    for (int i = 0; i < streamsCopy.size(); i++) {
+    for (CronetClientStream cronetClientStream : streamsCopy) {
       // Avoid deadlock by calling into stream without lock held
-      streamsCopy.get(i).cancel(status);
+      cronetClientStream.cancel(status);
     }
     stopIfNecessary();
   }
@@ -255,7 +255,7 @@ class CronetClientTransport implements ConnectionClientTransport {
    */
   void stopIfNecessary() {
     synchronized (lock) {
-      if (goAway && !stopped && streams.size() == 0) {
+      if (goAway && !stopped && streams.isEmpty()) {
         stopped = true;
       } else {
         return;

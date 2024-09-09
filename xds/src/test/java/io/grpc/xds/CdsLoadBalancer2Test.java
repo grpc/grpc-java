@@ -48,6 +48,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
+import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
@@ -177,7 +178,9 @@ public class CdsLoadBalancer2Test {
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
     assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME,
         null, LRS_SERVER_INFO, 100L, upstreamTlsContext, outlierDetection);
-    assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
+        .isEqualTo("round_robin");
   }
 
   @Test
@@ -194,9 +197,12 @@ public class CdsLoadBalancer2Test {
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
     assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.LOGICAL_DNS, null,
         DNS_HOST_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext, null);
-    assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName())
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
         .isEqualTo("least_request_experimental");
-    assertThat(((LeastRequestConfig) childLbConfig.lbPolicy.getConfig()).choiceCount).isEqualTo(3);
+    LeastRequestConfig lrConfig = (LeastRequestConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(childLbConfig.lbConfig);
+    assertThat(lrConfig.choiceCount).isEqualTo(3);
   }
 
   @Test
@@ -303,10 +309,13 @@ public class CdsLoadBalancer2Test {
         upstreamTlsContext, outlierDetection);
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(2), cluster4,
         DiscoveryMechanism.Type.EDS, null, null, LRS_SERVER_INFO, 300L, null, outlierDetection);
-    assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName())
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
         .isEqualTo("ring_hash_experimental");  // dominated by top-level cluster's config
-    assertThat(((RingHashConfig) childLbConfig.lbPolicy.getConfig()).minRingSize).isEqualTo(100L);
-    assertThat(((RingHashConfig) childLbConfig.lbPolicy.getConfig()).maxRingSize).isEqualTo(1000L);
+    RingHashConfig ringHashConfig = (RingHashConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(childLbConfig.lbConfig);
+    assertThat(ringHashConfig.minRingSize).isEqualTo(100L);
+    assertThat(ringHashConfig.maxRingSize).isEqualTo(1000L);
   }
 
   @Test
@@ -665,9 +674,9 @@ public class CdsLoadBalancer2Test {
       xdsClient.deliverCdsUpdate(CLUSTER,
           CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext,
                   outlierDetection)
-              .lbPolicyConfig(ImmutableMap.of("unknown", ImmutableMap.of("foo", "bar"))).build());
+              .lbPolicyConfig(ImmutableMap.of("unknownLb", ImmutableMap.of("foo", "bar"))).build());
     } catch (Exception e) {
-      assertThat(e).hasMessageThat().contains("No provider available");
+      assertThat(e).hasMessageThat().contains("unknownLb");
       return;
     }
     fail("Expected the unknown LB to cause an exception");

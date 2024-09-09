@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.protobuf.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.protobuf.ByteString;
@@ -59,6 +58,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -841,7 +841,7 @@ final class BinlogHelper {
     if (serialized != null) {
       int curBytes = 0;
       for (int i = 0; i < serialized.length; i += 2) {
-        String key = new String(serialized[i], Charsets.UTF_8);
+        String key = new String(serialized[i], StandardCharsets.UTF_8);
         byte[] value = serialized[i + 1];
         if (NEVER_INCLUDED_METADATA.contains(key)) {
           continue;

@@ -17,40 +17,22 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
-import io.grpc.ChannelLogger;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.Args;
-import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
-import io.grpc.ProxyDetector;
-import io.grpc.SynchronizationContext;
-import io.grpc.inprocess.InProcessSocketAddress;
-import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for ManagedChannelImpl#getNameResolver(). */
+/** Unit tests for ManagedChannelImplBuilder#getNameResolverProvider(). */
 @RunWith(JUnit4.class)
 public class ManagedChannelImplGetNameResolverTest {
-  private static final NameResolver.Args NAMERESOLVER_ARGS = NameResolver.Args.newBuilder()
-      .setDefaultPort(447)
-      .setProxyDetector(mock(ProxyDetector.class))
-      .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
-      .setServiceConfigParser(mock(ServiceConfigParser.class))
-      .setChannelLogger(mock(ChannelLogger.class))
-      .setScheduledExecutorService(new FakeClock().getScheduledExecutorService())
-      .build();
-
   @Test
   public void invalidUriTarget() {
     testInvalidTarget("defaultscheme:///[invalid]");
@@ -66,18 +48,6 @@ public class ManagedChannelImplGetNameResolverTest {
   public void validAuthorityTarget() throws Exception {
     testValidTarget("foo.googleapis.com:8080", "defaultscheme:///foo.googleapis.com:8080",
         new URI("defaultscheme", "", "/foo.googleapis.com:8080", null));
-  }
-
-  @Test
-  public void validAuthorityTarget_overrideAuthority() throws Exception {
-    String target = "foo.googleapis.com:8080";
-    String overrideAuthority = "override.authority";
-    URI expectedUri = new URI("defaultscheme", "", "/foo.googleapis.com:8080", null);
-    NameResolverRegistry nameResolverRegistry = getTestRegistry(expectedUri.getScheme());
-    NameResolver nameResolver = ManagedChannelImpl.getNameResolver(
-        target, overrideAuthority, nameResolverRegistry, NAMERESOLVER_ARGS,
-        Collections.singleton(InetSocketAddress.class));
-    assertThat(nameResolver.getServiceAuthority()).isEqualTo(overrideAuthority);
   }
 
   @Test
@@ -122,46 +92,11 @@ public class ManagedChannelImplGetNameResolverTest {
   }
 
   @Test
-  public void validTargetNoResolver() {
-    NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
-    NameResolverProvider nameResolverProvider = new NameResolverProvider() {
-      @Override
-      protected boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      protected int priority() {
-        return 5;
-      }
-
-      @Override
-      public NameResolver newNameResolver(URI targetUri, Args args) {
-        return null;
-      }
-
-      @Override
-      public String getDefaultScheme() {
-        return "defaultscheme";
-      }
-    };
-    nameResolverRegistry.register(nameResolverProvider);
-    try {
-      ManagedChannelImpl.getNameResolver(
-          "foo.googleapis.com:8080", null, nameResolverRegistry, NAMERESOLVER_ARGS,
-          Collections.singleton(InetSocketAddress.class));
-      fail("Should fail");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
-  }
-
-  @Test
   public void validTargetNoProvider() {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
     try {
-      ManagedChannelImpl.getNameResolver(
-          "foo.googleapis.com:8080", null, nameResolverRegistry, NAMERESOLVER_ARGS,
+      ManagedChannelImplBuilder.getNameResolverProvider(
+          "foo.googleapis.com:8080", nameResolverRegistry,
           Collections.singleton(InetSocketAddress.class));
       fail("Should fail");
     } catch (IllegalArgumentException e) {
@@ -173,9 +108,9 @@ public class ManagedChannelImplGetNameResolverTest {
   public void validTargetProviderAddrTypesNotSupported() {
     NameResolverRegistry nameResolverRegistry = getTestRegistry("testscheme");
     try {
-      ManagedChannelImpl.getNameResolver(
-          "testscheme:///foo.googleapis.com:8080", null, nameResolverRegistry, NAMERESOLVER_ARGS,
-          Collections.singleton(InProcessSocketAddress.class));
+      ManagedChannelImplBuilder.getNameResolverProvider(
+          "testscheme:///foo.googleapis.com:8080", nameResolverRegistry,
+          Collections.singleton(CustomSocketAddress.class));
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().isEqualTo(
@@ -184,26 +119,25 @@ public class ManagedChannelImplGetNameResolverTest {
     }
   }
 
-
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
     NameResolverRegistry nameResolverRegistry = getTestRegistry(expectedUri.getScheme());
-    FakeNameResolver nameResolver
-        = (FakeNameResolver) ((RetryingNameResolver) ManagedChannelImpl.getNameResolver(
-        target, null, nameResolverRegistry, NAMERESOLVER_ARGS,
-        Collections.singleton(InetSocketAddress.class))).getRetriedNameResolver();
-    assertNotNull(nameResolver);
-    assertEquals(expectedUri, nameResolver.uri);
-    assertEquals(expectedUriString, nameResolver.uri.toString());
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved =
+        ManagedChannelImplBuilder.getNameResolverProvider(
+            target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
+    assertThat(resolved.provider).isInstanceOf(FakeNameResolverProvider.class);
+    assertThat(resolved.targetUri).isEqualTo(expectedUri);
+    assertThat(resolved.targetUri.toString()).isEqualTo(expectedUriString);
   }
 
   private void testInvalidTarget(String target) {
     NameResolverRegistry nameResolverRegistry = getTestRegistry("dns");
 
     try {
-      FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(
-          target, null, nameResolverRegistry, NAMERESOLVER_ARGS,
-          Collections.singleton(InetSocketAddress.class));
-      fail("Should have failed, but got resolver with " + nameResolver.uri);
+      ManagedChannelImplBuilder.ResolvedNameResolver resolved =
+          ManagedChannelImplBuilder.getNameResolverProvider(
+              target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
+      FakeNameResolverProvider nameResolverProvider = (FakeNameResolverProvider) resolved.provider;
+      fail("Should have failed, but got resolver provider " + nameResolverProvider);
     } catch (IllegalArgumentException e) {
       // expected
     }
@@ -262,4 +196,6 @@ public class ManagedChannelImplGetNameResolverTest {
 
     @Override public void shutdown() {}
   }
+
+  private static class CustomSocketAddress extends SocketAddress {}
 }

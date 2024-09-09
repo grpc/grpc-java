@@ -77,6 +77,10 @@ final class ChildLoadBalancerHelper extends ForwardingLoadBalancerHelper {
       this.picker = checkNotNull(picker, "picker");
     }
 
+    void init() {
+      helper.updateBalancingState(ConnectivityState.CONNECTING, picker);
+    }
+
     ChildLoadBalancerHelper forTarget(String target) {
       return new ChildLoadBalancerHelper(target, helper, subchannelStateManager, picker);
     }

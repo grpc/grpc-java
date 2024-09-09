@@ -964,7 +964,7 @@ public class InternalSubchannelTest {
     // This should not lead to the creation of a new transport.
     reconnectTask.command.run();
 
-    // Futher call to obtainActiveTransport() is no-op.
+    // Further call to obtainActiveTransport() is no-op.
     assertNull(internalSubchannel.obtainActiveTransport());
     assertEquals(SHUTDOWN, internalSubchannel.getState());
     assertNoCallbackInvoke();
@@ -1337,6 +1337,32 @@ public class InternalSubchannelTest {
     index.seekTo(new FakeSocketAddress());
     // Failed seekTo doesn't change the index
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2);
+  }
+
+  @Test
+  public void connectedAddressAttributes_ready() {
+    SocketAddress addr = new SocketAddress() {};
+    Attributes attr = Attributes.newBuilder().set(Attributes.Key.create("some-key"), "1").build();
+    createInternalSubchannel(new EquivalentAddressGroup(Arrays.asList(addr), attr));
+
+    assertEquals(IDLE, internalSubchannel.getState());
+    assertNoCallbackInvoke();
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertNull(internalSubchannel.getConnectedAddressAttributes());
+
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(CONNECTING, internalSubchannel.getState());
+    verify(mockTransportFactory).newClientTransport(
+        eq(addr),
+        eq(createClientTransportOptions().setEagAttributes(attr)),
+        isA(TransportLogger.class));
+    assertNull(internalSubchannel.getConnectedAddressAttributes());
+
+    internalSubchannel.obtainActiveTransport();
+    transports.peek().listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:READY");
+    assertEquals(READY, internalSubchannel.getState());
+    assertEquals(attr, internalSubchannel.getConnectedAddressAttributes());
   }
 
   /** Create ClientTransportOptions. Should not be reused if it may be mutated. */

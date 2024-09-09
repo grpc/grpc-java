@@ -22,8 +22,9 @@ import java.util.List;
  * Represents a long-valued gauge metric instrument.
  */
 @Internal
-public final class LongGaugeMetricInstrument extends PartialMetricInstrument {
-  LongGaugeMetricInstrument(long index, String name, String description, String unit,
+public final class LongGaugeMetricInstrument extends PartialMetricInstrument
+    implements CallbackMetricInstrument {
+  public LongGaugeMetricInstrument(int index, String name, String description, String unit,
       List<String> requiredLabelKeys, List<String> optionalLabelKeys, boolean enableByDefault) {
     super(index, name, description, unit, requiredLabelKeys, optionalLabelKeys, enableByDefault);
   }

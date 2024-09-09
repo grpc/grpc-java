@@ -55,7 +55,7 @@ final class GrpclbConfig {
   }
 
   /**
-   * If specified, it overrides the name of the sevice name to be sent to the balancer. if not, the
+   * If specified, it overrides the name of the service name to be sent to the balancer. if not, the
    * target to be sent to the balancer will continue to be obtained from the target URI passed
    * to the gRPC client channel.
    */
