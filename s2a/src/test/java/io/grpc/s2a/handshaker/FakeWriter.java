@@ -16,6 +16,7 @@
 
 package io.grpc.s2a.handshaker;
 
+import static io.grpc.s2a.handshaker.TLSVersion.TLS_VERSION_1_2;
 import static io.grpc.s2a.handshaker.TLSVersion.TLS_VERSION_1_3;
 
 import com.google.common.collect.ImmutableMap;
@@ -39,7 +40,8 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     EMPTY_RESPONSE,
     ERROR_STATUS,
     ERROR_RESPONSE,
-    COMPLETE_STATUS
+    COMPLETE_STATUS,
+    BAD_TLS_VERSION_RESPONSE,
   }
 
   enum VerificationResult {
@@ -212,6 +214,20 @@ final class FakeWriter implements StreamObserver<SessionReq> {
         break;
       case COMPLETE_STATUS:
         reader.onCompleted();
+        break;
+      case BAD_TLS_VERSION_RESPONSE:
+        reader.onNext(
+            SessionResp.newBuilder()
+                .setGetTlsConfigurationResp(
+                    GetTlsConfigurationResp.newBuilder()
+                        .setClientTlsConfiguration(
+                            GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
+                                .addCertificateChain(LEAF_CERT)
+                                .addCertificateChain(INTERMEDIATE_CERT_2)
+                                .addCertificateChain(INTERMEDIATE_CERT_1)
+                                .setMinTlsVersion(TLS_VERSION_1_3)
+                                .setMaxTlsVersion(TLS_VERSION_1_2)))
+                .build());
         break;
       default:
         reader.onNext(handleResponse(sessionReq));

@@ -19,7 +19,7 @@ package io.grpc.s2a.handshaker;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.s2a.handshaker.S2AIdentity;
 import io.netty.handler.ssl.OpenSslContextOption;
@@ -138,14 +138,13 @@ final class SslContextFactory {
           NoSuchAlgorithmException,
           UnrecoverableKeyException {
     sslContextBuilder.keyManager(createKeylessManager(clientTlsConfiguration));
-    sslContextBuilder.protocols(
-        ProtoUtil.convertTlsProtocolVersion(clientTlsConfiguration.getMinTlsVersion()),
-        ProtoUtil.convertTlsProtocolVersion(clientTlsConfiguration.getMaxTlsVersion()));
-    ImmutableList.Builder<String> ciphersuites = ImmutableList.<String>builder();
-    for (int i = 0; i < clientTlsConfiguration.getCiphersuitesCount(); ++i) {
-      ciphersuites.add(ProtoUtil.convertCiphersuite(clientTlsConfiguration.getCiphersuites(i)));
+    ImmutableSet<String> tlsVersions =
+        ProtoUtil.buildTlsProtocolVersionSet(
+            clientTlsConfiguration.getMinTlsVersion(), clientTlsConfiguration.getMaxTlsVersion());
+    if (tlsVersions.isEmpty()) {
+      throw new S2AConnectionException("Set of TLS versions received from S2A server is empty.");
     }
-    sslContextBuilder.ciphers(ciphersuites.build());
+    sslContextBuilder.protocols(tlsVersions);
   }
 
   private static KeyManager createKeylessManager(

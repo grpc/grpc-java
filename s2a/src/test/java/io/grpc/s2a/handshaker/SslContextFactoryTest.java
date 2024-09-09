@@ -58,12 +58,6 @@ public final class SslContextFactoryTest {
     expect.that(sslContext.sessionTimeout()).isEqualTo(300);
     expect.that(sslContext.isClient()).isTrue();
     expect.that(sslContext.applicationProtocolNegotiator().protocols()).containsExactly("h2");
-    expect
-        .that(sslContext.cipherSuites())
-        .containsExactly(
-            "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-            "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
-            "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256");
     SSLSessionContext sslSessionContext = sslContext.sessionContext();
     if (sslSessionContext instanceof OpenSslSessionContext) {
       OpenSslSessionContext openSslSessionContext = (OpenSslSessionContext) sslSessionContext;
@@ -82,12 +76,6 @@ public final class SslContextFactoryTest {
     expect.that(sslContext.sessionTimeout()).isEqualTo(300);
     expect.that(sslContext.isClient()).isTrue();
     expect.that(sslContext.applicationProtocolNegotiator().protocols()).containsExactly("h2");
-    expect
-        .that(sslContext.cipherSuites())
-        .containsExactly(
-            "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
-            "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
-            "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256");
     SSLSessionContext sslSessionContext = sslContext.sessionContext();
     if (sslSessionContext instanceof OpenSslSessionContext) {
       OpenSslSessionContext openSslSessionContext = (OpenSslSessionContext) sslSessionContext;
@@ -139,6 +127,22 @@ public final class SslContextFactoryTest {
     assertThat(expected)
         .hasMessageThat()
         .contains("Failed to get client TLS configuration from S2A.");
+  }
+
+  @Test
+  public void createForClient_getsBadTlsVersionsFromServer_throwsError() throws Exception {
+    writer.setBehavior(FakeWriter.Behavior.BAD_TLS_VERSION_RESPONSE);
+
+    S2AConnectionException expected =
+        assertThrows(
+            S2AConnectionException.class,
+            () ->
+                SslContextFactory.createForClient(
+                    stub, FAKE_TARGET_NAME, /* localIdentity= */ Optional.empty()));
+
+    assertThat(expected)
+        .hasMessageThat()
+        .contains("Set of TLS versions received from S2A server is empty.");
   }
 
   @Test

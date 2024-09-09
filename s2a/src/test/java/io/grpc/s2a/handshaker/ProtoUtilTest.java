@@ -18,6 +18,7 @@ package io.grpc.s2a.handshaker;
 
 import static org.junit.Assert.assertThrows;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.truth.Expect;
 import org.junit.Rule;
 import org.junit.Test;
@@ -90,6 +91,41 @@ public final class ProtoUtilTest {
         assertThrows(
             AssertionError.class,
             () -> ProtoUtil.convertTlsProtocolVersion(TLSVersion.TLS_VERSION_UNSPECIFIED));
+    expect.that(expected).hasMessageThat().isEqualTo("TLS version 0 is not supported.");
+  }
+
+  @Test
+  public void buildTlsProtocolVersionSet_success() {
+    expect
+        .that(
+            ProtoUtil.buildTlsProtocolVersionSet(
+                TLSVersion.TLS_VERSION_1_0, TLSVersion.TLS_VERSION_1_3))
+        .isEqualTo(ImmutableSet.of("TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"));
+    expect
+        .that(
+            ProtoUtil.buildTlsProtocolVersionSet(
+                TLSVersion.TLS_VERSION_1_2, TLSVersion.TLS_VERSION_1_2))
+        .isEqualTo(ImmutableSet.of("TLSv1.2"));
+    expect
+        .that(
+            ProtoUtil.buildTlsProtocolVersionSet(
+                TLSVersion.TLS_VERSION_1_3, TLSVersion.TLS_VERSION_1_3))
+        .isEqualTo(ImmutableSet.of("TLSv1.3"));
+    expect
+        .that(
+            ProtoUtil.buildTlsProtocolVersionSet(
+                TLSVersion.TLS_VERSION_1_3, TLSVersion.TLS_VERSION_1_2))
+        .isEmpty();
+  }
+
+  @Test
+  public void buildTlsProtocolVersionSet_failure() {
+    AssertionError expected =
+        assertThrows(
+            AssertionError.class,
+            () ->
+                ProtoUtil.buildTlsProtocolVersionSet(
+                    TLSVersion.TLS_VERSION_UNSPECIFIED, TLSVersion.TLS_VERSION_1_3));
     expect.that(expected).hasMessageThat().isEqualTo("TLS version 0 is not supported.");
   }
 }

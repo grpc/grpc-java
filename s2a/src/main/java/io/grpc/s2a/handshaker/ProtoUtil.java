@@ -16,6 +16,8 @@
 
 package io.grpc.s2a.handshaker;
 
+import com.google.common.collect.ImmutableSet;
+
 /** Converts proto messages to Netty strings. */
 final class ProtoUtil {
   /**
@@ -66,6 +68,28 @@ final class ProtoUtil {
         throw new AssertionError(
             String.format("TLS version %d is not supported.", tlsVersion.getNumber()));
     }
+  }
+
+  /**
+   * Builds a set of strings representing all {@link TLSVersion}s between {@code minTlsVersion} and
+   * {@code maxTlsVersion}.
+   */
+  static ImmutableSet<String> buildTlsProtocolVersionSet(
+      TLSVersion minTlsVersion, TLSVersion maxTlsVersion) {
+    ImmutableSet.Builder<String> tlsVersions = ImmutableSet.<String>builder();
+    for (TLSVersion tlsVersion : TLSVersion.values()) {
+      int versionNumber;
+      try {
+        versionNumber = tlsVersion.getNumber();
+      } catch (IllegalArgumentException e) {
+        continue;
+      }
+      if (versionNumber < minTlsVersion.getNumber() || versionNumber > maxTlsVersion.getNumber()) {
+        continue;
+      }
+      tlsVersions.add(convertTlsProtocolVersion(tlsVersion));
+    }
+    return tlsVersions.build();
   }
 
   private ProtoUtil() {}
