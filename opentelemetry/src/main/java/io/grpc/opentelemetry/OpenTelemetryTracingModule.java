@@ -18,6 +18,7 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -35,6 +36,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
+import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.trace.Span;
@@ -55,8 +57,7 @@ final class OpenTelemetryTracingModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryTracingModule.class.getName());
 
   @VisibleForTesting
-  static final String OTEL_TRACING_SCOPE_NAME = "grpc-java";
-  private final io.grpc.Context.Key<Span> otelSpan = io.grpc.Context.key("opentelemetry-span-key");
+  final io.grpc.Context.Key<Span> otelSpan = io.grpc.Context.key("opentelemetry-span-key");
   @Nullable
   private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
   @Nullable
@@ -94,8 +95,16 @@ final class OpenTelemetryTracingModule {
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
 
   OpenTelemetryTracingModule(OpenTelemetry openTelemetry) {
-    this.otelTracer = checkNotNull(openTelemetry.getTracer(OTEL_TRACING_SCOPE_NAME), "otelTracer");
+    this.otelTracer = checkNotNull(openTelemetry.getTracerProvider(), "tracerProvider")
+        .tracerBuilder(OpenTelemetryConstants.INSTRUMENTATION_SCOPE)
+        .setInstrumentationVersion(IMPLEMENTATION_VERSION)
+        .build();
     this.contextPropagators = checkNotNull(openTelemetry.getPropagators(), "contextPropagators");
+  }
+
+  @VisibleForTesting
+  Tracer getTracer() {
+    return otelTracer;
   }
 
   /**
@@ -321,52 +330,53 @@ final class OpenTelemetryTracingModule {
             + "tracing must be set.");
         return next.startCall(call, headers);
       }
-      try (Scope scope = Context.current().with(span).makeCurrent()) {
-        return new AttachSpanServerCallListener<>(next.startCall(call, headers), span);
+      Context serverCallContext = Context.current().with(span);
+      try (Scope scope = serverCallContext.makeCurrent()) {
+        return new ContextServerCallListener<>(next.startCall(call, headers), serverCallContext);
       }
     }
   }
 
-  private static class AttachSpanServerCallListener<ReqT> extends
+  private static class ContextServerCallListener<ReqT> extends
       ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT> {
-    private final Span span;
+    private final Context context;
 
-    protected AttachSpanServerCallListener(ServerCall.Listener<ReqT> delegate, Span span) {
+    protected ContextServerCallListener(ServerCall.Listener<ReqT> delegate, Context context) {
       super(delegate);
-      this.span = checkNotNull(span, "span");
+      this.context = checkNotNull(context, "context");
     }
 
     @Override
     public void onMessage(ReqT message) {
-      try (Scope scope = Context.current().with(span).makeCurrent()) {
+      try (Scope scope = context.makeCurrent()) {
         delegate().onMessage(message);
       }
     }
 
     @Override
     public void onHalfClose() {
-      try (Scope scope = Context.current().with(span).makeCurrent()) {
+      try (Scope scope = context.makeCurrent()) {
         delegate().onHalfClose();
       }
     }
 
     @Override
     public void onCancel() {
-      try (Scope scope = Context.current().with(span).makeCurrent()) {
+      try (Scope scope = context.makeCurrent()) {
         delegate().onCancel();
       }
     }
 
     @Override
     public void onComplete() {
-      try (Scope scope = Context.current().with(span).makeCurrent()) {
+      try (Scope scope = context.makeCurrent()) {
         delegate().onComplete();
       }
     }
 
     @Override
     public void onReady() {
-      try (Scope scope = Context.current().with(span).makeCurrent()) {
+      try (Scope scope = context.makeCurrent()) {
         delegate().onReady();
       }
     }

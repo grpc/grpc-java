@@ -37,6 +37,7 @@ import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.MeterProvider;
+import io.opentelemetry.api.trace.Tracer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -89,8 +90,8 @@ public final class GrpcOpenTelemetry {
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
         STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
-    this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
+    this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
   }
 
   @VisibleForTesting
@@ -127,6 +128,11 @@ public final class GrpcOpenTelemetry {
     return sink;
   }
 
+  @VisibleForTesting
+  Tracer getTracer() {
+    return this.openTelemetryTracingModule.getTracer();
+  }
+
   /**
    * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
@@ -154,7 +160,16 @@ public final class GrpcOpenTelemetry {
     InternalManagedChannelBuilder.addMetricSink(builder, sink);
     InternalManagedChannelBuilder.interceptWithTarget(
         builder, openTelemetryMetricsModule::getClientInterceptor);
+  }
+
+  void configTracingForChannel(ManagedChannelBuilder<?> builder) {
     builder.intercept(openTelemetryTracingModule.getClientInterceptor());
+  }
+
+  void configureTracingForServer(ServerBuilder<?> serverBuilder) {
+    serverBuilder.addStreamTracerFactory(
+        openTelemetryTracingModule.getServerTracerFactory());
+    serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
   }
 
   /**

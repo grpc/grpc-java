@@ -17,6 +17,8 @@
 package io.grpc.opentelemetry;
 
 import io.grpc.Internal;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.ServerBuilder;
 
 /**
  * Internal accessor for {@link GrpcOpenTelemetry}.
@@ -28,5 +30,16 @@ public final class InternalGrpcOpenTelemetry {
   public static void builderPlugin(
       GrpcOpenTelemetry.Builder builder, InternalOpenTelemetryPlugin plugin) {
     builder.plugin(plugin);
+  }
+
+
+  public static void configTracingForChannelExperimental(
+      ManagedChannelBuilder<?> builder, GrpcOpenTelemetry grpcOpenTelemetry) {
+    grpcOpenTelemetry.configTracingForChannel(builder);
+  }
+
+  public static void configChannelBuilderExperimental(
+      ServerBuilder<?> builder, GrpcOpenTelemetry grpcOpenTelemetry) {
+    grpcOpenTelemetry.configureTracingForServer(builder);
   }
 }

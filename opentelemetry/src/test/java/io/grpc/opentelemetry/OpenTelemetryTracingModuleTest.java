@@ -17,13 +17,14 @@
 package io.grpc.opentelemetry;
 
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
-import static io.grpc.opentelemetry.OpenTelemetryTracingModule.OTEL_TRACING_SCOPE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,9 +42,11 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.NoopServerCall;
 import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
@@ -51,6 +54,7 @@ import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.opentelemetry.OpenTelemetryTracingModule.CallAttemptsTracerFactory;
+import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.OpenTelemetry;
@@ -60,6 +64,8 @@ import io.opentelemetry.api.trace.SpanId;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.TraceId;
 import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.TracerBuilder;
+import io.opentelemetry.api.trace.TracerProvider;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.ContextPropagators;
@@ -164,8 +170,15 @@ public class OpenTelemetryTracingModuleTest {
 
   @Before
   public void setUp() {
-    tracerRule = openTelemetryRule.getOpenTelemetry().getTracer(OTEL_TRACING_SCOPE_NAME);
-    when(mockOpenTelemetry.getTracer(OTEL_TRACING_SCOPE_NAME)).thenReturn(mockTracer);
+    tracerRule = openTelemetryRule.getOpenTelemetry().getTracer(
+        OpenTelemetryConstants.INSTRUMENTATION_SCOPE);
+    TracerProvider mockTracerProvider = mock(TracerProvider.class);
+    when(mockOpenTelemetry.getTracerProvider()).thenReturn(mockTracerProvider);
+    TracerBuilder mockTracerBuilder = mock(TracerBuilder.class);
+    when(mockTracerProvider.tracerBuilder(OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+        .thenReturn(mockTracerBuilder);
+    when(mockTracerBuilder.setInstrumentationVersion(any())).thenReturn(mockTracerBuilder);
+    when(mockTracerBuilder.build()).thenReturn(mockTracer);
     when(mockOpenTelemetry.getPropagators()).thenReturn(ContextPropagators.create(mockPropagator));
     when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan);
     when(mockSpanBuilder.setParent(any())).thenReturn(mockSpanBuilder);
@@ -459,7 +472,8 @@ public class OpenTelemetryTracingModuleTest {
 
   @Test
   public void clientStreamNeverCreatedStillRecordTracing() {
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(mockOpenTelemetry);
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
     CallAttemptsTracerFactory callTracer =
         tracingModule.newClientCallTracer(mockClientSpan, method);
 
@@ -652,6 +666,81 @@ public class OpenTelemetryTracingModuleTest {
     assertTrue(serverSpan.hasEnded());
     assertEquals(serverSpan.getStatus().getStatusCode(), StatusCode.ERROR);
     assertEquals(serverSpan.getStatus().getDescription(), "PERMISSION_DENIED: No you don't");
+  }
+
+  @Test
+  public void serverSpanPropagationInterceptor() throws Exception {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Server server = InProcessServerBuilder.forName("test-span-propagation-interceptor")
+        .directExecutor().build().start();
+    grpcCleanupRule.register(server);
+    final AtomicReference<Span> callbackSpan = new AtomicReference<>();
+    ServerCall.Listener<Integer> getContextListener = new ServerCall.Listener<Integer>() {
+      @Override
+      public void onMessage(Integer message) {
+        callbackSpan.set(Span.fromContext(Context.current()));
+      }
+
+      @Override
+      public void onHalfClose() {
+        callbackSpan.set(Span.fromContext(Context.current()));
+      }
+
+      @Override
+      public void onCancel() {
+        callbackSpan.set(Span.fromContext(Context.current()));
+      }
+
+      @Override
+      public void onComplete() {
+        callbackSpan.set(Span.fromContext(Context.current()));
+      }
+    };
+    ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
+    @SuppressWarnings("unchecked")
+    ServerCallHandler<Integer, Integer> handler = mock(ServerCallHandler.class);
+    when(handler.startCall(any(), any())).thenReturn(getContextListener);
+    ServerCall<Integer, Integer> call = new NoopServerCall<>();
+    Metadata metadata = new Metadata();
+    ServerCall.Listener<Integer> listener =
+       interceptor.interceptCall(call, metadata, handler);
+    verify(handler).startCall(same(call), same(metadata));
+    listener.onMessage(1);
+    assertEquals(callbackSpan.get(), Span.getInvalid());
+    listener.onReady();
+    assertEquals(callbackSpan.get(), Span.getInvalid());
+    listener.onCancel();
+    assertEquals(callbackSpan.get(), Span.getInvalid());
+    listener.onHalfClose();
+    assertEquals(callbackSpan.get(), Span.getInvalid());
+    listener.onComplete();
+    assertEquals(callbackSpan.get(), Span.getInvalid());
+
+    Span parentSpan = tracerRule.spanBuilder("parent-span").startSpan();
+    io.grpc.Context context = io.grpc.Context.current().withValue(tracingModule.otelSpan, parentSpan);
+    io.grpc.Context previous = context.attach();
+    try {
+      listener = interceptor.interceptCall(call, metadata, handler);
+      verify(handler, times(2)).startCall(same(call), same(metadata));
+      listener.onMessage(1);
+      assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
+          parentSpan.getSpanContext().getTraceId());
+      listener.onReady();
+      assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
+          parentSpan.getSpanContext().getTraceId());
+      listener.onCancel();
+      assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
+          parentSpan.getSpanContext().getTraceId());
+      listener.onHalfClose();
+      assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
+          parentSpan.getSpanContext().getTraceId());
+      listener.onComplete();
+      assertEquals(callbackSpan.get().getSpanContext().getTraceId(),
+          parentSpan.getSpanContext().getTraceId());
+    } finally {
+      context.detach(previous);
+    }
   }
 
   @Test

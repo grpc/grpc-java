@@ -25,6 +25,7 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,6 +36,7 @@ public class GrpcOpenTelemetryTest {
   private final InMemoryMetricReader inMemoryMetricReader = InMemoryMetricReader.create();
   private final SdkMeterProvider meterProvider =
       SdkMeterProvider.builder().registerMetricReader(inMemoryMetricReader).build();
+  private final SdkTracerProvider tracerProvider = SdkTracerProvider.builder().build();
   private final OpenTelemetry noopOpenTelemetry = OpenTelemetry.noop();
 
   @Test
@@ -57,6 +59,21 @@ public class GrpcOpenTelemetryTest {
   }
 
   @Test
+  public void buildTracer() {
+    OpenTelemetrySdk sdk =
+        OpenTelemetrySdk.builder().setTracerProvider(tracerProvider).build();
+
+    GrpcOpenTelemetry openTelemetryModule = GrpcOpenTelemetry.newBuilder()
+        .sdk(sdk).build();
+
+    assertThat(openTelemetryModule.getOpenTelemetryInstance()).isSameInstanceAs(sdk);
+    assertThat(openTelemetryModule.getTracer()).isSameInstanceAs(
+        tracerProvider.tracerBuilder("grpc-java")
+            .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
+            .build());
+  }
+
+  @Test
   public void builderDefaults() {
     GrpcOpenTelemetry module = GrpcOpenTelemetry.newBuilder().build();
 
@@ -73,6 +90,13 @@ public class GrpcOpenTelemetryTest {
     assertThat(module.getEnableMetrics()).isEmpty();
     assertThat(module.getOptionalLabels()).isEmpty();
     assertThat(module.getSink()).isInstanceOf(MetricSink.class);
+
+    assertThat(module.getTracer()).isSameInstanceAs(noopOpenTelemetry
+        .getTracerProvider()
+        .tracerBuilder("grpc-java")
+        .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
+        .build()
+    );
   }
 
   @Test
