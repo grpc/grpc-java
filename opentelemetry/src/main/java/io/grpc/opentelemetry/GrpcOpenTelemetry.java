@@ -90,8 +90,8 @@ public final class GrpcOpenTelemetry {
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
         STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
-    this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
     this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
+    this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
 
   @VisibleForTesting

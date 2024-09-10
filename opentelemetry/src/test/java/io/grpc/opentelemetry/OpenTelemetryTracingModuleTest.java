@@ -703,8 +703,7 @@ public class OpenTelemetryTracingModuleTest {
     when(handler.startCall(any(), any())).thenReturn(getContextListener);
     ServerCall<Integer, Integer> call = new NoopServerCall<>();
     Metadata metadata = new Metadata();
-    ServerCall.Listener<Integer> listener =
-       interceptor.interceptCall(call, metadata, handler);
+    ServerCall.Listener<Integer> listener = interceptor.interceptCall(call, metadata, handler);
     verify(handler).startCall(same(call), same(metadata));
     listener.onMessage(1);
     assertEquals(callbackSpan.get(), Span.getInvalid());
@@ -718,7 +717,8 @@ public class OpenTelemetryTracingModuleTest {
     assertEquals(callbackSpan.get(), Span.getInvalid());
 
     Span parentSpan = tracerRule.spanBuilder("parent-span").startSpan();
-    io.grpc.Context context = io.grpc.Context.current().withValue(tracingModule.otelSpan, parentSpan);
+    io.grpc.Context context = io.grpc.Context.current().withValue(
+        tracingModule.otelSpan, parentSpan);
     io.grpc.Context previous = context.attach();
     try {
       listener = interceptor.interceptCall(call, metadata, handler);

@@ -7,8 +7,6 @@ plugins {
 
 description = 'gRPC: OpenTelemetry'
 
-test.testLogging.showStandardStreams(true)
-
 dependencies {
     api project(':grpc-api')
     implementation libraries.guava,
@@ -21,9 +19,7 @@ dependencies {
             testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),
             libraries.opentelemetry.sdk.testing,
-            libraries.assertj.core
-    testImplementation project(path: ':grpc-api')
-    // opentelemetry.sdk.testing uses compileOnly for assertj
+            libraries.assertj.core // opentelemetry.sdk.testing uses compileOnly for assertj
 
     annotationProcessor libraries.auto.value
 
