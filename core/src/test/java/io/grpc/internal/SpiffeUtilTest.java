@@ -18,12 +18,14 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Optional;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
+import java.io.IOException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
@@ -75,6 +77,15 @@ public class SpiffeUtilTest {
     IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
         .extractSpiffeId(new X509Certificate[]{}));
     assertEquals("CertChain can't be empty", iae.getMessage());
+  }
+
+  @Test
+  public void loadTrustBundleFromFileHappyPath() throws IOException, CertificateParsingException {
+    SpiffeUtil.TrustBundle tb = SpiffeUtil.loadTrustBundleFromFile(
+        "certs/spiffebundle.txt");
+    assertEquals(1, tb.getTrustBundleMap().get("example.com").size());
+    assertEquals("foo.bar.com", SpiffeUtil.extractSpiffeId(tb.getTrustBundleMap().get("example.com")
+        .toArray(new X509Certificate[0])).get().getTrustDomain());
   }
 
 }
