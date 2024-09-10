@@ -179,9 +179,6 @@ public final class GrpcOpenTelemetry {
    */
   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
     serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
-    serverBuilder.addStreamTracerFactory(
-        openTelemetryTracingModule.getServerTracerFactory());
-    serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
   }
 
   @VisibleForTesting

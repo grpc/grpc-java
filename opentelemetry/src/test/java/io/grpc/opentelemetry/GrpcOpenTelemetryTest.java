@@ -17,9 +17,16 @@
 package io.grpc.opentelemetry;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
+import io.grpc.ServerBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
@@ -71,6 +78,14 @@ public class GrpcOpenTelemetryTest {
         tracerProvider.tracerBuilder("grpc-java")
             .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
             .build());
+    ServerBuilder<?> mockServerBuiler = mock(ServerBuilder.class);
+    openTelemetryModule.configureServerBuilder(mockServerBuiler);
+    verify(mockServerBuiler).addStreamTracerFactory(any());
+    verifyNoMoreInteractions(mockServerBuiler);
+
+    ManagedChannelBuilder<?> mockChannelBuilder = mock(ManagedChannelBuilder.class);
+    openTelemetryModule.configureChannelBuilder(mockChannelBuilder);
+    verify(mockChannelBuilder, never()).intercept();
   }
 
   @Test
