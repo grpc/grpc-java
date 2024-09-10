@@ -1090,6 +1090,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
+  @VisibleForTesting
+  public ManagedChannelServiceConfig getLastServiceConfig() {
+    return lastServiceConfig;
+  }
+
   /**
    * A client call for a given channel that applies a given config selector when it starts.
    */

@@ -4795,8 +4795,7 @@ public class ManagedChannelImplTest {
 
       nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-      assertThat(channel.getConfigSelector()).isNotSameInstanceAs(
-          managedChannelServiceConfig.getDefaultConfigSelector());
+      assertEquals(channel.getLastServiceConfig().toString(), managedChannelServiceConfig.toString());
 
       assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
               .setDescription("Initial Name Resolution error, using default service config")
