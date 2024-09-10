@@ -59,7 +59,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.testing.TestClientStreamTracer;
 import io.grpc.internal.testing.TestServerStreamTracer;
-import io.grpc.internal.testing.TestStreamTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -161,9 +160,9 @@ public abstract class AbstractTransportTest {
    * tests in an indeterminate state.
    */
   protected InternalServer server;
-  private ServerTransport serverTransport;
-  private ManagedClientTransport client;
-  private MethodDescriptor<String, String> methodDescriptor =
+  protected ServerTransport serverTransport;
+  protected ManagedClientTransport client;
+  protected MethodDescriptor<String, String> methodDescriptor =
       MethodDescriptor.<String, String>newBuilder()
           .setType(MethodDescriptor.MethodType.UNKNOWN)
           .setFullMethodName("service/method")
@@ -180,20 +179,20 @@ public abstract class AbstractTransportTest {
       "tracer-key", Metadata.ASCII_STRING_MARSHALLER);
   private final String tracerKeyValue = "tracer-key-value";
 
-  private ManagedClientTransport.Listener mockClientTransportListener
+  protected ManagedClientTransport.Listener mockClientTransportListener
       = mock(ManagedClientTransport.Listener.class);
-  private MockServerListener serverListener = new MockServerListener();
+  protected MockServerListener serverListener = new MockServerListener();
   private ArgumentCaptor<Throwable> throwableCaptor = ArgumentCaptor.forClass(Throwable.class);
-  private final TestClientStreamTracer clientStreamTracer1 = new TestHeaderClientStreamTracer();
+  protected final TestClientStreamTracer clientStreamTracer1 = new TestHeaderClientStreamTracer();
   private final TestClientStreamTracer clientStreamTracer2 = new TestHeaderClientStreamTracer();
-  private final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+  protected final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
       clientStreamTracer1, clientStreamTracer2
   };
   private final ClientStreamTracer[] noopTracers = new ClientStreamTracer[] {
     new ClientStreamTracer() {}
   };
 
-  private final TestServerStreamTracer serverStreamTracer1 = new TestServerStreamTracer();
+  protected final TestServerStreamTracer serverStreamTracer1 = new TestServerStreamTracer();
   private final TestServerStreamTracer serverStreamTracer2 = new TestServerStreamTracer();
   private final ServerStreamTracer.Factory serverStreamTracerFactory = mock(
       ServerStreamTracer.Factory.class,
@@ -248,15 +247,6 @@ public abstract class AbstractTransportTest {
    */
   protected long fakeCurrentTimeNanos() {
     throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Specific test for {@link InProcessTransport} to verify assumedMessageSize.
-   * For more goto: <a href="#11406">link</a>
-   */
-  protected void assertInProcessTransportAssumedMessageSize(
-          TestStreamTracer streamTracerSender, TestStreamTracer streamTracerReceiver) {
-    // implemented by SizesReportedInProcessTransportTest
   }
 
   // TODO(ejona):
@@ -877,7 +867,6 @@ public abstract class AbstractTransportTest {
     assertThat(serverStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
 
-    assertInProcessTransportAssumedMessageSize(clientStreamTracer1, serverStreamTracer1);
     Metadata serverHeaders = new Metadata();
     serverHeaders.put(asciiKey, "server");
     serverHeaders.put(asciiKey, "dupvalue");
@@ -914,7 +903,6 @@ public abstract class AbstractTransportTest {
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
     assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
     assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-    assertInProcessTransportAssumedMessageSize(serverStreamTracer1, clientStreamTracer1);
 
     message.close();
     assertNull("no additional message expected", clientStreamListener.messageQueue.poll());
@@ -1278,7 +1266,6 @@ public abstract class AbstractTransportTest {
     assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
     assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
     assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    assertInProcessTransportAssumedMessageSize(serverStreamTracer1, clientStreamTracer1);
     assertNull(clientStreamTracer1.getInboundTrailers());
     assertSame(status, clientStreamTracer1.getStatus());
     // There is a race between client cancelling and server closing.  The final status seen by the
@@ -2167,7 +2154,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static void startTransport(
+  protected static void startTransport(
       ManagedClientTransport clientTransport,
       ManagedClientTransport.Listener listener) {
     runIfNotNull(clientTransport.start(listener));
@@ -2185,7 +2172,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class MockServerListener implements ServerListener {
+  public static class MockServerListener implements ServerListener {
     public final BlockingQueue<MockServerTransportListener> listeners
         = new LinkedBlockingQueue<>();
     private final SettableFuture<?> shutdown = SettableFuture.create();
@@ -2216,7 +2203,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class MockServerTransportListener implements ServerTransportListener {
+  public static class MockServerTransportListener implements ServerTransportListener {
     public final ServerTransport transport;
     public final BlockingQueue<StreamCreation> streams = new LinkedBlockingQueue<>();
     private final SettableFuture<?> terminated = SettableFuture.create();
@@ -2264,8 +2251,8 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class ServerStreamListenerBase implements ServerStreamListener {
-    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
+  public static class ServerStreamListenerBase implements ServerStreamListener {
+    public final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
     // Would have used Void instead of Object, but null elements are not allowed
     private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<>();
     private final CountDownLatch halfClosedLatch = new CountDownLatch(1);
@@ -2324,8 +2311,8 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class ClientStreamListenerBase implements ClientStreamListener {
-    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
+  public static class ClientStreamListenerBase implements ClientStreamListener {
+    public final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
     // Would have used Void instead of Object, but null elements are not allowed
     private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<>();
     private final SettableFuture<Metadata> headers = SettableFuture.create();
@@ -2382,7 +2369,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class StreamCreation {
+  public static class StreamCreation {
     public final ServerStream stream;
     public final String method;
     public final Metadata headers;
