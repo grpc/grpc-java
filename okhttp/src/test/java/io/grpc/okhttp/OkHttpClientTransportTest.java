@@ -251,7 +251,16 @@ public class OkHttpClientTransportTest {
   public void testTransportExecutorWithTooFewThreads() throws Exception {
     ExecutorService fixedPoolExecutor = Executors.newFixedThreadPool(1);
     channelBuilder.transportExecutor(fixedPoolExecutor);
-    initTransport();
+    InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
+    clientTransport = new OkHttpClientTransport(
+        channelBuilder.buildTransportFactory(),
+        address,
+        "hostname",
+        null,
+        EAG_ATTRS,
+        NO_PROXY,
+        tooManyPingsRunnable);
+    clientTransport.start(transportListener);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture());
     Status capturedStatus = statusCaptor.getValue();
@@ -1736,7 +1745,6 @@ public class OkHttpClientTransportTest {
         EAG_ATTRS,
         NO_PROXY,
         tooManyPingsRunnable);
-    //hi
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);

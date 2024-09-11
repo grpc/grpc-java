@@ -19,6 +19,7 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
+import static java.rmi.server.LogStream.log;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -512,7 +513,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     // Connecting in the serializingExecutor, so that some stream operations like synStream
     // will be executed after connected.
 
-    System.out.println("before executor");
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
@@ -521,26 +521,16 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // network is not available during startup while another thread holding lock to send the
         // initial preface.
         try {
-          System.out.println("in serializing thread");
-          long waitStartTime = System.nanoTime();
-          barrier.await(10000000, TimeUnit.NANOSECONDS);
+          barrier.await(1000, TimeUnit.MILLISECONDS);
           long waitEndTime = System.nanoTime();
-          System.out.println("after barrier");
-          if (waitEndTime - waitStartTime >= 10000000) {
-            startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
-                .withDescription("Timed out waiting for second handshake thread. "
-                + "The transport executor pool may have run out of threads"));
-            if (connectedFuture != null) {
-              connectedFuture.set(null);
-            }
-            System.out.println("started goaway");
-            return;
-          }
           latch.await();
-        } catch (InterruptedException | BrokenBarrierException e) {
+        } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
-        } catch (TimeoutException e) {
-          throw new RuntimeException(e);
+        } catch (TimeoutException | BrokenBarrierException e) {
+          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
+              .withDescription("Timed out waiting for second handshake thread. "
+                + "The transport executor pool may have run out of threads"));
+          return;
         }
         // Use closed source on failure so that the reader immediately shuts down.
         BufferedSource source = Okio.buffer(new Source() {
@@ -619,10 +609,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       @Override
       public void run() {
         try {
-          System.out.println("In other thread");
-          barrier.await();
+          barrier.await(1000, TimeUnit.MILLISECONDS);
           latchForExtraThread.await();
-        } catch (BrokenBarrierException | InterruptedException e) {
+        } catch (BrokenBarrierException | TimeoutException e) {
+          log("Something bad happened, maybe too few threads available!");
+        } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         }
       }
