@@ -19,11 +19,12 @@ package io.grpc.opentelemetry;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.ClientInterceptor;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
@@ -34,6 +35,8 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import java.util.Arrays;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -45,6 +48,17 @@ public class GrpcOpenTelemetryTest {
       SdkMeterProvider.builder().registerMetricReader(inMemoryMetricReader).build();
   private final SdkTracerProvider tracerProvider = SdkTracerProvider.builder().build();
   private final OpenTelemetry noopOpenTelemetry = OpenTelemetry.noop();
+  private boolean originalEnableOtelTracing;
+
+  @Before
+  public void setup() {
+    originalEnableOtelTracing = GrpcOpenTelemetry.ENABLE_OTEL_TRACING;
+  }
+
+  @After
+  public void tearDown() {
+    GrpcOpenTelemetry.ENABLE_OTEL_TRACING = originalEnableOtelTracing;
+  }
 
   @Test
   public void build() {
@@ -70,22 +84,24 @@ public class GrpcOpenTelemetryTest {
     OpenTelemetrySdk sdk =
         OpenTelemetrySdk.builder().setTracerProvider(tracerProvider).build();
 
-    GrpcOpenTelemetry openTelemetryModule = GrpcOpenTelemetry.newBuilder()
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .enableTracing(true)
         .sdk(sdk).build();
 
-    assertThat(openTelemetryModule.getOpenTelemetryInstance()).isSameInstanceAs(sdk);
-    assertThat(openTelemetryModule.getTracer()).isSameInstanceAs(
+    assertThat(grpcOpenTelemetry.getOpenTelemetryInstance()).isSameInstanceAs(sdk);
+    assertThat(grpcOpenTelemetry.getTracer()).isSameInstanceAs(
         tracerProvider.tracerBuilder("grpc-java")
             .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
             .build());
     ServerBuilder<?> mockServerBuiler = mock(ServerBuilder.class);
-    openTelemetryModule.configureServerBuilder(mockServerBuiler);
-    verify(mockServerBuiler).addStreamTracerFactory(any());
+    grpcOpenTelemetry.configureServerBuilder(mockServerBuiler);
+    verify(mockServerBuiler, times(2)).addStreamTracerFactory(any());
+    verify(mockServerBuiler).intercept(any());
     verifyNoMoreInteractions(mockServerBuiler);
 
     ManagedChannelBuilder<?> mockChannelBuilder = mock(ManagedChannelBuilder.class);
-    openTelemetryModule.configureChannelBuilder(mockChannelBuilder);
-    verify(mockChannelBuilder, never()).intercept();
+    grpcOpenTelemetry.configureChannelBuilder(mockChannelBuilder);
+    verify(mockChannelBuilder).intercept(any(ClientInterceptor.class));
   }
 
   @Test
