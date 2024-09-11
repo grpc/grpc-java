@@ -88,6 +88,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -510,7 +512,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     // Connecting in the serializingExecutor, so that some stream operations like synStream
     // will be executed after connected.
 
-    long waitStartTime = System.nanoTime();
+    System.out.println("before executor");
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
@@ -519,10 +521,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // network is not available during startup while another thread holding lock to send the
         // initial preface.
         try {
-          barrier.await();
+          System.out.println("in serializing thread");
+          long waitStartTime = System.nanoTime();
+          barrier.await(10000000, TimeUnit.NANOSECONDS);
           long waitEndTime = System.nanoTime();
           System.out.println("after barrier");
-          if (waitEndTime - waitStartTime > 10000000) {
+          if (waitEndTime - waitStartTime >= 10000000) {
             startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
                 .withDescription("Timed out waiting for second handshake thread. "
                 + "The transport executor pool may have run out of threads"));
@@ -535,6 +539,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           latch.await();
         } catch (InterruptedException | BrokenBarrierException e) {
           Thread.currentThread().interrupt();
+        } catch (TimeoutException e) {
+          throw new RuntimeException(e);
         }
         // Use closed source on failure so that the reader immediately shuts down.
         BufferedSource source = Okio.buffer(new Source() {
@@ -600,11 +606,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
         }
         synchronized (lock) {
+          latchForExtraThread.countDown();
           socket = Preconditions.checkNotNull(sock, "socket");
           if (sslSession != null) {
             securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
           }
-          latchForExtraThread.countDown();
         }
       }
     });
@@ -613,6 +619,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       @Override
       public void run() {
         try {
+          System.out.println("In other thread");
           barrier.await();
           latchForExtraThread.await();
         } catch (BrokenBarrierException | InterruptedException e) {
