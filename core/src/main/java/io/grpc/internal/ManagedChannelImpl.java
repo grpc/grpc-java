@@ -1091,7 +1091,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   @VisibleForTesting
-  public ManagedChannelServiceConfig getLastServiceConfig() {
+  ManagedChannelServiceConfig getLastServiceConfig() {
     return lastServiceConfig;
   }
 
