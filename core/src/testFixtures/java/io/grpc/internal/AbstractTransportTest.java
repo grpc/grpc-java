@@ -194,7 +194,7 @@ public abstract class AbstractTransportTest {
 
   protected final TestServerStreamTracer serverStreamTracer1 = new TestServerStreamTracer();
   private final TestServerStreamTracer serverStreamTracer2 = new TestServerStreamTracer();
-  private final ServerStreamTracer.Factory serverStreamTracerFactory = mock(
+  protected final ServerStreamTracer.Factory serverStreamTracerFactory = mock(
       ServerStreamTracer.Factory.class,
       delegatesTo(new ServerStreamTracer.Factory() {
           final ArrayDeque<TestServerStreamTracer> tracers =

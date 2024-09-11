@@ -45,6 +45,7 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -75,6 +76,14 @@ public class InProcessTransportTest extends AbstractTransportTest {
 
   @Override
   protected InternalServer newServer(
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
+    InProcessServerBuilder builder = InProcessServerBuilder
+        .forName(TRANSPORT_NAME)
+        .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
+    return new InProcessServer(builder, streamTracerFactories);
+  }
+
+  protected InternalServer newServerWithAssumedMessageSize(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     InProcessServerBuilder builder = InProcessServerBuilder
         .forName(TRANSPORT_NAME)
@@ -186,9 +195,9 @@ public class InProcessTransportTest extends AbstractTransportTest {
     }
   }
 
-  @Ignore
   @Test
   public void basicStreamInProcess() throws Exception {
+    server = newServerWithAssumedMessageSize(Arrays.asList(serverStreamTracerFactory));
     server.start(serverListener);
     client = newClientTransportWithAssumedMessageSize(server);
     startTransport(client, mockClientTransportListener);
