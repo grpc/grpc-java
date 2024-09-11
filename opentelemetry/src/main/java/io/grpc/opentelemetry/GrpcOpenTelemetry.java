@@ -23,7 +23,6 @@ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.SIZE_BUCKETS
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -34,6 +33,7 @@ import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;
@@ -64,9 +64,8 @@ public final class GrpcOpenTelemetry {
   };
 
   @VisibleForTesting
-  static boolean ENABLE_OTEL_TRACING =
-      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING"));
+  static boolean ENABLE_OTEL_TRACING = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING",
+      false);
 
   private final OpenTelemetry openTelemetrySdk;
   private final MeterProvider meterProvider;
