@@ -58,7 +58,9 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
@@ -94,6 +96,16 @@ public class CdsLoadBalancer2Test {
   private static final String DNS_HOST_NAME = "backend-service-dns.googleapis.com:443";
   private static final ServerInfo LRS_SERVER_INFO =
       ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
+  private static final String SERVER_URI = "trafficdirector.googleapis.com";
+  private static final String NODE_ID =
+      "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
+  private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
+      EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
+  private static final BootstrapInfo BOOTSTRAP_INFO = BootstrapInfo.builder()
+      .servers(ImmutableList.of(
+          ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create())))
+      .node(BOOTSTRAP_NODE)
+      .build();
   private final UpstreamTlsContext upstreamTlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
   private final OutlierDetection outlierDetection = OutlierDetection.create(
@@ -211,7 +223,8 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
+            + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancers).isEmpty();
   }
@@ -254,7 +267,8 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverResourceNotExist(CLUSTER);
     assertThat(childBalancer.shutdown).isTrue();
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
+            + " xDS node ID: " + NODE_ID);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPicker(pickerCaptor.getValue(), unavailable, null);
@@ -331,7 +345,8 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
+            + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancers).isEmpty();
   }
@@ -379,7 +394,8 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
+            + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();
@@ -418,7 +434,8 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
+            + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();
@@ -466,7 +483,8 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
+            + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();
@@ -507,7 +525,7 @@ public class CdsLoadBalancer2Test {
     Status unavailable = Status.UNAVAILABLE.withDescription(
         "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
             + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
-            + " cluster-02.googleapis.com]");
+            + " cluster-02.googleapis.com]" + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
   }
 
@@ -549,7 +567,7 @@ public class CdsLoadBalancer2Test {
     Status unavailable = Status.UNAVAILABLE.withDescription(
         "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
             + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
-            + " cluster-02.googleapis.com]");
+            + " cluster-02.googleapis.com]" + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
   }
 
@@ -617,7 +635,7 @@ public class CdsLoadBalancer2Test {
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status expectedError = Status.UNAVAILABLE.withDescription(
         "Unable to load CDS cluster-foo.googleapis.com. xDS server returned: "
-        + "RESOURCE_EXHAUSTED: OOM");
+        + "RESOURCE_EXHAUSTED: OOM" + "  xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertThat(childBalancers).isEmpty();
   }
@@ -647,7 +665,8 @@ public class CdsLoadBalancer2Test {
 
   @Test
   public void handleNameResolutionErrorFromUpstream_beforeChildLbCreated_returnErrorPicker() {
-    Status upstreamError = Status.UNAVAILABLE.withDescription("unreachable");
+    Status upstreamError = Status.UNAVAILABLE.withDescription(
+        "unreachable" + " xDS node ID: " + NODE_ID);
     loadBalancer.handleNameResolutionError(upstreamError);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
@@ -819,6 +838,11 @@ public class CdsLoadBalancer2Test {
       if (watcherList.isEmpty()) {
         watchers.remove(resourceName);
       }
+    }
+
+    @Override
+    public BootstrapInfo getBootstrapInfo() {
+      return BOOTSTRAP_INFO;
     }
 
     private void deliverCdsUpdate(String clusterName, CdsUpdate update) {

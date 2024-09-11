@@ -815,10 +815,12 @@ final class XdsNameResolver extends NameResolver {
       // the config selector handles the error message itself. Once the LB API allows providing
       // failure information for addresses yet still providing a service config, the config seector
       // could be avoided.
+      String errorWithNodeId =
+          error + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
       listener.onResult(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
             .set(InternalConfigSelector.KEY,
-              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(error)))
+              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(errorWithNodeId)))
             .build())
           .setServiceConfig(emptyServiceConfig)
           .build());
@@ -876,7 +878,8 @@ final class XdsNameResolver extends NameResolver {
         if (RouteDiscoveryState.this != routeDiscoveryState) {
           return;
         }
-        String error = "RDS resource does not exist: " + resourceName;
+        String error = "RDS resource does not exist: " + resourceName + " xDS node ID: "
+            + xdsClient.getBootstrapInfo().node().getId();
         logger.log(XdsLogLevel.INFO, error);
         cleanUpRoutes(error);
       }

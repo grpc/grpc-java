@@ -206,8 +206,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               }
               loopStatus = Status.UNAVAILABLE.withDescription(String.format(
                   "CDS error: circular aggregate clusters directly under %s for "
-                      + "root cluster %s, named %s",
-                  clusterState.name, root.name, namesCausingLoops));
+                      + "root cluster %s, named %s xDS node ID: %s",
+                  clusterState.name, root.name, namesCausingLoops,
+                  xdsClient.getBootstrapInfo().node().getId()));
             }
           }
         }
@@ -225,8 +226,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           childLb = null;
         }
         Status unavailable =
-            Status.UNAVAILABLE.withDescription("CDS error: found 0 leaf (logical DNS or EDS) "
-                + "clusters for root cluster " + root.name);
+            Status.UNAVAILABLE.withDescription(
+                "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster "
+                    + root.name + " xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
         helper.updateBalancingState(
             TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(unavailable)));
         return;
@@ -288,11 +290,16 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     }
 
     private void handleClusterDiscoveryError(Status error) {
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorWithNodeId = Status.fromCode(error.getCode())
+          .withDescription(
+              description + " xDS node ID: " + xdsClient.getBootstrapInfo().node().getId())
+          .withCause(error.getCause());
       if (childLb != null) {
-        childLb.handleNameResolutionError(error);
+        childLb.handleNameResolutionError(errorWithNodeId);
       } else {
         helper.updateBalancingState(
-            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(errorWithNodeId)));
       }
     }
 
