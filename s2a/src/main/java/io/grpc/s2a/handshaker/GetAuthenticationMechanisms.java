@@ -33,7 +33,6 @@ final class GetAuthenticationMechanisms {
    * @return an {@link AuthenticationMechanism} for the given local identity.
    */
   static Optional<AuthenticationMechanism> getAuthMechanism(Optional<S2AIdentity> localIdentity) {
-    Optional<AuthenticationMechanism> authMechanism = Optional.empty();
     if (!TOKEN_MANAGER.isPresent()) {
       return Optional.empty();
     }
@@ -41,19 +40,16 @@ final class GetAuthenticationMechanisms {
     // If no identity is provided, fetch the default access token and DO NOT attach an identity
     // to the request.
     if (!localIdentity.isPresent()) {
-      authMechanism =
-          Optional.of(
+      return Optional.of(
               AuthenticationMechanism.newBuilder().setToken(manager.getDefaultToken()).build());
     } else {
       // Fetch an access token for the provided identity.
-      authMechanism =
-          Optional.of(
+      return Optional.of(
               AuthenticationMechanism.newBuilder()
                   .setIdentity(localIdentity.get().getIdentity())
                   .setToken(manager.getToken(localIdentity.get()))
                   .build());
     }
-    return authMechanism;
   }
 
   private GetAuthenticationMechanisms() {}
