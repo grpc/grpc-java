@@ -128,7 +128,7 @@ public class S2AProtocolNegotiatorFactoryTest {
   @Test
   public void createProtocolNegotiatorFactory_getsDefaultPort_succeeds() throws Exception {
     InternalProtocolNegotiator.ClientFactory clientFactory =
-        S2AProtocolNegotiatorFactory.createClientFactory(Optional.of(LOCAL_IDENTITY), channelPool);
+        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool);
 
     assertThat(clientFactory.getDefaultPort()).isEqualTo(S2AProtocolNegotiatorFactory.DEFAULT_PORT);
   }
@@ -152,7 +152,7 @@ public class S2AProtocolNegotiatorFactoryTest {
   public void createProtocolNegotiatorFactory_buildsAnS2AProtocolNegotiatorOnClientSide_succeeds()
       throws Exception {
     InternalProtocolNegotiator.ClientFactory clientFactory =
-        S2AProtocolNegotiatorFactory.createClientFactory(Optional.of(LOCAL_IDENTITY), channelPool);
+        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool);
 
     ProtocolNegotiator clientNegotiator = clientFactory.newNegotiator();
 
@@ -164,7 +164,7 @@ public class S2AProtocolNegotiatorFactoryTest {
   public void closeProtocolNegotiator_verifyProtocolNegotiatorIsClosedOnClientSide()
       throws Exception {
     InternalProtocolNegotiator.ClientFactory clientFactory =
-        S2AProtocolNegotiatorFactory.createClientFactory(Optional.of(LOCAL_IDENTITY), channelPool);
+        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool);
     ProtocolNegotiator clientNegotiator = clientFactory.newNegotiator();
 
     clientNegotiator.close();
@@ -182,7 +182,7 @@ public class S2AProtocolNegotiatorFactoryTest {
     FakeS2AChannelPool fakeChannelPool = new FakeS2AChannelPool(channel);
     ProtocolNegotiator clientNegotiator =
         S2AProtocolNegotiatorFactory.S2AProtocolNegotiator.createForClient(
-            fakeChannelPool, Optional.of(LOCAL_IDENTITY));
+            fakeChannelPool, LOCAL_IDENTITY);
 
     ChannelHandler channelHandler = clientNegotiator.newHandler(fakeConnectionHandler);
 

@@ -66,20 +66,19 @@ public final class S2AProtocolNegotiatorFactory {
    * @return a factory for creating a client-side protocol negotiator.
    */
   public static InternalProtocolNegotiator.ClientFactory createClientFactory(
-      Optional<S2AIdentity> localIdentity, ObjectPool<Channel> s2aChannelPool) {
+      @Nullable S2AIdentity localIdentity, ObjectPool<Channel> s2aChannelPool) {
     checkNotNull(s2aChannelPool, "S2A channel pool should not be null.");
-    checkNotNull(localIdentity, "Local identity should not be null on the client side.");
     S2AChannelPool channelPool = S2AGrpcChannelPool.create(s2aChannelPool);
     return new S2AClientProtocolNegotiatorFactory(localIdentity, channelPool);
   }
 
   static final class S2AClientProtocolNegotiatorFactory
       implements InternalProtocolNegotiator.ClientFactory {
-    private final Optional<S2AIdentity> localIdentity;
+    private final @Nullable S2AIdentity localIdentity;
     private final S2AChannelPool channelPool;
 
     S2AClientProtocolNegotiatorFactory(
-        Optional<S2AIdentity> localIdentity, S2AChannelPool channelPool) {
+        @Nullable S2AIdentity localIdentity, S2AChannelPool channelPool) {
       this.localIdentity = localIdentity;
       this.channelPool = channelPool;
     }
@@ -105,10 +104,13 @@ public final class S2AProtocolNegotiatorFactory {
         MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(1));
 
     static S2AProtocolNegotiator createForClient(
-        S2AChannelPool channelPool, Optional<S2AIdentity> localIdentity) {
+        S2AChannelPool channelPool, @Nullable S2AIdentity localIdentity) {
       checkNotNull(channelPool, "Channel pool should not be null.");
-      checkNotNull(localIdentity, "Local identity should not be null on the client side.");
-      return new S2AProtocolNegotiator(channelPool, localIdentity);
+      if (localIdentity == null) {
+        return new S2AProtocolNegotiator(channelPool, Optional.empty());
+      } else {
+        return new S2AProtocolNegotiator(channelPool, Optional.of(localIdentity));
+      }
     }
 
     @VisibleForTesting

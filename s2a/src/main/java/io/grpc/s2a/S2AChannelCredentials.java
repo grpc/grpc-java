@@ -122,12 +122,7 @@ public final class S2AChannelCredentials {
     }
 
     InternalProtocolNegotiator.ClientFactory buildProtocolNegotiatorFactory() {
-      if (localIdentity == null) {
-        return S2AProtocolNegotiatorFactory.createClientFactory(Optional.empty(), s2aChannelPool);
-      } else {
-        return S2AProtocolNegotiatorFactory.createClientFactory(
-            Optional.of(localIdentity), s2aChannelPool);
-      }
+      return S2AProtocolNegotiatorFactory.createClientFactory(localIdentity, s2aChannelPool);
     }
   }
 
