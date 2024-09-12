@@ -816,7 +816,7 @@ final class XdsNameResolver extends NameResolver {
       // failure information for addresses yet still providing a service config, the config seector
       // could be avoided.
       String errorWithNodeId =
-          error + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
+          error + ", xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
       listener.onResult(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
             .set(InternalConfigSelector.KEY,
@@ -878,8 +878,7 @@ final class XdsNameResolver extends NameResolver {
         if (RouteDiscoveryState.this != routeDiscoveryState) {
           return;
         }
-        String error = "RDS resource does not exist: " + resourceName + " xDS node ID: "
-            + xdsClient.getBootstrapInfo().node().getId();
+        String error = "RDS resource does not exist: " + resourceName;
         logger.log(XdsLogLevel.INFO, error);
         cleanUpRoutes(error);
       }

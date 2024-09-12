@@ -525,7 +525,7 @@ public class CdsLoadBalancer2Test {
     Status unavailable = Status.UNAVAILABLE.withDescription(
         "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
             + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
-            + " cluster-02.googleapis.com]" + " xDS node ID: " + NODE_ID);
+            + " cluster-02.googleapis.com]" + ", xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
   }
 
@@ -567,7 +567,7 @@ public class CdsLoadBalancer2Test {
     Status unavailable = Status.UNAVAILABLE.withDescription(
         "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
             + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
-            + " cluster-02.googleapis.com]" + " xDS node ID: " + NODE_ID);
+            + " cluster-02.googleapis.com]" + ", xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
   }
 
@@ -635,7 +635,7 @@ public class CdsLoadBalancer2Test {
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status expectedError = Status.UNAVAILABLE.withDescription(
         "Unable to load CDS cluster-foo.googleapis.com. xDS server returned: "
-        + "RESOURCE_EXHAUSTED: OOM" + "  xDS node ID: " + NODE_ID);
+        + "RESOURCE_EXHAUSTED: OOM" + " xDS node ID: " + NODE_ID);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertThat(childBalancers).isEmpty();
   }
