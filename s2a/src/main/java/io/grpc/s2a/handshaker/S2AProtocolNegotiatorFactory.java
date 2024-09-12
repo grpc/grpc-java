@@ -155,7 +155,7 @@ public final class S2AProtocolNegotiatorFactory {
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    public void channelRead(ChannelHandlerContext unused, Object msg) {
       reads.add(msg);
     }
 
