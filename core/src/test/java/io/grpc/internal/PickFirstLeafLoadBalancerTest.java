@@ -27,6 +27,7 @@ import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 import static io.grpc.LoadBalancer.IS_PETIOLE_POLICY;
 import static io.grpc.internal.PickFirstLeafLoadBalancer.CONNECTION_DELAY_INTERVAL_MS;
+import static io.grpc.internal.PickFirstLeafLoadBalancer.isSerializingRetries;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -95,7 +96,11 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Parameterized.Parameters(name = "{0}")
   public static List<Boolean> enableHappyEyeballs() {
-    return Arrays.asList(true, false);
+    if (PickFirstLeafLoadBalancer.isSerializingRetries()) {
+      return Arrays.asList(false);
+    } else {
+      return Arrays.asList(false, true);
+    }
   }
 
   @Parameterized.Parameter
@@ -143,7 +148,8 @@ public class PickFirstLeafLoadBalancerTest {
     originalHappyEyeballsEnabledValue =
         System.getProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS);
     System.setProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS,
-        enableHappyEyeballs ? "true" : "false");
+         !PickFirstLeafLoadBalancer.isSerializingRetries() && enableHappyEyeballs
+         ? "true" : "false");
 
     for (int i = 1; i <= 5; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
@@ -498,6 +504,9 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs)
         .getSubchannel()).isSameInstanceAs(mockSubchannel1);
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verifyNoMoreInteractions(mockHelper);
 
     healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     verifyNoMoreInteractions(mockHelper);
@@ -589,6 +598,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
   }
@@ -619,6 +630,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
@@ -651,6 +664,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
@@ -1518,6 +1533,8 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void updateAddresses_intersecting_transient_failure() {
+    Assume.assumeTrue(!isSerializingRetries());
+
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4); // captor: captures
@@ -1782,6 +1799,8 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void updateAddresses_identical_transient_failure() {
+    Assume.assumeTrue(!isSerializingRetries());
+
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4);
     // Creating first set of endpoints/addresses

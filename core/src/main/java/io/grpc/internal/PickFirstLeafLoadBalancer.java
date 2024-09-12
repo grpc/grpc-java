@@ -64,15 +64,24 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
-  private ScheduledHandle scheduleConnectionTask;
+  private ScheduledHandle scheduleConnectionTask = null;
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
-  private final boolean enableHappyEyeballs =
-      PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  private final boolean enableHappyEyeballs = !isSerializingRetries()
+      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   private boolean notAPetiolePolicy = true; // means not under a petiole policy
+  private final BackoffPolicy.Provider bkoffPolProvider = new ExponentialBackoffPolicy.Provider();
+  private BackoffPolicy reconnectPolicy;
+  @Nullable
+  private ScheduledHandle reconnectTask = null;
+  private boolean serializingRetries = isSerializingRetries();
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+  }
+
+  static boolean isSerializingRetries() {
+    return GrpcUtil.getFlag("GRPC_SERIALIZE_RETRIES", false);
   }
 
   @Override
@@ -277,10 +286,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           if (addressIndex.increment()) {
             cancelScheduleTask();
             requestConnection(); // is recursive so might hit the end of the addresses
+          } else {
+            scheduleBackoff();
           }
         }
 
-        if (isPassComplete()) {
+        if ( isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
               new Picker(PickResult.withError(stateInfo.getStatus())));
@@ -302,6 +313,42 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       default:
         throw new IllegalArgumentException("Unsupported state:" + newState);
     }
+  }
+
+  /**
+   * Only called after all addresses attempted and failed (TRANSIENT_FAILURE).
+   */
+  private void scheduleBackoff() {
+    if (!serializingRetries) {
+      return;
+    }
+
+    class EndOfCurrentBackoff implements Runnable {
+      @Override
+      public void run() {
+        reconnectTask = null;
+        if (rawConnectivityState == SHUTDOWN) {
+          return;
+        }
+        addressIndex.reset();
+        requestConnection();
+      }
+    }
+
+    // Just allow the previous one to trigger when ready if we're already in backoff
+    if (reconnectTask != null) {
+      return;
+    }
+
+    if (reconnectPolicy == null) {
+      reconnectPolicy = bkoffPolProvider.get();
+    }
+    long delayNanos = reconnectPolicy.nextBackoffNanos();
+    reconnectTask = helper.getSynchronizationContext().schedule(
+        new EndOfCurrentBackoff(),
+        delayNanos,
+        TimeUnit.NANOSECONDS,
+        helper.getScheduledExecutorService());
   }
 
   private void updateHealthCheckedState(SubchannelData subchannelData) {
@@ -337,6 +384,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     rawConnectivityState = SHUTDOWN;
     concludedState = SHUTDOWN;
     cancelScheduleTask();
+    if (reconnectTask != null) {
+      reconnectTask.cancel();
+      reconnectTask = null;
+    }
+    reconnectPolicy = null;
 
     for (SubchannelData subchannelData : subchannels.values()) {
       subchannelData.getSubchannel().shutdown();
@@ -350,6 +402,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * that all other subchannels must be shutdown.
   */
   private void shutdownRemaining(SubchannelData activeSubchannelData) {
+    if (reconnectTask != null) {
+      reconnectTask.cancel();
+      reconnectTask = null;
+    }
+    reconnectPolicy = null;
+
     cancelScheduleTask();
     for (SubchannelData subchannelData : subchannels.values()) {
       if (!subchannelData.getSubchannel().equals(activeSubchannelData.subchannel)) {
@@ -370,7 +428,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
+    if (rawConnectivityState == SHUTDOWN) {
+      return;
+    }
+
+    if (!addressIndex.isValid()) {
+      scheduleBackoff();
       return;
     }
 
@@ -391,8 +454,21 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         scheduleNextConnection();
         break;
       case TRANSIENT_FAILURE:
+        if (scheduleConnectionTask != null) {
+          break; // let the already scheduled task do its job
+        }
         addressIndex.increment();
-        requestConnection();
+        if (!serializingRetries) {
+          requestConnection();
+        } else {
+          if (!addressIndex.isValid()) {
+            scheduleBackoff();
+          } else {
+            subchannelData.subchannel.shutdown(); // shutdown the previous subchannel
+            subchannels.remove(currentAddress);
+            requestConnection();
+          }
+        }
         break;
       default:
         // Wait for current subchannel to change state
@@ -458,7 +534,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private boolean isPassComplete() {
-    if (addressIndex.isValid() || subchannels.size() < addressIndex.size()) {
+    if ((!serializingRetries && addressIndex.isValid())
+        || subchannels.size() < addressIndex.size()) {
       return false;
     }
     for (SubchannelData sc : subchannels.values()) {
