@@ -26,7 +26,7 @@ public interface S2AChannelPool extends AutoCloseable {
   /**
    * Retrieves an open channel to the S2A from the channel pool.
    *
-   * <p>If no channel is available, blocks until a channel can be retrieved from the channel pool.
+   * @throws IllegalStateException if no channel is available.
    */
   @CanIgnoreReturnValue
   Channel getChannel();
