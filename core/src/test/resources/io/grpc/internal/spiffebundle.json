@@ -1,5 +1,25 @@
 {
   "trust_domains": {
+    "google.com": {
+      "sequence_number": 123,
+      "keys": [
+        {
+          "x5c": "-----BEGIN CERTIFICATE-----
+                  CORRUPTED_BYTES==
+                  -----END CERTIFICATE-----"
+        }
+      ]
+    },
+    "test.google.com": {
+      "sequence_number": 123,
+      "keys": [
+        {
+          "some_id": "1",
+          "some_key": "some_value"
+        }
+      ]
+    },
+    "test.google.com.au": {},
     "example.com": {
       "sequence_number": 12035488,
       "keys": [

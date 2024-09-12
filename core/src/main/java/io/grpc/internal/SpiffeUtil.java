@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -38,6 +39,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.security.auth.x500.X500Principal;
 
 /**
@@ -46,6 +49,8 @@ import javax.security.auth.x500.X500Principal;
  * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">standard</a>
  */
 public final class SpiffeUtil {
+
+  private static final Logger log = Logger.getLogger(SpiffeUtil.class.getName());
 
   private static final Integer URI_SAN_TYPE = 6;
 
@@ -70,8 +75,9 @@ public final class SpiffeUtil {
     return Optional.absent();
   }
 
-  public static TrustBundle loadTrustBundleFromFile(String filePath) throws IOException {
-    String json = new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8);
+  public static TrustBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
+    Path path = Paths.get(checkNotNull(trustBundleFile, "trustBundleFile"));
+    String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     Object jsonObject = JsonParser.parse(json);
     if (!(jsonObject instanceof Map)) {
       throw new IllegalArgumentException(
@@ -114,15 +120,13 @@ public final class SpiffeUtil {
             roots.add(certs.toArray(new X509Certificate[0])[0]);
           }
         } catch (CertificateException e) {
-          System.out.println(e);
+          log.log(Level.SEVERE, String.format("Certificate for domain %s can't be parsed.",
+              trustDomainName), e);
         }
       }
-
       trustBundleMap.put(trustDomainName, roots);
     }
-
     return new TrustBundle(sequenceNumbers, trustBundleMap);
-
   }
 
   public static class SpiffeId {
