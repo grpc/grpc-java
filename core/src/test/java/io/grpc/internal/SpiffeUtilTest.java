@@ -26,9 +26,12 @@ import com.google.common.base.Optional;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -81,8 +84,8 @@ public class SpiffeUtilTest {
 
   @Test
   public void loadTrustBundleFromFileHappyPath() throws IOException, CertificateParsingException {
-    SpiffeUtil.TrustBundle tb = SpiffeUtil.loadTrustBundleFromFile(
-        "certs/spiffebundle.txt");
+    SpiffeUtil.TrustBundle tb = SpiffeUtil.loadTrustBundleFromFile(getClass().getClassLoader()
+        .getResource("io/grpc/internal/spiffebundle.txt").getPath());
     assertEquals(1, tb.getTrustBundleMap().get("example.com").size());
     assertEquals("foo.bar.com", SpiffeUtil.extractSpiffeId(tb.getTrustBundleMap().get("example.com")
         .toArray(new X509Certificate[0])).get().getTrustDomain());
