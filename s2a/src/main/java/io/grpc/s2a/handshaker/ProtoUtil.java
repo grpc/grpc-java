@@ -84,10 +84,10 @@ final class ProtoUtil {
       } catch (IllegalArgumentException e) {
         continue;
       }
-      if (versionNumber < minTlsVersion.getNumber() || versionNumber > maxTlsVersion.getNumber()) {
-        continue;
+      if (versionNumber >= minTlsVersion.getNumber()
+          && versionNumber <= maxTlsVersion.getNumber()) {
+        tlsVersions.add(convertTlsProtocolVersion(tlsVersion));
       }
-      tlsVersions.add(convertTlsProtocolVersion(tlsVersion));
     }
     return tlsVersions.build();
   }
