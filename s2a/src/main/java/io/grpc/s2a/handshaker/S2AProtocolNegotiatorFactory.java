@@ -16,7 +16,9 @@
 
 package io.grpc.s2a.handshaker;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Strings.isNullOrEmpty;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.net.HostAndPort;
@@ -131,7 +133,7 @@ public final class S2AProtocolNegotiatorFactory {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       checkNotNull(grpcHandler, "grpcHandler should not be null.");
       String hostname = getHostNameFromAuthority(grpcHandler.getAuthority());
-      checkNotNull(hostname, "hostname should not be null.");
+      checkArgument(!isNullOrEmpty(hostname), "hostname should not be null or empty.");
       return new S2AProtocolNegotiationHandler(
         grpcHandler, channelPool, localIdentity, hostname, service);
     }
