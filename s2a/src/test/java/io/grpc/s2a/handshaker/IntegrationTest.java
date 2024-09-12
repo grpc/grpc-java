@@ -262,7 +262,7 @@ public final class IntegrationTest {
       throws InterruptedException {
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub stub =
-          SimpleServiceGrpc.newBlockingStub(channel).withWaitForReady();
+          SimpleServiceGrpc.newBlockingStub(channel);
       SimpleResponse resp = stub.unaryRpc(SimpleRequest.newBuilder()
                                                        .setRequestMessage("S2A team")
                                                        .build());
