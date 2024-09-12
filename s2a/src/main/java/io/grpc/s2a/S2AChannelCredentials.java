@@ -73,6 +73,7 @@ public final class S2AChannelCredentials {
     @CanIgnoreReturnValue
     public Builder setLocalSpiffeId(String localSpiffeId) {
       checkNotNull(localSpiffeId);
+      checkArgument(localIdentity == null, "localIdentity is already set.");
       localIdentity = S2AIdentity.fromSpiffeId(localSpiffeId);
       return this;
     }
@@ -85,6 +86,7 @@ public final class S2AChannelCredentials {
     @CanIgnoreReturnValue
     public Builder setLocalHostname(String localHostname) {
       checkNotNull(localHostname);
+      checkArgument(localIdentity == null, "localIdentity is already set.");
       localIdentity = S2AIdentity.fromHostname(localHostname);
       return this;
     }
@@ -97,6 +99,7 @@ public final class S2AChannelCredentials {
     @CanIgnoreReturnValue
     public Builder setLocalUid(String localUid) {
       checkNotNull(localUid);
+      checkArgument(localIdentity == null, "localIdentity is already set.");
       localIdentity = S2AIdentity.fromUid(localUid);
       return this;
     }
