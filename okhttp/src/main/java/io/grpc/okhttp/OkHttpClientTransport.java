@@ -19,7 +19,6 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
-import static java.rmi.server.LogStream.log;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -522,7 +521,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // initial preface.
         try {
           barrier.await(1000, TimeUnit.MILLISECONDS);
-          long waitEndTime = System.nanoTime();
           latch.await();
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
@@ -594,9 +592,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           return;
         } finally {
           clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
+          latchForExtraThread.countDown();
         }
         synchronized (lock) {
-          latchForExtraThread.countDown();
           socket = Preconditions.checkNotNull(sock, "socket");
           if (sslSession != null) {
             securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
@@ -612,7 +610,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           barrier.await(1000, TimeUnit.MILLISECONDS);
           latchForExtraThread.await();
         } catch (BrokenBarrierException | TimeoutException e) {
-          log("Something bad happened, maybe too few threads available!");
+          // Something bad happened, maybe too few threads available!
+          // This will be handled in the handshake thread.
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         }
