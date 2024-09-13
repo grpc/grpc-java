@@ -39,8 +39,8 @@ public final class ApiConstants {
    * <p>In multi-user Android, the target user for an Intent is unfortunately not part of the intent
    * itself. Instead, it's passed around as a separate argument wherever that Intent is needed.
    * Following suit, this implementation of the binder transport accepts the target Android user as
-   * a parameter to BinderChannelBuilder -- it's not in the target URI or the SocketAddress.
-   * Instead, downstream plugins such as {@link io.grpc.NameResolver}s and {@link
+   * a parameter to BinderChannelBuilder -- unfortunately it's not in the target URI or the
+   * SocketAddress. Instead, downstream plugins such as {@link io.grpc.NameResolver}s and {@link
    * io.grpc.LoadBalancer}s can use this attribute to obtain the Channel's target UserHandle. If the
    * attribute is not set, the Channel's target is the Android user hosting the current process (the
    * default).
