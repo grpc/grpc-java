@@ -520,8 +520,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // network is not available during startup while another thread holding lock to send the
         // initial preface.
         try {
-          barrier.await(1000, TimeUnit.MILLISECONDS);
           latch.await();
+          barrier.await(1000, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         } catch (TimeoutException | BrokenBarrierException e) {
