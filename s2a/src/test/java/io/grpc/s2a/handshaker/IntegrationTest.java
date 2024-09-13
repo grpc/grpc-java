@@ -52,7 +52,6 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSessionContext;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -140,11 +139,6 @@ public final class IntegrationTest {
   private String serverAddress;
   private Server server;
 
-  @BeforeClass
-  public static void setUpClass() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", "false");
-  }
-
   @Before
   public void setUp() throws Exception {
     s2aPort = Utils.pickUnusedPort();
@@ -186,9 +180,13 @@ public final class IntegrationTest {
 
   @After
   public void tearDown() throws Exception {
+    server.awaitTermination(10, SECONDS);
     server.shutdown();
+    s2aServer.awaitTermination(10, SECONDS);
     s2aServer.shutdown();
+    s2aDelayServer.awaitTermination(10, SECONDS);
     s2aDelayServer.shutdown();
+    mtlsS2AServer.awaitTermination(10, SECONDS);
     mtlsS2AServer.shutdown();
   }
 
