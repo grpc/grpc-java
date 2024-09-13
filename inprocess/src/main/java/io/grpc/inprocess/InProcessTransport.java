@@ -199,7 +199,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         serverSchedulerPool = server.getScheduledExecutorServicePool();
         serverScheduler = serverSchedulerPool.getObject();
         serverStreamTracerFactories = server.getStreamTracerFactories();
-        assumedMessageSize = server.getAssumedMessageSize();
+        assumedMessageSize =
+            (assumedMessageSize == -1) ? server.getAssumedMessageSize() : assumedMessageSize;
         // Must be semi-initialized; past this point, can begin receiving requests
         serverTransportListener = server.register(this);
       }

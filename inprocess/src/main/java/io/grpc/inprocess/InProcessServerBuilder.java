@@ -213,12 +213,13 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
   }
 
   /**
-   * Sets whether to include the provided messageSize or not and is propagated
-   * forward to InProcessTransport. This was added to not calculate messageSize
-   * if already provided while calling builder.
-   *
-   * @param assumedMessageSize length of InProcess transport's messageSize
+   * Assumes RPC messages are the specified size. This avoids serializing
+   * messages for metrics and retry memory tracking. This can dramatically
+   * improve performance when accurate message sizes are not needed and if
+   * nothing else needs the serialized message.
+   * @param assumedMessageSize length of InProcess transport's messageSize.
    * @return this
+   * @throws IllegalArgumentException if assumedMessageSize is non-positive
    */
   public InProcessServerBuilder assumedMessageSize(long assumedMessageSize) {
     Preconditions.checkArgument(assumedMessageSize >= 0, "assumedMessageSize must be >= 0");
