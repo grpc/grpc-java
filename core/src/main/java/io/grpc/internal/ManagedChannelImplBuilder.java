@@ -35,6 +35,7 @@ import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Grpc.ChannelAttr;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.ManagedChannel;
@@ -196,6 +197,8 @@ public final class ManagedChannelImplBuilder
 
   @Nullable
   ProxyDetector proxyDetector;
+
+  @ChannelAttr Attributes channelAttributes = Attributes.EMPTY;
 
   private boolean authorityCheckerDisabled;
   private boolean statsEnabled = true;
@@ -664,6 +667,14 @@ public final class ManagedChannelImplBuilder
   }
 
   /**
+   * Makes the specified Attributes available to downstream plugins such as resolvers and load
+   * balancers.
+   */
+  public void setChannelAttributes(@ChannelAttr Attributes channelAttributes) {
+    this.channelAttributes = channelAttributes;
+  }
+
+  /**
    * Verifies the authority is valid.
    */
   @VisibleForTesting
@@ -929,5 +940,15 @@ public final class ManagedChannelImplBuilder
    */
   public ObjectPool<? extends Executor> getOffloadExecutorPool() {
     return this.offloadExecutorPool;
+  }
+
+  /** Returns the NameResolverRegistry. */
+  public NameResolverRegistry getNameResolverRegistry() {
+    return nameResolverRegistry;
+  }
+
+  /** Returns the target string. */
+  public String getTarget() {
+    return target;
   }
 }

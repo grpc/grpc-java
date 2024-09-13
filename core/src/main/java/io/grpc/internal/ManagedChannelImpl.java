@@ -590,6 +590,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.authorityOverride = builder.authorityOverride;
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
+            .setChannelAttributes(builder.channelAttributes)
             .setDefaultPort(builder.getDefaultPort())
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
