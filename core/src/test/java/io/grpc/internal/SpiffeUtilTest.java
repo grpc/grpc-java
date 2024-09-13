@@ -44,7 +44,6 @@ public class SpiffeUtilTest {
   private static final String SPIFFE_PEM_FILE = "spiffe_cert.pem";
   private static final String SERVER_0_PEM_FILE = "server0.pem";
   private static final String TEST_DIRECTORY_PREFIX = "io/grpc/internal/";
-
   private static final String SPIFFE_TRUST_BUNDLE_FILE = "spiffebundle.json";
   private static final String SPIFFE_TRUST_BUNDLE_MALFORMED = "spiffebundle_malformed.json";
   private static final String SPIFFE_TRUST_BUNDLE_WRONG_ELEMENTS =
@@ -68,12 +67,12 @@ public class SpiffeUtilTest {
     Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(spiffeCert);
     assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
     assertEquals("client/workload/1", spiffeId.get().getPath());
-    spiffeId = SpiffeUtil.extractSpiffeId(serverCert0);
-    assertFalse(spiffeId.isPresent());
   }
 
   @Test
   public void extractSpiffeIdFailureTest() throws CertificateParsingException {
+    Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(serverCert0);
+    assertFalse(spiffeId.isPresent());
   }
 
   @Test

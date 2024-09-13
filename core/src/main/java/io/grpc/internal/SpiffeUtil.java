@@ -65,7 +65,7 @@ public final class SpiffeUtil {
       for (List<?> altName : subjectAltNames) {
         if (URI_SAN_TYPE.equals(altName.get(0))) {
           String uri = (String) altName.get(1);
-          // Validation will be plugged in via another PR.
+          // Real validation will be plugged in via another PR.
           String[] parts = uri.substring(9).split("/", 2);
           String trustDomain = parts[0];
           String path = parts[1];
@@ -144,6 +144,7 @@ public final class SpiffeUtil {
     return new TrustBundle(sequenceNumbers, trustBundleMap);
   }
 
+  // Will be merged with other PR
   public static class SpiffeId {
 
     private final String trustDomain;
