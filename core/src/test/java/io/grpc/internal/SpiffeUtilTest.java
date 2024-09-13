@@ -34,6 +34,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.internal.matchers.Null;
@@ -46,6 +47,8 @@ public class SpiffeUtilTest {
 
   private static final String SPIFFE_TRUST_BUNDLE_FILE = "spiffebundle.json";
   private static final String SPIFFE_TRUST_BUNDLE_MALFORMED = "spiffebundle_malformed.json";
+  private static final String SPIFFE_TRUST_BUNDLE_WRONG_ELEMENTS =
+      "spiffebundle_wrong_elements.json";
   private static final String SPIFFE_TRUST_BUNDLE_WITH_WRONG_ROOT =
       "spiffebundle_wrong_root.json";
 
@@ -118,6 +121,12 @@ public class SpiffeUtilTest {
         loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
             + SPIFFE_TRUST_BUNDLE_MALFORMED).getPath()));
     assertTrue(iae.getMessage().contains("SPIFFE Trust Bundle should be a JSON object."));
+    SpiffeUtil.TrustBundle tb = SpiffeUtil.loadTrustBundleFromFile(getClass().getClassLoader()
+        .getResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_WRONG_ELEMENTS).getPath());
+    assertEquals(4, tb.getTrustBundleMap().size());
+    for (List<X509Certificate> certs: tb.getTrustBundleMap().values()){
+      assertEquals(0, certs.size());
+    }
   }
 
   @Test

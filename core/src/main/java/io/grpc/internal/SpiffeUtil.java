@@ -53,6 +53,7 @@ public final class SpiffeUtil {
   private static final Logger log = Logger.getLogger(SpiffeUtil.class.getName());
 
   private static final Integer URI_SAN_TYPE = 6;
+  private static final String USE_PARAMETER_VALUE = "x509-svid";
 
   private SpiffeUtil() {}
 
@@ -108,9 +109,23 @@ public final class SpiffeUtil {
       }
       List<X509Certificate> roots = new ArrayList<>();
       for (Map<String, ?> keyNode : keysNode) {
+        String kid = JsonUtil.getString(keyNode, "kid");
+        if (kid != null && !kid.equals("")) {
+          log.log(Level.SEVERE, String.format("'kid' parameter must not be set but value '%s' "
+              + "found. Skipping certificate loading for trust domain '%s'.", kid,
+              trustDomainName));
+          break;
+        }
+        String use = JsonUtil.getString(keyNode, "use");
+        if (use == null || !use.equals(USE_PARAMETER_VALUE)) {
+          log.log(Level.SEVERE, String.format("'use' parameter must be '%s' but '%s' found. "
+              + "Skipping certificate loading for trust domain '%s'.", USE_PARAMETER_VALUE, use,
+              trustDomainName));
+          break;
+        }
         String rawCert = JsonUtil.getString(keyNode, "x5c");
         if (rawCert == null) {
-          continue;
+          break;
         }
         InputStream stream = new ByteArrayInputStream(rawCert.getBytes(StandardCharsets.UTF_8));
         try {

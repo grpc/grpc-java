@@ -1,0 +1,33 @@
+{
+  "trust_domains": {
+    "google.com": {
+      "sequence_number": 123,
+      "keys": [
+        {
+          "x5c": "VALUE_DOESN'T_MATTER"
+        }
+      ]
+    },
+    "test.google.com": {
+      "sequence_number": 123,
+      "keys": [
+        {
+          "use": "x509-svid",
+          "kid": "some_value",
+          "x5c": "VALUE_DOESN'T_MATTER"
+        }
+      ]
+    },
+    "test.google.com.au": {},
+    "example.com": {
+      "sequence_number": 12035488,
+      "keys": [
+        {
+          "use": "Z_x509-svid",
+          "kid": "",
+          "x5c": "VALUE_DOESN'T_MATTER"
+        }
+      ]
+    }
+  }
+}
