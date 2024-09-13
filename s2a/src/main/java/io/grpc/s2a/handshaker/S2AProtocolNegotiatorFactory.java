@@ -162,7 +162,7 @@ public final class S2AProtocolNegotiatorFactory {
     }
 
     @Override
-    public void channelReadComplete(ChannelHandlerContext ctx) {
+    public void channelReadComplete(ChannelHandlerContext unused) {
       readComplete = true;
     }
 
