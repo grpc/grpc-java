@@ -1035,9 +1035,8 @@ public final class XdsClientImpl extends XdsClient implements XdsClient.Resource
     public void handleStreamClosed(Status status, boolean inRetry,
                                    ControlPlaneClient cpcThatClosed) {
       syncContext.throwIfNotInThisSynchronizationContext();
-      ControlPlaneClient cpcForThisStream = serverCpClientMap.get(serverInfo);
       if (!inRetry) {
-        cleanUpResourceTimers(cpcForThisStream);
+        cleanUpResourceTimers(cpcThatClosed);
       }
 
       Status error = status.isOk() ? Status.UNAVAILABLE.withDescription(CLOSED_BY_SERVER) : status;
@@ -1047,14 +1046,13 @@ public final class XdsClientImpl extends XdsClient implements XdsClient.Resource
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-          if (subscriber.hasResult() || subscriber.controlPlaneClient != cpcThatClosed
-              || (subscriber.serverInfos != null && !subscriber.serverInfos.contains(serverInfo))) {
+          if (subscriber.hasResult() || subscriber.controlPlaneClient != cpcThatClosed) {
             continue;
           }
           if (checkForFallback) {
             // try to fallback to lower priority control plane client
-            if (doFallbackForAuthority(cpcForThisStream,
-                serverInfo, subscriber.serverInfos, subscriber.authority)) {
+            if (doFallbackForAuthority(
+                cpcThatClosed, serverInfo, subscriber.serverInfos, subscriber.authority)) {
               return;
             }
             checkForFallback = false;
@@ -1107,13 +1105,7 @@ public final class XdsClientImpl extends XdsClient implements XdsClient.Resource
 
       restartMatchingSubscriberTimers(authority);
       controlPlaneClient.sendDiscoveryRequests();
-
-      // If fallback isn't enabled, we're done.
-      if (!BootstrapperImpl.isEnabledXdsFallback()) {
-        return;
-      }
     }
-
   }
 
   /** Returns a negative number if base is higher priority than other, positive if lower, and 0 if
