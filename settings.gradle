@@ -65,6 +65,7 @@ include ":grpc-benchmarks"
 include ":grpc-services"
 include ":grpc-servlet"
 include ":grpc-servlet-jakarta"
+include ":grpc-s2a"
 include ":grpc-xds"
 include ":grpc-bom"
 include ":grpc-rls"
@@ -100,6 +101,7 @@ project(':grpc-benchmarks').projectDir = "$rootDir/benchmarks" as File
 project(':grpc-services').projectDir = "$rootDir/services" as File
 project(':grpc-servlet').projectDir = "$rootDir/servlet" as File
 project(':grpc-servlet-jakarta').projectDir = "$rootDir/servlet/jakarta" as File
+project(':grpc-s2a').projectDir = "$rootDir/s2a" as File
 project(':grpc-xds').projectDir = "$rootDir/xds" as File
 project(':grpc-bom').projectDir = "$rootDir/bom" as File
 project(':grpc-rls').projectDir = "$rootDir/rls" as File
