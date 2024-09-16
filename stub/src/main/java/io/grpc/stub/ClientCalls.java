@@ -235,7 +235,7 @@ public final class ClientCalls {
    * @throws StatusException if the write to the server failed
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
-  public static <ReqT, RespT> BlockingClientCall<?, RespT> blockingV2ServerStreamingCall(
+  public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingV2ServerStreamingCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req)
       throws InterruptedException, StatusException {
     BlockingClientCall<ReqT, RespT> call =
@@ -436,7 +436,7 @@ public final class ClientCalls {
     abstract void onStart();
   }
 
-  private static class CallToStreamObserverAdapter<ReqT>
+  private static final class CallToStreamObserverAdapter<ReqT>
       extends ClientCallStreamObserver<ReqT> {
     private boolean frozen;
     private final ClientCall<ReqT, ?> call;
@@ -787,7 +787,7 @@ public final class ClientCalls {
   }
 
   @SuppressWarnings("serial")
-  static final class ThreadlessExecutor extends ConcurrentLinkedQueue<Runnable>
+  private static final class ThreadlessExecutor extends ConcurrentLinkedQueue<Runnable>
       implements Executor {
     private static final Logger log = Logger.getLogger(ThreadlessExecutor.class.getName());
 
@@ -804,12 +804,14 @@ public final class ClientCalls {
      * Must only be called by one thread at a time.
      */
     public void waitAndDrain() throws InterruptedException {
+      throwIfInterrupted();
       Runnable runnable = poll();
       if (runnable == null) {
         waiter = Thread.currentThread();
         try {
           while ((runnable = poll()) == null) {
             LockSupport.park(this);
+            throwIfInterrupted();
           }
         } finally {
           waiter = null;
@@ -818,6 +820,12 @@ public final class ClientCalls {
       do {
         runQuietly(runnable);
       } while ((runnable = poll()) != null);
+    }
+
+    private static void throwIfInterrupted() throws InterruptedException {
+      if (Thread.interrupted()) {
+        throw new InterruptedException();
+      }
     }
 
     /**
@@ -857,7 +865,7 @@ public final class ClientCalls {
     private static final Logger log =
         Logger.getLogger(ThreadSafeThreadlessExecutor.class.getName());
 
-    private Lock waiterLock = new ReentrantLock();
+    private final Lock waiterLock = new ReentrantLock();
     private final Condition waiterCondition = waiterLock.newCondition();
 
     // Non private to avoid synthetic class
