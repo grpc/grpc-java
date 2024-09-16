@@ -1,6 +1,5 @@
 plugins {
     id "java-library"
-    id "maven-publish"
 
     id "com.github.johnrengelman.shadow"
     id "com.google.osdetector"
