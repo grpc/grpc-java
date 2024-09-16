@@ -14,21 +14,25 @@
  * limitations under the License.
  */
 
+package io.grpc.xds.internal.rlqs;
 
-package io.grpc.xds.internal.matchers;
 
-import com.google.auto.value.AutoValue;
-import io.grpc.Metadata;
-import io.grpc.ServerCall;
+import com.google.common.collect.ImmutableList;
 
-@AutoValue
-public abstract class HttpMatchInput {
-  public abstract Metadata headers();
+final class RlqsBucketCache {
 
-  // TODO(sergiitk): [IMPL] consider
-  public abstract ServerCall<?, ?> serverCall();
+  RlqsBucket getBucket(RlqsBucketId bucketId) {
+    return null;
+  }
 
-  public static HttpMatchInput create(Metadata headers, ServerCall<?, ?> serverCall) {
-    return new AutoValue_HttpMatchInput(headers, serverCall);
+  void insertBucket(RlqsBucket bucket) {
+  }
+
+  void deleteBucket(RlqsBucketId bucketId) {
+  }
+
+
+  public ImmutableList<RlqsBucket> getBucketsToReport() {
+    return ImmutableList.of();
   }
 }

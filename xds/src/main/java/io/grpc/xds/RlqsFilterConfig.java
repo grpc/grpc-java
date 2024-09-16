@@ -19,26 +19,27 @@ package io.grpc.xds;
 import com.google.auto.value.AutoValue;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.internal.datatype.GrpcService;
+import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
 import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
 import javax.annotation.Nullable;
 
 /** Parsed RateLimitQuotaFilterConfig. */
 @AutoValue
-abstract class RlqsFilterConfig implements FilterConfig {
+public abstract class RlqsFilterConfig implements FilterConfig {
 
   @Override
   public final String typeUrl() {
     return RlqsFilter.TYPE_URL;
   }
 
-  abstract String domain();
+  public abstract String domain();
 
   @Nullable
-  abstract GrpcService rlqsService();
+  public abstract GrpcService rlqsService();
 
   @Nullable
-  abstract Matcher<RlqsBucketSettings> bucketMatchers();
+  public abstract Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers();
 
   public static Builder builder() {
     return new AutoValue_RlqsFilterConfig.Builder();
@@ -52,7 +53,7 @@ abstract class RlqsFilterConfig implements FilterConfig {
 
     abstract Builder rlqsService(GrpcService rlqsService);
 
-    public abstract Builder bucketMatchers(Matcher<RlqsBucketSettings> matcher);
+    public abstract Builder bucketMatchers(Matcher<HttpMatchInput, RlqsBucketSettings> matcher);
 
     abstract RlqsFilterConfig build();
   }
