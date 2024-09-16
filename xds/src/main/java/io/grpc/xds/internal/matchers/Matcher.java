@@ -19,13 +19,15 @@ package io.grpc.xds.internal.matchers;
 import javax.annotation.Nullable;
 
 /** Unified Matcher API: xds.type.matcher.v3.Matcher. */
-public abstract class Matcher<T> {
+public abstract class Matcher<InputT, ResultT> {
   // TODO(sergiitk): [IMPL] iterator?
   // TODO(sergiitk): [IMPL] public boolean matches(EvaluateArgs args) ?
 
   // TODO(sergiitk): [IMPL] AutoOneOf MatcherList, MatcherTree
   @Nullable
-  public abstract MatcherList<T> matcherList();
+  public abstract MatcherList<InputT, ResultT> matcherList();
 
-  public abstract OnMatch<T> onNoMatch();
+  public abstract OnMatch<InputT, ResultT> onNoMatch();
+
+  public abstract ResultT match(InputT input);
 }

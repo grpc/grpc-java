@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,25 +17,24 @@
 package io.grpc.xds.internal.rlqs;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableMap;
-import com.google.protobuf.Duration;
-import io.grpc.xds.internal.matchers.HttpMatchInput;
+import java.util.Map;
 
 @AutoValue
-public abstract class RlqsBucketSettings {
+public abstract class RlqsBucketId {
+  public abstract ImmutableMap<String, String> bucketId();
 
-  public abstract ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder();
-
-  public RlqsBucketId toBucketId(HttpMatchInput input) {
-    return null;
+  public static RlqsBucketId create(ImmutableMap<String, String> bucketId) {
+    return new AutoValue_RlqsBucketId(bucketId);
   }
 
-  public abstract Duration reportingInterval();
-
-  public static RlqsBucketSettings create(
-      ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder,
-      Duration reportingInterval) {
-    return new AutoValue_RlqsBucketSettings(bucketIdBuilder, reportingInterval);
+  public static RlqsBucketId fromEnvoyProto(
+      io.envoyproxy.envoy.service.rate_limit_quota.v3.BucketId envoyProto) {
+    ImmutableMap.Builder<String, String> bucketId = ImmutableMap.builder();
+    for (Map.Entry<String, String> entry : envoyProto.getBucketMap().entrySet()) {
+      bucketId.put(entry.getKey(), entry.getValue());
+    }
+    return RlqsBucketId.create(bucketId.build());
   }
+
 }

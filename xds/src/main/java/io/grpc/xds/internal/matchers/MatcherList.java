@@ -17,6 +17,6 @@
 package io.grpc.xds.internal.matchers;
 
 /** Unified Matcher API: xds.type.matcher.v3.Matcher.MatcherList. */
-public class MatcherList<T> {
+public class MatcherList<InputT, ResultT> {
 
 }

@@ -21,20 +21,21 @@ import com.google.auto.value.AutoOneOf;
 
 /** Unified Matcher API: xds.type.matcher.v3.Matcher.OnMatch. */
 @AutoOneOf(OnMatch.Kind.class)
-public abstract class OnMatch<T> {
+public abstract class OnMatch<InputT, ResultT> {
   public enum Kind { MATCHER, ACTION }
 
   public abstract Kind getKind();
 
-  public abstract Matcher<T> matcher();
+  public abstract Matcher<InputT, ResultT> matcher();
 
-  public abstract T action();
+  public abstract ResultT action();
 
-  public static <T> OnMatch<T> ofMatcher(Matcher<T> matcher) {
+  public static <InputT, ResultT> OnMatch<InputT, ResultT> ofMatcher(
+      Matcher<InputT, ResultT> matcher) {
     return AutoOneOf_OnMatch.matcher(matcher);
   }
 
-  public static <T> OnMatch<T> ofAction(T result) {
+  public static <InputT, ResultT> OnMatch<InputT, ResultT> ofAction(ResultT result) {
     return AutoOneOf_OnMatch.action(result);
   }
 }

@@ -32,12 +32,16 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.Status;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.internal.datatype.GrpcService;
+import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
 import io.grpc.xds.internal.matchers.MatcherList;
 import io.grpc.xds.internal.matchers.OnMatch;
+import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
+import io.grpc.xds.internal.rlqs.RlqsClient;
 import io.grpc.xds.internal.rlqs.RlqsClientPool;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -144,17 +148,14 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       // Being shut down, return no interceptor.
       return null;
     }
-    // TODO(sergiitk): [DESIGN] Rlqs client should take the channel as an argument?
-    // TODO(sergiitk): [DESIGN] the key should be hashed (domain + buckets) merged config?
-    rlqsClientPool.addClient(config.rlqsService());
+    final RlqsClient rlqsClient = rlqsClientPool.getOrCreateRlqsClient(config);
 
-    // final GrpcAuthorizationEngine authEngine = new GrpcAuthorizationEngine(config);
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
         // Notes:
-        // map domain() -> an incarnation of bucket matchers, f.e. new RlqsEngine(domain, matchers).
+        // map domain() -> an incarnation of bucket matchers, f.e. new RlqsClient(domain, matchers).
         // shared resource holder, acquire every rpc
         // Store RLQS Client or channel in the config as a reference - FilterConfig config ref
         // when parse.
@@ -171,20 +172,13 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         // AI: follow up with Eric on how cache is shared, this changes if we need to cache
         //     interceptor
         // AI: discuss the lifetime of RLQS channel and the cache - needs wider per-lang discussion.
-
-        // Example:
-        // AuthDecision authResult = authEngine.evaluate(headers, call);
-        // if (logger.isLoggable(Level.FINE)) {
-        //   logger.log(Level.FINE,
-        //       "Authorization result for serverCall {0}: {1}, matching policy: {2}.",
-        //       new Object[]{call, authResult.decision(), authResult.matchingPolicyName()});
-        // }
-        // if (GrpcAuthorizationEngine.Action.DENY.equals(authResult.decision())) {
-        //   Status status = Status.PERMISSION_DENIED.withDescription("Access Denied");
-        //   call.close(status, new Metadata());
-        //   return new ServerCall.Listener<ReqT>(){};
-        // }
-        return next.startCall(call, headers);
+        RateLimitResult result = rlqsClient.evaluate(HttpMatchInput.create(headers, call));
+        if (RateLimitResult.ALLOWED.equals(result)) {
+          return next.startCall(call, headers);
+        }
+        Status status = Status.UNAVAILABLE.withDescription("");
+        call.close(status, new Metadata());
+        return new ServerCall.Listener<ReqT>(){};
       }
     };
   }
@@ -208,20 +202,33 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         fallbackBucketSettingsProto.getReportingInterval());
 
     // TODO(sergiitk): [IMPL] actually parse, move to Matcher.fromProto()
-    Matcher<RlqsBucketSettings> bucketMatchers = new Matcher<RlqsBucketSettings>() {
-      @Nullable
-      @Override
-      public MatcherList<RlqsBucketSettings> matcherList() {
-        return null;
-      }
-
-      @Override
-      public OnMatch<RlqsBucketSettings> onNoMatch() {
-        return OnMatch.ofAction(fallbackBucket);
-      }
-    };
+    Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers = new RlqsMatcher(fallbackBucket);
 
     return builder.bucketMatchers(bucketMatchers).build();
+  }
+
+  static class RlqsMatcher extends Matcher<HttpMatchInput, RlqsBucketSettings> {
+    private final RlqsBucketSettings fallbackBucket;
+
+    RlqsMatcher(RlqsBucketSettings fallbackBucket) {
+      this.fallbackBucket = fallbackBucket;
+    }
+
+    @Nullable
+    @Override
+    public MatcherList<HttpMatchInput, RlqsBucketSettings> matcherList() {
+      return null;
+    }
+
+    @Override
+    public OnMatch<HttpMatchInput, RlqsBucketSettings> onNoMatch() {
+      return OnMatch.ofAction(fallbackBucket);
+    }
+
+    @Override
+    public RlqsBucketSettings match(HttpMatchInput input) {
+      return null;
+    }
   }
 
   @VisibleForTesting

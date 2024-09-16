@@ -16,21 +16,49 @@
 
 package io.grpc.xds.internal.rlqs;
 
+import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
+import io.grpc.xds.internal.matchers.HttpMatchInput;
+import io.grpc.xds.internal.matchers.Matcher;
+import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-final class RlqsClient {
+public class RlqsClient {
   private static final Logger logger = Logger.getLogger(RlqsClient.class.getName());
 
-  private final String targetUri;
+  private final RlqsApiClient rlqsApiClient;
+  private final Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers;
+  private final RlqsBucketCache bucketCache;
+  private final String clientHash;
 
-  RlqsClient(String targetUri) {
-    this.targetUri = targetUri;
+  public RlqsClient(
+      RemoteServerInfo rlqsServer, String domain,
+      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, String clientHash) {
+    this.bucketMatchers = bucketMatchers;
+    this.clientHash = clientHash;
+    bucketCache = new RlqsBucketCache();
+    rlqsApiClient = new RlqsApiClient(rlqsServer, domain, bucketCache);
   }
 
+  public RateLimitResult evaluate(HttpMatchInput input) {
+    RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
+    RlqsBucketId bucketId = bucketSettings.toBucketId(input);
+    RlqsBucket bucket = bucketCache.getBucket(bucketId);
+    RateLimitResult rateLimitResult;
+    if (bucket != null) {
+      return bucket.rateLimit();
+    }
+    bucket = new RlqsBucket(bucketId, bucketSettings);
+    rateLimitResult = bucket.rateLimit();
+    bucketCache.insertBucket(bucket);
+    rlqsApiClient.sendInitialUsageReport(bucket);
+    // register tickers
+    return rateLimitResult;
+  }
 
   public void shutdown() {
-    logger.log(Level.FINER, "Shutting down RlqsClient to {0}", targetUri);
     // TODO(sergiitk): [IMPL] RlqsClient shutdown
+    logger.log(Level.FINER, "Shutting down RlqsClient with hash {0}", clientHash);
+    rlqsApiClient.shutdown();
   }
 }

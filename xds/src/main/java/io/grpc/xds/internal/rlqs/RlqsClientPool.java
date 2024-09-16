@@ -20,12 +20,17 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.SynchronizationContext;
-import io.grpc.xds.internal.datatype.GrpcService;
+import io.grpc.xds.RlqsFilterConfig;
+import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -67,9 +72,9 @@ public final class RlqsClientPool {
       if (shutdown) {
         return;
       }
-      for (String targetUri : clientsToShutdown) {
-        clientPool.get(targetUri).shutdown();
-        clientPool.remove(targetUri);
+      for (String clientHash : clientsToShutdown) {
+        clientPool.get(clientHash).shutdown();
+        clientPool.remove(clientHash);
       }
       clientsToShutdown.clear();
     };
@@ -81,18 +86,44 @@ public final class RlqsClientPool {
       shutdown = true;
       logger.log(Level.FINER, "Shutting down RlqsClientPool");
       clientsToShutdown.clear();
-      for (String targetUri : clientPool.keySet()) {
-        clientPool.get(targetUri).shutdown();
+      for (String clientHash : clientPool.keySet()) {
+        clientPool.get(clientHash).shutdown();
       }
       clientPool.clear();
     });
   }
 
-  public void addClient(GrpcService rlqsService) {
+  public RlqsClient getOrCreateRlqsClient(RlqsFilterConfig config) {
+    final SettableFuture<RlqsClient> future = SettableFuture.create();
+    final String clientHash = makeRlqsClientHash(config);
+
     syncContext.execute(() -> {
-      RlqsClient rlqsClient = new RlqsClient(rlqsService.targetUri());
-      clientPool.put(rlqsService.targetUri(), rlqsClient);
+      if (clientPool.containsKey(clientHash)) {
+        future.set(clientPool.get(clientHash));
+        return;
+      }
+      // TODO(sergiitk): [IMPL] get from bootstrap.
+      RemoteServerInfo rlqsServer = RemoteServerInfo.create(config.rlqsService().targetUri(),
+          InsecureChannelCredentials.create());
+      RlqsClient rlqsClient =
+          new RlqsClient(rlqsServer, config.domain(), config.bucketMatchers(), clientHash);
+
+      clientPool.put(clientHash, rlqsClient);
+      future.set(clientPool.get(clientHash));
     });
+    try {
+      // TODO(sergiitk): [IMPL] clarify time
+      return future.get(1, TimeUnit.SECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      // TODO(sergiitk): [IMPL] handle properly
+      throw new RuntimeException(e);
+    }
+  }
+
+  private String makeRlqsClientHash(RlqsFilterConfig config) {
+    // TODO(sergiitk): [DESIGN] the key should be hashed (domain + buckets) merged config?
+    // TODO(sergiitk): [IMPL] Hash buckets
+    return config.rlqsService().targetUri() + config.domain();
   }
 
   /**
