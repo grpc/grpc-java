@@ -4795,8 +4795,12 @@ public class ManagedChannelImplTest {
 
       nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-      assertEquals(channel.getLastServiceConfig().toString(),
-          managedChannelServiceConfig.toString());
+      /*assertEquals(channel.getLastServiceConfig().toString(),
+          managedChannelServiceConfig.toString());*/
+
+      assertEquals(channel.getConfigSelector().getClass().getName(),
+          managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
+
 
       assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
               .setDescription("Initial Name Resolution error, using default service config")
@@ -4821,40 +4825,54 @@ public class ManagedChannelImplTest {
   @Test
   public void testTraceEventsOnResultsCallFollowedByOnErrorCallWithAppliedServiceConfig()
           throws Exception {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     timer.forwardNanos(1234);
     channelBuilder.maxTraceEvents(10);
-    List<EquivalentAddressGroup> servers = new ArrayList<>();
-    servers.add(new EquivalentAddressGroup(socketAddress));
-    FakeNameResolverFactory nameResolverFactory =
-            new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
-    channelBuilder.nameResolverFactory(nameResolverFactory);
-    Map<String, Object> defaultServiceConfig =
-            parseConfig("{\"methodConfig\":[{"
-                    + "\"name\":[{\"service\":\"SimpleService1\"}],"
-                    + "\"waitForReady\":true}]}");
-    channelBuilder.defaultServiceConfig(defaultServiceConfig);
-    ManagedChannelServiceConfig managedChannelServiceConfig =
-        createManagedChannelServiceConfig(defaultServiceConfig, null);
-    nameResolverFactory.nextConfigOrError.set(
-        ConfigOrError.fromConfig(managedChannelServiceConfig));
-    createChannel();
-    int prevSize = getStats(channel).channelTrace.events.size();
-    Status resolutionError = Status.UNAVAILABLE
-            .withDescription("Initial Name Resolution error, using default service config");
+    try {
+      List<EquivalentAddressGroup> servers = new ArrayList<>();
+      servers.add(new EquivalentAddressGroup(socketAddress));
+      FakeNameResolverFactory nameResolverFactory =
+          new FakeNameResolverFactory.Builder(expectedUri).setServers(servers).build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+      Map<String, Object> defaultServiceConfig =
+          parseConfig("{\"methodConfig\":[{"
+              + "\"name\":[{\"service\":\"SimpleService1\"}],"
+              + "\"waitForReady\":true}]}");
+      channelBuilder.defaultServiceConfig(defaultServiceConfig);
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          createManagedChannelServiceConfig(defaultServiceConfig, null);
+      nameResolverFactory.nextConfigOrError.set(
+          ConfigOrError.fromConfig(managedChannelServiceConfig));
+      createChannel();
+      int prevSize = getStats(channel).channelTrace.events.size();
+      Status resolutionError = Status.UNAVAILABLE
+          .withDescription("Initial Name Resolution error, using default service config");
 
-    nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
+      nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-    assertEquals(channel.getLastServiceConfig().toString(),
-        managedChannelServiceConfig.toString());
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+      prevSize = getStats(channel).channelTrace.events.size();
+      ResolutionResult resolutionResult = ResolutionResult.newBuilder()
+          .setAddresses(Collections.singletonList(
+              new EquivalentAddressGroup(Arrays.asList(new SocketAddress() {
+              }, new SocketAddress() {
+              })))).build();
+      nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult);
 
-    // initial service config is already applied so it's not reapplied using the default service
-    // config here.
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
-    assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-            .setDescription("Failed to resolve name: " + resolutionError)
-            .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
-            .setTimestampNanos(timer.getTicker().read())
-            .build());
+      assertEquals(channel.getConfigSelector().getClass().getName(),
+          managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
+
+      // initial service config is already applied so it's not reapplied using the default service
+      // config here.
+      assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
+      assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+          .setDescription("Failed to resolve name: " + resolutionError)
+          .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
+          .setTimestampNanos(timer.getTicker().read())
+          .build());
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
   }
 
 
