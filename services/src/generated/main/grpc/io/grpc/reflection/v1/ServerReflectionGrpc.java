@@ -61,6 +61,21 @@ public final class ServerReflectionGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ServerReflectionBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingV2Stub>() {
+        @java.lang.Override
+        public ServerReflectionBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ServerReflectionBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ServerReflectionBlockingStub newBlockingStub(
@@ -148,6 +163,35 @@ public final class ServerReflectionGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service ServerReflection.
+   */
+  public static final class ServerReflectionBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingV2Stub> {
+    private ServerReflectionBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ServerReflectionBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ServerReflectionBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * The reflection service is structured as a bidirectional stream, ensuring
+     * all related requests go to a single server.
+     * </pre>
+     */
+    public io.grpc.stub.BlockingClientCall<io.grpc.reflection.v1.ServerReflectionRequest, io.grpc.reflection.v1.ServerReflectionResponse>
+        serverReflectionInfo() {
+      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
+          getChannel(), getServerReflectionInfoMethod(), getCallOptions());
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service ServerReflection.
    */
   public static final class ServerReflectionBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
