@@ -4858,8 +4858,8 @@ public class ManagedChannelImplTest {
 
       assertEquals(channel.getConfigSelector().getClass().getName(),
           managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
-      assertEquals(channel.getConfigSelector().getClass().getName(),
-          managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
+      assertEquals(channel.getLastServiceConfig().toString(),
+          managedChannelServiceConfig.toString());
 
       // initial service config is already applied so it's not reapplied using the default service
       // config here.
