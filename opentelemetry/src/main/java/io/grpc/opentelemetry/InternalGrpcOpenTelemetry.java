@@ -29,4 +29,8 @@ public final class InternalGrpcOpenTelemetry {
       GrpcOpenTelemetry.Builder builder, InternalOpenTelemetryPlugin plugin) {
     builder.plugin(plugin);
   }
+
+  public static void enableTracing(GrpcOpenTelemetry.Builder builder, boolean enable) {
+    builder.enableTracing(enable);
+  }
 }
