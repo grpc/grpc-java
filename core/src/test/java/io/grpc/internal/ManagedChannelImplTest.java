@@ -4795,19 +4795,16 @@ public class ManagedChannelImplTest {
 
       nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-      /*assertEquals(channel.getLastServiceConfig().toString(),
-          managedChannelServiceConfig.toString());*/
-
       assertEquals(channel.getConfigSelector().getClass().getName(),
           managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
-
+      assertEquals(channel.getLastServiceConfig().toString(),
+          managedChannelServiceConfig.toString());
 
       assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
               .setDescription("Initial Name Resolution error, using default service config")
               .setSeverity(ChannelTrace.Event.Severity.CT_ERROR)
               .setTimestampNanos(timer.getTicker().read())
               .build());
-
       assertThat(getStats(channel).channelTrace.events.get(prevSize - 1))
               .isEqualTo(new ChannelTrace.Event.Builder()
               .setDescription("Failed to resolve name: " + resolutionError)
@@ -4859,6 +4856,8 @@ public class ManagedChannelImplTest {
               })))).build();
       nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult);
 
+      assertEquals(channel.getConfigSelector().getClass().getName(),
+          managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
       assertEquals(channel.getConfigSelector().getClass().getName(),
           managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
 
