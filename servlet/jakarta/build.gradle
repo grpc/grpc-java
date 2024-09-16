@@ -99,7 +99,7 @@ dependencies {
     jettyTestImplementation libraries.jetty.servlet,
             libraries.jetty.http2.server
 
-    undertowTestImplementation libraries.undertow.servlet.jakartaee9
+    undertowTestImplementation libraries.undertow.servlet
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,

@@ -152,8 +152,14 @@ final class ControlPlaneClient {
       startRpcStream();
     }
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
-    if (resources != null) {
-      adsStream.sendDiscoveryRequest(resourceType, resources);
+    if (resources == null) {
+      resources = Collections.emptyList();
+    }
+    adsStream.sendDiscoveryRequest(resourceType, resources);
+    if (resources.isEmpty()) {
+      // The resource type no longer has subscribing resources; clean up references to it
+      versions.remove(resourceType);
+      adsStream.respNonces.remove(resourceType);
     }
   }
 

@@ -276,7 +276,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     }
   }
 
-  public static class FakeSocketAddress extends SocketAddress {
+  public static final class FakeSocketAddress extends SocketAddress {
     private static final long serialVersionUID = 0L;
     final String name;
 
@@ -287,6 +287,20 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     @Override
     public String toString() {
       return "FakeSocketAddress-" + name;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof FakeSocketAddress)) {
+        return false;
+      }
+      FakeSocketAddress that = (FakeSocketAddress) o;
+      return this.name.equals(that.name);
+    }
+
+    @Override
+    public int hashCode() {
+      return name.hashCode();
     }
   }
 }

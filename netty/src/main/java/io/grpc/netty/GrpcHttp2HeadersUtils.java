@@ -31,12 +31,12 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.US_ASCII;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
 import static io.netty.handler.codec.http2.Http2Exception.connectionError;
 import static io.netty.util.AsciiString.isUpperCase;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.io.BaseEncoding;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;

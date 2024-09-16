@@ -21,7 +21,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.66.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.68.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -474,7 +474,13 @@ def isAcceptableVersion(ModuleComponentIdentifier candidate) {
         return true
     if (group == 'io.netty' && version.contains('Final'))
         return true
+    if (group == 'io.undertow' && version.contains('Final'))
+        return true
     if (module == 'android-api-level-19')
+        return true
+    if (module == 'opentelemetry-exporter-prometheus')
+        return true
+    if (module == 'opentelemetry-gcp-resources')
         return true
     return version ==~ /^[0-9]+(\.[0-9]+)+$/
 }

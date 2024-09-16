@@ -127,7 +127,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
-    long readyTimeoutMillis = -1; // TODO(jdcormie) Set an non-infinite default in a separate PR.
+    long readyTimeoutMillis = 60_000;
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
@@ -210,7 +210,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      * <a href="https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md">fail-fast</a> work
      * as expected despite certain edge cases that could otherwise stall the transport indefinitely.
      *
-     * <p>Optional. Use a negative value to wait indefinitely.
+     * <p>Optional but enabled by default. Use a negative value to wait indefinitely.
      */
     public Builder setReadyTimeoutMillis(long readyTimeoutMillis) {
       this.readyTimeoutMillis = readyTimeoutMillis;

@@ -171,7 +171,7 @@ final class XdsServerWrapper extends Server {
 
   private void internalStart() {
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate();
+      xdsClientPool = xdsClientPoolFactory.getOrCreate("");
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();

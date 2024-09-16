@@ -1,16 +1,17 @@
 pluginManagement {
     plugins {
         // https://developer.android.com/build/releases/gradle-plugin
+        // 8+ has many changes: https://github.com/grpc/grpc-java/issues/10152
         id "com.android.application" version "7.4.1"
         id "com.android.library" version "7.4.1"
         // https://github.com/johnrengelman/shadow/releases
         id "com.github.johnrengelman.shadow" version "8.1.1"
 	// https://github.com/kt3k/coveralls-gradle-plugin/tags
         id "com.github.kt3k.coveralls" version "2.12.2"
-	// https://github.com/GoogleCloudPlatform/appengine-plugins/blob/main/app-gradle-plugin/CHANGELOG.md
-        id "com.google.cloud.tools.appengine" version "2.5.0"
+	// https://github.com/GoogleCloudPlatform/appengine-plugins/releases
+        id "com.google.cloud.tools.appengine" version "2.8.0"
         // https://github.com/GoogleContainerTools/jib/blob/master/jib-gradle-plugin/CHANGELOG.md
-        id "com.google.cloud.tools.jib" version "3.4.1"
+        id "com.google.cloud.tools.jib" version "3.4.3"
 	// https://github.com/google/osdetector-gradle-plugin/tags
         id "com.google.osdetector" version "1.7.3"
         // https://github.com/google/protobuf-gradle-plugin/releases
@@ -20,7 +21,7 @@ pluginManagement {
         // https://github.com/melix/jmh-gradle-plugin/releases
         id "me.champeau.jmh" version "0.7.2"
         // https://github.com/tbroyer/gradle-errorprone-plugin/releases
-        id "net.ltgt.errorprone" version "3.1.0"
+        id "net.ltgt.errorprone" version "4.0.1"
         // https://github.com/xvik/gradle-animalsniffer-plugin/releases
         id "ru.vyarus.animalsniffer" version "1.7.1"
     }
@@ -30,7 +31,7 @@ pluginManagement {
                 useModule("com.android.tools.build:gradle:${target.version}")
             }
             if (requested.id.id.startsWith('com.google.cloud.tools.appengine')) {
-                useModule("com.google.cloud.tools:appengine-gradle-plugin:${requested.version}")
+                useModule("com.google.cloud.tools:appengine-gradle-plugin:${target.version}")
             }
         }
     }

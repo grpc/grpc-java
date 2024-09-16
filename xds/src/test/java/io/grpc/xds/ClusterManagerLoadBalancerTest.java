@@ -52,10 +52,11 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickSubchannelArgsImpl;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -288,16 +289,27 @@ public class ClusterManagerLoadBalancerTest {
             .build());
   }
 
+  // Prevent ClusterManagerLB from detecting different providers even when the configuration is the
+  // same.
+  private Map<List<Object>, FakeLoadBalancerProvider> fakeLoadBalancerProviderCache
+      = new HashMap<>();
+
   private ClusterManagerConfig buildConfig(Map<String, String> childPolicies, boolean failing) {
-    Map<String, PolicySelection> childPolicySelections = new LinkedHashMap<>();
+    Map<String, Object> childConfigs = new LinkedHashMap<>();
     for (String name : childPolicies.keySet()) {
       String childPolicyName = childPolicies.get(name);
       Object childConfig = lbConfigInventory.get(name);
-      PolicySelection policy =
-          new PolicySelection(new FakeLoadBalancerProvider(childPolicyName, failing), childConfig);
-      childPolicySelections.put(name, policy);
+      FakeLoadBalancerProvider lbProvider =
+          fakeLoadBalancerProviderCache.get(Arrays.asList(childPolicyName, failing));
+      if (lbProvider == null) {
+        lbProvider = new FakeLoadBalancerProvider(childPolicyName, failing);
+        fakeLoadBalancerProviderCache.put(Arrays.asList(childPolicyName, failing), lbProvider);
+      }
+      Object policy =
+          GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(lbProvider, childConfig);
+      childConfigs.put(name, policy);
     }
-    return new ClusterManagerConfig(childPolicySelections);
+    return new ClusterManagerConfig(childConfigs);
   }
 
   private static PickResult pickSubchannel(SubchannelPicker picker, String clusterName) {
