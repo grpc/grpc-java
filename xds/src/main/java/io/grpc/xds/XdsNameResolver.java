@@ -66,6 +66,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -104,6 +105,7 @@ final class XdsNameResolver extends NameResolver {
   private final XdsLogger logger;
   @Nullable
   private final String targetAuthority;
+  private final String target;
   private final String serviceAuthority;
   // Encoded version of the service authority as per 
   // https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
@@ -133,23 +135,24 @@ final class XdsNameResolver extends NameResolver {
   private boolean receivedConfig;
 
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
+      URI targetUri, String name, @Nullable String overrideAuthority,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
-    this(targetAuthority, name, overrideAuthority, serviceConfigParser, syncContext, scheduler,
-        SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
-        FilterRegistry.getDefaultRegistry(), bootstrapOverride);
+    this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
+        syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
+        ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
-      ServiceConfigParser serviceConfigParser,
+      URI targetUri, @Nullable String targetAuthority, String name,
+      @Nullable String overrideAuthority, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
+    target = targetUri.toString();
 
     // The name might have multiple slashes so encode it before verifying.
     serviceAuthority = checkNotNull(name, "name");
@@ -180,7 +183,7 @@ final class XdsNameResolver extends NameResolver {
   public void start(Listener2 listener) {
     this.listener = checkNotNull(listener, "listener");
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate();
+      xdsClientPool = xdsClientPoolFactory.getOrCreate(target);
     } catch (Exception e) {
       listener.onError(
           Status.UNAVAILABLE.withDescription("Failed to initialize xDS").withCause(e));

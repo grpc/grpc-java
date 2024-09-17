@@ -14,22 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc;
 
-import io.grpc.internal.ObjectPool;
-import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsInitializationException;
-import java.util.List;
-import java.util.Map;
-import javax.annotation.Nullable;
+/**
+ * An internal class. Do not use.
+ *
+ * <p>An interface to provide the attributes for address connected by subchannel.
+ */
+@Internal
+public interface InternalSubchannelAddressAttributes {
 
-interface XdsClientPoolFactory {
-  void setBootstrapOverride(Map<String, ?> bootstrap);
-
-  @Nullable
-  ObjectPool<XdsClient> get(String target);
-
-  ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException;
-
-  List<String> getTargets();
+  /**
+   * Return attributes of the server address connected by sub channel.
+   */
+  public Attributes getConnectedAddressAttributes();
 }

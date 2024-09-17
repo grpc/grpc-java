@@ -39,6 +39,8 @@ import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.client.XdsResourceType;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -117,43 +119,58 @@ public final class CsdsService implements BindableService {
 
   private boolean handleRequest(
       ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
-    StatusException error;
-    try {
-      responseObserver.onNext(getConfigDumpForRequest(request));
-      return true;
-    } catch (StatusException e) {
-      error = e;
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
-      error = Status.ABORTED.withDescription("Thread interrupted").withCause(e).asException();
-    } catch (RuntimeException e) {
-      logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
-      error =
-          Status.INTERNAL.withDescription("Unexpected internal error").withCause(e).asException();
+    StatusException error = null;
+
+    if (request.getNodeMatchersCount() > 0) {
+      error = new StatusException(
+          Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"));
+    } else {
+      List<String> targets = xdsClientPoolFactory.getTargets();
+      List<ClientConfig> clientConfigs = new ArrayList<>(targets.size());
+
+      for (int i = 0; i < targets.size() && error == null; i++) {
+        try {
+          ClientConfig clientConfig = getConfigForRequest(targets.get(i));
+          if (clientConfig != null) {
+            clientConfigs.add(clientConfig);
+          }
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
+          error = Status.ABORTED.withDescription("Thread interrupted").withCause(e).asException();
+        } catch (RuntimeException e) {
+          logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
+          error = Status.INTERNAL.withDescription("Unexpected internal error").withCause(e)
+              .asException();
+        }
+      }
+
+      try {
+        responseObserver.onNext(getStatusResponse(clientConfigs));
+      } catch (RuntimeException e) {
+        logger.log(Level.WARNING, "Unexpected error while processing CSDS config dump", e);
+        error = Status.INTERNAL.withDescription("Unexpected internal error").withCause(e)
+            .asException();
+      }
+    }
+
+    if (error == null) {
+      return true; // All clients reported without error
     }
     responseObserver.onError(error);
     return false;
   }
 
-  private ClientStatusResponse getConfigDumpForRequest(ClientStatusRequest request)
-      throws StatusException, InterruptedException {
-    if (request.getNodeMatchersCount() > 0) {
-      throw new StatusException(
-          Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"));
-    }
-
-    ObjectPool<XdsClient> xdsClientPool = xdsClientPoolFactory.get();
+  private ClientConfig getConfigForRequest(String target) throws InterruptedException {
+    ObjectPool<XdsClient> xdsClientPool = xdsClientPoolFactory.get(target);
     if (xdsClientPool == null) {
-      return ClientStatusResponse.getDefaultInstance();
+      return null;
     }
 
     XdsClient xdsClient = null;
     try {
       xdsClient = xdsClientPool.getObject();
-      return ClientStatusResponse.newBuilder()
-          .addConfig(getClientConfigForXdsClient(xdsClient))
-          .build();
+      return getClientConfigForXdsClient(xdsClient, target);
     } finally {
       if (xdsClient != null) {
         xdsClientPool.returnObject(xdsClient);
@@ -161,9 +178,18 @@ public final class CsdsService implements BindableService {
     }
   }
 
+  private ClientStatusResponse getStatusResponse(List<ClientConfig> clientConfigs) {
+    if (clientConfigs.isEmpty()) {
+      return ClientStatusResponse.getDefaultInstance();
+    }
+    return ClientStatusResponse.newBuilder().addAllConfig(clientConfigs).build();
+  }
+
   @VisibleForTesting
-  static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) throws InterruptedException {
+  static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient, String target)
+      throws InterruptedException {
     ClientConfig.Builder builder = ClientConfig.newBuilder()
+        .setClientScope(target)
         .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
 
     Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
