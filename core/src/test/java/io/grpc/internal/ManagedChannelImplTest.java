@@ -4787,9 +4787,6 @@ public class ManagedChannelImplTest {
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
       ManagedChannelServiceConfig managedChannelServiceConfig =
           createManagedChannelServiceConfig(defaultServiceConfig, null);
-      nameResolverFactory.nextConfigOrError.set(
-          ConfigOrError.fromConfig(managedChannelServiceConfig));
-
       createChannel(true);
       int prevSize = getStats(channel).channelTrace.events.size();
 
@@ -4836,8 +4833,6 @@ public class ManagedChannelImplTest {
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
       ManagedChannelServiceConfig managedChannelServiceConfig =
           createManagedChannelServiceConfig(defaultServiceConfig, null);
-      nameResolverFactory.nextConfigOrError.set(
-          ConfigOrError.fromConfig(managedChannelServiceConfig));
       createChannel();
       int prevSize = getStats(channel).channelTrace.events.size();
       Status resolutionError = Status.UNAVAILABLE
