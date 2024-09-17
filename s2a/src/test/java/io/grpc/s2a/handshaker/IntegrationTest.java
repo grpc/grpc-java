@@ -194,7 +194,7 @@ public final class IntegrationTest {
   public void clientCommunicateUsingS2ACredentials_succeeds() throws Exception {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     ChannelCredentials credentials =
-        S2AChannelCredentials.createBuilder(s2aAddress).setLocalSpiffeId("test-spiffe-id").build();
+        S2AChannelCredentials.newBuilder(s2aAddress).setLocalSpiffeId("test-spiffe-id").build();
     ManagedChannel channel =
         Grpc.newChannelBuilder(serverAddress, credentials).executor(executor).build();
 
@@ -204,7 +204,7 @@ public final class IntegrationTest {
   @Test
   public void clientCommunicateUsingS2ACredentialsNoLocalIdentity_succeeds() throws Exception {
     ExecutorService executor = Executors.newSingleThreadExecutor();
-    ChannelCredentials credentials = S2AChannelCredentials.createBuilder(s2aAddress).build();
+    ChannelCredentials credentials = S2AChannelCredentials.newBuilder(s2aAddress).build();
     ManagedChannel channel =
         Grpc.newChannelBuilder(serverAddress, credentials).executor(executor).build();
 
@@ -215,7 +215,7 @@ public final class IntegrationTest {
   public void clientCommunicateUsingMtlsToS2ACredentials_succeeds() throws Exception {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     ChannelCredentials credentials =
-        MtlsToS2AChannelCredentials.createBuilder(
+        MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ mtlsS2AAddress,
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
@@ -242,7 +242,7 @@ public final class IntegrationTest {
     @Override
     public void run() {
       ExecutorService executor = Executors.newSingleThreadExecutor();
-      ChannelCredentials credentials = S2AChannelCredentials.createBuilder(s2aDelayAddress).build();
+      ChannelCredentials credentials = S2AChannelCredentials.newBuilder(s2aDelayAddress).build();
       ManagedChannel channel =
           Grpc.newChannelBuilder(serverAddress, credentials).executor(executor).build();
       boolean result = false;

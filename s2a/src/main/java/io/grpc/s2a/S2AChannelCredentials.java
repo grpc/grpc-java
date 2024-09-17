@@ -48,7 +48,7 @@ public final class S2AChannelCredentials {
    * @param s2aAddress the address of the S2A server used to secure the connection.
    * @return a {@code S2AChannelCredentials.Builder} instance.
    */
-  public static Builder createBuilder(String s2aAddress) {
+  public static Builder newBuilder(String s2aAddress) {
     checkArgument(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
     return new Builder(s2aAddress);
   }

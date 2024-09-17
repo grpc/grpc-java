@@ -44,7 +44,7 @@ public final class MtlsToS2AChannelCredentials {
    * @param trustBundlePath the path to the trust bundle PEM.
    * @return a {@code MtlsToS2AChannelCredentials.Builder} instance.
    */
-  public static Builder createBuilder(
+  public static Builder newBuilder(
       String s2aAddress, String privateKeyPath, String certChainPath, String trustBundlePath) {
     checkArgument(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
     checkArgument(!isNullOrEmpty(privateKeyPath), "privateKeyPath must not be null or empty.");
@@ -89,7 +89,7 @@ public final class MtlsToS2AChannelCredentials {
               .trustManager(trustManager)
               .build();
 
-      return S2AChannelCredentials.createBuilder(s2aAddress)
+      return S2AChannelCredentials.newBuilder(s2aAddress)
           .setS2AChannelCredentials(channelToS2ACredentials);
     }
   }
