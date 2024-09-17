@@ -180,14 +180,15 @@ public final class IntegrationTest {
 
   @After
   public void tearDown() throws Exception {
-    server.awaitTermination(10, SECONDS);
     server.shutdown();
-    s2aServer.awaitTermination(10, SECONDS);
     s2aServer.shutdown();
-    s2aDelayServer.awaitTermination(10, SECONDS);
     s2aDelayServer.shutdown();
-    mtlsS2AServer.awaitTermination(10, SECONDS);
     mtlsS2AServer.shutdown();
+
+    server.awaitTermination(10, SECONDS);
+    s2aServer.awaitTermination(10, SECONDS);
+    s2aDelayServer.awaitTermination(10, SECONDS);
+    mtlsS2AServer.awaitTermination(10, SECONDS);
   }
 
   @Test
