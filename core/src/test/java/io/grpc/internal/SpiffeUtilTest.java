@@ -30,7 +30,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 
 @RunWith(Enclosed.class)
-public class SpiffeIdParserTest {
+public class SpiffeUtilTest {
 
   @RunWith(Parameterized.class)
   public static class ParseSuccessTest {
@@ -45,7 +45,7 @@ public class SpiffeIdParserTest {
 
     @Test
     public void parseSuccessTest() {
-      SpiffeIdParser.SpiffeId spiffeId = SpiffeIdParser.parse(uri);
+      SpiffeUtil.SpiffeId spiffeId = SpiffeUtil.parse(uri);
       assertEquals(trustDomain, spiffeId.getTrustDomain());
       assertEquals(path, spiffeId.getPath());
     }
@@ -87,7 +87,7 @@ public class SpiffeIdParserTest {
 
     @Test
     public void parseFailureTest() {
-      assertThrows(IllegalArgumentException.class, () -> SpiffeIdParser.parse(uri));
+      assertThrows(IllegalArgumentException.class, () -> SpiffeUtil.parse(uri));
     }
 
     @Parameters(name = "spiffeId={0}")
@@ -122,30 +122,30 @@ public class SpiffeIdParserTest {
     @Test
     public void spiffeUriFormatTest() {
       NullPointerException npe = assertThrows(NullPointerException.class, () ->
-          SpiffeIdParser.parse(null));
+          SpiffeUtil.parse(null));
       assertEquals("uri", npe.getMessage());
 
       IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("https://example.com"));
+          SpiffeUtil.parse("https://example.com"));
       assertEquals("Spiffe Id must start with spiffe://", iae.getMessage());
 
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example.com/workload#1"));
+          SpiffeUtil.parse("spiffe://example.com/workload#1"));
       assertEquals("Spiffe Id must not contain query fragments", iae.getMessage());
 
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example.com/workload-1?t=1"));
+          SpiffeUtil.parse("spiffe://example.com/workload-1?t=1"));
       assertEquals("Spiffe Id must not contain query parameters", iae.getMessage());
     }
 
     @Test
     public void spiffeTrustDomainFormatTest() {
       IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://"));
+          SpiffeUtil.parse("spiffe://"));
       assertEquals("Trust Domain can't be empty", iae.getMessage());
 
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://eXample.com"));
+          SpiffeUtil.parse("spiffe://eXample.com"));
       assertEquals(
           "Trust Domain must contain only letters, numbers, dots, dashes, and underscores "
               + "([a-z0-9.-_])",
@@ -156,27 +156,39 @@ public class SpiffeIdParserTest {
         longTrustDomain.append("pi.eu");
       }
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse(longTrustDomain.toString()));
+          SpiffeUtil.parse(longTrustDomain.toString()));
       assertEquals("Trust Domain maximum length is 255 characters", iae.getMessage());
+
+      StringBuilder longSpiffe = new StringBuilder("spiffe://mydomain%21com/");
+      for (int i = 0; i < 405; i++) {
+        longSpiffe.append("qwert");
+      }
+      iae = assertThrows(IllegalArgumentException.class, () ->
+          SpiffeUtil.parse(longSpiffe.toString()));
+      assertEquals("Spiffe Id maximum length is 2048 characters", iae.getMessage());
     }
 
     @Test
     public void spiffePathFormatTest() {
       IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example.com//"));
+          SpiffeUtil.parse("spiffe://example.com//"));
       assertEquals("Path must not include a trailing '/'", iae.getMessage());
 
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example.com/us//miami"));
+          SpiffeUtil.parse("spiffe://example.com/"));
+      assertEquals("Path must not include a trailing '/'", iae.getMessage());
+
+      iae = assertThrows(IllegalArgumentException.class, () ->
+          SpiffeUtil.parse("spiffe://example.com/us//miami"));
       assertEquals("Individual path segments must not be empty", iae.getMessage());
 
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example.com/us/."));
+          SpiffeUtil.parse("spiffe://example.com/us/."));
       assertEquals("Individual path segments must not be relative path modifiers (i.e. ., ..)",
           iae.getMessage());
 
       iae = assertThrows(IllegalArgumentException.class, () ->
-          SpiffeIdParser.parse("spiffe://example.com/us!"));
+          SpiffeUtil.parse("spiffe://example.com/us!"));
       assertEquals("Individual path segments must contain only letters, numbers, dots, dashes, and "
           + "underscores ([a-zA-Z0-9.-_])", iae.getMessage());
     }

@@ -20,25 +20,23 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Splitter;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 /**
- * Parses URI to SPIFFE ID if it matches SPIFFE ID standard.
+ * Helper utility to work with SPIFFE URIs.
  * <p>
- * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">standard</a>
+ * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">Standard</a>
  */
-public final class SpiffeIdParser {
+public final class SpiffeUtil {
 
   private static final String PREFIX = "spiffe://";
 
-  private SpiffeIdParser() {}
-
   /**
    * Parses a URI string, applies validation rules described in SPIFFE standard, and, in case of
-   * success, returns {@link SpiffeId}.
+   * success, returns parsed TrustDomain and Path.
    *
    * @param uri a String representing a SPIFFE ID
-   * @return {@link SpiffeId} containing Trust Domain and Path of SPIFFE ID
    */
   public static SpiffeId parse(String uri) {
     doInitialUriValidation(uri);
@@ -52,6 +50,7 @@ public final class SpiffeIdParser {
       String[] parts = domainAndPath.split("/", 2);
       trustDomain = parts[0];
       path = parts[1];
+      checkArgument(!path.isEmpty(), "Path must not include a trailing '/'");
     }
     validateTrustDomain(trustDomain);
     validatePath(path);
@@ -63,6 +62,7 @@ public final class SpiffeIdParser {
 
   private static void doInitialUriValidation(String uri) {
     checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
+    checkArgument(uri.length() <= 2048, "Spiffe Id maximum length is 2048 characters");
     checkArgument(uri.toLowerCase(Locale.US).startsWith(PREFIX), "Spiffe Id must start with "
         + PREFIX);
     checkArgument(!uri.contains("#"), "Spiffe Id must not contain query fragments");
@@ -99,7 +99,7 @@ public final class SpiffeIdParser {
   /**
    * Represents a SPIFFE ID as defined in the SPIFFE standard.
    * <p>
-   * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">standard</a>
+   * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">Standard</a>
    */
   public static class SpiffeId {
 
