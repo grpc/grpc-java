@@ -25,6 +25,7 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ExperimentalApi;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyChannelCredentials;
@@ -32,7 +33,6 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.s2a.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.handshaker.S2AIdentity;
 import io.grpc.s2a.handshaker.S2AProtocolNegotiatorFactory;
-import java.util.Optional;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -58,13 +58,13 @@ public final class S2AChannelCredentials {
   public static final class Builder {
     private final String s2aAddress;
     private ObjectPool<Channel> s2aChannelPool;
-    private Optional<ChannelCredentials> s2aChannelCredentials;
+    private ChannelCredentials s2aChannelCredentials;
     private @Nullable S2AIdentity localIdentity = null;
 
     Builder(String s2aAddress) {
       this.s2aAddress = s2aAddress;
       this.s2aChannelPool = null;
-      this.s2aChannelCredentials = Optional.empty();
+      this.s2aChannelCredentials = InsecureChannelCredentials.create();
     }
 
     /**
@@ -109,7 +109,7 @@ public final class S2AChannelCredentials {
     /** Sets the credentials to be used when connecting to the S2A. */
     @CanIgnoreReturnValue
     public Builder setS2AChannelCredentials(ChannelCredentials s2aChannelCredentials) {
-      this.s2aChannelCredentials = Optional.of(s2aChannelCredentials);
+      this.s2aChannelCredentials = s2aChannelCredentials;
       return this;
     }
 

@@ -34,7 +34,6 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -74,8 +73,9 @@ public final class S2AHandshakerServiceChannel {
    *     running at {@code s2aAddress}.
    */
   public static Resource<Channel> getChannelResource(
-      String s2aAddress, Optional<ChannelCredentials> s2aChannelCredentials) {
+      String s2aAddress, ChannelCredentials s2aChannelCredentials) {
     checkNotNull(s2aAddress);
+    checkNotNull(s2aChannelCredentials);
     return SHARED_RESOURCE_CHANNELS.computeIfAbsent(
         s2aAddress, channelResource -> new ChannelResource(s2aAddress, s2aChannelCredentials));
   }
@@ -87,9 +87,9 @@ public final class S2AHandshakerServiceChannel {
    */
   private static class ChannelResource implements Resource<Channel> {
     private final String targetAddress;
-    private final Optional<ChannelCredentials> channelCredentials;
+    private final ChannelCredentials channelCredentials;
 
-    public ChannelResource(String targetAddress, Optional<ChannelCredentials> channelCredentials) {
+    public ChannelResource(String targetAddress, ChannelCredentials channelCredentials) {
       this.targetAddress = targetAddress;
       this.channelCredentials = channelCredentials;
     }
@@ -103,25 +103,12 @@ public final class S2AHandshakerServiceChannel {
     public Channel create() {
       EventLoopGroup eventLoopGroup =
           new NioEventLoopGroup(1, new DefaultThreadFactory("S2A channel pool", true));
-      ManagedChannel channel = null;
-      if (channelCredentials.isPresent()) {
-        // Create a secure channel.
-        channel =
-            NettyChannelBuilder.forTarget(targetAddress, channelCredentials.get())
-                .channelType(NioSocketChannel.class)
-                .directExecutor()
-                .eventLoopGroup(eventLoopGroup)
-                .build();
-      } else {
-        // Create a plaintext channel.
-        channel =
-            NettyChannelBuilder.forTarget(targetAddress)
-                .channelType(NioSocketChannel.class)
-                .directExecutor()
-                .eventLoopGroup(eventLoopGroup)
-                .usePlaintext()
-                .build();
-      }
+      ManagedChannel channel =
+          NettyChannelBuilder.forTarget(targetAddress, channelCredentials)
+              .channelType(NioSocketChannel.class)
+              .directExecutor()
+              .eventLoopGroup(eventLoopGroup)
+              .build();
       return EventLoopHoldingChannel.create(channel, eventLoopGroup);
     }
 
