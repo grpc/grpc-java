@@ -23,11 +23,8 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import io.grpc.ChannelCredentials;
 import io.grpc.ExperimentalApi;
 import io.grpc.TlsChannelCredentials;
-import io.grpc.util.AdvancedTlsX509KeyManager;
-import io.grpc.util.AdvancedTlsX509TrustManager;
 import java.io.File;
 import java.io.IOException;
-import java.security.GeneralSecurityException;
 
 /**
  * Configures an {@code S2AChannelCredentials.Builder} instance with credentials used to establish a
@@ -68,7 +65,7 @@ public final class MtlsToS2AChannelCredentials {
       this.trustBundlePath = trustBundlePath;
     }
 
-    public S2AChannelCredentials.Builder build() throws GeneralSecurityException, IOException {
+    public S2AChannelCredentials.Builder build() throws IOException {
       checkState(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
       checkState(!isNullOrEmpty(privateKeyPath), "privateKeyPath must not be null or empty.");
       checkState(!isNullOrEmpty(certChainPath), "certChainPath must not be null or empty.");
@@ -77,16 +74,10 @@ public final class MtlsToS2AChannelCredentials {
       File certChainFile = new File(certChainPath);
       File trustBundleFile = new File(trustBundlePath);
 
-      AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
-      keyManager.updateIdentityCredentials(certChainFile, privateKeyFile);
-
-      AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-      trustManager.updateTrustCredentials(trustBundleFile);
-
       ChannelCredentials channelToS2ACredentials =
           TlsChannelCredentials.newBuilder()
-              .keyManager(keyManager)
-              .trustManager(trustManager)
+              .keyManager(certChainFile, privateKeyFile)
+              .trustManager(trustBundleFile)
               .build();
 
       return S2AChannelCredentials.newBuilder(s2aAddress)
