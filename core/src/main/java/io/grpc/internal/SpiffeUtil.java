@@ -62,6 +62,18 @@ public final class SpiffeUtil {
     checkArgument(checkNotNull(certChain, "certChain").length > 0, "CertChain can't be empty");
     Collection<List<?>> subjectAltNames = certChain[0].getSubjectAlternativeNames();
     if (subjectAltNames != null) {
+      boolean spiffeFound = false;
+      for (List<?> altName : subjectAltNames) {
+        if (URI_SAN_TYPE.equals(altName.get(0))) {
+          if (spiffeFound) {
+            throw new IllegalArgumentException("Multiple URI SAN values found in the leaf cert.");
+          }
+          spiffeFound = true;
+        }
+      }
+      if (!spiffeFound) {
+        return Optional.absent();
+      }
       for (List<?> altName : subjectAltNames) {
         if (URI_SAN_TYPE.equals(altName.get(0))) {
           String uri = (String) altName.get(1);

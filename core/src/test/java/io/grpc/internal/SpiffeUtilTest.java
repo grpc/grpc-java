@@ -27,21 +27,18 @@ import com.google.common.base.Optional;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
-import java.nio.file.Paths;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
 import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.internal.matchers.Null;
 
 public class SpiffeUtilTest {
 
   private static final String SPIFFE_PEM_FILE = "spiffe_cert.pem";
+  private static final String SPIFFE_MULTI_VALUES_PEM_FILE = "spiffe_cert_multi.pem";
   private static final String SERVER_0_PEM_FILE = "server0.pem";
   private static final String TEST_DIRECTORY_PREFIX = "io/grpc/internal/";
   private static final String SPIFFE_TRUST_BUNDLE_FILE = "spiffebundle.json";
@@ -53,12 +50,15 @@ public class SpiffeUtilTest {
 
 
   private X509Certificate[] spiffeCert;
+  private X509Certificate[] spiffeMultiCert;
   private X509Certificate[] serverCert0;
 
 
   @Before
   public void setUp() throws CertificateException {
     spiffeCert = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SPIFFE_PEM_FILE));
+    spiffeMultiCert = CertificateUtils.getX509Certificates(TlsTesting
+        .loadCert(SPIFFE_MULTI_VALUES_PEM_FILE));
     serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
   }
 
@@ -73,6 +73,10 @@ public class SpiffeUtilTest {
   public void extractSpiffeIdFailureTest() throws CertificateParsingException {
     Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(serverCert0);
     assertFalse(spiffeId.isPresent());
+    IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+        .extractSpiffeId(spiffeMultiCert));
+    assertEquals("Multiple URI SAN values found in the leaf cert.", iae.getMessage());
+
   }
 
   @Test
