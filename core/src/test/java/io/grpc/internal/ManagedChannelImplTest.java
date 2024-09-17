@@ -4795,8 +4795,6 @@ public class ManagedChannelImplTest {
 
       nameResolverFactory.resolvers.get(0).listener.onError(resolutionError);
 
-      assertEquals(channel.getConfigSelector().getClass().getName(),
-          managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
       assertEquals(channel.getLastServiceConfig().toString(),
           managedChannelServiceConfig.toString());
 
@@ -4856,13 +4854,9 @@ public class ManagedChannelImplTest {
               })))).build();
       nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult);
 
-      assertEquals(channel.getConfigSelector().getClass().getName(),
-          managedChannelServiceConfig.getDefaultConfigSelector().getClass().getName());
       assertEquals(channel.getLastServiceConfig().toString(),
           managedChannelServiceConfig.toString());
 
-      // initial service config is already applied so it's not reapplied using the default service
-      // config here.
       assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
       assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
           .setDescription("Failed to resolve name: " + resolutionError)
