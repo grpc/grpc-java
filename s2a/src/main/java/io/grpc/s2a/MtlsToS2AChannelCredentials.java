@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
 import io.grpc.ChannelCredentials;
+import io.grpc.ExperimentalApi;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
@@ -32,6 +33,7 @@ import java.security.GeneralSecurityException;
  * Configures an {@code S2AChannelCredentials.Builder} instance with credentials used to establish a
  * connection with the S2A to support talking to the S2A over mTLS.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/11533")
 public final class MtlsToS2AChannelCredentials {
   /**
    * Creates a {@code S2AChannelCredentials.Builder} builder, that talks to the S2A over mTLS.

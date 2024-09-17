@@ -24,6 +24,7 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
+import io.grpc.ExperimentalApi;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyChannelCredentials;
@@ -39,6 +40,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * Configures gRPC to use S2A for transport security when establishing a secure channel. Only for
  * use on the client side of a gRPC connection.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/11533")
 public final class S2AChannelCredentials {
   /**
    * Creates a channel credentials builder for establishing an S2A-secured connection.
