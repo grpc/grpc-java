@@ -44,9 +44,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.logging.Level;
+import java.util.concurrent.FutureTask;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSessionContext;
@@ -127,28 +125,21 @@ public final class IntegrationTest {
         + "-----END PRIVATE KEY-----";
 
   private String s2aAddress;
-  private int s2aPort;
   private Server s2aServer;
   private String s2aDelayAddress;
-  private int s2aDelayPort;
   private Server s2aDelayServer;
   private String mtlsS2AAddress;
-  private int mtlsS2APort;
   private Server mtlsS2AServer;
-  private int serverPort;
   private String serverAddress;
   private Server server;
 
   @Before
   public void setUp() throws Exception {
-    s2aPort = Utils.pickUnusedPort();
+    s2aServer = ServerBuilder.forPort(0).addService(new FakeS2AServer()).build().start();
+    int s2aPort = s2aServer.getPort();
     s2aAddress = "localhost:" + s2aPort;
-    s2aServer = ServerBuilder.forPort(s2aPort).addService(new FakeS2AServer()).build();
     logger.info("S2A service listening on localhost:" + s2aPort);
-    s2aServer.start();
 
-    mtlsS2APort = Utils.pickUnusedPort();
-    mtlsS2AAddress = "localhost:" + mtlsS2APort;
     File s2aCert = new File("src/test/resources/server_cert.pem");
     File s2aKey = new File("src/test/resources/server_key.pem");
     File rootCert = new File("src/test/resources/root_cert.pem");
@@ -158,24 +149,25 @@ public final class IntegrationTest {
             .trustManager(rootCert)
             .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
             .build();
-    mtlsS2AServer =
-        NettyServerBuilder.forPort(mtlsS2APort, s2aCreds).addService(new FakeS2AServer()).build();
-    logger.info("mTLS S2A service listening on localhost:" + mtlsS2APort);
+    mtlsS2AServer = NettyServerBuilder.forPort(0, s2aCreds).addService(new FakeS2AServer()).build();
     mtlsS2AServer.start();
+    int mtlsS2APort = mtlsS2AServer.getPort();
+    mtlsS2AAddress = "localhost:" + mtlsS2APort;
+    logger.info("mTLS S2A service listening on localhost:" + mtlsS2APort);
 
-    s2aDelayPort = Utils.pickUnusedPort();
+    int s2aDelayPort = Utils.pickUnusedPort();
     s2aDelayAddress = "localhost:" + s2aDelayPort;
     s2aDelayServer = ServerBuilder.forPort(s2aDelayPort).addService(new FakeS2AServer()).build();
 
-    serverPort = Utils.pickUnusedPort();
-    serverAddress = "localhost:" + serverPort;
     server =
-        NettyServerBuilder.forPort(serverPort)
+        NettyServerBuilder.forPort(0)
             .addService(new SimpleServiceImpl())
             .sslContext(buildSslContext())
-            .build();
+            .build()
+            .start();
+    int serverPort = server.getPort();
+    serverAddress = "localhost:" + serverPort;
     logger.info("Simple Service listening on localhost:" + serverPort);
-    server.start();
   }
 
   @After
@@ -193,28 +185,23 @@ public final class IntegrationTest {
 
   @Test
   public void clientCommunicateUsingS2ACredentials_succeeds() throws Exception {
-    ExecutorService executor = Executors.newSingleThreadExecutor();
     ChannelCredentials credentials =
         S2AChannelCredentials.createBuilder(s2aAddress).setLocalSpiffeId("test-spiffe-id").build();
-    ManagedChannel channel =
-        Grpc.newChannelBuilder(serverAddress, credentials).executor(executor).build();
+    ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
-    assertThat(doUnaryRpc(executor, channel)).isTrue();
+    assertThat(doUnaryRpc(channel)).isTrue();
   }
 
   @Test
   public void clientCommunicateUsingS2ACredentialsNoLocalIdentity_succeeds() throws Exception {
-    ExecutorService executor = Executors.newSingleThreadExecutor();
     ChannelCredentials credentials = S2AChannelCredentials.createBuilder(s2aAddress).build();
-    ManagedChannel channel =
-        Grpc.newChannelBuilder(serverAddress, credentials).executor(executor).build();
+    ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
-    assertThat(doUnaryRpc(executor, channel)).isTrue();
+    assertThat(doUnaryRpc(channel)).isTrue();
   }
 
   @Test
   public void clientCommunicateUsingMtlsToS2ACredentials_succeeds() throws Exception {
-    ExecutorService executor = Executors.newSingleThreadExecutor();
     ChannelCredentials credentials =
         MtlsToS2AChannelCredentials.createBuilder(
                 /* s2aAddress= */ mtlsS2AAddress,
@@ -224,41 +211,24 @@ public final class IntegrationTest {
             .build()
             .setLocalSpiffeId("test-spiffe-id")
             .build();
-    ManagedChannel channel =
-        Grpc.newChannelBuilder(serverAddress, credentials).executor(executor).build();
+    ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
-    assertThat(doUnaryRpc(executor, channel)).isTrue();
+    assertThat(doUnaryRpc(channel)).isTrue();
   }
 
   @Test
   public void clientCommunicateUsingS2ACredentials_s2AdelayStart_succeeds() throws Exception {
-    DoUnaryRpc doUnaryRpc = new DoUnaryRpc();
-    doUnaryRpc.start();
+    ChannelCredentials credentials = S2AChannelCredentials.createBuilder(s2aDelayAddress).build();
+    ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
+
+    FutureTask<Boolean> rpc = new FutureTask<>(() -> doUnaryRpc(channel));
+    new Thread(rpc).start();
     Thread.sleep(2000);
     s2aDelayServer.start();
-    doUnaryRpc.join();
+    assertThat(rpc.get()).isTrue();
   }
 
-  private class DoUnaryRpc extends Thread {
-    @Override
-    public void run() {
-      ExecutorService executor = Executors.newSingleThreadExecutor();
-      ChannelCredentials credentials = S2AChannelCredentials.createBuilder(s2aDelayAddress).build();
-      ManagedChannel channel =
-          Grpc.newChannelBuilder(serverAddress, credentials).executor(executor).build();
-      boolean result = false;
-      try {
-        result = doUnaryRpc(executor, channel);
-      } catch (InterruptedException e) {
-        logger.log(Level.SEVERE, "Failed to do unary rpc", e);
-        result = false;
-      }
-      assertThat(result).isTrue();
-    }
-  }
-
-  public static boolean doUnaryRpc(ExecutorService executor, ManagedChannel channel)
-      throws InterruptedException {
+  public static boolean doUnaryRpc(ManagedChannel channel) throws InterruptedException {
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub stub =
           SimpleServiceGrpc.newBlockingStub(channel);
@@ -277,8 +247,6 @@ public final class IntegrationTest {
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
-      executor.shutdown();
-      executor.awaitTermination(1, SECONDS);
     }
   }
 
