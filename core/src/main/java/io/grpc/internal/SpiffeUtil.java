@@ -40,6 +40,8 @@ public final class SpiffeUtil {
    */
   public static SpiffeId parse(String uri) {
     doInitialUriValidation(uri);
+    checkArgument(uri.toLowerCase(Locale.US).startsWith(PREFIX), "Spiffe Id must start with "
+        + PREFIX);
     String domainAndPath = uri.substring(PREFIX.length());
     String trustDomain;
     String path;
@@ -63,8 +65,6 @@ public final class SpiffeUtil {
   private static void doInitialUriValidation(String uri) {
     checkArgument(checkNotNull(uri, "uri").length() > 0, "Spiffe Id can't be empty");
     checkArgument(uri.length() <= 2048, "Spiffe Id maximum length is 2048 characters");
-    checkArgument(uri.toLowerCase(Locale.US).startsWith(PREFIX), "Spiffe Id must start with "
-        + PREFIX);
     checkArgument(!uri.contains("#"), "Spiffe Id must not contain query fragments");
     checkArgument(!uri.contains("?"), "Spiffe Id must not contain query parameters");
   }
