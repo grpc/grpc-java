@@ -83,9 +83,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -499,8 +503,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       outboundFlow = new OutboundFlowController(this, frameWriter);
     }
     final CountDownLatch latch = new CountDownLatch(1);
+    final CountDownLatch latchForExtraThread = new CountDownLatch(1);
+    // The transport needs up to two threads to function once started,
+    // but only needs one during handshaking. Start another thread during handshaking
+    // to make sure there's still a free thread available. If the number of threads is exhausted,
+    // it is better to kill the transport than for all the transports to hang unable to send.
+    CyclicBarrier barrier = new CyclicBarrier(2);
     // Connecting in the serializingExecutor, so that some stream operations like synStream
     // will be executed after connected.
+
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
@@ -510,8 +521,14 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // initial preface.
         try {
           latch.await();
+          barrier.await(1000, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
+        } catch (TimeoutException | BrokenBarrierException e) {
+          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
+              .withDescription("Timed out waiting for second handshake thread. "
+                + "The transport executor pool may have run out of threads"));
+          return;
         }
         // Use closed source on failure so that the reader immediately shuts down.
         BufferedSource source = Okio.buffer(new Source() {
@@ -575,12 +592,28 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           return;
         } finally {
           clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
+          latchForExtraThread.countDown();
         }
         synchronized (lock) {
           socket = Preconditions.checkNotNull(sock, "socket");
           if (sslSession != null) {
             securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
           }
+        }
+      }
+    });
+
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          barrier.await(1000, TimeUnit.MILLISECONDS);
+          latchForExtraThread.await();
+        } catch (BrokenBarrierException | TimeoutException e) {
+          // Something bad happened, maybe too few threads available!
+          // This will be handled in the handshake thread.
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
         }
       }
     });

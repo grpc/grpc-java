@@ -33,10 +33,12 @@ import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.MeterProvider;
+import io.opentelemetry.api.trace.Tracer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -61,6 +63,10 @@ public final class GrpcOpenTelemetry {
     }
   };
 
+  @VisibleForTesting
+  static boolean ENABLE_OTEL_TRACING = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING",
+      false);
+
   private final OpenTelemetry openTelemetrySdk;
   private final MeterProvider meterProvider;
   private final Meter meter;
@@ -68,6 +74,7 @@ public final class GrpcOpenTelemetry {
   private final boolean disableDefault;
   private final OpenTelemetryMetricsResource resource;
   private final OpenTelemetryMetricsModule openTelemetryMetricsModule;
+  private final OpenTelemetryTracingModule openTelemetryTracingModule;
   private final List<String> optionalLabels;
   private final MetricSink sink;
 
@@ -88,6 +95,7 @@ public final class GrpcOpenTelemetry {
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
         STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
+    this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
 
@@ -125,6 +133,11 @@ public final class GrpcOpenTelemetry {
     return sink;
   }
 
+  @VisibleForTesting
+  Tracer getTracer() {
+    return this.openTelemetryTracingModule.getTracer();
+  }
+
   /**
    * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
@@ -152,6 +165,9 @@ public final class GrpcOpenTelemetry {
     InternalManagedChannelBuilder.addMetricSink(builder, sink);
     InternalManagedChannelBuilder.interceptWithTarget(
         builder, openTelemetryMetricsModule::getClientInterceptor);
+    if (ENABLE_OTEL_TRACING) {
+      builder.intercept(openTelemetryTracingModule.getClientInterceptor());
+    }
   }
 
   /**
@@ -161,6 +177,11 @@ public final class GrpcOpenTelemetry {
    */
   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
     serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
+    if (ENABLE_OTEL_TRACING) {
+      serverBuilder.addStreamTracerFactory(
+          openTelemetryTracingModule.getServerTracerFactory());
+      serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
+    }
   }
 
   @VisibleForTesting
@@ -339,6 +360,11 @@ public final class GrpcOpenTelemetry {
     public Builder disableAllMetrics() {
       this.enableMetrics.clear();
       this.disableAll = true;
+      return this;
+    }
+
+    Builder enableTracing(boolean enable) {
+      ENABLE_OTEL_TRACING = enable;
       return this;
     }
 

@@ -23,11 +23,6 @@ readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 # cd to the root dir of grpc-java
 cd $(dirname $0)/../..
 
-# TODO(zpencer): always make sure we are using Oracle jdk8
-if [[ -f /usr/libexec/java_home ]]; then
-    JAVA_HOME=$(/usr/libexec/java_home -v"1.8.0")
-fi
-
 # ARCH is x86_64 unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
 
