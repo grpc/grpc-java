@@ -153,8 +153,8 @@ public class OpenTelemetryContextPropagationTest extends AbstractInteropTest {
       // Disabling census-tracing is necessary to avoid trace ID mismatches.
       // This is because census-tracing overrides the grpc-trace-bin header with
       // OpenTelemetry's GrpcTraceBinPropagator.
-       InternalNettyChannelBuilder.setTracingEnabled(builder, false);
-       grpcOpenTelemetry.configureChannelBuilder(builder);
+      InternalNettyChannelBuilder.setTracingEnabled(builder, false);
+      grpcOpenTelemetry.configureChannelBuilder(builder);
     }
     return builder;
   }
