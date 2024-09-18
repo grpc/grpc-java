@@ -170,6 +170,7 @@ public final class S2AHandshakerServiceChannel {
         isDelegateTerminated =
             delegate.awaitTermination(DELEGATE_TERMINATION_TIMEOUT.getSeconds(), SECONDS);
       } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
         isDelegateTerminated = false;
       }
       long quietPeriodSeconds = isDelegateTerminated ? 0 : 1;
