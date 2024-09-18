@@ -54,8 +54,7 @@ final class OpenTelemetryContextStorage extends Context.Storage {
     Scope scope = OTEL_SCOPE.get(toRestore);
     if (scope == null) {
       logger.log(
-          Level.SEVERE, "Detaching context which was not attached.",
-          new Throwable().fillInStackTrace());
+          Level.SEVERE, "Detaching context which was not attached.");
     } else {
       scope.close();
     }

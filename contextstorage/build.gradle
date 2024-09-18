@@ -1,6 +1,7 @@
 plugins {
     id "java-library"
-    id "maven-publish"
+    // until we are confident we like the name
+    //id "maven-publish"
 
     id "ru.vyarus.animalsniffer"
 }
