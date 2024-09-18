@@ -20,12 +20,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Splitter;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 /**
  * Helper utility to work with SPIFFE URIs.
- * <p>
  * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">Standard</a>
  */
 public final class SpiffeUtil {
@@ -98,7 +96,6 @@ public final class SpiffeUtil {
 
   /**
    * Represents a SPIFFE ID as defined in the SPIFFE standard.
-   * <p>
    * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">Standard</a>
    */
   public static class SpiffeId {
