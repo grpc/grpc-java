@@ -91,8 +91,7 @@ public final class S2AHandshakerServiceChannel {
 
     /**
      * Creates a {@code HandshakerServiceChannel} instance to the service running at {@code
-     * targetAddress}. This channel uses a dedicated thread pool for its {@code EventLoopGroup}
-     * instance to avoid blocking.
+     * targetAddress}.
      */
     @Override
     public Channel create() {
