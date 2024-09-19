@@ -20,7 +20,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Optional;
-import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,22 +42,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.security.auth.x500.X500Principal;
 
 /**
+ * Will be merged with SpiffeUtil.
  * Provides utilities to load, extract, and parse SPIFFE ID according the SPIFFE ID standard.
- * <p>
- * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">standard</a>
+ *
  */
-public final class SpiffeUtil {
+public final class SpiffeUtil2 {
 
-  private static final Logger log = Logger.getLogger(SpiffeUtil.class.getName());
+  private static final Logger log = Logger.getLogger(SpiffeUtil2.class.getName());
 
   private static final Integer URI_SAN_TYPE = 6;
   private static final String USE_PARAMETER_VALUE = "x509-svid";
 
-  private SpiffeUtil() {}
-
+  /**
+   * Parses a leaf certificate from the chain to extract unique SPIFFE ID. In case of success,
+   * returns parsed TrustDomain and Path.
+   *
+   * @param certChain certificate chain to extract SPIFFE ID from
+   */
   public static Optional<SpiffeId> extractSpiffeId(X509Certificate[] certChain)
       throws CertificateParsingException {
     checkArgument(checkNotNull(certChain, "certChain").length > 0, "CertChain can't be empty");
@@ -77,7 +81,7 @@ public final class SpiffeUtil {
       for (List<?> altName : subjectAltNames) {
         if (URI_SAN_TYPE.equals(altName.get(0))) {
           String uri = (String) altName.get(1);
-          // Real validation will be plugged in via another PR.
+          // Real validation will be plugged in via another PR (SpiffeUtil).
           String[] parts = uri.substring(9).split("/", 2);
           String trustDomain = parts[0];
           String path = parts[1];
@@ -88,7 +92,15 @@ public final class SpiffeUtil {
     return Optional.absent();
   }
 
-  public static TrustBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
+  /**
+   * Loads a SPIFFE trust bundle from a file, parsing it from the JSON format.
+   * In case of success, returns trust domains, their associated sequence numbers, and X.509
+   * certificates.
+   *
+   * @param trustBundleFile the file path to the JSON file containing the trust bundle
+   * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md">JSON format</a>
+   */
+   public static SpiffeBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
     Path path = Paths.get(checkNotNull(trustBundleFile, "trustBundleFile"));
     String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     Object jsonObject = JsonParser.parse(json);
@@ -153,7 +165,7 @@ public final class SpiffeUtil {
       }
       trustBundleMap.put(trustDomainName, roots);
     }
-    return new TrustBundle(sequenceNumbers, trustBundleMap);
+    return new SpiffeBundle(sequenceNumbers, trustBundleMap);
   }
 
   // Will be merged with other PR
@@ -176,23 +188,32 @@ public final class SpiffeUtil {
     }
   }
 
-  public static class TrustBundle {
+  /**
+   * Represents a Trust Bundle inspired by SPIFFE Bundle Format standard. Only trust domain's
+   * sequence numbers and x509 certificates are supported.
+   * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md#4-spiffe-bundle-format">Standard</a>
+   */
+  public static final class SpiffeBundle {
 
-    private final Map<String, Long> sequenceNumbers;
+    private final ImmutableMap<String, Long> sequenceNumbers;
 
-    private final Map<String, List<X509Certificate>> trustBundleMap;
+    private final ImmutableMap<String, ImmutableList<X509Certificate>> bundleMap;
 
-    public TrustBundle(Map<String, Long> sequenceNumbers, Map<String, List<X509Certificate>> trustDomainMap) {
-      this.sequenceNumbers = sequenceNumbers;
-      this.trustBundleMap = trustDomainMap;
+    public SpiffeBundle(Map<String, Long> sequenceNumbers, Map<String, List<X509Certificate>> trustDomainMap) {
+      this.sequenceNumbers = ImmutableMap.copyOf(sequenceNumbers);
+      ImmutableMap.Builder<String, ImmutableList<X509Certificate>> builder = ImmutableMap.builder();
+      for (Map.Entry<String, List<X509Certificate>> entry : trustDomainMap.entrySet()) {
+        builder.put(entry.getKey(), ImmutableList.copyOf(entry.getValue()));
+      }
+      this.bundleMap = builder.build();
     }
 
-    public Map<String, Long> getSequenceNumbers() {
+    public ImmutableMap<String, Long> getSequenceNumbers() {
       return sequenceNumbers;
     }
 
-    public Map<String, List<X509Certificate>> getTrustBundleMap() {
-      return trustBundleMap;
+    public ImmutableMap<String, ImmutableList<X509Certificate>> getBundleMap() {
+      return bundleMap;
     }
   }
 }
