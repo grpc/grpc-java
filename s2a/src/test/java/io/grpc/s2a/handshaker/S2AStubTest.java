@@ -189,26 +189,13 @@ public class S2AStubTest {
   @Test
   public void send_receiveDelayedResponse() throws Exception {
     writer.sendGetTlsConfigResp();
-    SessionResp resp = stub.send(SessionReq.getDefaultInstance());
-    SessionResp expected =
-        SessionResp.newBuilder()
-            .setGetTlsConfigurationResp(
-                GetTlsConfigurationResp.newBuilder()
-                    .setClientTlsConfiguration(
-                        GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                            .addCertificateChain(FakeWriter.LEAF_CERT)
-                            .addCertificateChain(FakeWriter.INTERMEDIATE_CERT_2)
-                            .addCertificateChain(FakeWriter.INTERMEDIATE_CERT_1)
-                            .setMinTlsVersion(TLSVersion.TLS_VERSION_1_3)
-                            .setMaxTlsVersion(TLSVersion.TLS_VERSION_1_3)
-                            .addCiphersuites(
-                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
-                            .addCiphersuites(
-                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
-                            .addCiphersuites(
-                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)))
-            .build();
-    assertThat(resp).ignoringRepeatedFieldOrder().isEqualTo(expected);
+    IOException expectedException =
+        assertThrows(IOException.class, () -> stub.send(SessionReq.getDefaultInstance()));
+    assertThat(expectedException)
+        .hasMessageThat()
+        .contains("Received an unexpected response from a host at the S2A's address.");
+
+    assertThat(stub.getResponses()).isEmpty();
   }
 
   @Test
