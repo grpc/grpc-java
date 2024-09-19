@@ -246,8 +246,8 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
    */
   public void cancel(String message, Throwable cause) {
-    call.cancel(message, cause);
     writeClosed = true;
+    call.cancel(message, cause);
   }
 
   /**
