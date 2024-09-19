@@ -16,6 +16,7 @@
 
 package io.grpc.s2a.handshaker;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 
 /** Converts proto messages to Netty strings. */
@@ -28,6 +29,7 @@ final class ProtoUtil {
    * @return a {@link String} representation of the TLS version.
    * @throws AssertionError if the {@code tlsVersion} is not one of the supported TLS versions.
    */
+  @VisibleForTesting
   static String convertTlsProtocolVersion(TLSVersion tlsVersion) {
     switch (tlsVersion) {
       case TLS_VERSION_1_3:
