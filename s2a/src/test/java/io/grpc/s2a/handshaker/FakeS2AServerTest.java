@@ -29,6 +29,7 @@ import io.grpc.ServerBuilder;
 import io.grpc.benchmarks.Utils;
 import io.grpc.s2a.handshaker.ValidatePeerCertificateChainReq.VerificationMode;
 import io.grpc.stub.StreamObserver;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,9 +46,7 @@ public final class FakeS2AServerTest {
   private static final Logger logger = Logger.getLogger(FakeS2AServerTest.class.getName());
 
   private static final ImmutableList<ByteString> FAKE_CERT_DER_CHAIN =
-      ImmutableList.of(
-          ByteString.copyFrom(
-              new byte[] {'f', 'a', 'k', 'e', '-', 'd', 'e', 'r', '-', 'c', 'h', 'a', 'i', 'n'}));
+      ImmutableList.of(ByteString.copyFrom("fake-der-chain".getBytes(StandardCharsets.US_ASCII)));
   private int port;
   private String serverAddress;
   private SessionResp response = null;
