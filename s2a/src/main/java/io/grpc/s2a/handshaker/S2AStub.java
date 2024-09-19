@@ -111,7 +111,7 @@ class S2AStub implements AutoCloseable {
       writer.onNext(req);
     } catch (RuntimeException e) {
       writer.onError(e);
-      responses.offer(Result.createWithThrowable(e));
+      responses.add(Result.createWithThrowable(e));
     }
     try {
       return responses.take().getResultOrThrow();
@@ -159,7 +159,7 @@ class S2AStub implements AutoCloseable {
     @Override
     public void onNext(SessionResp resp) {
       verify(!doneReading);
-      responses.offer(Result.createWithResponse(resp));
+      responses.add(Result.createWithResponse(resp));
     }
 
     /**
@@ -169,7 +169,7 @@ class S2AStub implements AutoCloseable {
      */
     @Override
     public void onError(Throwable t) {
-      responses.offer(Result.createWithThrowable(t));
+      responses.add(Result.createWithThrowable(t));
     }
 
     /**
@@ -180,7 +180,7 @@ class S2AStub implements AutoCloseable {
     public void onCompleted() {
       logger.log(Level.INFO, "Reading from the S2A is complete.");
       doneReading = true;
-      responses.offer(
+      responses.add(
           Result.createWithThrowable(
               new ConnectionClosedException("Reading from the S2A is complete.")));
     }
