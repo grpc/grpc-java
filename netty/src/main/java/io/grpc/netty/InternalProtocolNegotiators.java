@@ -41,7 +41,7 @@ public final class InternalProtocolNegotiators {
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
           ObjectPool<? extends Executor> executorPool) {
-    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext);
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext, executorPool);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override
