@@ -121,7 +121,9 @@ final class S2ATrustManager implements X509TrustManager {
     try {
       resp = stub.send(reqBuilder.build());
     } catch (IOException | InterruptedException e) {
-      Thread.currentThread().interrupt();
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
       throw new CertificateException("Failed to send request to S2A.", e);
     }
     if (resp.hasStatus() && resp.getStatus().getCode() != 0) {
