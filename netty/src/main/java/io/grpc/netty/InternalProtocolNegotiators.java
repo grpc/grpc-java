@@ -17,12 +17,14 @@
 package io.grpc.netty;
 
 import io.grpc.ChannelLogger;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.GrpcNegotiationHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.util.concurrent.Executor;
 
 /**
  * Internal accessor for {@link ProtocolNegotiators}.
@@ -31,6 +33,36 @@ public final class InternalProtocolNegotiators {
 
   private InternalProtocolNegotiators() {}
 
+  /**
+   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
+   * may happen immediately, even before the TLS Handshake is complete.
+   * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
+   */
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
+          ObjectPool<? extends Executor> executorPool) {
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext);
+    final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
+
+      @Override
+      public AsciiString scheme() {
+        return negotiator.scheme();
+      }
+
+      @Override
+      public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        return negotiator.newHandler(grpcHandler);
+      }
+
+      @Override
+      public void close() {
+        negotiator.close();
+      }
+    }
+    
+    return new TlsNegotiator();
+  }
+  
   /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
