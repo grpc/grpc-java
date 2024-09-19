@@ -112,7 +112,7 @@ public final class S2AHandshakerServiceChannelTest {
     assertThat(resource).isNotEqualTo(resourceTwo);
   }
 
-  /** Same as getChannelResource_twoEqualChannels, but use mTLS. */
+  /** Same as getChannelResource_twoUnEqualChannels, but use mTLS. */
   @Test
   public void getChannelResource_mtlsTwoUnEqualChannels() throws Exception {
     Resource<Channel> resource =
