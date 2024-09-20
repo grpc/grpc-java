@@ -13,8 +13,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <grpc.version>1.67.1-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protobuf.version>3.25.3</protobuf.version>
-    <protoc.version>3.25.3</protoc.version>
+    <protobuf.version>3.25.5</protobuf.version>
+    <protoc.version>3.25.5</protoc.version>
     <!-- required for JDK 8 -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
