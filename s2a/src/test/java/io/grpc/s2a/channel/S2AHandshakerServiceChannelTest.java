@@ -24,6 +24,7 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -42,7 +43,6 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.File;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -74,7 +74,7 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     assertThat(resource.toString()).isEqualTo("grpc-s2a-channel");
   }
 
@@ -96,11 +96,11 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     assertThat(resource).isEqualTo(resourceTwo);
   }
 
@@ -125,10 +125,10 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
-            "localhost:" + Utils.pickUnusedPort(), /* s2aChannelCredentials= */ Optional.empty());
+            "localhost:" + Utils.pickUnusedPort(), InsecureChannelCredentials.create());
     assertThat(resourceTwo).isNotEqualTo(resource);
   }
 
@@ -153,7 +153,7 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Channel channel = resource.create();
     resource.close(channel);
     StatusRuntimeException expected =
@@ -191,7 +191,7 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Channel channel = resource.create();
     assertThat(channel).isInstanceOf(HandshakerServiceChannel.class);
     assertThat(
@@ -256,7 +256,7 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Channel channelOne = resource.create();
     resource.close(channelOne);
 
@@ -308,15 +308,14 @@ public final class S2AHandshakerServiceChannelTest {
         ServerBuilder.forPort(Utils.pickUnusedPort()).addService(service).build());
   }
 
-  private static Optional<ChannelCredentials> getTlsChannelCredentials() throws Exception {
+  private static ChannelCredentials getTlsChannelCredentials() throws Exception {
     File clientCert = new File("src/test/resources/client_cert.pem");
     File clientKey = new File("src/test/resources/client_key.pem");
     File rootCert = new File("src/test/resources/root_cert.pem");
-    return Optional.of(
-        TlsChannelCredentials.newBuilder()
+    return TlsChannelCredentials.newBuilder()
             .keyManager(clientCert, clientKey)
             .trustManager(rootCert)
-            .build());
+            .build();
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
