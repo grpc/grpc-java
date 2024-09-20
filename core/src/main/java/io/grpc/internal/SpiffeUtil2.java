@@ -101,21 +101,7 @@ public final class SpiffeUtil2 {
   * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md">JSON format</a>
   */
   public static SpiffeBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
-    Path path = Paths.get(checkNotNull(trustBundleFile, "trustBundleFile"));
-    String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
-    Object jsonObject = JsonParser.parseNoDuplicates(json);
-    if (!(jsonObject instanceof Map)) {
-      throw new IllegalArgumentException(
-          "SPIFFE Trust Bundle should be a JSON object. Found: "
-              + (jsonObject == null ? null : jsonObject.getClass()));
-    }
-    @SuppressWarnings("unchecked")
-    Map<String, ?> root = (Map<String, ?>)jsonObject;
-    Map<String, ?> trustDomainsNode = JsonUtil.getObject(root, "trust_domains");
-    checkArgument(checkNotNull(trustDomainsNode,
-        "Mandatory trust_domains element is missing").size() > 0,
-        "Mandatory trust_domains element is missing");
-
+    Map<String, ?> trustDomainsNode = readTrustDomainsFromFile(trustBundleFile);
     Map<String, List<X509Certificate>> trustBundleMap = new HashMap<>();
     Map<String, Long> sequenceNumbers = new HashMap<>();
     for (String trustDomainName : trustDomainsNode.keySet()) {
@@ -131,41 +117,64 @@ public final class SpiffeUtil2 {
         trustBundleMap.put(trustDomainName, Collections.emptyList());
         continue;
       }
-      List<X509Certificate> roots = new ArrayList<>();
-      for (Map<String, ?> keyNode : keysNode) {
-        String kid = JsonUtil.getString(keyNode, "kid");
-        if (kid != null && !kid.equals("")) {
-          log.log(Level.SEVERE, String.format("'kid' parameter must not be set but value '%s' "
-              + "found. Skipping certificate loading for trust domain '%s'.", kid,
-              trustDomainName));
-          break;
-        }
-        String use = JsonUtil.getString(keyNode, "use");
-        if (use == null || !use.equals(USE_PARAMETER_VALUE)) {
-          log.log(Level.SEVERE, String.format("'use' parameter must be '%s' but '%s' found. "
-              + "Skipping certificate loading for trust domain '%s'.", USE_PARAMETER_VALUE, use,
-              trustDomainName));
-          break;
-        }
-        String rawCert = JsonUtil.getString(keyNode, "x5c");
-        if (rawCert == null) {
-          break;
-        }
-        InputStream stream = new ByteArrayInputStream(rawCert.getBytes(StandardCharsets.UTF_8));
-        try {
-          Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")
-              .generateCertificates(stream);
-          if (certs.size() > 0) {
-            roots.add(certs.toArray(new X509Certificate[0])[0]);
-          }
-        } catch (CertificateException e) {
-          log.log(Level.SEVERE, String.format("Certificate for domain %s can't be parsed.",
-              trustDomainName), e);
-        }
-      }
-      trustBundleMap.put(trustDomainName, roots);
+      trustBundleMap.put(trustDomainName, extractCerts(keysNode, trustDomainName));
     }
     return new SpiffeBundle(sequenceNumbers, trustBundleMap);
+  }
+
+  private static Map<String, ?> readTrustDomainsFromFile(String filePath) throws IOException {
+    Path path = Paths.get(checkNotNull(filePath, "trustBundleFile"));
+    String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+    Object jsonObject = JsonParser.parseNoDuplicates(json);
+    if (!(jsonObject instanceof Map)) {
+      throw new IllegalArgumentException(
+          "SPIFFE Trust Bundle should be a JSON object. Found: "
+              + (jsonObject == null ? null : jsonObject.getClass()));
+    }
+    @SuppressWarnings("unchecked")
+    Map<String, ?> root = (Map<String, ?>)jsonObject;
+    Map<String, ?> trustDomainsNode = JsonUtil.getObject(root, "trust_domains");
+    checkArgument(checkNotNull(trustDomainsNode,
+            "Mandatory trust_domains element is missing").size() > 0,
+        "Mandatory trust_domains element is missing");
+    return trustDomainsNode;
+  }
+
+  private static List<X509Certificate> extractCerts(List<Map<String, ?>> keysNode,
+      String trustDomainName) {
+    List<X509Certificate> result = new ArrayList<>();
+    for (Map<String, ?> keyNode : keysNode) {
+      String kid = JsonUtil.getString(keyNode, "kid");
+      if (kid != null && !kid.equals("")) {
+        log.log(Level.SEVERE, String.format("'kid' parameter must not be set but value '%s' "
+                + "found. Skipping certificate loading for trust domain '%s'.", kid,
+            trustDomainName));
+        break;
+      }
+      String use = JsonUtil.getString(keyNode, "use");
+      if (use == null || !use.equals(USE_PARAMETER_VALUE)) {
+        log.log(Level.SEVERE, String.format("'use' parameter must be '%s' but '%s' found. "
+                + "Skipping certificate loading for trust domain '%s'.", USE_PARAMETER_VALUE, use,
+            trustDomainName));
+        break;
+      }
+      String rawCert = JsonUtil.getString(keyNode, "x5c");
+      if (rawCert == null) {
+        break;
+      }
+      InputStream stream = new ByteArrayInputStream(rawCert.getBytes(StandardCharsets.UTF_8));
+      try {
+        Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")
+            .generateCertificates(stream);
+        if (certs.size() > 0) {
+          result.add(certs.toArray(new X509Certificate[0])[0]);
+        }
+      } catch (CertificateException e) {
+        log.log(Level.SEVERE, String.format("Certificate for domain %s can't be parsed.",
+            trustDomainName), e);
+      }
+    }
+    return result;
   }
 
   // Will be merged with other PR

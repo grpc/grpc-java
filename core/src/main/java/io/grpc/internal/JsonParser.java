@@ -56,6 +56,11 @@ public final class JsonParser {
     }
   }
 
+  /**
+   * Parses a json string, returning either a {@code Map<String, ?>}, {@code List<?>},
+   * {@code String}, {@code Double}, {@code Boolean}, or {@code null}. Fails if duplicate names
+   * found.
+   */
   public static Object parseNoDuplicates(String raw) throws IOException {
     JsonReader jr = new JsonReader(new StringReader(raw));
     try {
