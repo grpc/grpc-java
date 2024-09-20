@@ -27,6 +27,8 @@ import io.grpc.s2a.channel.S2AGrpcChannelPool;
 import io.grpc.s2a.channel.S2AHandshakerServiceChannel;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Optional;
 import org.junit.Before;
 import org.junit.Rule;
@@ -82,9 +84,12 @@ public class S2AStubTest {
                 GetTlsConfigurationResp.newBuilder()
                     .setClientTlsConfiguration(
                         GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                            .addCertificateChain(FakeWriter.LEAF_CERT)
-                            .addCertificateChain(FakeWriter.INTERMEDIATE_CERT_2)
-                            .addCertificateChain(FakeWriter.INTERMEDIATE_CERT_1)
+                            .addCertificateChain(new String(Files.readAllBytes(
+                              FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
+                            .addCertificateChain(new String(Files.readAllBytes(
+                              FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
+                            .addCertificateChain(new String(Files.readAllBytes(
+                              FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
                             .setMinTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .setMaxTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .addCiphersuites(
