@@ -81,6 +81,9 @@ public final class JsonParser {
     Map<String, Object> obj = new LinkedHashMap<>();
     while (jr.hasNext()) {
       String name = jr.nextName();
+      if (obj.containsKey(name)) {
+        throw new IllegalArgumentException("Duplicate key found: " + name);
+      }
       Object value = parseRecursive(jr);
       obj.put(name, value);
     }

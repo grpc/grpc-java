@@ -47,6 +47,7 @@ public class SpiffeUtil2Test {
   private static final String SPIFFE_TRUST_BUNDLE_MALFORMED = "spiffebundle_malformed.json";
   private static final String SPIFFE_TRUST_BUNDLE_WRONG_ELEMENTS =
       "spiffebundle_wrong_elements.json";
+  private static final String SPIFFE_TRUST_BUNDLE_DUPLICATES = "spiffebundle_duplicates.json";
   private static final String SPIFFE_TRUST_BUNDLE_WITH_WRONG_ROOT =
       "spiffebundle_wrong_root.json";
 
@@ -117,7 +118,7 @@ public class SpiffeUtil2Test {
   }
 
   @Test
-  public void loadTrustBundleFromFileFailureTest() throws IOException, CertificateParsingException {
+  public void loadTrustBundleFromFileFailureTest() throws IOException {
     NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil2.
         loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
             + SPIFFE_TRUST_BUNDLE_WITH_WRONG_ROOT).getPath()));
@@ -126,6 +127,10 @@ public class SpiffeUtil2Test {
         loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
             + SPIFFE_TRUST_BUNDLE_MALFORMED).getPath()));
     assertTrue(iae.getMessage().contains("SPIFFE Trust Bundle should be a JSON object."));
+    iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil2.
+        loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+            + SPIFFE_TRUST_BUNDLE_DUPLICATES).getPath()));
+    assertTrue(iae.getMessage().contains("Duplicate key found: google.com"));
     SpiffeBundle tb = SpiffeUtil2.loadTrustBundleFromFile(getClass().getClassLoader()
         .getResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_WRONG_ELEMENTS).getPath());
     assertEquals(4, tb.getBundleMap().size());
@@ -135,7 +140,7 @@ public class SpiffeUtil2Test {
   }
 
   @Test
-  public void loadTrustBundleFromFileParameterValidityTest() throws IOException, CertificateParsingException {
+  public void loadTrustBundleFromFileParameterValidityTest() {
     NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil2
         .loadTrustBundleFromFile(null));
     assertEquals("trustBundleFile", npe.getMessage());
