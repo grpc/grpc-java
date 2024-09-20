@@ -116,7 +116,7 @@ public class S2AProtocolNegotiatorFactoryTest {
         S2AGrpcChannelPool.create(
             SharedResourcePool.forResource(
                 S2AHandshakerServiceChannel.getChannelResource(
-                    "localhost:8080", /* s2aChannelCredentials= */ Optional.empty())));
+                    "localhost:8080", InsecureChannelCredentials.create())));
 
     NullPointerTester tester =
         new NullPointerTester()

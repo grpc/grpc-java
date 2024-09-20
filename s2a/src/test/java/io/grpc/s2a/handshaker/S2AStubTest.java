@@ -21,6 +21,7 @@ import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.google.common.truth.Expect;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.s2a.channel.S2AChannelPool;
 import io.grpc.s2a.channel.S2AGrpcChannelPool;
@@ -29,7 +30,6 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Optional;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -57,7 +57,7 @@ public class S2AStubTest {
         S2AGrpcChannelPool.create(
             SharedResourcePool.forResource(
                 S2AHandshakerServiceChannel.getChannelResource(
-                    S2A_ADDRESS, /* s2aChannelCredentials= */ Optional.empty())));
+                    S2A_ADDRESS, InsecureChannelCredentials.create())));
     S2AServiceGrpc.S2AServiceStub serviceStub = S2AServiceGrpc.newStub(channelPool.getChannel());
     S2AStub newStub = S2AStub.newInstance(serviceStub);
 

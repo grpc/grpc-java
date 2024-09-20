@@ -29,7 +29,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
@@ -67,7 +66,7 @@ public final class S2AHandshakerServiceChannel {
    *     running at {@code s2aAddress}.
    */
   public static Resource<Channel> getChannelResource(
-      String s2aAddress, Optional<ChannelCredentials> s2aChannelCredentials) {
+      String s2aAddress, ChannelCredentials s2aChannelCredentials) {
     checkNotNull(s2aAddress);
     return new ChannelResource(s2aAddress, s2aChannelCredentials);
   }
@@ -79,9 +78,9 @@ public final class S2AHandshakerServiceChannel {
    */
   private static class ChannelResource implements Resource<Channel> {
     private final String targetAddress;
-    private final Optional<ChannelCredentials> channelCredentials;
+    private final ChannelCredentials channelCredentials;
 
-    public ChannelResource(String targetAddress, Optional<ChannelCredentials> channelCredentials) {
+    public ChannelResource(String targetAddress, ChannelCredentials channelCredentials) {
       this.targetAddress = targetAddress;
       this.channelCredentials = channelCredentials;
     }
@@ -92,21 +91,10 @@ public final class S2AHandshakerServiceChannel {
      */
     @Override
     public Channel create() {
-      ManagedChannel channel = null;
-      if (channelCredentials.isPresent()) {
-        // Create a secure channel.
-        channel =
-            NettyChannelBuilder.forTarget(targetAddress, channelCredentials.get())
-                .directExecutor()
-                .build();
-      } else {
-        // Create a plaintext channel.
-        channel =
-            NettyChannelBuilder.forTarget(targetAddress)
-                .directExecutor()
-                .usePlaintext()
-                .build();
-      }
+      ManagedChannel channel =
+          NettyChannelBuilder.forTarget(targetAddress, channelCredentials)
+              .directExecutor()
+              .build();
       return HandshakerServiceChannel.create(channel);
     }
 

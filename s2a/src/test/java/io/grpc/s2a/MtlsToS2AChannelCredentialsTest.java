@@ -26,11 +26,11 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class MtlsToS2AChannelCredentialsTest {
   @Test
-  public void createBuilder_nullAddress_throwsException() throws Exception {
+  public void newBuilder_nullAddress_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ null,
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
@@ -38,11 +38,11 @@ public final class MtlsToS2AChannelCredentialsTest {
   }
 
   @Test
-  public void createBuilder_nullPrivateKeyPath_throwsException() throws Exception {
+  public void newBuilder_nullPrivateKeyPath_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "s2a_address",
                 /* privateKeyPath= */ null,
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
@@ -50,11 +50,11 @@ public final class MtlsToS2AChannelCredentialsTest {
   }
 
   @Test
-  public void createBuilder_nullCertChainPath_throwsException() throws Exception {
+  public void newBuilder_nullCertChainPath_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "s2a_address",
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ null,
@@ -62,11 +62,11 @@ public final class MtlsToS2AChannelCredentialsTest {
   }
 
   @Test
-  public void createBuilder_nullTrustBundlePath_throwsException() throws Exception {
+  public void newBuilder_nullTrustBundlePath_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "s2a_address",
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
@@ -74,11 +74,11 @@ public final class MtlsToS2AChannelCredentialsTest {
   }
 
   @Test
-  public void createBuilder_emptyAddress_throwsException() throws Exception {
+  public void newBuilder_emptyAddress_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "",
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
@@ -86,11 +86,11 @@ public final class MtlsToS2AChannelCredentialsTest {
   }
 
   @Test
-  public void createBuilder_emptyPrivateKeyPath_throwsException() throws Exception {
+  public void newBuilder_emptyPrivateKeyPath_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "s2a_address",
                 /* privateKeyPath= */ "",
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
@@ -98,11 +98,11 @@ public final class MtlsToS2AChannelCredentialsTest {
   }
 
   @Test
-  public void createBuilder_emptyCertChainPath_throwsException() throws Exception {
+  public void newBuilder_emptyCertChainPath_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "s2a_address",
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ "",
@@ -110,11 +110,11 @@ public final class MtlsToS2AChannelCredentialsTest {
   }
 
   @Test
-  public void createBuilder_emptyTrustBundlePath_throwsException() throws Exception {
+  public void newBuilder_emptyTrustBundlePath_throwsException() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "s2a_address",
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
@@ -124,7 +124,7 @@ public final class MtlsToS2AChannelCredentialsTest {
   @Test
   public void build_s2AChannelCredentials_success() throws Exception {
     assertThat(
-            MtlsToS2AChannelCredentials.createBuilder(
+            MtlsToS2AChannelCredentials.newBuilder(
                 /* s2aAddress= */ "s2a_address",
                 /* privateKeyPath= */ "src/test/resources/client_key.pem",
                 /* certChainPath= */ "src/test/resources/client_cert.pem",
