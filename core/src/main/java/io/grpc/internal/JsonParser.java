@@ -46,10 +46,23 @@ public final class JsonParser {
    * @param raw String containing JSON
    * @param failOnDuplicates indicates if parsing must fail if duplicate names found.
    */
-  public static Object parse(String raw, Boolean... failOnDuplicates) throws IOException {
+  public static Object parse(String raw) throws IOException {
     JsonReader jr = new JsonReader(new StringReader(raw));
     try {
-      return parseRecursive(jr, failOnDuplicates);
+      return parseRecursive(jr, false);
+    } finally {
+      try {
+        jr.close();
+      } catch (IOException e) {
+        logger.log(Level.WARNING, "Failed to close", e);
+      }
+    }
+  }
+
+  public static Object parseNoDuplicates(String raw) throws IOException {
+    JsonReader jr = new JsonReader(new StringReader(raw));
+    try {
+      return parseRecursive(jr, true);
     } finally {
       try {
         jr.close();

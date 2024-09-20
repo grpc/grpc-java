@@ -103,7 +103,7 @@ public final class SpiffeUtil2 {
   public static SpiffeBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
     Path path = Paths.get(checkNotNull(trustBundleFile, "trustBundleFile"));
     String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
-    Object jsonObject = JsonParser.parse(json, true);
+    Object jsonObject = JsonParser.parseNoDuplicates(json);
     if (!(jsonObject instanceof Map)) {
       throw new IllegalArgumentException(
           "SPIFFE Trust Bundle should be a JSON object. Found: "
