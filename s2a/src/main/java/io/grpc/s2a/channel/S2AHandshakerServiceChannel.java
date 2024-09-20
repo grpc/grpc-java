@@ -29,12 +29,10 @@ import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.util.concurrent.DefaultThreadFactory;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -60,7 +58,6 @@ import javax.annotation.concurrent.ThreadSafe;
 public final class S2AHandshakerServiceChannel {
   private static final ConcurrentMap<String, Resource<Channel>> SHARED_RESOURCE_CHANNELS =
       Maps.newConcurrentMap();
-  private static final Duration DELEGATE_TERMINATION_TIMEOUT = Duration.ofSeconds(2);
   private static final Duration CHANNEL_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
 
   /**
@@ -95,28 +92,23 @@ public final class S2AHandshakerServiceChannel {
     }
 
     /**
-     * Creates a {@code EventLoopHoldingChannel} instance to the service running at {@code
-     * targetAddress}. This channel uses a dedicated thread pool for its {@code EventLoopGroup}
-     * instance to avoid blocking.
+     * Creates a {@code HandshakerServiceChannel} instance to the service running at {@code
+     * targetAddress}.
      */
     @Override
     public Channel create() {
-      EventLoopGroup eventLoopGroup =
-          new NioEventLoopGroup(1, new DefaultThreadFactory("S2A channel pool", true));
       ManagedChannel channel =
           NettyChannelBuilder.forTarget(targetAddress, channelCredentials)
-              .channelType(NioSocketChannel.class)
               .directExecutor()
-              .eventLoopGroup(eventLoopGroup)
               .build();
-      return EventLoopHoldingChannel.create(channel, eventLoopGroup);
+      return HandshakerServiceChannel.create(channel);
     }
 
-    /** Destroys a {@code EventLoopHoldingChannel} instance. */
+    /** Destroys a {@code HandshakerServiceChannel} instance. */
     @Override
     public void close(Channel instanceChannel) {
       checkNotNull(instanceChannel);
-      EventLoopHoldingChannel channel = (EventLoopHoldingChannel) instanceChannel;
+      HandshakerServiceChannel channel = (HandshakerServiceChannel) instanceChannel;
       channel.close();
     }
 
@@ -127,23 +119,21 @@ public final class S2AHandshakerServiceChannel {
   }
 
   /**
-   * Manages a channel using a {@link ManagedChannel} instance that belong to the {@code
-   * EventLoopGroup} thread pool.
+   * Manages a channel using a {@link ManagedChannel} instance.
    */
   @VisibleForTesting
-  static class EventLoopHoldingChannel extends Channel {
+  static class HandshakerServiceChannel extends Channel {
+    private static final Logger logger =
+          Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
     private final ManagedChannel delegate;
-    private final EventLoopGroup eventLoopGroup;
 
-    static EventLoopHoldingChannel create(ManagedChannel delegate, EventLoopGroup eventLoopGroup) {
+    static HandshakerServiceChannel create(ManagedChannel delegate) {
       checkNotNull(delegate);
-      checkNotNull(eventLoopGroup);
-      return new EventLoopHoldingChannel(delegate, eventLoopGroup);
+      return new HandshakerServiceChannel(delegate);
     }
 
-    private EventLoopHoldingChannel(ManagedChannel delegate, EventLoopGroup eventLoopGroup) {
+    private HandshakerServiceChannel(ManagedChannel delegate) {
       this.delegate = delegate;
-      this.eventLoopGroup = eventLoopGroup;
     }
 
     /**
@@ -165,17 +155,12 @@ public final class S2AHandshakerServiceChannel {
     @SuppressWarnings("FutureReturnValueIgnored")
     public void close() {
       delegate.shutdownNow();
-      boolean isDelegateTerminated;
       try {
-        isDelegateTerminated =
-            delegate.awaitTermination(DELEGATE_TERMINATION_TIMEOUT.getSeconds(), SECONDS);
+        delegate.awaitTermination(CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        isDelegateTerminated = false;
+        logger.log(Level.WARNING, "Channel to S2A was not shutdown.");
       }
-      long quietPeriodSeconds = isDelegateTerminated ? 0 : 1;
-      eventLoopGroup.shutdownGracefully(
-          quietPeriodSeconds, CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
     }
   }
 
