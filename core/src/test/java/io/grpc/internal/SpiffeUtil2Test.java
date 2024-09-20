@@ -18,8 +18,6 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -32,7 +30,6 @@ import java.nio.file.NoSuchFileException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
@@ -119,22 +116,22 @@ public class SpiffeUtil2Test {
 
   @Test
   public void loadTrustBundleFromFileFailureTest() throws IOException {
-    NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil2.
-        loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+    NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil2
+        .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
             + SPIFFE_TRUST_BUNDLE_WITH_WRONG_ROOT).getPath()));
     assertEquals("Mandatory trust_domains element is missing", npe.getMessage());
-    IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil2.
-        loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+    IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil2
+        .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
             + SPIFFE_TRUST_BUNDLE_MALFORMED).getPath()));
     assertTrue(iae.getMessage().contains("SPIFFE Trust Bundle should be a JSON object."));
-    iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil2.
-        loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+    iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil2
+        .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
             + SPIFFE_TRUST_BUNDLE_DUPLICATES).getPath()));
     assertTrue(iae.getMessage().contains("Duplicate key found: google.com"));
     SpiffeBundle tb = SpiffeUtil2.loadTrustBundleFromFile(getClass().getClassLoader()
         .getResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_WRONG_ELEMENTS).getPath());
     assertEquals(4, tb.getBundleMap().size());
-    for (List<X509Certificate> certs: tb.getBundleMap().values()){
+    for (List<X509Certificate> certs: tb.getBundleMap().values()) {
       assertEquals(0, certs.size());
     }
   }

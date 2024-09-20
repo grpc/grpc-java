@@ -93,17 +93,17 @@ public final class SpiffeUtil2 {
   }
 
   /**
-   * Loads a SPIFFE trust bundle from a file, parsing it from the JSON format.
-   * In case of success, returns trust domains, their associated sequence numbers, and X.509
-   * certificates.
-   *
-   * @param trustBundleFile the file path to the JSON file containing the trust bundle
-   * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md">JSON format</a>
-   */
-   public static SpiffeBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
+  * Loads a SPIFFE trust bundle from a file, parsing it from the JSON format.
+  * In case of success, returns trust domains, their associated sequence numbers, and X.509
+  * certificates.
+  *
+  * @param trustBundleFile the file path to the JSON file containing the trust bundle
+  * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md">JSON format</a>
+  */
+  public static SpiffeBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
     Path path = Paths.get(checkNotNull(trustBundleFile, "trustBundleFile"));
     String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
-    Object jsonObject = JsonParser.parse(json);
+    Object jsonObject = JsonParser.parse(json, true);
     if (!(jsonObject instanceof Map)) {
       throw new IllegalArgumentException(
           "SPIFFE Trust Bundle should be a JSON object. Found: "
@@ -153,9 +153,9 @@ public final class SpiffeUtil2 {
         }
         InputStream stream = new ByteArrayInputStream(rawCert.getBytes(StandardCharsets.UTF_8));
         try {
-          Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509").
-              generateCertificates(stream);
-          if (certs.size() > 0){
+          Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")
+              .generateCertificates(stream);
+          if (certs.size() > 0) {
             roots.add(certs.toArray(new X509Certificate[0])[0]);
           }
         } catch (CertificateException e) {
@@ -199,7 +199,8 @@ public final class SpiffeUtil2 {
 
     private final ImmutableMap<String, ImmutableList<X509Certificate>> bundleMap;
 
-    public SpiffeBundle(Map<String, Long> sequenceNumbers, Map<String, List<X509Certificate>> trustDomainMap) {
+    public SpiffeBundle(Map<String, Long> sequenceNumbers,
+        Map<String, List<X509Certificate>> trustDomainMap) {
       this.sequenceNumbers = ImmutableMap.copyOf(sequenceNumbers);
       ImmutableMap.Builder<String, ImmutableList<X509Certificate>> builder = ImmutableMap.builder();
       for (Map.Entry<String, List<X509Certificate>> entry : trustDomainMap.entrySet()) {
