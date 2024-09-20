@@ -29,8 +29,9 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Channel;
-import io.grpc.internal.FixedObjectPool;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
@@ -229,7 +230,8 @@ public final class S2AProtocolNegotiatorFactory {
             public void onSuccess(SslContext sslContext) {
               ChannelHandler handler =
                   InternalProtocolNegotiators.tls(
-                          sslContext, new FixedObjectPool<>(Executors.newFixedThreadPool(1)))
+                          sslContext,
+                          SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR))
                       .newHandler(grpcHandler);
 
               // Remove the bufferReads handler and delegate the rest of the handshake to the TLS
