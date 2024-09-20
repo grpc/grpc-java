@@ -1,0 +1,28 @@
+plugins {
+    id "java-library"
+    // until we are confident we like the name
+    //id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: ContextStorageOverride'
+
+dependencies {
+    api project(':grpc-api')
+    implementation libraries.opentelemetry.api
+
+    testImplementation libraries.junit,
+            libraries.opentelemetry.sdk.testing,
+            libraries.assertj.core
+    testImplementation 'junit:junit:4.13.1'// opentelemetry.sdk.testing uses compileOnly for assertj
+
+    signature libraries.signature.java
+    signature libraries.signature.android
+}
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.override')
+    }
+}
