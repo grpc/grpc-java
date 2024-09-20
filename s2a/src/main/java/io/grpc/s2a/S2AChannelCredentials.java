@@ -24,6 +24,7 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyChannelCredentials;
@@ -31,6 +32,8 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.s2a.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.handshaker.S2AIdentity;
 import io.grpc.s2a.handshaker.S2AProtocolNegotiatorFactory;
+import java.io.File;
+import java.io.IOException;
 import java.util.Optional;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -56,13 +59,46 @@ public final class S2AChannelCredentials {
   public static final class Builder {
     private final String s2aAddress;
     private ObjectPool<Channel> s2aChannelPool;
-    private Optional<ChannelCredentials> s2aChannelCredentials;
     private @Nullable S2AIdentity localIdentity = null;
+    private boolean useMtlsToS2A = false;
+    private @Nullable String privateKeyPath;
+    private @Nullable String certChainPath;
+    private @Nullable String trustBundlePath;
 
     Builder(String s2aAddress) {
       this.s2aAddress = s2aAddress;
       this.s2aChannelPool = null;
-      this.s2aChannelCredentials = Optional.empty();
+    }
+
+    /**
+     * Sets whether to use mTLS to S2A. If true, the {@code privateKeyPath}, {@code certChainPath},
+     * and {@code trustBundlePath} must also be set.
+     */
+    @CanIgnoreReturnValue
+    public Builder setUseMtlsToS2A(boolean useMtlsToS2A) {
+      this.useMtlsToS2A = useMtlsToS2A;
+      return this;
+    }
+
+    /** Sets the path to the private key PEM to use for authenticating to the S2A. */
+    @CanIgnoreReturnValue
+    public Builder setPrivateKeyPath(String privateKeyPath) {
+      this.privateKeyPath = privateKeyPath;
+      return this;
+    }
+
+    /** Sets the path to the certificate chain PEM to use for authenticating to the S2A. */
+    @CanIgnoreReturnValue
+    public Builder setCertChainPath(String certChainPath) {
+      this.certChainPath = certChainPath;
+      return this;
+    }
+
+    /** Sets the path to the trust bundle PEM to use for authenticating to the S2A. */
+    @CanIgnoreReturnValue
+    public Builder setTrustBundlePath(String trustBundlePath) {
+      this.trustBundlePath = trustBundlePath;
+      return this;
     }
 
     /**
@@ -104,15 +140,26 @@ public final class S2AChannelCredentials {
       return this;
     }
 
-    /** Sets the credentials to be used when connecting to the S2A. */
-    @CanIgnoreReturnValue
-    public Builder setS2AChannelCredentials(ChannelCredentials s2aChannelCredentials) {
-      this.s2aChannelCredentials = Optional.of(s2aChannelCredentials);
-      return this;
-    }
-
-    public ChannelCredentials build() {
+    public ChannelCredentials build() throws IOException {
       checkState(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
+      ChannelCredentials s2aChannelCredentials;
+      if (useMtlsToS2A) {
+        checkState(!isNullOrEmpty(privateKeyPath), "privateKeyPath must not be null or empty.");
+        checkState(!isNullOrEmpty(certChainPath), "certChainPath must not be null or empty.");
+        checkState(!isNullOrEmpty(trustBundlePath), "trustBundlePath must not be null or empty.");
+
+        File privateKeyFile = new File(privateKeyPath);
+        File certChainFile = new File(certChainPath);
+        File trustBundleFile = new File(trustBundlePath);
+
+        s2aChannelCredentials =
+            TlsChannelCredentials.newBuilder()
+                .keyManager(certChainFile, privateKeyFile)
+                .trustManager(trustBundleFile)
+                .build();
+      } else {
+        s2aChannelCredentials = InsecureChannelCredentials.create();
+      }
       ObjectPool<Channel> s2aChannelPool =
           SharedResourcePool.forResource(
               S2AHandshakerServiceChannel.getChannelResource(s2aAddress, s2aChannelCredentials));

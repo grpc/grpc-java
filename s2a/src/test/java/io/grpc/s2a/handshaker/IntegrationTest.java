@@ -203,14 +203,13 @@ public final class IntegrationTest {
   @Test
   public void clientCommunicateUsingMtlsToS2ACredentials_succeeds() throws Exception {
     ChannelCredentials credentials =
-        MtlsToS2AChannelCredentials.createBuilder(
-                /* s2aAddress= */ mtlsS2AAddress,
-                /* privateKeyPath= */ "src/test/resources/client_key.pem",
-                /* certChainPath= */ "src/test/resources/client_cert.pem",
-                /* trustBundlePath= */ "src/test/resources/root_cert.pem")
-            .build()
-            .setLocalSpiffeId("test-spiffe-id")
-            .build();
+    S2AChannelCredentials.createBuilder(mtlsS2AAddress)
+        .setUseMtlsToS2A(true)
+        .setPrivateKeyPath("src/test/resources/client_key.pem")
+        .setCertChainPath("src/test/resources/client_cert.pem")
+        .setTrustBundlePath("src/test/resources/root_cert.pem")
+        .setLocalSpiffeId("test-spiffe-id")
+        .build();
     ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
     assertThat(doUnaryRpc(channel)).isTrue();

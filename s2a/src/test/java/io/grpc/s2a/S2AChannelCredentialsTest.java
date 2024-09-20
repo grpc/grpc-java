@@ -19,9 +19,6 @@ package io.grpc.s2a;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
-import io.grpc.ChannelCredentials;
-import io.grpc.TlsChannelCredentials;
-import java.io.File;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -91,22 +88,138 @@ public final class S2AChannelCredentialsTest {
   }
   
   @Test
-  public void build_withTlsChannelCredentials_succeeds() throws Exception {
+  public void build_withUseMtlsToS2ANoCredetials_throwsException() throws Exception {
+    assertThrows(
+        IllegalStateException.class,
+        () -> S2AChannelCredentials.createBuilder("s2a_address").setUseMtlsToS2A(true).build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2ANullS2AAddress_throwsException() throws Exception {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            S2AChannelCredentials.createBuilder(null)
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2AEmptyS2AAddress_throwsException() throws Exception {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            S2AChannelCredentials.createBuilder("")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2A_nullPrivateKeyPath_throwsException() throws Exception {
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            S2AChannelCredentials.createBuilder("s2a_address")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath(null)
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2A_nullCertChainPath_throwsException() throws Exception {
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            S2AChannelCredentials.createBuilder("s2a_address")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath(null)
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2A_nullTrustBundlePath_throwsException() throws Exception {
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            S2AChannelCredentials.createBuilder("s2a_address")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath(null)
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2A_emptyPrivateKeyPath_throwsException() throws Exception {
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            S2AChannelCredentials.createBuilder("s2a_address")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("")
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2A_emptyCertChainPath_throwsException() throws Exception {
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            S2AChannelCredentials.createBuilder("s2a_address")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath("")
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2A_emptyTrustBundlePath_throwsException() throws Exception {
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            S2AChannelCredentials.createBuilder("s2a_address")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath("")
+                .build());
+  }
+
+  @Test
+  public void build_withUseMtlsToS2ANoLocalIdentity_success() throws Exception {
     assertThat(
             S2AChannelCredentials.createBuilder("s2a_address")
-                .setLocalSpiffeId("spiffe://test")
-                .setS2AChannelCredentials(getTlsChannelCredentials())
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
                 .build())
         .isNotNull();
   }
 
-  private static ChannelCredentials getTlsChannelCredentials() throws Exception {
-    File clientCert = new File("src/test/resources/client_cert.pem");
-    File clientKey = new File("src/test/resources/client_key.pem");
-    File rootCert = new File("src/test/resources/root_cert.pem");
-    return TlsChannelCredentials.newBuilder()
-        .keyManager(clientCert, clientKey)
-        .trustManager(rootCert)
-        .build();
+  @Test
+  public void build_withUseMtlsToS2AWithLocalUid_success() throws Exception {
+    assertThat(
+            S2AChannelCredentials.createBuilder("s2a_address")
+                .setUseMtlsToS2A(true)
+                .setPrivateKeyPath("src/test/resources/client_key.pem")
+                .setCertChainPath("src/test/resources/client_cert.pem")
+                .setTrustBundlePath("src/test/resources/root_cert.pem")
+                .setLocalUid("local_uid")
+                .build())
+        .isNotNull();
   }
 }
