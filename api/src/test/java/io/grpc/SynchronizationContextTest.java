@@ -27,6 +27,7 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.util.concurrent.testing.TestingExecutors;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import java.time.Duration;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -247,6 +248,23 @@ public class SynchronizationContextTest {
   }
 
   @Test
+  public void testScheduleWithFixedDelay(){
+    MockScheduledExecutorService executorService = new MockScheduledExecutorService();
+
+    ScheduledHandle handle =
+        syncContext.scheduleWithFixedDelay(task1, Duration.ofNanos(110), Duration.ofNanos(110), TimeUnit.NANOSECONDS, executorService);
+
+    assertThat(executorService.delay)
+        .isEqualTo(executorService.unit.convert(110, TimeUnit.NANOSECONDS));
+    assertThat(handle.isPending()).isTrue();
+    verify(task1, never()).run();
+
+    executorService.command.run();
+    assertThat(handle.isPending()).isFalse();
+    verify(task1).run();
+  }
+
+  @Test
   public void scheduleDueImmediately() {
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle = syncContext.schedule(task1, -1, TimeUnit.NANOSECONDS, executorService);
@@ -356,6 +374,13 @@ public class SynchronizationContextTest {
       this.delay = delay;
       this.unit = unit;
       return future = super.schedule(command, delay, unit);
+    }
+
+    @Override public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long intialDelay, long delay, TimeUnit unit) {
+      this.command = command;
+      this.delay = delay;
+      this.unit = unit;
+      return future = super.scheduleWithFixedDelay(command, intialDelay, delay, unit);
     }
   }
 }
