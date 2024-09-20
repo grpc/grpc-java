@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -194,38 +193,6 @@ public final class SynchronizationContext implements Executor {
     return new ScheduledHandle(runnable, future);
   }
 
-
-  public final ScheduledHandle scheduleWithFixedDelay(
-      final Runnable task, Duration initialDelay, Duration delay, TimeUnit unit,
-      ScheduledExecutorService timerService) {
-    final ManagedRunnable runnable = new ManagedRunnable(task);
-    System.out.println("Inside Durationcall");
-    ScheduledFuture<?> future = timerService.scheduleWithFixedDelay(new Runnable() {
-      @Override
-      public void run() {
-        execute(runnable);
-      }
-
-      @Override
-      public String toString() {
-        return task.toString() + "(scheduled in SynchronizationContext with delay of " + delay
-            + ")";
-      }
-    }, toNanosSaturated(initialDelay), toNanosSaturated(delay), unit);
-    return new ScheduledHandle(runnable, future);
-  }
-  static long toNanosSaturated(Duration duration) {
-    // Using a try/catch seems lazy, but the catch block will rarely get invoked (except for
-    // durations longer than approximately +/- 292 years).
-    try {
-      //long delay = TimeUnit.MILLISECONDS.convert(500, TimeUnit.SECONDS);  // Converts 500 seconds to milliseconds
-      return duration.toNanos();
-      //return TimeUnit.NANOSECONDS.convert(duration);
-
-    } catch (ArithmeticException tooBig) {
-      return duration.isNegative() ? Long.MIN_VALUE : Long.MAX_VALUE;
-    }
-  }
 
   private static class ManagedRunnable implements Runnable {
     final Runnable task;
