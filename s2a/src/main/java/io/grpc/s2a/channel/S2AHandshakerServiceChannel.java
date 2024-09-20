@@ -32,6 +32,8 @@ import io.grpc.netty.NettyChannelBuilder;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -132,6 +134,8 @@ public final class S2AHandshakerServiceChannel {
    */
   @VisibleForTesting
   static class HandshakerServiceChannel extends Channel {
+    private static final Logger logger =
+          Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
     private final ManagedChannel delegate;
 
     static HandshakerServiceChannel create(ManagedChannel delegate) {
@@ -166,6 +170,7 @@ public final class S2AHandshakerServiceChannel {
         delegate.awaitTermination(CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
+        logger.log(Level.WARNING, "Channel to S2A was not shutdown.");
       }
     }
   }
