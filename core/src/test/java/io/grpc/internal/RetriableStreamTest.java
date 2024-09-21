@@ -2150,7 +2150,6 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream2).flush(); // Memory leak workaround
     inOrder.verify(mockStream2).request(456);
-    inOrder.verify(mockStream1).isReady();
     inOrder.verify(mockStream2).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2200,8 +2199,8 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream3).flush(); // Memory leak workaround
     inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream3).flush(); // Memory leak workaround
-    inOrder.verify(mockStream1).isReady();
-    inOrder.verify(mockStream2).isReady();
+    inOrder.verify(mockStream1, never()).isReady();
+    inOrder.verify(mockStream2, never()).isReady();
     inOrder.verify(mockStream3).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2257,8 +2256,6 @@ public class RetriableStreamTest {
       inOrder.verify(mockStream4).writeMessage(any(InputStream.class));
       inOrder.verify(mockStream4).flush(); // Memory leak workaround
     }
-    inOrder.verify(mockStream1).isReady();
-    inOrder.verify(mockStream2).isReady();
     inOrder.verify(mockStream4).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2701,7 +2698,6 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
-    inOrder.verify(mockStream1).isReady();
     inOrder.verify(mockStream2).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2744,7 +2740,6 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream2).start(sublistenerCaptor2.capture());
-    verify(mockStream1, times(2)).isReady();
     verify(mockStream2).isReady();
 
     ClientStreamTracer bufferSizeTracer2 = bufferSizeTracer;
@@ -2786,7 +2781,6 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream2).start(sublistenerCaptor2.capture());
-    verify(mockStream1, times(2)).isReady();
     verify(mockStream2).isReady();
 
     ClientStreamTracer bufferSizeTracer2 = bufferSizeTracer;
