@@ -333,7 +333,7 @@ Status code mapping: **UNIMPLEMENTED**
 
 Unfortunately `UNIMPLEMENTED` doesn’t capture (3) but none of the other canonical status codes do either and we expect this case to be extremely rare.
 
-(4) is intentially indistinguishable from (1) by Android design so we can't handle it different. However, as a client manifest error, it's not something reasonable apps would handle at runtime anyway.
+(4) is intentially indistinguishable from (1) by Android design so we can't handle it differently. However, as a client manifest error, it's not something reasonable apps would handle at runtime anyway.
 
 ### bindService() throws SecurityException
 
