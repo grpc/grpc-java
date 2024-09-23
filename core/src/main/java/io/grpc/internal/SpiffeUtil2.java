@@ -54,6 +54,7 @@ public final class SpiffeUtil2 {
 
   private static final Integer URI_SAN_TYPE = 6;
   private static final String USE_PARAMETER_VALUE = "x509-svid";
+  private static final String KTY_PARAMETER_VALUE = "RSA";
 
   /**
    * Parses a leaf certificate from the chain to extract unique SPIFFE ID. In case of success,
@@ -68,6 +69,9 @@ public final class SpiffeUtil2 {
     if (subjectAltNames != null) {
       boolean spiffeFound = false;
       for (List<?> altName : subjectAltNames) {
+        if (altName.size() == 0) {
+          continue;
+        }
         if (URI_SAN_TYPE.equals(altName.get(0))) {
           if (spiffeFound) {
             throw new IllegalArgumentException("Multiple URI SAN values found in the leaf cert.");
@@ -79,6 +83,9 @@ public final class SpiffeUtil2 {
         return Optional.absent();
       }
       for (List<?> altName : subjectAltNames) {
+        if (altName.size() < 2) {
+          continue;
+        }
         if (URI_SAN_TYPE.equals(altName.get(0))) {
           String uri = (String) altName.get(1);
           // Real validation will be plugged in via another PR (SpiffeUtil).
@@ -140,22 +147,36 @@ public final class SpiffeUtil2 {
     return trustDomainsNode;
   }
 
+  private static boolean checkJwkEntry(Map<String, ?> jwkNode, String trustDomainName) {
+    String kty = JsonUtil.getString(jwkNode, "kty");
+    if (kty == null || !kty.equals(KTY_PARAMETER_VALUE)) {
+      log.log(Level.SEVERE, String.format("'kty' parameter must be '%s' but '%s' found. "
+              + "Skipping certificate loading for trust domain '%s'.", KTY_PARAMETER_VALUE, kty,
+          trustDomainName));
+      return false;
+    }
+    String kid = JsonUtil.getString(jwkNode, "kid");
+    if (kid != null && !kid.equals("")) {
+      log.log(Level.SEVERE, String.format("'kid' parameter must not be set but value '%s' "
+              + "found. Skipping certificate loading for trust domain '%s'.", kid,
+          trustDomainName));
+      return false;
+    }
+    String use = JsonUtil.getString(jwkNode, "use");
+    if (use == null || !use.equals(USE_PARAMETER_VALUE)) {
+      log.log(Level.SEVERE, String.format("'use' parameter must be '%s' but '%s' found. "
+              + "Skipping certificate loading for trust domain '%s'.", USE_PARAMETER_VALUE, use,
+          trustDomainName));
+      return false;
+    }
+    return true;
+  }
+
   private static List<X509Certificate> extractCerts(List<Map<String, ?>> keysNode,
       String trustDomainName) {
     List<X509Certificate> result = new ArrayList<>();
     for (Map<String, ?> keyNode : keysNode) {
-      String kid = JsonUtil.getString(keyNode, "kid");
-      if (kid != null && !kid.equals("")) {
-        log.log(Level.SEVERE, String.format("'kid' parameter must not be set but value '%s' "
-                + "found. Skipping certificate loading for trust domain '%s'.", kid,
-            trustDomainName));
-        break;
-      }
-      String use = JsonUtil.getString(keyNode, "use");
-      if (use == null || !use.equals(USE_PARAMETER_VALUE)) {
-        log.log(Level.SEVERE, String.format("'use' parameter must be '%s' but '%s' found. "
-                + "Skipping certificate loading for trust domain '%s'.", USE_PARAMETER_VALUE, use,
-            trustDomainName));
+      if (!checkJwkEntry(keyNode, trustDomainName)) {
         break;
       }
       String rawCert = JsonUtil.getString(keyNode, "x5c");
