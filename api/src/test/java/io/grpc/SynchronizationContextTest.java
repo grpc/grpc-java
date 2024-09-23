@@ -250,10 +250,9 @@ public class SynchronizationContextTest {
   @Test
   public void testScheduleWithFixedDelay(){
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
-
     ScheduledHandle handle =
-        syncContext.scheduleWithFixedDelay(task1, Duration.ofNanos(110), Duration.ofNanos(110), TimeUnit.NANOSECONDS, executorService);
-
+        syncContext.scheduleWithFixedDelay(task1, Duration.ofNanos(110), Duration.ofNanos(110),
+            TimeUnit.NANOSECONDS, executorService);
     assertThat(executorService.delay)
         .isEqualTo(executorService.unit.convert(110, TimeUnit.NANOSECONDS));
     assertThat(handle.isPending()).isTrue();
