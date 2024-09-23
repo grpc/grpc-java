@@ -248,8 +248,19 @@ class OkHttpProtocolNegotiator {
             SET_USE_SESSION_TICKETS.invokeOptionalWithoutCheckedException(sslSocket, true);
           }
           if (SET_SERVER_NAMES != null && SNI_HOST_NAME != null) {
-            SET_SERVER_NAMES
-                .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
+            try {
+              // SSLParameters.setServerNames(List<SNIServerName>) may throw IllegalArgumentException
+              // if an IP address that contains special characters (e.g. % for scope) is passed.
+              SET_SERVER_NAMES
+                      .invoke(sslParams, Collections.singletonList(SNI_HOST_NAME.newInstance(hostname)));
+            } catch (InvocationTargetException e) {
+              Throwable targetException = e.getTargetException();
+              if (targetException instanceof IllegalArgumentException) {
+                SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
+              } else {
+                throw e;
+              }
+            }
           } else {
             SET_HOSTNAME.invokeOptionalWithoutCheckedException(sslSocket, hostname);
           }
