@@ -150,7 +150,7 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 2 : 1;
     verify(subchannel, times(expectedTimes)).requestConnection();
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
@@ -184,7 +184,7 @@ public class RingHashLoadBalancerTest {
     pickerCaptor.getValue().pickSubchannel(args);
     Subchannel subchannel = subchannels.get(Collections.singletonList(childLbState.getEag()));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 2 : 1;
     inOrder.verify(subchannel, times(expectedTimes)).requestConnection();
     deliverSubchannelState(subchannel, CSI_READY);
     inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
@@ -443,7 +443,7 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();  // buffer request
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 2 : 1;
     // verify kicked off connection to server2
     verify(getSubChannel(servers.get(1)), times(expectedTimes)).requestConnection();
     assertThat(subchannels.size()).isEqualTo(2);  // no excessive connection
