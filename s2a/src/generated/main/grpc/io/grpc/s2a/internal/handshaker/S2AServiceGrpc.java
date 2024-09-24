@@ -61,21 +61,6 @@ public final class S2AServiceGrpc {
   }
 
   /**
-   * Creates a new blocking-style stub that supports all types of calls on the service
-   */
-  public static S2AServiceBlockingV2Stub newBlockingV2Stub(
-      io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<S2AServiceBlockingV2Stub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<S2AServiceBlockingV2Stub>() {
-        @java.lang.Override
-        public S2AServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new S2AServiceBlockingV2Stub(channel, callOptions);
-        }
-      };
-    return S2AServiceBlockingV2Stub.newStub(factory, channel);
-  }
-
-  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static S2AServiceBlockingStub newBlockingStub(
@@ -163,35 +148,6 @@ public final class S2AServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service S2AService.
-   */
-  public static final class S2AServiceBlockingV2Stub
-      extends io.grpc.stub.AbstractBlockingStub<S2AServiceBlockingV2Stub> {
-    private S2AServiceBlockingV2Stub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
-    }
-
-    @java.lang.Override
-    protected S2AServiceBlockingV2Stub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new S2AServiceBlockingV2Stub(channel, callOptions);
-    }
-
-    /**
-     * <pre>
-     * SetUpSession is a bidirectional stream used by applications to offload
-     * operations from the TLS handshake.
-     * </pre>
-     */
-    public io.grpc.stub.BlockingClientCall<io.grpc.s2a.handshaker.SessionReq, io.grpc.s2a.handshaker.SessionResp>
-        setUpSession() {
-      return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
-          getChannel(), getSetUpSessionMethod(), getCallOptions());
-    }
-  }
-
-  /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service S2AService.
    */
   public static final class S2AServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<S2AServiceBlockingStub> {
