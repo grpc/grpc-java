@@ -44,16 +44,17 @@ public class RlqsClient {
     RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
     RlqsBucketId bucketId = bucketSettings.toBucketId(input);
     RlqsBucket bucket = bucketCache.getBucket(bucketId);
-    RateLimitResult rateLimitResult;
     if (bucket != null) {
       return bucket.rateLimit();
     }
     bucket = new RlqsBucket(bucketId, bucketSettings);
-    rateLimitResult = bucket.rateLimit();
-    bucketCache.insertBucket(bucket);
-    rlqsApiClient.sendInitialUsageReport(bucket);
-    // register tickers
+    RateLimitResult rateLimitResult = rlqsApiClient.processFirstBucketRequest(bucket);
+    // TODO(sergiitk): register tickers
+    registerTimers(bucket, bucketSettings);
     return rateLimitResult;
+  }
+
+  private void registerTimers(RlqsBucket bucket, RlqsBucketSettings bucketSettings) {
   }
 
   public void shutdown() {
