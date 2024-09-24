@@ -48,6 +48,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /** RBAC Http filter implementation. */
+// TODO(sergiitk): introduce a layer between the filter and interceptor.
+// lds has filter names and the names are unique - even for server instances.
 final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   // private static final Logger logger = Logger.getLogger(RlqsFilter.class.getName());
 

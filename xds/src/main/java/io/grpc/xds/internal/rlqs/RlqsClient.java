@@ -49,7 +49,6 @@ public class RlqsClient {
     }
     bucket = new RlqsBucket(bucketId, bucketSettings);
     RateLimitResult rateLimitResult = rlqsApiClient.processFirstBucketRequest(bucket);
-    // TODO(sergiitk): register tickers
     registerTimers(bucket, bucketSettings);
     return rateLimitResult;
   }
