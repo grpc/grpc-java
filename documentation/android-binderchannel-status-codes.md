@@ -23,15 +23,23 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
+   <td>0
+   </td>
+   <td><a href="https://developer.android.com/training/package-visibility">Server app not visible</a>.
+   </td>
+   <td rowspan="6" >bindService() returns false
+   </td>
+   <td rowspan="9" ><p>UNIMPLEMENTED<p>“The operation is not implemented or is not supported / enabled in this service.”
+   </td>
+   <td>Give up - This is an error in the client manifest.
+   </td>
+  </tr>
+  <tr>
    <td>1
    </td>
    <td>Server app not installed
    </td>
-   <td rowspan="5" >bindService() returns false
-   </td>
-   <td rowspan="8" ><p>UNIMPLEMENTED<p>“The operation is not implemented or is not supported / enabled in this service.”
-   </td>
-   <td rowspan="9" >Direct the user to install/reinstall the server app.
+   <td rowspan="8" >Direct the user to install/reinstall the server app.
    </td>
   </tr>
   <tr>
@@ -89,6 +97,8 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
    <td rowspan="5" ><p>PERMISSION_DENIED<p>
 “The caller does not have permission to execute the specified operation …”
+   </td>
+   <td>Direct the user to update the server app in the hopes that a newer version fixes this error in its manifest.
    </td>
   </tr>
   <tr>
@@ -315,6 +325,7 @@ According to a review of the AOSP source code, there are in fact several cases:
 1. The target package is not installed
 2. The target package is installed but does not declare the target Service in its manifest.
 3. The target package requests dangerous permissions but targets sdk &lt;= M and therefore requires a permissions review, but the caller is not running in the foreground and so it would be inappropriate to launch the review UI.
+4. The target package is not visible to the client due to [Android 11 package visibility rules](https://developer.android.com/training/package-visibility).
 
 Status code mapping: **UNIMPLEMENTED**
 
@@ -322,6 +333,7 @@ Status code mapping: **UNIMPLEMENTED**
 
 Unfortunately `UNIMPLEMENTED` doesn’t capture (3) but none of the other canonical status codes do either and we expect this case to be extremely rare.
 
+(4) is intentially indistinguishable from (1) by Android design so we can't handle it differently. However, as a client manifest error, it's not something reasonable apps would handle at runtime anyway.
 
 ### bindService() throws SecurityException
 
