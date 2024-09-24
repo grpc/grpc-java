@@ -22,6 +22,7 @@ public class RlqsBucket {
   }
 
   private final RlqsBucketId bucketId;
+  // TODO(sergiitk): consider immutable report structure
   private long numRequestsAllowed = 0;
   private long numRequestsDenied = 0;
   // last_report_time

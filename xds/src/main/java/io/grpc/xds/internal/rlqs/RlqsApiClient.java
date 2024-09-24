@@ -30,6 +30,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
+import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,18 +50,27 @@ public final class RlqsApiClient {
     this.bucketCache = bucketCache;
   }
 
-  void sendInitialUsageReport(RlqsBucket bucket) {
+  RateLimitResult processFirstBucketRequest(RlqsBucket bucket) {
+    bucketCache.insertBucket(bucket);
+    // Register first request to the bucket for the initial report.
+    RateLimitResult rateLimitResult = bucket.rateLimit();
+
+    // Send initial usage report.
+    BucketQuotaUsage bucketQuotaUsage = toUsageReport(bucket);
+    bucket.reset();
     rlqsApiClient.reportUsage(RateLimitQuotaUsageReports.newBuilder()
         .setDomain(domain)
-        .addBucketQuotaUsages(toUsageReport(bucket))
+        .addBucketQuotaUsages(bucketQuotaUsage)
         .build());
+    return rateLimitResult;
   }
-
 
   void sendUsageReports() {
     RateLimitQuotaUsageReports.Builder reports = RateLimitQuotaUsageReports.newBuilder();
     for (RlqsBucket bucket : bucketCache.getBucketsToReport()) {
-      reports.addBucketQuotaUsages(toUsageReport(bucket));
+      BucketQuotaUsage bucketQuotaUsage = toUsageReport(bucket);
+      bucket.reset();
+      reports.addBucketQuotaUsages(bucketQuotaUsage);
     }
     rlqsApiClient.reportUsage(reports.build());
   }
@@ -75,6 +85,7 @@ public final class RlqsApiClient {
   }
 
   BucketQuotaUsage toUsageReport(RlqsBucket bucket) {
+    // TODO(sergiitk): consider moving to RlqsBucket, and adding something like reportAndReset
     return null;
   }
 
