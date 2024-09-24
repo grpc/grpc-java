@@ -236,7 +236,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           delegate().start(new SubchannelStateListener() {
             @Override
             public void onSubchannelState(ConnectivityStateInfo newState) {
-              if (newState.getState().equals(ConnectivityState.READY)) {
+              // Do nothing if LB has been shutdown
+              if (xdsClient != null && newState.getState().equals(ConnectivityState.READY)) {
                 // Get locality based on the connected address attributes
                 ClusterLocality updatedClusterLocality = createClusterLocalityFromAttributes(
                     subchannel.getConnectedAddressAttributes());
