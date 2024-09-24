@@ -89,6 +89,7 @@ tasks.named("shadowJar").configure {
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
 }
 
+plugins.withId('maven-publish') {
 publishing {
     publications {
         maven(MavenPublication) {
@@ -109,4 +110,5 @@ publishing {
             }
         }
     }
+}
 }
