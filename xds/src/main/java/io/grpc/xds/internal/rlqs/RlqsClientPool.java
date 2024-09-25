@@ -16,7 +16,6 @@
 
 package io.grpc.xds.internal.rlqs;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.Sets;
@@ -37,10 +36,8 @@ import java.util.logging.Logger;
 public final class RlqsClientPool {
   private static final Logger logger = Logger.getLogger(RlqsClientPool.class.getName());
 
-  private static final int DEFAULT_CLEANUP_INTERVAL_SECONDS = 10;
-
   // TODO(sergiitk): [QUESTION] always in sync context?
-  private boolean shutdown;
+  private volatile boolean shutdown = false;
   private final SynchronizationContext syncContext = new SynchronizationContext((thread, error) -> {
     String message = "Uncaught exception in RlqsClientPool SynchronizationContext. Panic!";
     logger.log(Level.FINE, message, error);
@@ -49,39 +46,24 @@ public final class RlqsClientPool {
 
   private final ConcurrentHashMap<String, RlqsEngine> enginePool = new ConcurrentHashMap<>();
   Set<String> enginesToShutdown = Sets.newConcurrentHashSet();
-  private final ScheduledExecutorService timeService;
-  private final int cleanupIntervalSeconds;
+  private final ScheduledExecutorService scheduler;
 
 
-  private RlqsClientPool(ScheduledExecutorService scheduler, int cleanupIntervalSeconds) {
-    this.timeService = checkNotNull(scheduler, "scheduler");
-    checkArgument(cleanupIntervalSeconds >= 0, "cleanupIntervalSeconds < 0");
-    this.cleanupIntervalSeconds =
-        cleanupIntervalSeconds > 0 ? cleanupIntervalSeconds : DEFAULT_CLEANUP_INTERVAL_SECONDS;
+  private RlqsClientPool(ScheduledExecutorService scheduler) {
+    this.scheduler = checkNotNull(scheduler, "scheduler");
   }
 
   /** Creates an instance. */
   public static RlqsClientPool newInstance(ScheduledExecutorService scheduler) {
     // TODO(sergiitk): [IMPL] scheduler - consider using GrpcUtil.TIMER_SERVICE.
     // TODO(sergiitk): [IMPL] note that the scheduler has a finite lifetime.
-    return new RlqsClientPool(scheduler, 0);
-  }
-
-  public void run() {
-    Runnable cleanupTask = () -> {
-      if (shutdown) {
-        return;
-      }
-      for (String configHash : enginesToShutdown) {
-        enginePool.get(configHash).shutdown();
-        enginePool.remove(configHash);
-      }
-      enginesToShutdown.clear();
-    };
-    syncContext.schedule(cleanupTask, cleanupIntervalSeconds, TimeUnit.SECONDS, timeService);
+    return new RlqsClientPool(scheduler);
   }
 
   public void shutdown() {
+    if (shutdown) {
+      return;
+    }
     syncContext.execute(() -> {
       shutdown = true;
       logger.log(Level.FINER, "Shutting down RlqsClientPool");
@@ -90,6 +72,7 @@ public final class RlqsClientPool {
         enginePool.get(configHash).shutdown();
       }
       enginePool.clear();
+      shutdown = false;
     });
   }
 
@@ -110,7 +93,7 @@ public final class RlqsClientPool {
           config.domain(),
           config.bucketMatchers(),
           configHash,
-          timeService);
+          scheduler);
 
       enginePool.put(configHash, rlqsEngine);
       future.set(enginePool.get(configHash));
