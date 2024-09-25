@@ -33,13 +33,13 @@ import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public final class RlqsClientPool {
-  private static final Logger logger = Logger.getLogger(RlqsClientPool.class.getName());
+public final class RlqsCache {
+  private static final Logger logger = Logger.getLogger(RlqsCache.class.getName());
 
   // TODO(sergiitk): [QUESTION] always in sync context?
   private volatile boolean shutdown = false;
   private final SynchronizationContext syncContext = new SynchronizationContext((thread, error) -> {
-    String message = "Uncaught exception in RlqsClientPool SynchronizationContext. Panic!";
+    String message = "Uncaught exception in RlqsCache SynchronizationContext. Panic!";
     logger.log(Level.FINE, message, error);
     throw new RlqsPoolSynchronizationException(message, error);
   });
@@ -49,15 +49,15 @@ public final class RlqsClientPool {
   private final ScheduledExecutorService scheduler;
 
 
-  private RlqsClientPool(ScheduledExecutorService scheduler) {
+  private RlqsCache(ScheduledExecutorService scheduler) {
     this.scheduler = checkNotNull(scheduler, "scheduler");
   }
 
   /** Creates an instance. */
-  public static RlqsClientPool newInstance(ScheduledExecutorService scheduler) {
+  public static RlqsCache newInstance(ScheduledExecutorService scheduler) {
     // TODO(sergiitk): [IMPL] scheduler - consider using GrpcUtil.TIMER_SERVICE.
     // TODO(sergiitk): [IMPL] note that the scheduler has a finite lifetime.
-    return new RlqsClientPool(scheduler);
+    return new RlqsCache(scheduler);
   }
 
   public void shutdown() {
@@ -66,7 +66,7 @@ public final class RlqsClientPool {
     }
     syncContext.execute(() -> {
       shutdown = true;
-      logger.log(Level.FINER, "Shutting down RlqsClientPool");
+      logger.log(Level.FINER, "Shutting down RlqsCache");
       enginesToShutdown.clear();
       for (String configHash : enginePool.keySet()) {
         enginePool.get(configHash).shutdown();

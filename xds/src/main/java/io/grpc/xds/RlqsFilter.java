@@ -41,7 +41,7 @@ import io.grpc.xds.internal.matchers.MatcherList;
 import io.grpc.xds.internal.matchers.OnMatch;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
-import io.grpc.xds.internal.rlqs.RlqsClientPool;
+import io.grpc.xds.internal.rlqs.RlqsCache;
 import io.grpc.xds.internal.rlqs.RlqsEngine;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -60,11 +60,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   static final String TYPE_URL_OVERRIDE_CONFIG = "type.googleapis.com/"
       + "envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride";
 
-  private final AtomicReference<RlqsClientPool> rlqsClientPoolRef = new AtomicReference<>();
-
-  // RlqsFilter() {
-  //   rlqsClientPool = new RlqsClientPool()
-  // }
+  private final AtomicReference<RlqsCache> rlqsCache = new AtomicReference<>();
 
   @Override
   public String[] typeUrls() {
@@ -127,7 +123,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       rlqsFilterConfig = overrideBuilder.build();
     }
 
-    rlqsClientPoolRef.compareAndSet(null, RlqsClientPool.newInstance(scheduler));
+    rlqsCache.compareAndSet(null, RlqsCache.newInstance(scheduler));
     return generateRlqsInterceptor(rlqsFilterConfig);
   }
 
@@ -135,9 +131,9 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   public void shutdown() {
     // TODO(sergiitk): [DESIGN] besides shutting down everything, should there
     //    be per-route interceptor destructors?
-    RlqsClientPool oldClientPool = rlqsClientPoolRef.getAndUpdate(unused -> null);
-    if (oldClientPool != null) {
-      oldClientPool.shutdown();
+    RlqsCache oldCache = rlqsCache.getAndUpdate(unused -> null);
+    if (oldCache != null) {
+      oldCache.shutdown();
     }
   }
 
@@ -145,12 +141,12 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   private ServerInterceptor generateRlqsInterceptor(RlqsFilterConfig config) {
     checkNotNull(config, "config");
     checkNotNull(config.rlqsService(), "config.rlqsService");
-    RlqsClientPool rlqsClientPool = rlqsClientPoolRef.get();
-    if (rlqsClientPool == null) {
+    RlqsCache rlqsCache = this.rlqsCache.get();
+    if (rlqsCache == null) {
       // Being shut down, return no interceptor.
       return null;
     }
-    final RlqsEngine rlqsEngine = rlqsClientPool.getOrCreateRlqsEngine(config);
+    final RlqsEngine rlqsEngine = rlqsCache.getOrCreateRlqsEngine(config);
 
     return new ServerInterceptor() {
       @Override
