@@ -462,6 +462,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           requestConnection();
         } else {
           if (!addressIndex.isValid()) {
+            subchannelData.subchannel.shutdown(); // shutdown the previous subchannel
             scheduleBackoff();
           } else {
             subchannelData.subchannel.shutdown(); // shutdown the previous subchannel
