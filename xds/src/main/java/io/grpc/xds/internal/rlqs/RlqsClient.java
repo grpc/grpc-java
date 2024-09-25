@@ -52,7 +52,7 @@ public final class RlqsClient {
     this.bucketCache = bucketCache;
   }
 
-  RateLimitResult processFirstBucketRequest(RlqsBucket bucket) {
+  RateLimitResult sendInitialReport(RlqsBucket bucket) {
     bucketCache.insertBucket(bucket);
     // Register first request to the bucket for the initial report.
     RateLimitResult rateLimitResult = bucket.rateLimit();
@@ -95,6 +95,10 @@ public final class RlqsClient {
   public void shutdown() {
     logger.log(Level.FINER, "Shutting down RlqsClient to {0}", serverInfo.target());
     // TODO(sergiitk): [IMPL] RlqsClient shutdown
+  }
+
+  public void handleStreamClosed() {
+    // TODO(sergiitk): [IMPL] reconnect on stream down.
   }
 
   private class RlqsStream {

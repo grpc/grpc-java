@@ -57,7 +57,7 @@ public class RlqsEngine {
       return bucket.rateLimit();
     }
     bucket = new RlqsBucket(bucketId, bucketSettings);
-    RateLimitResult rateLimitResult = rlqsClient.processFirstBucketRequest(bucket);
+    RateLimitResult rateLimitResult = rlqsClient.sendInitialReport(bucket);
     registerReportTimer(bucketSettings.reportingIntervalMillis());
     return rateLimitResult;
   }
