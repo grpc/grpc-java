@@ -30,6 +30,8 @@ public final class SpiffeUtil {
 
   private static final String PREFIX = "spiffe://";
 
+  private SpiffeUtil() {}
+
   /**
    * Parses a URI string, applies validation rules described in SPIFFE standard, and, in case of
    * success, returns parsed TrustDomain and Path.
