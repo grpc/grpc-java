@@ -16,10 +16,15 @@
 
 package io.grpc.xds.internal.rlqs;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -30,12 +35,16 @@ public class RlqsClient {
   private final Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers;
   private final RlqsBucketCache bucketCache;
   private final String clientHash;
+  private final ScheduledExecutorService timeService;
+  private final ConcurrentHashMap<Long, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
 
   public RlqsClient(
       RemoteServerInfo rlqsServer, String domain,
-      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, String clientHash) {
+      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, String clientHash,
+      ScheduledExecutorService timeService) {
     this.bucketMatchers = bucketMatchers;
     this.clientHash = clientHash;
+    this.timeService = timeService;
     bucketCache = new RlqsBucketCache();
     rlqsApiClient = new RlqsApiClient(rlqsServer, domain, bucketCache);
   }
@@ -49,14 +58,33 @@ public class RlqsClient {
     }
     bucket = new RlqsBucket(bucketId, bucketSettings);
     RateLimitResult rateLimitResult = rlqsApiClient.processFirstBucketRequest(bucket);
-    registerTimers(bucket, bucketSettings);
+    registerReportTimer(bucketSettings.reportingIntervalMillis());
     return rateLimitResult;
   }
 
-  private void registerTimers(RlqsBucket bucket, RlqsBucketSettings bucketSettings) {
+  private void registerReportTimer(final long reportingIntervalMillis) {
+    // TODO(sergiitk): [IMPL] cap the interval.
+    if (timers.containsKey(reportingIntervalMillis)) {
+      return;
+    }
+    // TODO(sergiitk): [IMPL] consider manually extending.
+    ScheduledFuture<?> schedule = timeService.scheduleWithFixedDelay(
+        () -> reportBucketsWithInterval(reportingIntervalMillis),
+        reportingIntervalMillis,
+        reportingIntervalMillis,
+        TimeUnit.MILLISECONDS);
+    timers.put(reportingIntervalMillis, schedule);
+  }
+
+  private void reportBucketsWithInterval(long reportingIntervalMillis) {
+    ImmutableList<RlqsBucket> bucketsToReport =
+        bucketCache.getBucketsToReport(reportingIntervalMillis);
+    // TODO(sergiitk): [IMPL] destroy timer if empty
+    rlqsApiClient.sendUsageReports(bucketsToReport);
   }
 
   public void shutdown() {
+    // TODO(sergiitk): [IMPL] Timers shutdown
     // TODO(sergiitk): [IMPL] RlqsClient shutdown
     logger.log(Level.FINER, "Shutting down RlqsClient with hash {0}", clientHash);
     rlqsApiClient.shutdown();

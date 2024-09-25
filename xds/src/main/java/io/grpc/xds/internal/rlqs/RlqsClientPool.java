@@ -105,8 +105,12 @@ public final class RlqsClientPool {
       // TODO(sergiitk): [IMPL] get from bootstrap.
       RemoteServerInfo rlqsServer = RemoteServerInfo.create(config.rlqsService().targetUri(),
           InsecureChannelCredentials.create());
-      RlqsClient rlqsClient =
-          new RlqsClient(rlqsServer, config.domain(), config.bucketMatchers(), clientHash);
+      RlqsClient rlqsClient = new RlqsClient(
+          rlqsServer,
+          config.domain(),
+          config.bucketMatchers(),
+          clientHash,
+          timeService);
 
       clientPool.put(clientHash, rlqsClient);
       future.set(clientPool.get(clientHash));

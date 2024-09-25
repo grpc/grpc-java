@@ -20,6 +20,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Duration;
+import com.google.protobuf.util.Durations;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 
 @AutoValue
@@ -31,11 +32,11 @@ public abstract class RlqsBucketSettings {
     return null;
   }
 
-  public abstract Duration reportingInterval();
+  public abstract long reportingIntervalMillis();
 
   public static RlqsBucketSettings create(
       ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder,
       Duration reportingInterval) {
-    return new AutoValue_RlqsBucketSettings(bucketIdBuilder, reportingInterval);
+    return new AutoValue_RlqsBucketSettings(bucketIdBuilder, Durations.toMillis(reportingInterval));
   }
 }
