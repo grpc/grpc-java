@@ -31,7 +31,7 @@ import java.util.logging.Logger;
 public class RlqsEngine {
   private static final Logger logger = Logger.getLogger(RlqsEngine.class.getName());
 
-  private final RlqsApiClient rlqsApiClient;
+  private final RlqsClient rlqsClient;
   private final Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers;
   private final RlqsBucketCache bucketCache;
   private final String configHash;
@@ -46,7 +46,7 @@ public class RlqsEngine {
     this.configHash = configHash;
     this.timeService = timeService;
     bucketCache = new RlqsBucketCache();
-    rlqsApiClient = new RlqsApiClient(rlqsServer, domain, bucketCache);
+    rlqsClient = new RlqsClient(rlqsServer, domain, bucketCache);
   }
 
   public RateLimitResult evaluate(HttpMatchInput input) {
@@ -57,7 +57,7 @@ public class RlqsEngine {
       return bucket.rateLimit();
     }
     bucket = new RlqsBucket(bucketId, bucketSettings);
-    RateLimitResult rateLimitResult = rlqsApiClient.processFirstBucketRequest(bucket);
+    RateLimitResult rateLimitResult = rlqsClient.processFirstBucketRequest(bucket);
     registerReportTimer(bucketSettings.reportingIntervalMillis());
     return rateLimitResult;
   }
@@ -80,13 +80,13 @@ public class RlqsEngine {
     ImmutableList<RlqsBucket> bucketsToReport =
         bucketCache.getBucketsToReport(reportingIntervalMillis);
     // TODO(sergiitk): [IMPL] destroy timer if empty
-    rlqsApiClient.sendUsageReports(bucketsToReport);
+    rlqsClient.sendUsageReports(bucketsToReport);
   }
 
   public void shutdown() {
     // TODO(sergiitk): [IMPL] Timers shutdown
     // TODO(sergiitk): [IMPL] RlqsEngine shutdown
     logger.log(Level.FINER, "Shutting down RlqsEngine with hash {0}", configHash);
-    rlqsApiClient.shutdown();
+    rlqsClient.shutdown();
   }
 }

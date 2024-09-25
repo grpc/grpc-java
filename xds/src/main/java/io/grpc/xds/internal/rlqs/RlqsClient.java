@@ -33,21 +33,22 @@ import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public final class RlqsApiClient {
-  private static final Logger logger = Logger.getLogger(RlqsApiClient.class.getName());
+public final class RlqsClient {
+  private static final Logger logger = Logger.getLogger(RlqsClient.class.getName());
 
   private final RemoteServerInfo serverInfo;
   private final String domain;
-  private final RlqsApiClientInternal rlqsApiClient;
+  private final RlqsStream rlqsStream;
   private final RlqsBucketCache bucketCache;
 
-  RlqsApiClient(RemoteServerInfo serverInfo, String domain, RlqsBucketCache bucketCache) {
+  RlqsClient(RemoteServerInfo serverInfo, String domain, RlqsBucketCache bucketCache) {
     this.serverInfo = serverInfo;
     this.domain = domain;
-    this.rlqsApiClient = new RlqsApiClientInternal(serverInfo);
+    this.rlqsStream = new RlqsStream(serverInfo, domain);
     this.bucketCache = bucketCache;
   }
 
@@ -58,8 +59,9 @@ public final class RlqsApiClient {
 
     // Send initial usage report.
     BucketQuotaUsage bucketQuotaUsage = toUsageReport(bucket);
+    // TODO(sergiitk): [IMPL] domain logic not needed anymore.
     bucket.reset();
-    rlqsApiClient.reportUsage(RateLimitQuotaUsageReports.newBuilder()
+    rlqsStream.reportUsage(RateLimitQuotaUsageReports.newBuilder()
         .setDomain(domain)
         .addBucketQuotaUsages(bucketQuotaUsage)
         .build());
@@ -73,7 +75,7 @@ public final class RlqsApiClient {
       bucket.reset();
       reports.addBucketQuotaUsages(bucketQuotaUsage);
     }
-    rlqsApiClient.reportUsage(reports.build());
+    rlqsStream.reportUsage(reports.build());
   }
 
   void abandonBucket(RlqsBucketId bucketId) {
@@ -91,29 +93,36 @@ public final class RlqsApiClient {
   }
 
   public void shutdown() {
-    logger.log(Level.FINER, "Shutting down RlqsApiClient to {0}", serverInfo.target());
-    // TODO(sergiitk): [IMPL] RlqsApiClient shutdown
+    logger.log(Level.FINER, "Shutting down RlqsClient to {0}", serverInfo.target());
+    // TODO(sergiitk): [IMPL] RlqsClient shutdown
   }
 
-  private class RlqsApiClientInternal {
+  private class RlqsStream {
+    private final AtomicBoolean isFirstReport = new AtomicBoolean(true);
     private final ManagedChannel channel;
-    private final RateLimitQuotaServiceStub stub;
+    private final String domain;
     private final ClientCallStreamObserver<RateLimitQuotaUsageReports> clientCallStream;
 
-    RlqsApiClientInternal(RemoteServerInfo serverInfo) {
+    RlqsStream(RemoteServerInfo serverInfo, String domain) {
+      this.domain = domain;
       channel = Grpc.newChannelBuilder(serverInfo.target(), serverInfo.channelCredentials())
           .keepAliveTime(10, TimeUnit.SECONDS)
           .keepAliveWithoutCalls(true)
           .build();
       // keepalive?
       // TODO(sergiitk): [IMPL] Manage State changes?
-      stub = RateLimitQuotaServiceGrpc.newStub(channel);
+      RateLimitQuotaServiceStub stub = RateLimitQuotaServiceGrpc.newStub(channel);
       clientCallStream = (ClientCallStreamObserver<RateLimitQuotaUsageReports>)
           stub.streamRateLimitQuotas(new RlqsStreamObserver());
       // TODO(sergiitk): [IMPL] set on ready handler?
+      // TODO(sergiitk): [QUESTION] a nice way to handle setting domain in the first usage report?
+      //                 - probably an interceptor
     }
 
     void reportUsage(RateLimitQuotaUsageReports usageReports) {
+      if (isFirstReport.compareAndSet(true, false)) {
+        usageReports = usageReports.toBuilder().setDomain(domain).build();
+      }
       clientCallStream.onNext(usageReports);
     }
 
