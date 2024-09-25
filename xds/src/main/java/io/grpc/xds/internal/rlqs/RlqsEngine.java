@@ -28,22 +28,22 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class RlqsClient {
-  private static final Logger logger = Logger.getLogger(RlqsClient.class.getName());
+public class RlqsEngine {
+  private static final Logger logger = Logger.getLogger(RlqsEngine.class.getName());
 
   private final RlqsApiClient rlqsApiClient;
   private final Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers;
   private final RlqsBucketCache bucketCache;
-  private final String clientHash;
+  private final String configHash;
   private final ScheduledExecutorService timeService;
   private final ConcurrentHashMap<Long, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
 
-  public RlqsClient(
+  public RlqsEngine(
       RemoteServerInfo rlqsServer, String domain,
-      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, String clientHash,
+      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, String configHash,
       ScheduledExecutorService timeService) {
     this.bucketMatchers = bucketMatchers;
-    this.clientHash = clientHash;
+    this.configHash = configHash;
     this.timeService = timeService;
     bucketCache = new RlqsBucketCache();
     rlqsApiClient = new RlqsApiClient(rlqsServer, domain, bucketCache);
@@ -85,8 +85,8 @@ public class RlqsClient {
 
   public void shutdown() {
     // TODO(sergiitk): [IMPL] Timers shutdown
-    // TODO(sergiitk): [IMPL] RlqsClient shutdown
-    logger.log(Level.FINER, "Shutting down RlqsClient with hash {0}", clientHash);
+    // TODO(sergiitk): [IMPL] RlqsEngine shutdown
+    logger.log(Level.FINER, "Shutting down RlqsEngine with hash {0}", configHash);
     rlqsApiClient.shutdown();
   }
 }
