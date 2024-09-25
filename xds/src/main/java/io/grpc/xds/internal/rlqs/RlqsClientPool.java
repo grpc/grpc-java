@@ -47,8 +47,8 @@ public final class RlqsClientPool {
     throw new RlqsPoolSynchronizationException(message, error);
   });
 
-  private final ConcurrentHashMap<String, RlqsClient> clientPool = new ConcurrentHashMap<>();
-  Set<String> clientsToShutdown = Sets.newConcurrentHashSet();
+  private final ConcurrentHashMap<String, RlqsEngine> enginePool = new ConcurrentHashMap<>();
+  Set<String> enginesToShutdown = Sets.newConcurrentHashSet();
   private final ScheduledExecutorService timeService;
   private final int cleanupIntervalSeconds;
 
@@ -72,11 +72,11 @@ public final class RlqsClientPool {
       if (shutdown) {
         return;
       }
-      for (String clientHash : clientsToShutdown) {
-        clientPool.get(clientHash).shutdown();
-        clientPool.remove(clientHash);
+      for (String configHash : enginesToShutdown) {
+        enginePool.get(configHash).shutdown();
+        enginePool.remove(configHash);
       }
-      clientsToShutdown.clear();
+      enginesToShutdown.clear();
     };
     syncContext.schedule(cleanupTask, cleanupIntervalSeconds, TimeUnit.SECONDS, timeService);
   }
@@ -85,35 +85,35 @@ public final class RlqsClientPool {
     syncContext.execute(() -> {
       shutdown = true;
       logger.log(Level.FINER, "Shutting down RlqsClientPool");
-      clientsToShutdown.clear();
-      for (String clientHash : clientPool.keySet()) {
-        clientPool.get(clientHash).shutdown();
+      enginesToShutdown.clear();
+      for (String configHash : enginePool.keySet()) {
+        enginePool.get(configHash).shutdown();
       }
-      clientPool.clear();
+      enginePool.clear();
     });
   }
 
-  public RlqsClient getOrCreateRlqsClient(RlqsFilterConfig config) {
-    final SettableFuture<RlqsClient> future = SettableFuture.create();
-    final String clientHash = makeRlqsClientHash(config);
+  public RlqsEngine getOrCreateRlqsEngine(RlqsFilterConfig config) {
+    final SettableFuture<RlqsEngine> future = SettableFuture.create();
+    final String configHash = hashRlqsFilterConfig(config);
 
     syncContext.execute(() -> {
-      if (clientPool.containsKey(clientHash)) {
-        future.set(clientPool.get(clientHash));
+      if (enginePool.containsKey(configHash)) {
+        future.set(enginePool.get(configHash));
         return;
       }
       // TODO(sergiitk): [IMPL] get from bootstrap.
       RemoteServerInfo rlqsServer = RemoteServerInfo.create(config.rlqsService().targetUri(),
           InsecureChannelCredentials.create());
-      RlqsClient rlqsClient = new RlqsClient(
+      RlqsEngine rlqsEngine = new RlqsEngine(
           rlqsServer,
           config.domain(),
           config.bucketMatchers(),
-          clientHash,
+          configHash,
           timeService);
 
-      clientPool.put(clientHash, rlqsClient);
-      future.set(clientPool.get(clientHash));
+      enginePool.put(configHash, rlqsEngine);
+      future.set(enginePool.get(configHash));
     });
     try {
       // TODO(sergiitk): [IMPL] clarify time
@@ -124,7 +124,8 @@ public final class RlqsClientPool {
     }
   }
 
-  private String makeRlqsClientHash(RlqsFilterConfig config) {
+  private String hashRlqsFilterConfig(RlqsFilterConfig config) {
+    // TODO(sergiitk): [QUESTION] better name? - ask Eric.
     // TODO(sergiitk): [DESIGN] the key should be hashed (domain + buckets) merged config?
     // TODO(sergiitk): [IMPL] Hash buckets
     return config.rlqsService().targetUri() + config.domain();

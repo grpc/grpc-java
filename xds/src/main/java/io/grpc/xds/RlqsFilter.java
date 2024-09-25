@@ -41,8 +41,8 @@ import io.grpc.xds.internal.matchers.MatcherList;
 import io.grpc.xds.internal.matchers.OnMatch;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
-import io.grpc.xds.internal.rlqs.RlqsClient;
 import io.grpc.xds.internal.rlqs.RlqsClientPool;
+import io.grpc.xds.internal.rlqs.RlqsEngine;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
@@ -150,14 +150,14 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       // Being shut down, return no interceptor.
       return null;
     }
-    final RlqsClient rlqsClient = rlqsClientPool.getOrCreateRlqsClient(config);
+    final RlqsEngine rlqsEngine = rlqsClientPool.getOrCreateRlqsEngine(config);
 
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
         // Notes:
-        // map domain() -> an incarnation of bucket matchers, f.e. new RlqsClient(domain, matchers).
+        // map domain() -> an incarnation of bucket matchers, f.e. new RlqsEngine(domain, matchers).
         // shared resource holder, acquire every rpc
         // Store RLQS Client or channel in the config as a reference - FilterConfig config ref
         // when parse.
@@ -174,7 +174,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         // AI: follow up with Eric on how cache is shared, this changes if we need to cache
         //     interceptor
         // AI: discuss the lifetime of RLQS channel and the cache - needs wider per-lang discussion.
-        RateLimitResult result = rlqsClient.evaluate(HttpMatchInput.create(headers, call));
+        RateLimitResult result = rlqsEngine.evaluate(HttpMatchInput.create(headers, call));
         if (RateLimitResult.ALLOWED.equals(result)) {
           return next.startCall(call, headers);
         }
