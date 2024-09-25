@@ -101,21 +101,23 @@ public class SpiffeUtil2Test {
   public void loadTrustBundleFromFileSuccessTest() throws IOException, CertificateParsingException {
     SpiffeBundle tb = SpiffeUtil2.loadTrustBundleFromFile(getClass().getClassLoader()
         .getResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_FILE).getPath());
-    assertEquals(3, tb.getSequenceNumbers().size());
+    assertEquals(4, tb.getSequenceNumbers().size());
     assertEquals(123L, (long) tb.getSequenceNumbers().get("google.com"));
     assertEquals(123L, (long) tb.getSequenceNumbers().get("test.google.com"));
     assertEquals(12035488L, (long) tb.getSequenceNumbers().get("example.com"));
-    assertEquals(4, tb.getBundleMap().size());
+    assertEquals(-1L, (long) tb.getSequenceNumbers().get("test.example.com"));
+    assertEquals(5, tb.getBundleMap().size());
     assertEquals(0, tb.getBundleMap().get("google.com").size());
     assertEquals(0, tb.getBundleMap().get("test.google.com").size());
     assertEquals(0, tb.getBundleMap().get("test.google.com.au").size());
     assertEquals(1, tb.getBundleMap().get("example.com").size());
+    assertEquals(2, tb.getBundleMap().get("test.example.com").size());
     assertEquals("foo.bar.com", SpiffeUtil2.extractSpiffeId(tb.getBundleMap().get("example.com")
         .toArray(new X509Certificate[0])).get().getTrustDomain());
   }
 
   @Test
-  public void loadTrustBundleFromFileFailureTest() throws IOException {
+  public void loadTrustBundleFromFileFailureTest() throws IOException, CertificateException {
     NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil2
         .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
             + SPIFFE_TRUST_BUNDLE_WITH_WRONG_ROOT).getPath()));
@@ -130,7 +132,7 @@ public class SpiffeUtil2Test {
     assertTrue(iae.getMessage().contains("Duplicate key found: google.com"));
     SpiffeBundle tb = SpiffeUtil2.loadTrustBundleFromFile(getClass().getClassLoader()
         .getResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_WRONG_ELEMENTS).getPath());
-    assertEquals(4, tb.getBundleMap().size());
+    assertEquals(5, tb.getBundleMap().size());
     for (List<X509Certificate> certs: tb.getBundleMap().values()) {
       assertEquals(0, certs.size());
     }

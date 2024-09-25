@@ -106,6 +106,7 @@ public final class SpiffeUtil2 {
   *
   * @param trustBundleFile the file path to the JSON file containing the trust bundle
   * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md">JSON format</a>
+  * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/X509-SVID.md#61-publishing-spiffe-bundle-elements">JWK entry format</a>
   */
   public static SpiffeBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
     Map<String, ?> trustDomainsNode = readTrustDomainsFromFile(trustBundleFile);
@@ -118,13 +119,13 @@ public final class SpiffeUtil2 {
         continue;
       }
       Long sequenceNumber = JsonUtil.getNumberAsLong(domainNode, "sequence_number");
-      sequenceNumbers.put(trustDomainName, sequenceNumber);
+      sequenceNumbers.put(trustDomainName, sequenceNumber == null ? -1L : sequenceNumber);
       List<Map<String, ?>> keysNode = JsonUtil.getListOfObjects(domainNode, "keys");
       if (keysNode == null || keysNode.size() == 0) {
         trustBundleMap.put(trustDomainName, Collections.emptyList());
         continue;
       }
-      trustBundleMap.put(trustDomainName, extractCerts(keysNode, trustDomainName));
+      trustBundleMap.put(trustDomainName, extractCert(keysNode, trustDomainName));
     }
     return new SpiffeBundle(sequenceNumbers, trustBundleMap);
   }
@@ -172,7 +173,7 @@ public final class SpiffeUtil2 {
     return true;
   }
 
-  private static List<X509Certificate> extractCerts(List<Map<String, ?>> keysNode,
+  private static List<X509Certificate> extractCert(List<Map<String, ?>> keysNode,
       String trustDomainName) {
     List<X509Certificate> result = new ArrayList<>();
     for (Map<String, ?> keyNode : keysNode) {
@@ -187,7 +188,10 @@ public final class SpiffeUtil2 {
       try {
         Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")
             .generateCertificates(stream);
-        if (certs.size() > 0) {
+        if (certs.size() != 1) {
+          log.log(Level.SEVERE, String.format("Exactly 1 certificate is expected, but %s found for "
+                  + "domain %s.", certs.size(), trustDomainName));
+        } else {
           result.add(certs.toArray(new X509Certificate[0])[0]);
         }
       } catch (CertificateException e) {
