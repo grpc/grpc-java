@@ -53,6 +53,7 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.testing.TestMethodDescriptors;
@@ -384,9 +385,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.upstreamLocalityStatsList()).isEmpty();  // no longer reported
   }
 
-  // TODO(dnvindhya): This test has been added as a fix to verify
-  // https://github.com/grpc/grpc-java/issues/11434.
-  // Once we update PickFirstLeafLoadBalancer as default LoadBalancer, update the test.
+  // Verifies https://github.com/grpc/grpc-java/issues/11434.
   @Test
   public void pickFirstLoadReport_onUpdateAddress() {
     Locality locality1 =
@@ -435,8 +434,17 @@ public class ClusterImplLoadBalancerTest {
     fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
 
     // Faksubchannel mimics update address and returns different locality
-    fakeSubchannel.setConnectedEagIndex(1);
-    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      fakeSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(
+          Status.UNAVAILABLE.withDescription("Try second address instead")));
+      fakeSubchannel = helper.subchannels.poll();
+      fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
+      fakeSubchannel.setConnectedEagIndex(0);
+      fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    } else {
+      fakeSubchannel.setConnectedEagIndex(1);
+      fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+    }
     result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
     ClientStreamTracer streamTracer2 = result.getStreamTracerFactory().newClientStreamTracer(
