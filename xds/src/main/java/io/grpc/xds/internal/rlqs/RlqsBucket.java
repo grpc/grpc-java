@@ -25,11 +25,12 @@ public class RlqsBucket {
   // TODO(sergiitk): consider immutable report structure
   private long numRequestsAllowed = 0;
   private long numRequestsDenied = 0;
-  // last_report_time
+  private long reportingIntervalMillis;
   // last_assignment_time
 
   RlqsBucket(RlqsBucketId bucketId, RlqsBucketSettings bucketSettings) {
     this.bucketId = bucketId;
+    this.reportingIntervalMillis = bucketSettings.reportingIntervalMillis();
   }
 
   RateLimitResult rateLimit() {
@@ -53,5 +54,9 @@ public class RlqsBucket {
 
   public long getNumRequestsAllowed() {
     return numRequestsAllowed;
+  }
+
+  public long getReportingIntervalMillis() {
+    return reportingIntervalMillis;
   }
 }
