@@ -24,6 +24,8 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
+import io.grpc.ExperimentalApi;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
@@ -34,7 +36,6 @@ import io.grpc.s2a.handshaker.S2AIdentity;
 import io.grpc.s2a.handshaker.S2AProtocolNegotiatorFactory;
 import java.io.File;
 import java.io.IOException;
-import java.util.Optional;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -42,6 +43,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * Configures gRPC to use S2A for transport security when establishing a secure channel. Only for
  * use on the client side of a gRPC connection.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/11533")
 public final class S2AChannelCredentials {
   /**
    * Creates a channel credentials builder for establishing an S2A-secured connection.
@@ -49,7 +51,7 @@ public final class S2AChannelCredentials {
    * @param s2aAddress the address of the S2A server used to secure the connection.
    * @return a {@code S2AChannelCredentials.Builder} instance.
    */
-  public static Builder createBuilder(String s2aAddress) {
+  public static Builder newBuilder(String s2aAddress) {
     checkArgument(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
     return new Builder(s2aAddress);
   }
