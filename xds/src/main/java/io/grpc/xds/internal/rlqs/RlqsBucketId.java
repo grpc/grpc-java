@@ -17,7 +17,9 @@
 package io.grpc.xds.internal.rlqs;
 
 import com.google.auto.value.AutoValue;
+import com.google.auto.value.extension.memoized.Memoized;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.service.rate_limit_quota.v3.BucketId;
 import java.util.Map;
 
 @AutoValue
@@ -28,13 +30,18 @@ public abstract class RlqsBucketId {
     return new AutoValue_RlqsBucketId(bucketId);
   }
 
-  public static RlqsBucketId fromEnvoyProto(
-      io.envoyproxy.envoy.service.rate_limit_quota.v3.BucketId envoyProto) {
+  public static RlqsBucketId fromEnvoyProto(BucketId envoyProto) {
     ImmutableMap.Builder<String, String> bucketId = ImmutableMap.builder();
     for (Map.Entry<String, String> entry : envoyProto.getBucketMap().entrySet()) {
       bucketId.put(entry.getKey(), entry.getValue());
     }
     return RlqsBucketId.create(bucketId.build());
+
   }
 
+  @Memoized
+  public BucketId toEnvoyProto() {
+    // TODO(sergiitk): [impl] can be cached.
+    return BucketId.newBuilder().putAllBucket(bucketId()).build();
+  }
 }

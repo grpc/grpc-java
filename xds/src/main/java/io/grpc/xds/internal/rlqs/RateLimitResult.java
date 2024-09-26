@@ -24,6 +24,8 @@ import javax.annotation.Nullable;
 
 @AutoValue
 public abstract class RateLimitResult {
+  // TODO(sergiitk): make RateLimitResult an interface,
+  //  RlqsRateLimitResult extends it - which contains DenyResponse.
 
   public abstract Optional<DenyResponse> denyResponse();
 

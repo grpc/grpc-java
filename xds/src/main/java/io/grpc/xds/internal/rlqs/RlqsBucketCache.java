@@ -19,6 +19,7 @@ package io.grpc.xds.internal.rlqs;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
+import io.grpc.xds.internal.datatype.RateLimitStrategy;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -33,12 +34,19 @@ final class RlqsBucketCache {
   }
 
   void insertBucket(RlqsBucket bucket) {
-    long interval = bucket.getReportingIntervalMillis();
-    if (!bucketsPerInterval.containsKey(interval)) {
-      bucketsPerInterval.put(interval, Sets.newConcurrentHashSet());
+    // read synchronize trick
+    if (buckets.get(bucket.getBucketId()) != null) {
+      return;
     }
-    bucketsPerInterval.get(bucket.getReportingIntervalMillis()).add(bucket);
-    buckets.put(bucket.getBucketId(), bucket);
+    synchronized (this) {
+      long interval = bucket.getReportingIntervalMillis();
+      if (!bucketsPerInterval.containsKey(interval)) {
+        bucketsPerInterval.put(interval, Sets.newConcurrentHashSet());
+      }
+
+      bucketsPerInterval.get(bucket.getReportingIntervalMillis()).add(bucket);
+      buckets.put(bucket.getBucketId(), bucket);
+    }
   }
 
   void deleteBucket(RlqsBucketId bucketId) {
@@ -47,6 +55,10 @@ final class RlqsBucketCache {
     buckets.remove(bucket.getBucketId());
   }
 
+  void updateBucket(RlqsBucketId bucketId, RateLimitStrategy rateLimitStrategy, long ttlMillis) {
+    RlqsBucket bucket = buckets.get(bucketId);
+    bucket.updateAction(rateLimitStrategy, ttlMillis);
+  }
 
   public ImmutableList<RlqsBucket> getBucketsToReport(long reportingIntervalMillis) {
     ImmutableList.Builder<RlqsBucket> report = ImmutableList.builder();

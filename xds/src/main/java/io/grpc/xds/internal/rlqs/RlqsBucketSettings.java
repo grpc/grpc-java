@@ -21,6 +21,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
+import io.grpc.xds.internal.datatype.RateLimitStrategy;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 
 @AutoValue
@@ -29,6 +30,14 @@ public abstract class RlqsBucketSettings {
   public abstract ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder();
 
   public RlqsBucketId toBucketId(HttpMatchInput input) {
+    return null;
+  }
+
+  public RateLimitStrategy noAssignmentStrategy() {
+    return null;
+  }
+
+  public RateLimitStrategy expiredAssignmentStrategy() {
     return null;
   }
 
