@@ -57,8 +57,7 @@ public final class SpiffeUtil2 {
   private static final String KTY_PARAMETER_VALUE = "RSA";
 
   /**
-   * Parses a leaf certificate from the chain to extract unique SPIFFE ID. In case of success,
-   * returns parsed TrustDomain and Path.
+   * Returns the SPIFFE ID from the leaf certificate, if present.
    *
    * @param certChain certificate chain to extract SPIFFE ID from
    */
@@ -66,37 +65,29 @@ public final class SpiffeUtil2 {
       throws CertificateParsingException {
     checkArgument(checkNotNull(certChain, "certChain").length > 0, "CertChain can't be empty");
     Collection<List<?>> subjectAltNames = certChain[0].getSubjectAlternativeNames();
-    if (subjectAltNames != null) {
-      boolean spiffeFound = false;
-      for (List<?> altName : subjectAltNames) {
-        if (altName.size() == 0) {
-          continue;
-        }
-        if (URI_SAN_TYPE.equals(altName.get(0))) {
-          if (spiffeFound) {
-            throw new IllegalArgumentException("Multiple URI SAN values found in the leaf cert.");
-          }
-          spiffeFound = true;
-        }
+    if (subjectAltNames == null) {
+      return Optional.absent();
+    }
+    String uri = null;
+    for (List<?> altName : subjectAltNames) {
+      if (altName.size() < 2 ) {
+        continue;
       }
-      if (!spiffeFound) {
-        return Optional.absent();
-      }
-      for (List<?> altName : subjectAltNames) {
-        if (altName.size() < 2) {
-          continue;
+      if (URI_SAN_TYPE.equals(altName.get(0))) {
+        if (uri != null) {
+          throw new IllegalArgumentException("Multiple URI SAN values found in the leaf cert.");
         }
-        if (URI_SAN_TYPE.equals(altName.get(0))) {
-          String uri = (String) altName.get(1);
-          // Real validation will be plugged in via another PR (SpiffeUtil).
-          String[] parts = uri.substring(9).split("/", 2);
-          String trustDomain = parts[0];
-          String path = parts[1];
-          return Optional.of(new SpiffeId(trustDomain, path));
-        }
+        uri = (String) altName.get(1);
       }
     }
-    return Optional.absent();
+    if (uri == null) {
+      return Optional.absent();
+    }
+    // Real validation will be plugged in via another PR (SpiffeUtil).
+    String[] parts = uri.substring(9).split("/", 2);
+    String trustDomain = parts[0];
+    String path = parts[1];
+    return Optional.of(new SpiffeId(trustDomain, path));
   }
 
   /**
