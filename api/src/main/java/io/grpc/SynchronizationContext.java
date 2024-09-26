@@ -194,7 +194,7 @@ public final class SynchronizationContext implements Executor {
     return new ScheduledHandle(runnable, future);
   }
 
-  public final ScheduledHandle scheduleWithFixedDelay (
+  public final ScheduledHandle scheduleWithFixedDelay(
       final Runnable task, Duration initialDelay, Duration delay,
       ScheduledExecutorService timerService) {
     return scheduleWithFixedDelay(task, TimeUnit.NANOSECONDS.convert(initialDelay.getSeconds(),

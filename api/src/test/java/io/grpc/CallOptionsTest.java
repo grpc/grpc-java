@@ -151,9 +151,9 @@ public class CallOptionsTest {
     assertAbout(deadline()).that(actual).isWithin(10, MILLISECONDS).of(expected);
   }
 
- @Test
+  @Test
   public void withDeadlineAfterDuration() {
-    Deadline actual = CallOptions.DEFAULT.withDeadlineAfter(Duration.ofMinutes(1l)).getDeadline();
+    Deadline actual = CallOptions.DEFAULT.withDeadlineAfter(Duration.ofMinutes(1L)).getDeadline();
     Deadline expected = Deadline.after(1, MINUTES);
 
     assertAbout(deadline()).that(actual).isWithin(10, MILLISECONDS).of(expected);

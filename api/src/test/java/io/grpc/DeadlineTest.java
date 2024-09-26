@@ -139,7 +139,7 @@ public class DeadlineTest {
   }
 
   @Test
-  public void deadLineMatchesDurationValue(){
+  public void deadLineMatchesDurationValue() {
     assertEquals(10, Deadline.after(Duration.ofMinutes(10), ticker)
         .timeRemaining(TimeUnit.MINUTES));
   }
