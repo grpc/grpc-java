@@ -335,7 +335,7 @@ public final class ServerCalls {
     private boolean aborted = false;
     private boolean completed = false;
     private Runnable onCloseHandler;
-
+    private RespT unaryResponse;
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi) {
       this.call = call;
@@ -382,6 +382,9 @@ public final class ServerCalls {
 
     @Override
     public void onError(Throwable t) {
+      if (!serverStreamingOrBidi) {
+        unaryResponse = null;
+      }
       Metadata metadata = Status.trailersFromThrowable(t);
       if (metadata == null) {
         metadata = new Metadata();
@@ -392,6 +395,14 @@ public final class ServerCalls {
 
     @Override
     public void onCompleted() {
+      if (!serverStreamingOrBidi && unaryResponse != null) {
+        if (!sentHeaders) {
+          call.sendHeaders(new Metadata());
+          sentHeaders = true;
+        }
+        call.sendMessage(unaryResponse);
+        unaryResponse = null;
+      }
       call.close(Status.OK, new Metadata());
       completed = true;
     }
