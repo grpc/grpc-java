@@ -151,8 +151,17 @@ public final class S2AChannelCredentials {
         checkState(!isNullOrEmpty(trustBundlePath), "trustBundlePath must not be null or empty.");
 
         File privateKeyFile = new File(privateKeyPath);
+        if (!privateKeyFile.exists()) {
+          throw new IOException(privateKeyPath + " does not exist");
+        }
         File certChainFile = new File(certChainPath);
+        if (!certChainFile.exists()) {
+          throw new IOException(certChainPath + " does not exist");
+        }
         File trustBundleFile = new File(trustBundlePath);
+        if (!trustBundleFile.exists()) {
+          throw new IOException(trustBundlePath + " does not exist");
+        }
 
         s2aChannelCredentials =
             TlsChannelCredentials.newBuilder()
