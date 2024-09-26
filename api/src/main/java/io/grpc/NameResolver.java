@@ -226,7 +226,7 @@ public abstract class NameResolver {
       // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
       onResult2(
           ResolutionResult.newBuilder().setAddressesOrError(
-              StatusOr.of(servers)).setAttributes(attributes).build());
+              StatusOr.fromValue(servers)).setAttributes(attributes).build());
     }
 
     /**
@@ -605,7 +605,7 @@ public abstract class NameResolver {
         List<EquivalentAddressGroup> addresses,
         @ResolutionResultAttr Attributes attributes,
         ConfigOrError serviceConfig) {
-      this.addressesOrError = StatusOr.of(addresses);
+      this.addressesOrError = StatusOr.fromValue(addresses);
       this.attributes = checkNotNull(attributes, "attributes");
       this.serviceConfig = serviceConfig;
     }
@@ -711,7 +711,7 @@ public abstract class NameResolver {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     public static final class Builder {
       private StatusOr<List<EquivalentAddressGroup>> addresses =
-          StatusOr.of(Collections.emptyList());
+          StatusOr.fromValue(Collections.emptyList());
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
       private ConfigOrError serviceConfig;
@@ -727,7 +727,7 @@ public abstract class NameResolver {
        */
       @Deprecated
       public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
-        this.addresses = StatusOr.of(addresses);
+        this.addresses = StatusOr.fromValue(addresses);
         return this;
       }
 

@@ -616,7 +616,7 @@ public class ManagedChannelImplIdlenessTest {
     // the NameResolver.
     ResolutionResult resolutionResult =
         ResolutionResult.newBuilder()
-            .setAddressesOrError(StatusOr.of(servers))
+            .setAddressesOrError(StatusOr.fromValue(servers))
             .setAttributes(Attributes.EMPTY)
             .build();
     nameResolverListenerCaptor.getValue().onResult(resolutionResult);

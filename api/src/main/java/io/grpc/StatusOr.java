@@ -29,7 +29,7 @@ public class StatusOr<T> {
   }
 
   /** Construct from a value. */
-  public static <T> StatusOr<T> of(T value) {
+  public static <T> StatusOr<T> fromValue(T value) {
     StatusOr<T> result = new StatusOr<T>(null, checkNotNull(value, "value"));
     return result;
   }
@@ -46,8 +46,14 @@ public class StatusOr<T> {
     return status == null;
   }
 
-  /** Returns the value if set, or null in case of a non-OK status. */
+  /**
+   * Returns the value if set or throws exception if there is no value set. This method is meant
+   * to be called after checking the return value of hasValue() first.
+   */
   public T getValue() {
+    if (value == null) {
+      throw new IllegalStateException("No value present.");
+    }
     return value;
   }
 

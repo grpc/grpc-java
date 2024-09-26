@@ -1308,7 +1308,7 @@ public class ClusterResolverLoadBalancerTest {
 
     private void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
       listener.onResult(ResolutionResult.newBuilder()
-          .setAddressesOrError(StatusOr.of(addresses)).build());
+          .setAddressesOrError(StatusOr.fromValue(addresses)).build());
     }
 
     private void deliverError(Status error) {
