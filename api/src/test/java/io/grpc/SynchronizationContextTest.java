@@ -248,7 +248,7 @@ public class SynchronizationContextTest {
   }
 
   @Test
-  public void scheduleWithFixedDelayDuration(){
+  public void scheduleWithFixedDelayDuration() {
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =
         syncContext.scheduleWithFixedDelay(task1, Duration.ofSeconds(10),

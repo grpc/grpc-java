@@ -197,8 +197,9 @@ public final class SynchronizationContext implements Executor {
   public final ScheduledHandle scheduleWithFixedDelay (
       final Runnable task, Duration initialDelay, Duration delay,
       ScheduledExecutorService timerService) {
-    return scheduleWithFixedDelay(task, TimeUnit.NANOSECONDS.convert(initialDelay.getSeconds(), TimeUnit.SECONDS),
-        TimeUnit.NANOSECONDS.convert(delay.getSeconds(), TimeUnit.SECONDS), TimeUnit.NANOSECONDS, timerService);
+    return scheduleWithFixedDelay(task, TimeUnit.NANOSECONDS.convert(initialDelay.getSeconds(),
+        TimeUnit.SECONDS), TimeUnit.NANOSECONDS.convert(delay.getSeconds(), TimeUnit.SECONDS),
+        TimeUnit.NANOSECONDS, timerService);
   }
 
   private static class ManagedRunnable implements Runnable {
