@@ -147,7 +147,7 @@ public final class ServerCalls {
           ServerCallStreamObserverImpl<ReqT, RespT> responseObserver,
           ServerCall<ReqT, RespT> call) {
         this.call = call;
-        this.responseObserver = responseObserver;
+        this.responseObserver = responseObserver;  //test Comment
       }
 
       @Override
@@ -335,6 +335,7 @@ public final class ServerCalls {
     private boolean aborted = false;
     private boolean completed = false;
     private Runnable onCloseHandler;
+    private RespT unaryResponseMessage;
 
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi) {
@@ -373,15 +374,23 @@ public final class ServerCalls {
       }
       checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
       checkState(!completed, "Stream is already completed, no further calls are allowed");
-      if (!sentHeaders) {
-        call.sendHeaders(new Metadata());
-        sentHeaders = true;
+      if (serverStreamingOrBidi) {
+        if (!sentHeaders) {
+          call.sendHeaders(new Metadata());
+          sentHeaders = true;
+        }
+        call.sendMessage(response);
       }
-      call.sendMessage(response);
+      else {
+        unaryResponseMessage = response;
+      }
     }
 
     @Override
     public void onError(Throwable t) {
+      if (!serverStreamingOrBidi) {
+        unaryResponseMessage = null;
+      }
       Metadata metadata = Status.trailersFromThrowable(t);
       if (metadata == null) {
         metadata = new Metadata();
@@ -392,6 +401,14 @@ public final class ServerCalls {
 
     @Override
     public void onCompleted() {
+      if (!serverStreamingOrBidi && unaryResponseMessage != null) {
+        if (!sentHeaders) {
+          call.sendHeaders(new Metadata());
+          sentHeaders = true;
+        }
+        call.sendMessage(unaryResponseMessage);
+        unaryResponseMessage = null;
+      }
       call.close(Status.OK, new Metadata());
       completed = true;
     }
