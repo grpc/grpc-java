@@ -46,6 +46,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
+import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.InternalSubchannel.CallTracingTransport;
@@ -1381,7 +1382,9 @@ public class InternalSubchannelTest {
     InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ AUTHORITY);
     ChannelTracer subchannelTracer = new ChannelTracer(logId, 10,
         fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel");
-    internalSubchannel = new InternalSubchannel(addressGroups, AUTHORITY, USER_AGENT,
+    internalSubchannel = new InternalSubchannel(
+        LoadBalancer.CreateSubchannelArgs.newBuilder().setAddresses(addressGroups).build(),
+        AUTHORITY, USER_AGENT,
         mockBackoffPolicyProvider, mockTransportFactory, fakeClock.getScheduledExecutorService(),
         fakeClock.getStopwatchSupplier(), syncContext, mockInternalSubchannelCallback,
         channelz, CallTracer.getDefaultFactory().create(),

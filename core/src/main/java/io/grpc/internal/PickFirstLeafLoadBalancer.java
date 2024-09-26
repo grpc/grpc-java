@@ -74,7 +74,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private BackoffPolicy reconnectPolicy;
   @Nullable
   private ScheduledHandle reconnectTask = null;
-  private boolean serializingRetries = isSerializingRetries();
+  private final boolean serializingRetries = isSerializingRetries();
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -234,9 +234,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return;
     }
 
-    if (newState == IDLE) {
+    if (newState == IDLE && subchannelData.state == READY) {
       helper.refreshNameResolution();
     }
+
     // If we are transitioning from a TRANSIENT_FAILURE to CONNECTING or IDLE we ignore this state
     // transition and still keep the LB in TRANSIENT_FAILURE state. This is referred to as "sticky
     // transient failure". Only a subchannel state change to READY will get the LB out of
@@ -291,7 +292,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         }
 
-        if ( isPassComplete()) {
+        if (isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
               new Picker(PickResult.withError(stateInfo.getStatus())));
@@ -462,11 +463,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           requestConnection();
         } else {
           if (!addressIndex.isValid()) {
-            subchannelData.subchannel.shutdown(); // shutdown the previous subchannel
             scheduleBackoff();
           } else {
-            subchannelData.subchannel.shutdown(); // shutdown the previous subchannel
-            subchannels.remove(currentAddress);
             requestConnection();
           }
         }
@@ -515,9 +513,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     HealthListener hcListener = new HealthListener();
     final Subchannel subchannel = helper.createSubchannel(
         CreateSubchannelArgs.newBuilder()
-        .setAddresses(Lists.newArrayList(
-            new EquivalentAddressGroup(addr, attrs)))
-        .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
+            .setAddresses(Lists.newArrayList(
+                new EquivalentAddressGroup(addr, attrs)))
+            .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
+            .addOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY, serializingRetries)
             .build());
     if (subchannel == null) {
       log.warning("Was not able to create subchannel for " + addr);

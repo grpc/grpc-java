@@ -1475,7 +1475,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroup,
+          CreateSubchannelArgs.newBuilder().setAddresses(addressGroup).build(),
           authority, userAgent, backoffPolicyProvider, oobTransportFactory,
           oobTransportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
           // All callback methods are run from syncContext
@@ -1907,7 +1907,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          args.getAddresses(),
+          args,
           authority(),
           userAgent,
           backoffPolicyProvider,

@@ -122,6 +122,12 @@ public abstract class LoadBalancer {
       LoadBalancer.CreateSubchannelArgs.Key.create("internal:health-check-consumer-listener");
 
   @Internal
+  public static final LoadBalancer.CreateSubchannelArgs.Key<Boolean>
+      DISABLE_SUBCHANNEL_RECONNECT_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.createWithDefault(
+          "internal:disable-subchannel-reconnect", Boolean.FALSE);
+
+  @Internal
   public static final Attributes.Key<Boolean>
       HAS_HEALTH_PRODUCER_LISTENER_KEY =
       Attributes.Key.create("internal:has-health-check-producer-listener");
@@ -823,6 +829,13 @@ public abstract class LoadBalancer {
           .add("attrs", attrs)
           .add("customOptions", Arrays.deepToString(customOptions))
           .toString();
+    }
+
+    @Internal
+    public Object[][] getOptions() {
+      Object[][] retVal = new Object[customOptions.length][2];
+      System.arraycopy(retVal, 0, customOptions, 0, customOptions.length);
+      return retVal;
     }
 
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
