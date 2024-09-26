@@ -145,6 +145,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       // Being shut down, return no interceptor.
       return null;
     }
+
     final RlqsEngine rlqsEngine = rlqsCache.getOrCreateRlqsEngine(config);
 
     return new ServerInterceptor() {

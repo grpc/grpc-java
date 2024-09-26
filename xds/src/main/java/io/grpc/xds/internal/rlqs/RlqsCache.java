@@ -76,16 +76,19 @@ public final class RlqsCache {
     });
   }
 
-  public RlqsEngine getOrCreateRlqsEngine(RlqsFilterConfig config) {
-    final SettableFuture<RlqsEngine> future = SettableFuture.create();
-    final String configHash = hashRlqsFilterConfig(config);
+  public void forgetRlqsEngine(RlqsFilterConfig oldConfig) {
+    // TODO(sergiitk): shutdown one
+  }
 
+  public RlqsEngine getOrCreateRlqsEngine(RlqsFilterConfig config) {
+    final String configHash = hashRlqsFilterConfig(config);
+    if (enginePool.containsKey(configHash)) {
+      return enginePool.get(configHash);
+    }
+
+    final SettableFuture<RlqsEngine> future = SettableFuture.create();
     syncContext.execute(() -> {
-      if (enginePool.containsKey(configHash)) {
-        future.set(enginePool.get(configHash));
-        return;
-      }
-      // TODO(sergiitk): [IMPL] get from bootstrap.
+      // TODO(sergiitk): [IMPL] get channel creds from the bootstrap.
       RemoteServerInfo rlqsServer = RemoteServerInfo.create(config.rlqsService().targetUri(),
           InsecureChannelCredentials.create());
       RlqsEngine rlqsEngine = new RlqsEngine(
