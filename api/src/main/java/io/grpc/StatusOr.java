@@ -20,8 +20,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Objects;
+import javax.annotation.Nullable;
 
 /** Either a Status or a value. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/11563")
 public class StatusOr<T> {
   private StatusOr(Status status, T value) {
     this.status = status;
@@ -29,8 +31,8 @@ public class StatusOr<T> {
   }
 
   /** Construct from a value. */
-  public static <T> StatusOr<T> fromValue(T value) {
-    StatusOr<T> result = new StatusOr<T>(null, checkNotNull(value, "value"));
+  public static <T> StatusOr<T> fromValue(@Nullable T value) {
+    StatusOr<T> result = new StatusOr<T>(null, value);
     return result;
   }
 
@@ -50,8 +52,8 @@ public class StatusOr<T> {
    * Returns the value if set or throws exception if there is no value set. This method is meant
    * to be called after checking the return value of hasValue() first.
    */
-  public T getValue() {
-    if (value == null) {
+  public @Nullable T getValue() {
+    if (status != null) {
       throw new IllegalStateException("No value present.");
     }
     return value;

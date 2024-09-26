@@ -219,7 +219,7 @@ public abstract class NameResolver {
     @Deprecated
     @InlineMe(
         replacement = "this.onResult2(ResolutionResult.newBuilder().setAddressesOrError("
-            + "StatusOr.of(servers)).setAttributes(attributes).build())",
+            + "StatusOr.fromValue(servers)).setAttributes(attributes).build())",
         imports = {"io.grpc.NameResolver.ResolutionResult", "io.grpc.StatusOr"})
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
