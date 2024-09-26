@@ -26,6 +26,7 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
@@ -147,6 +148,11 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    */
   public final S withDeadlineAfter(long duration, TimeUnit unit) {
     return build(channel, callOptions.withDeadlineAfter(duration, unit));
+  }
+
+  public final S withDeadlineAfter(Duration duration) {
+    return withDeadlineAfter(TimeUnit.NANOSECONDS.convert(duration.getSeconds(),
+        TimeUnit.SECONDS), TimeUnit.NANOSECONDS);
   }
 
   /**
