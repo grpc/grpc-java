@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
-import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;

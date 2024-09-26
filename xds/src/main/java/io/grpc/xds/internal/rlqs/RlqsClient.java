@@ -30,7 +30,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
-import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;

@@ -17,10 +17,6 @@
 package io.grpc.xds.internal.rlqs;
 
 public class RlqsBucket {
-  public enum RateLimitResult {
-    ALLOWED, DENIED
-  }
-
   private final RlqsBucketId bucketId;
   // TODO(sergiitk): consider immutable report structure
   private long numRequestsAllowed = 0;
@@ -36,7 +32,7 @@ public class RlqsBucket {
   RateLimitResult rateLimit() {
     // TODO(sergiitk): impl
     numRequestsAllowed += 1;
-    return RateLimitResult.ALLOWED;
+    return RateLimitResult.allow();
   }
 
   void reset() {
