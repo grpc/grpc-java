@@ -633,6 +633,5 @@ public class AbstractClientStreamTest {
     public void runOnTransportThread(Runnable r) {
       r.run();
     }
-  }
-   //Test comment:---
+  }  
 }
