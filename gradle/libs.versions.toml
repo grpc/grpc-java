@@ -6,7 +6,7 @@ nettytcnative = '2.0.65.Final'
 opencensus = "0.31.1"
 # Not upgrading to 4.x as it is not yet ABI compatible.
 # https://github.com/protocolbuffers/protobuf/issues/17247
-protobuf = "3.25.3"
+protobuf = "3.25.5"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"

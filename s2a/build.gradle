@@ -1,6 +1,5 @@
 plugins {
     id "java-library"
-    id "maven-publish"
 
     id "com.github.johnrengelman.shadow"
     id "com.google.osdetector"
@@ -90,6 +89,7 @@ tasks.named("shadowJar").configure {
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
 }
 
+plugins.withId('maven-publish') {
 publishing {
     publications {
         maven(MavenPublication) {
@@ -110,4 +110,5 @@ publishing {
             }
         }
     }
+}
 }
