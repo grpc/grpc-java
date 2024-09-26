@@ -32,14 +32,13 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-import io.grpc.Status;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.internal.datatype.GrpcService;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
 import io.grpc.xds.internal.matchers.MatcherList;
 import io.grpc.xds.internal.matchers.OnMatch;
-import io.grpc.xds.internal.rlqs.RlqsBucket.RateLimitResult;
+import io.grpc.xds.internal.rlqs.RateLimitResult;
 import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
 import io.grpc.xds.internal.rlqs.RlqsCache;
 import io.grpc.xds.internal.rlqs.RlqsEngine;
@@ -171,11 +170,11 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         //     interceptor
         // AI: discuss the lifetime of RLQS channel and the cache - needs wider per-lang discussion.
         RateLimitResult result = rlqsEngine.evaluate(HttpMatchInput.create(headers, call));
-        if (RateLimitResult.ALLOWED.equals(result)) {
+        if (result.isAllowed()) {
           return next.startCall(call, headers);
         }
-        Status status = Status.UNAVAILABLE.withDescription("");
-        call.close(status, new Metadata());
+        RateLimitResult.DenyResponse denyResponse = result.denyResponse().get();
+        call.close(denyResponse.status(), denyResponse.headersToAdd());
         return new ServerCall.Listener<ReqT>(){};
       }
     };
