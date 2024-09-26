@@ -117,19 +117,6 @@ java_library(
     ],
 )
 
-java_library(
-    name = "mtls_to_s2av2_credentials",
-    srcs = ["src/main/java/io/grpc/s2a/MtlsToS2AChannelCredentials.java"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":s2a_channel_pool",
-        ":s2av2_credentials",
-        "//api",
-        "//util",
-        artifact("com.google.guava:guava"),
-    ],
-)
-
 # bazel only accepts proto import with absolute path.
 genrule(
     name = "protobuf_imports",
