@@ -33,7 +33,7 @@ import java.util.logging.Logger;
 
 /**
  * Example to illustrate use of Google credentials as described in
- * @see <a href="../../../../../../GOOGLE_AUTH_EXAMPLE.md">Google Auth Example README</a>
+ * @see <a href="../../../../../../README.md">Google Auth Example README</a>
  *
  * Also @see <a href="https://cloud.google.com/pubsub/docs/reference/rpc/">Google Cloud Pubsub via gRPC</a>
  */
@@ -52,7 +52,7 @@ public class GoogleAuthClient {
    *
    * @param host  host to connect to - typically "pubsub.googleapis.com"
    * @param port  port to connect to - typically 443 - the TLS port
-   * @param callCredentials  the Google call credentials created from a JSON file
+   * @param callCredentials  the Google call credentials
    */
   public GoogleAuthClient(String host, int port, CallCredentials callCredentials) {
     // Google API invocation requires a secure channel. Channels are secure by default (SSL/TLS)
@@ -63,7 +63,7 @@ public class GoogleAuthClient {
    * Construct our gRPC client that connects to the pubsub server using an existing channel.
    *
    * @param channel    channel that has been built already
-   * @param callCredentials  the Google call credentials created from a JSON file
+   * @param callCredentials  the Google call credentials
    */
   GoogleAuthClient(ManagedChannel channel, CallCredentials callCredentials) {
     this.channel = channel;
@@ -100,28 +100,24 @@ public class GoogleAuthClient {
   }
 
   /**
-   * The app requires 2 arguments as described in
-   * @see <a href="../../../../../../GOOGLE_AUTH_EXAMPLE.md">Google Auth Example README</a>
+   * The app requires 1 argument as described in
+   * @see <a href="../../../../../../README.md">Google Auth Example README</a>
    *
-   * arg0 = location of the JSON file for the service account you created in the GCP console
    * arg1 = project name in the form "projects/balmy-cirrus-225307" where "balmy-cirrus-225307" is
    *        the project ID for the project you created.
    *
    */
   public static void main(String[] args) throws Exception {
-    if (args.length < 2) {
-      logger.severe("Usage: please pass 2 arguments:\n" +
-                    "arg0 = location of the JSON file for the service account you created in the GCP console\n" +
-                    "arg1 = project name in the form \"projects/xyz\" where \"xyz\" is the project ID of the project you created.\n");
+    if (args.length < 1) {
+      logger.severe("Usage: please pass 1 argument:\n" +
+                    "arg0 = project name in the form \"projects/xyz\" where \"xyz\" is the project ID of the project you created.\n");
       System.exit(1);
     }
-    GoogleCredentials credentials = GoogleCredentials.fromStream(new FileInputStream(args[0]));
+    GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
 
     // We need to create appropriate scope as per https://cloud.google.com/storage/docs/authentication#oauth-scopes
     credentials = credentials.createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
 
-    // credentials must be refreshed before the access token is available
-    credentials.refreshAccessToken();
     GoogleAuthClient client =
             new GoogleAuthClient("pubsub.googleapis.com", 443, MoreCallCredentials.from(credentials));
 
