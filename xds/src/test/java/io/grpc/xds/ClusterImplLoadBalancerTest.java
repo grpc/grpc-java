@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -280,6 +281,7 @@ public class ClusterImplLoadBalancerTest {
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     leafBalancer.createSubChannel();
     FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
     fakeSubchannel.setConnectedEagIndex(0);
     fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
@@ -309,6 +311,7 @@ public class ClusterImplLoadBalancerTest {
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
     Subchannel subchannel = leafBalancer.createSubChannel();
     FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
     fakeSubchannel.setConnectedEagIndex(0);
     fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
@@ -407,6 +410,7 @@ public class ClusterImplLoadBalancerTest {
     // Leaf balancer is created by Pick First. Get FakeSubchannel created to update attributes
     // A real subchannel would get these attributes from the connected address's EAG locality.
     FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
     fakeSubchannel.setConnectedEagIndex(0);
     fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
@@ -440,15 +444,15 @@ public class ClusterImplLoadBalancerTest {
     streamTracer2.streamClosed(Status.UNAVAILABLE);
 
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    UpstreamLocalityStats localityStats1 = Iterables.get(clusterStats.upstreamLocalityStatsList(),
-        0);
-    assertThat(localityStats1.locality()).isEqualTo(locality1);
+    List<UpstreamLocalityStats> upstreamLocalityStatsList =
+        clusterStats.upstreamLocalityStatsList();
+    UpstreamLocalityStats localityStats1 = Iterables.find(upstreamLocalityStatsList,
+        upstreamLocalityStats -> upstreamLocalityStats.locality().equals(locality1));
     assertThat(localityStats1.totalIssuedRequests()).isEqualTo(0L);
     assertThat(localityStats1.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats1.totalErrorRequests()).isEqualTo(0L);
-    UpstreamLocalityStats localityStats2 = Iterables.get(clusterStats.upstreamLocalityStatsList(),
-        1);
-    assertThat(localityStats2.locality()).isEqualTo(locality2);
+    UpstreamLocalityStats localityStats2 = Iterables.find(upstreamLocalityStatsList,
+        upstreamLocalityStats -> upstreamLocalityStats.locality().equals(locality2));
     assertThat(localityStats2.totalIssuedRequests()).isEqualTo(1L);
     assertThat(localityStats2.totalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats2.totalErrorRequests()).isEqualTo(1L);
@@ -490,6 +494,7 @@ public class ClusterImplLoadBalancerTest {
         .isEqualTo(endpoint.getAddresses());
     leafBalancer.createSubChannel();
     FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
     fakeSubchannel.setConnectedEagIndex(0);
     fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
 
@@ -571,6 +576,7 @@ public class ClusterImplLoadBalancerTest {
         .isEqualTo(endpoint.getAddresses());
     leafBalancer.createSubChannel();
     FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
     fakeSubchannel.setConnectedEagIndex(0);
     fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
@@ -665,6 +671,7 @@ public class ClusterImplLoadBalancerTest {
         .isEqualTo(endpoint.getAddresses());
     leafBalancer.createSubChannel();
     FakeSubchannel fakeSubchannel = helper.subchannels.poll();
+    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
     fakeSubchannel.setConnectedEagIndex(0);
     fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
     assertThat(currentState).isEqualTo(ConnectivityState.READY);
@@ -943,6 +950,7 @@ public class ClusterImplLoadBalancerTest {
               new FixedResultPicker(PickResult.withSubchannel(subchannel)));
         }
       });
+      subchannel.requestConnection();
       return subchannel;
     }
   }
@@ -989,6 +997,8 @@ public class ClusterImplLoadBalancerTest {
     private final Attributes attrs;
     private SubchannelStateListener listener;
     private Attributes connectedAttributes;
+    private ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(ConnectivityState.IDLE);
+    private boolean connectionRequested;
 
     private FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attrs) {
       this.eags = eags;
@@ -1006,6 +1016,9 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public void requestConnection() {
+      if (state.getState() == ConnectivityState.IDLE) {
+        this.connectionRequested = true;
+      }
     }
 
     @Override
@@ -1028,6 +1041,26 @@ public class ClusterImplLoadBalancerTest {
     }
 
     public void updateState(ConnectivityStateInfo newState) {
+      switch (newState.getState()) {
+        case IDLE:
+          assertThat(state.getState()).isEqualTo(ConnectivityState.READY);
+          break;
+        case CONNECTING:
+          assertThat(state.getState())
+              .isIn(Arrays.asList(ConnectivityState.IDLE, ConnectivityState.TRANSIENT_FAILURE));
+          if (state.getState() == ConnectivityState.IDLE) {
+            assertWithMessage("Connection requested").that(this.connectionRequested).isTrue();
+            this.connectionRequested = false;
+          }
+          break;
+        case READY:
+        case TRANSIENT_FAILURE:
+          assertThat(state.getState()).isEqualTo(ConnectivityState.CONNECTING);
+          break;
+        default:
+          break;
+      }
+      this.state = newState;
       listener.onSubchannelState(newState);
     }
 

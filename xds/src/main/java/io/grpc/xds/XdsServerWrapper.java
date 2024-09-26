@@ -425,7 +425,8 @@ final class XdsServerWrapper extends Server {
         return;
       }
       StatusException statusException = Status.UNAVAILABLE.withDescription(
-              "Listener " + resourceName + " unavailable").asException();
+          String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
+              xdsClient.getBootstrapInfo().node().getId())).asException();
       handleConfigNotFound(statusException);
     }
 
@@ -434,9 +435,12 @@ final class XdsServerWrapper extends Server {
       if (stopped) {
         return;
       }
-      logger.log(Level.FINE, "Error from XdsClient", error);
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorWithNodeId = error.withDescription(
+          description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
+      logger.log(Level.FINE, "Error from XdsClient", errorWithNodeId);
       if (!isServing) {
-        listener.onNotServing(error.asException());
+        listener.onNotServing(errorWithNodeId.asException());
       }
     }
 
@@ -664,8 +668,11 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
+            String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+            Status errorWithNodeId = error.withDescription(
+                    description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
             logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
-                    new Object[]{resourceName, error});
+                    new Object[]{resourceName, errorWithNodeId});
             maybeUpdateSelector();
           }
         });

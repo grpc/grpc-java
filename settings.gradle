@@ -65,6 +65,7 @@ include ":grpc-benchmarks"
 include ":grpc-services"
 include ":grpc-servlet"
 include ":grpc-servlet-jakarta"
+include ":grpc-s2a"
 include ":grpc-xds"
 include ":grpc-bom"
 include ":grpc-rls"
@@ -76,6 +77,7 @@ include ":grpc-istio-interop-testing"
 include ":grpc-inprocess"
 include ":grpc-util"
 include ":grpc-opentelemetry"
+include ":grpc-opentelemetry-context-storage-override"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
@@ -100,6 +102,7 @@ project(':grpc-benchmarks').projectDir = "$rootDir/benchmarks" as File
 project(':grpc-services').projectDir = "$rootDir/services" as File
 project(':grpc-servlet').projectDir = "$rootDir/servlet" as File
 project(':grpc-servlet-jakarta').projectDir = "$rootDir/servlet/jakarta" as File
+project(':grpc-s2a').projectDir = "$rootDir/s2a" as File
 project(':grpc-xds').projectDir = "$rootDir/xds" as File
 project(':grpc-bom').projectDir = "$rootDir/bom" as File
 project(':grpc-rls').projectDir = "$rootDir/rls" as File
@@ -111,6 +114,7 @@ project(':grpc-istio-interop-testing').projectDir = "$rootDir/istio-interop-test
 project(':grpc-inprocess').projectDir = "$rootDir/inprocess" as File
 project(':grpc-util').projectDir = "$rootDir/util" as File
 project(':grpc-opentelemetry').projectDir = "$rootDir/opentelemetry" as File
+project(':grpc-opentelemetry-context-storage-override').projectDir = "$rootDir/contextstorage" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'
