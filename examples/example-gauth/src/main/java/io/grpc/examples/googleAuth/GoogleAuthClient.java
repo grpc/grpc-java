@@ -38,10 +38,14 @@ import java.util.logging.Logger;
  * Also @see <a href="https://cloud.google.com/pubsub/docs/reference/rpc/">Google Cloud Pubsub via gRPC</a>
  */
 public class GoogleAuthClient {
+  /**
+   * GoogleAuthClient Logger.
+   */
   private static final Logger logger = Logger.getLogger(GoogleAuthClient.class.getName());
-
+  /**
+   * ManagedChannel.
+   */
   private final ManagedChannel channel;
-
   /**
    * stub generated from the proto file.
    */
