@@ -48,7 +48,7 @@ public class RlqsEngine {
     rlqsClient = new RlqsClient(rlqsServer, domain, bucketCache);
   }
 
-  public RateLimitResult evaluate(HttpMatchInput input) {
+  public RateLimitResult rateLimit(HttpMatchInput input) {
     RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
     RlqsBucketId bucketId = bucketSettings.toBucketId(input);
     RlqsBucket bucket = bucketCache.getBucket(bucketId);

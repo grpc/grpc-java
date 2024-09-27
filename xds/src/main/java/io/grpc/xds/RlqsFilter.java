@@ -170,7 +170,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         // AI: follow up with Eric on how cache is shared, this changes if we need to cache
         //     interceptor
         // AI: discuss the lifetime of RLQS channel and the cache - needs wider per-lang discussion.
-        RateLimitResult result = rlqsEngine.evaluate(HttpMatchInput.create(headers, call));
+        RateLimitResult result = rlqsEngine.rateLimit(HttpMatchInput.create(headers, call));
         if (result.isAllowed()) {
           return next.startCall(call, headers);
         }

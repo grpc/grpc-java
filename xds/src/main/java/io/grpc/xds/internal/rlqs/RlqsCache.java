@@ -76,7 +76,7 @@ public final class RlqsCache {
     });
   }
 
-  public void forgetRlqsEngine(RlqsFilterConfig oldConfig) {
+  public void shutdownRlqsEngine(RlqsFilterConfig oldConfig) {
     // TODO(sergiitk): shutdown one
   }
 
