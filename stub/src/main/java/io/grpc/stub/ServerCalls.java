@@ -373,11 +373,15 @@ public final class ServerCalls {
       }
       checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
       checkState(!completed, "Stream is already completed, no further calls are allowed");
+      if (serverStreamingOrBidi) {
       if (!sentHeaders) {
         call.sendHeaders(new Metadata());
         sentHeaders = true;
       }
       call.sendMessage(response);
+    else {
+        unaryResponse = response;
+      }
     }
 
     @Override
