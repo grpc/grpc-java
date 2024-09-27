@@ -126,7 +126,7 @@ public class GoogleAuthClient {
             new GoogleAuthClient("pubsub.googleapis.com", 443, MoreCallCredentials.from(credentials));
 
     try {
-      client.getTopics(args[1]);
+      client.getTopics(args[0]);
     } finally {
       client.shutdown();
     }
