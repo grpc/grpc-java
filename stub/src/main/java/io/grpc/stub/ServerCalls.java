@@ -335,6 +335,7 @@ public final class ServerCalls {
     private boolean aborted = false;
     private boolean completed = false;
     private Runnable onCloseHandler;
+    private RespT unaryResponse;
 
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi) {
@@ -373,15 +374,21 @@ public final class ServerCalls {
       }
       checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
       checkState(!completed, "Stream is already completed, no further calls are allowed");
-      if (!sentHeaders) {
-        call.sendHeaders(new Metadata());
-        sentHeaders = true;
+      if (serverStreamingOrBidi) {
+        if (!sentHeaders) {
+          call.sendHeaders(new Metadata());
+          sentHeaders = true;
+        }
+        call.sendMessage(response);
+      } else {
+        unaryResponse = response;
       }
-      call.sendMessage(response);
     }
-
     @Override
     public void onError(Throwable t) {
+      if (!serverStreamingOrBidi) {
+        unaryResponse = null;
+      }
       Metadata metadata = Status.trailersFromThrowable(t);
       if (metadata == null) {
         metadata = new Metadata();
@@ -392,6 +399,14 @@ public final class ServerCalls {
 
     @Override
     public void onCompleted() {
+      if (!serverStreamingOrBidi && unaryResponse != null) {
+        if (!sentHeaders) {
+          call.sendHeaders(new Metadata());
+          sentHeaders = true;
+        }
+        call.sendMessage(unaryResponse);
+        unaryResponse = null;
+      }
       call.close(Status.OK, new Metadata());
       completed = true;
     }
