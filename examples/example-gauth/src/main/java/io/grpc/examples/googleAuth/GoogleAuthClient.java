@@ -103,7 +103,7 @@ public class GoogleAuthClient {
    * The app requires 1 argument as described in
    * @see <a href="../../../../../../README.md">Google Auth Example README</a>
    *
-   * arg1 = project name in the form "projects/balmy-cirrus-225307" where "balmy-cirrus-225307" is
+   * arg0 = project name in the form "projects/balmy-cirrus-225307" where "balmy-cirrus-225307" is
    *        the project ID for the project you created.
    *
    */
