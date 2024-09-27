@@ -75,6 +75,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @Nullable
   private ScheduledHandle reconnectTask = null;
   private final boolean serializingRetries = isSerializingRetries();
+  @VisibleForTesting
+  final IndexIntrospector indexIntrospector = new IndexIntrospector();
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -429,12 +431,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (rawConnectivityState == SHUTDOWN) {
-      return;
-    }
-
-    if (!addressIndex.isValid()) {
-      scheduleBackoff();
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
       return;
     }
 
@@ -455,18 +452,15 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         scheduleNextConnection();
         break;
       case TRANSIENT_FAILURE:
-        if (scheduleConnectionTask != null) {
-          break; // let the already scheduled task do its job
-        }
-        addressIndex.increment();
         if (!serializingRetries) {
+          addressIndex.increment();
           requestConnection();
         } else {
           if (!addressIndex.isValid()) {
             scheduleBackoff();
           } else {
-            requestConnection();
-          }
+            subchannelData.subchannel.requestConnection();
+            subchannelData.updateState(CONNECTING);}
         }
         break;
       default:
@@ -720,6 +714,18 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     public int size() {
       return size;
+    }
+  }
+
+  @VisibleForTesting
+  final class IndexIntrospector {
+
+    public int getGroupIndex() {
+      return addressIndex.groupIndex;
+    }
+
+    public boolean isValid() {
+      return addressIndex.isValid();
     }
   }
 

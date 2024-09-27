@@ -78,7 +78,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
-  private final boolean recconectDisabled;
+  private final boolean reconectDisabled;
 
   private final List<ClientTransportFilter> transportFilters;
 
@@ -191,7 +191,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.logId = Preconditions.checkNotNull(logId, "logId");
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.transportFilters = transportFilters;
-    this.recconectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
+    this.reconectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
   }
 
   ChannelLogger getChannelLogger() {
@@ -201,7 +201,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   @Override
   public ClientTransport obtainActiveTransport() {
     ClientTransport savedTransport = activeTransport;
-    if (savedTransport != null && state.getState() != IDLE) {
+    if (savedTransport != null) {
       return savedTransport;
     }
     syncContext.execute(new Runnable() {
@@ -295,7 +295,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     gotoState(ConnectivityStateInfo.forTransientFailure(status));
 
-    if (recconectDisabled) {
+    if (reconectDisabled) {
       return;
     }
 
@@ -347,7 +347,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     if (state.getState() != newState.getState()) {
       Preconditions.checkState(state.getState() != SHUTDOWN,
           "Cannot transition out of SHUTDOWN to " + newState);
-      state = newState;
+      if (reconectDisabled && newState.getState() == TRANSIENT_FAILURE) {
+        state = ConnectivityStateInfo.forNonError(IDLE);
+      } else {
+        state = newState;
+      }
       callback.onStateChange(InternalSubchannel.this, newState);
     }
   }

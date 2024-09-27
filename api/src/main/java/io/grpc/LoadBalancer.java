@@ -831,13 +831,6 @@ public abstract class LoadBalancer {
           .toString();
     }
 
-    @Internal
-    public Object[][] getOptions() {
-      Object[][] retVal = new Object[customOptions.length][2];
-      System.arraycopy(retVal, 0, customOptions, 0, customOptions.length);
-      return retVal;
-    }
-
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
 

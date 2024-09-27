@@ -32,6 +32,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -148,9 +149,13 @@ public class PickFirstLeafLoadBalancerTest {
   private String originalHappyEyeballsEnabledValue;
   private String originalSerializeRetriesValue;
 
+  private long backoffMillis;
+
   @Before
   public void setUp() {
     assumeTrue(!serializeRetries || !enableHappyEyeballs); // they are not compatible
+
+    backoffMillis = TimeUnit.SECONDS.toMillis(1);
     originalSerializeRetriesValue = System.getProperty(GRPC_SERIALIZE_RETRIES);
     System.setProperty(GRPC_SERIALIZE_RETRIES, Boolean.toString(serializeRetries));
 
@@ -2582,6 +2587,44 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void serialized_retries_two_passes() {
+    assumeTrue(serializeRetries); // This test is only for serialized retries
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
+
+    List<EquivalentAddressGroup> addrs =
+        Lists.newArrayList(servers.get(0), servers.get(1), servers.get(2));
+    Subchannel[] subchannels = new Subchannel[]{mockSubchannel1, mockSubchannel2, mockSubchannel3};
+    SubchannelStateListener[] listeners = new SubchannelStateListener[subchannels.length];
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(addrs).build());
+    forwardTimeByConnectionDelay(2);
+    for (int i = 0; i < subchannels.length; i++) {
+      inOrder.verify(subchannels[i]).start(stateListenerCaptor.capture());
+      inOrder.verify(subchannels[i]).requestConnection();
+      listeners[i] = stateListenerCaptor.getValue();
+      listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    }
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
+    assertFalse("Index should be at end", loadBalancer.indexIntrospector.isValid());
+
+    forwardTimeByBackoffDelay(); // should trigger retry
+    for (int i = 0; i < subchannels.length; i++) {
+      inOrder.verify(subchannels[i]).requestConnection();
+      listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error)); // cascade
+    }
+    inOrder.verify(subchannels[0], never()).requestConnection(); // should wait for backoff delay
+
+    forwardTimeByBackoffDelay(); // should trigger retry again
+    for (int i = 0; i < subchannels.length; i++) {
+      inOrder.verify(subchannels[i]).requestConnection();
+      assertEquals(i, loadBalancer.indexIntrospector.getGroupIndex());
+      listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error)); // cascade
+    }
+  }
+
+  @Test
   public void index_looping() {
     Attributes.Key<String> key = Attributes.Key.create("some-key");
     Attributes attr1 = Attributes.newBuilder().set(key, "1").build();
@@ -2718,6 +2761,11 @@ public class PickFirstLeafLoadBalancerTest {
     for (int i = 0; i < times; i++) {
       forwardTimeByConnectionDelay();
     }
+  }
+
+  private void forwardTimeByBackoffDelay() {
+    backoffMillis *= 1.8; // backoff factor for ExponentialBackoffProvider is 1.6 with Jitter .2
+    fakeClock.forwardTime(backoffMillis, TimeUnit.MILLISECONDS);
   }
 
   private void acceptXSubchannels(int num) {
