@@ -44,12 +44,8 @@ gcloud pubsub topics create Topic1
 [service account](https://cloud.google.com/docs/authentication/#service_accounts) in order to access
 Pub/Sub via gRPC APIs as described [here](https://cloud.google.com/iam/docs/creating-managing-service-accounts).
 Assign the [role](https://cloud.google.com/iam/docs/granting-roles-to-service-accounts) `Project -> Owner`
-and for Key type select JSON. Once you click `Create`, a JSON file containing your key is downloaded to
-your computer. Note down the path of this file or copy this file to the computer and file system where
-you will be running the example application as described later. Assume this JSON file is available at
-`/path/to/JSON/file`. You can also use the `gcloud` shell commands to
+You can also use the `gcloud` shell commands to
 [create the service account](https://cloud.google.com/iam/docs/creating-managing-service-accounts#iam-service-accounts-create-gcloud)
-and [the JSON file](https://cloud.google.com/iam/docs/creating-managing-service-account-keys#iam-service-account-keys-create-gcloud).
 
 #### To build the examples
 
@@ -62,19 +58,18 @@ $ ../gradlew installDist
 
 
 #### How to run the example:
-`google-auth-client` requires two command line arguments for the location of the JSON file and the project ID:
+`google-auth-client` requires one command line argument for the project ID:
 
  ```text
-USAGE: GoogleAuthClient <path-to-JSON-file> <project-ID>
+USAGE: GoogleAuthClient <project-ID>
 ```
 
-The first argument <path-to-JSON-file> is the location of the JSON file you created in step 5 above.
-The second argument <project-ID> is the project ID in the form "projects/xyz123" where "xyz123" is
+The first argument <project-ID> is the project ID in the form "projects/xyz123" where "xyz123" is
 the project ID of the project you created (or used) in step 2 above.
 
  ```bash
 # Run the client
-./build/install/example-gauth/bin/google-auth-client /path/to/JSON/file projects/xyz123
+./build/install/example-gauth/bin/google-auth-client projects/xyz123
 ```
  That's it! The client will show the list of Pub/Sub topics for the project as follows:
 
@@ -93,7 +88,7 @@ the project ID of the project you created (or used) in step 2 above.
  ```
  $ mvn verify
  $ # Run the client
- $ mvn exec:java -Dexec.mainClass=io.grpc.examples.googleAuth.GoogleAuthClient -Dexec.args="/path/to/JSON/file projects/xyz123"
+ $ mvn exec:java -Dexec.mainClass=io.grpc.examples.googleAuth.GoogleAuthClient -Dexec.args="projects/xyz123"
  ```
 
  ## Bazel
@@ -101,5 +96,5 @@ the project ID of the project you created (or used) in step 2 above.
  ```
  $ bazel build :google-auth-client
  $ # Run the client
- $ ../bazel-bin/google-auth-client /path/to/JSON/file projects/xyz123
+ $ ../bazel-bin/google-auth-client projects/xyz123
  ```
