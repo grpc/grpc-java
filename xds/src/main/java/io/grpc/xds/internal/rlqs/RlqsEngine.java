@@ -48,7 +48,7 @@ public class RlqsEngine {
     rlqsClient = new RlqsClient(rlqsServer, domain, bucketCache);
   }
 
-  public RateLimitResult rateLimit(HttpMatchInput input) {
+  public RlqsRateLimitResult rateLimit(HttpMatchInput input) {
     RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
     RlqsBucketId bucketId = bucketSettings.toBucketId(input);
     RlqsBucket bucket = bucketCache.getBucket(bucketId);
@@ -56,9 +56,9 @@ public class RlqsEngine {
       return bucket.rateLimit();
     }
     bucket = new RlqsBucket(bucketId, bucketSettings);
-    RateLimitResult rateLimitResult = rlqsClient.sendInitialReport(bucket);
+    RlqsRateLimitResult rlqsRateLimitResult = rlqsClient.sendInitialReport(bucket);
     registerReportTimer(bucketSettings.reportingIntervalMillis());
-    return rateLimitResult;
+    return rlqsRateLimitResult;
   }
 
   private void registerReportTimer(final long reportingIntervalMillis) {
