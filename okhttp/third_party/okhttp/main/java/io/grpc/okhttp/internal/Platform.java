@@ -295,7 +295,9 @@ public class Platform {
         }
       }
     }
-    logger.log(Level.WARNING, "Unable to find Conscrypt");
+    if (PLATFORM instanceof Android) {
+      logger.log(Level.WARNING, "Unable to find Conscrypt");
+    }
     return null;
   }
 
