@@ -16,8 +16,8 @@
 
 package io.grpc.xds.internal.rlqs;
 
-import com.google.common.collect.ImmutableList;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.service.rate_limit_quota.v3.BucketId;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse.BucketAction;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse.BucketAction.QuotaAssignmentAction;
@@ -31,6 +31,7 @@ import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
 import io.grpc.xds.internal.datatype.RateLimitStrategy;
+import io.grpc.xds.internal.rlqs.RlqsBucket.RlqsBucketUsage;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -50,29 +51,19 @@ public final class RlqsClient {
     this.bucketCache = bucketCache;
   }
 
-  RlqsRateLimitResult sendInitialReport(RlqsBucket bucket) {
-    bucketCache.insertBucket(bucket);
-    // Register the first request to the bucket for the initial report.
-    RlqsRateLimitResult rlqsRateLimitResult = bucket.rateLimit();
-    rlqsStream.reportUsage(ImmutableList.of(bucket.snapshotAndResetUsage()));
-    return rlqsRateLimitResult;
+  void sendUsageReports(List<RlqsBucketUsage> bucketUsage) {
+    rlqsStream.reportUsage(bucketUsage);
   }
 
-  void sendUsageReports(List<RlqsBucket> buckets) {
-    ImmutableList.Builder<RlqsBucket.RlqsBucketUsage> reports = ImmutableList.builder();
-    for (RlqsBucket bucket : buckets) {
-      reports.add(bucket.snapshotAndResetUsage());
-    }
-    rlqsStream.reportUsage(reports.build());
+  void abandonBucket(BucketId bucketId) {
+    bucketCache.deleteBucket(RlqsBucketId.fromEnvoyProto(bucketId));
   }
 
-  void abandonBucket(RlqsBucketId bucketId) {
-    bucketCache.deleteBucket(bucketId);
-  }
-
-  void updateBucketAssignment(
-      RlqsBucketId bucketId, RateLimitStrategy rateLimitStrategy, long ttlMillis) {
-    bucketCache.updateBucket(bucketId, rateLimitStrategy, ttlMillis);
+  void updateBucketAssignment(BucketId bucketId, QuotaAssignmentAction quotaAssignment) {
+    bucketCache.updateBucket(
+        RlqsBucketId.fromEnvoyProto(bucketId),
+        RateLimitStrategy.fromEnvoyProto(quotaAssignment.getRateLimitStrategy()),
+        Durations.toMillis(quotaAssignment.getAssignmentTimeToLive()));
   }
 
   public void shutdown() {
@@ -138,13 +129,12 @@ public final class RlqsClient {
         for (BucketAction bucketAction : response.getBucketActionList()) {
           switch (bucketAction.getBucketActionCase()) {
             case ABANDON_ACTION:
-              abandonBucket(RlqsBucketId.fromEnvoyProto(bucketAction.getBucketId()));
+              abandonBucket(bucketAction.getBucketId());
               break;
             case QUOTA_ASSIGNMENT_ACTION:
-              QuotaAssignmentAction quotaAssignmentAction = bucketAction.getQuotaAssignmentAction();
-              updateBucketAssignment(RlqsBucketId.fromEnvoyProto(bucketAction.getBucketId()),
-                  RateLimitStrategy.fromEnvoyProto(quotaAssignmentAction.getRateLimitStrategy()),
-                  Durations.toMillis(quotaAssignmentAction.getAssignmentTimeToLive()));
+              updateBucketAssignment(
+                  bucketAction.getBucketId(),
+                  bucketAction.getQuotaAssignmentAction());
               break;
             default:
               // TODO(sergiitk): error
