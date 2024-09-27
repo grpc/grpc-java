@@ -54,6 +54,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.AbstractEpollStreamChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.Future;
@@ -241,13 +242,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.option(SO_KEEPALIVE, true);
-    // For non-epoll based channel, the option will be ignored.
-    if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
-      ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
-      if (tcpUserTimeout != null) {
-        b.option(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
-      }
-    }
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
       // Every entry in the map is obtained from
       // NettyChannelBuilder#withOption(ChannelOption<T> option, T value)
@@ -286,6 +280,13 @@ class NettyClientTransport implements ConnectionClientTransport {
       };
     }
     channel = regFuture.channel();
+    // For non-epoll based channel, the option will be ignored.
+    if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED && channel instanceof AbstractEpollStreamChannel) {
+      ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
+      if (tcpUserTimeout != null) {
+        channel.config().setOption(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
+      }
+    }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
     // This write will have no effect, yet it will only complete once the negotiationHandler
