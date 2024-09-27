@@ -18,7 +18,6 @@ package io.grpc.s2a;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
@@ -109,8 +108,6 @@ public final class S2AChannelCredentials {
     }
 
     public ChannelCredentials build() throws IOException {
-      checkState(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
-      checkNotNull(s2aChannelCredentials, "S2A channel credentials must not be null");
       ObjectPool<Channel> s2aChannelPool =
           SharedResourcePool.forResource(
               S2AHandshakerServiceChannel.getChannelResource(s2aAddress, s2aChannelCredentials));
