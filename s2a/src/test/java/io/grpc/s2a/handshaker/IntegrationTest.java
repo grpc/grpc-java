@@ -45,7 +45,6 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.FutureTask;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLException;
@@ -210,17 +209,8 @@ public final class IntegrationTest {
     String certChainPath = "src/test/resources/client_cert.pem";
     String trustBundlePath = "src/test/resources/root_cert.pem";
     File privateKeyFile = new File(privateKeyPath);
-    if (!privateKeyFile.exists()) {
-      throw new IOException(privateKeyPath + " does not exist");
-    }
     File certChainFile = new File(certChainPath);
-    if (!certChainFile.exists()) {
-      throw new IOException(certChainPath + " does not exist");
-    }
     File trustBundleFile = new File(trustBundlePath);
-    if (!trustBundleFile.exists()) {
-      throw new IOException(trustBundlePath + " does not exist");
-    }
     ChannelCredentials s2aChannelCredentials =
         TlsChannelCredentials.newBuilder()
           .keyManager(certChainFile, privateKeyFile)

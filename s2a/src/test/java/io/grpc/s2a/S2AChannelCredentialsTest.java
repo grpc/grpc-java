@@ -23,7 +23,6 @@ import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import java.io.File;
-import java.io.IOException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -129,17 +128,8 @@ public final class S2AChannelCredentialsTest {
     String certChainPath = "src/test/resources/client_cert.pem";
     String trustBundlePath = "src/test/resources/root_cert.pem";
     File privateKeyFile = new File(privateKeyPath);
-    if (!privateKeyFile.exists()) {
-      throw new IOException(privateKeyPath + " does not exist");
-    }
     File certChainFile = new File(certChainPath);
-    if (!certChainFile.exists()) {
-      throw new IOException(certChainPath + " does not exist");
-    }
     File trustBundleFile = new File(trustBundlePath);
-    if (!trustBundleFile.exists()) {
-      throw new IOException(trustBundlePath + " does not exist");
-    }
     return TlsChannelCredentials.newBuilder()
       .keyManager(certChainFile, privateKeyFile)
       .trustManager(trustBundleFile)
