@@ -84,6 +84,7 @@ class S2AStub implements AutoCloseable {
    * @throws IOException if an unexpected response is received, or if the {@code reader} or {@code
    *     writer} calls their {@code onError} method.
    */
+  @SuppressWarnings("CheckReturnValue")
   public SessionResp send(SessionReq req) throws IOException, InterruptedException {
     if (doneWriting && doneReading) {
       logger.log(Level.INFO, "Stream to the S2A is closed.");
@@ -92,9 +93,8 @@ class S2AStub implements AutoCloseable {
     createWriterIfNull();
     if (!responses.isEmpty()) {
       IOException exception = null;
-      SessionResp resp = null;
       try {
-        resp = responses.take().getResultOrThrow();
+        responses.take().getResultOrThrow();
       } catch (IOException e) {
         exception = e;
       }
@@ -104,14 +104,15 @@ class S2AStub implements AutoCloseable {
             "Received an unexpected response from a host at the S2A's address. The S2A might be"
                 + " unavailable."
                 + exception.getMessage());
+      } else {
+        throw new IOException("Received an unexpected response from a host at the S2A's address.");
       }
-      return resp;
     }
     try {
       writer.onNext(req);
     } catch (RuntimeException e) {
       writer.onError(e);
-      responses.offer(Result.createWithThrowable(e));
+      responses.add(Result.createWithThrowable(e));
     }
     try {
       return responses.take().getResultOrThrow();
@@ -159,7 +160,7 @@ class S2AStub implements AutoCloseable {
     @Override
     public void onNext(SessionResp resp) {
       verify(!doneReading);
-      responses.offer(Result.createWithResponse(resp));
+      responses.add(Result.createWithResponse(resp));
     }
 
     /**
@@ -169,7 +170,7 @@ class S2AStub implements AutoCloseable {
      */
     @Override
     public void onError(Throwable t) {
-      responses.offer(Result.createWithThrowable(t));
+      responses.add(Result.createWithThrowable(t));
     }
 
     /**
@@ -180,7 +181,7 @@ class S2AStub implements AutoCloseable {
     public void onCompleted() {
       logger.log(Level.INFO, "Reading from the S2A is complete.");
       doneReading = true;
-      responses.offer(
+      responses.add(
           Result.createWithThrowable(
               new ConnectionClosedException("Reading from the S2A is complete.")));
     }

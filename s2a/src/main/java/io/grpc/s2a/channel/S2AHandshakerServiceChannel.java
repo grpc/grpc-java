@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Maps;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
@@ -30,16 +29,15 @@ import io.grpc.MethodDescriptor;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import java.time.Duration;
-import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Provides APIs for managing gRPC channels to S2A servers. Each channel is local and plaintext. If
- * credentials are provided, they are used to secure the channel.
+ * Provides APIs for managing gRPC channels to an S2A server. Each channel is local and plaintext.
+ * If credentials are provided, they are used to secure the channel.
  *
- * <p>This is done as follows: for each S2A server, provides an implementation of gRPC's {@link
+ * <p>This is done as follows: for an S2A server, provides an implementation of gRPC's {@link
  * SharedResourceHolder.Resource} interface called a {@code Resource<Channel>}. A {@code
  * Resource<Channel>} is a factory for creating gRPC channels to the S2A server at a given address,
  * and a channel must be returned to the {@code Resource<Channel>} when it is no longer needed.
@@ -56,8 +54,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class S2AHandshakerServiceChannel {
-  private static final ConcurrentMap<String, Resource<Channel>> SHARED_RESOURCE_CHANNELS =
-      Maps.newConcurrentMap();
   private static final Duration CHANNEL_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
 
   /**
@@ -72,9 +68,7 @@ public final class S2AHandshakerServiceChannel {
   public static Resource<Channel> getChannelResource(
       String s2aAddress, ChannelCredentials s2aChannelCredentials) {
     checkNotNull(s2aAddress);
-    checkNotNull(s2aChannelCredentials);
-    return SHARED_RESOURCE_CHANNELS.computeIfAbsent(
-        s2aAddress, channelResource -> new ChannelResource(s2aAddress, s2aChannelCredentials));
+    return new ChannelResource(s2aAddress, s2aChannelCredentials);
   }
 
   /**
