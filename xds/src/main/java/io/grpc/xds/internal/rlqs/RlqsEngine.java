@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
+import io.grpc.xds.internal.rlqs.RlqsBucket.RlqsBucketUsage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -34,20 +35,21 @@ public class RlqsEngine {
   private final Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers;
   private final RlqsBucketCache bucketCache;
   private final String configHash;
-  private final ScheduledExecutorService timeService;
+  private final ScheduledExecutorService scheduler;
   private final ConcurrentHashMap<Long, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
 
   public RlqsEngine(
       RemoteServerInfo rlqsServer, String domain,
       Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, String configHash,
-      ScheduledExecutorService timeService) {
+      ScheduledExecutorService scheduler) {
     this.bucketMatchers = bucketMatchers;
     this.configHash = configHash;
-    this.timeService = timeService;
+    this.scheduler = scheduler;
     bucketCache = new RlqsBucketCache();
     rlqsClient = new RlqsClient(rlqsServer, domain, bucketCache);
   }
 
+  // TODO(sergiitk): Instead, we should do something similar to computeIfAbsent().
   public RlqsRateLimitResult rateLimit(HttpMatchInput input) {
     RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
     RlqsBucketId bucketId = bucketSettings.toBucketId(input);
@@ -55,8 +57,12 @@ public class RlqsEngine {
     if (bucket != null) {
       return bucket.rateLimit();
     }
+    // Create the new bucket.
     bucket = new RlqsBucket(bucketId, bucketSettings);
-    RlqsRateLimitResult rlqsRateLimitResult = rlqsClient.sendInitialReport(bucket);
+    bucketCache.insertBucket(bucket);
+    // Register the first request to the bucket before the initial report.
+    RlqsRateLimitResult rlqsRateLimitResult = bucket.rateLimit();
+    rlqsClient.sendUsageReports(ImmutableList.of(bucket.snapshotAndResetUsage()));
     registerReportTimer(bucketSettings.reportingIntervalMillis());
     return rlqsRateLimitResult;
   }
@@ -67,7 +73,7 @@ public class RlqsEngine {
       return;
     }
     // TODO(sergiitk): [IMPL] consider manually extending.
-    ScheduledFuture<?> schedule = timeService.scheduleWithFixedDelay(
+    ScheduledFuture<?> schedule = scheduler.scheduleWithFixedDelay(
         () -> reportBucketsWithInterval(reportingIntervalMillis),
         reportingIntervalMillis,
         reportingIntervalMillis,
@@ -76,10 +82,12 @@ public class RlqsEngine {
   }
 
   private void reportBucketsWithInterval(long reportingIntervalMillis) {
-    ImmutableList<RlqsBucket> bucketsToReport =
-        bucketCache.getBucketsToReport(reportingIntervalMillis);
+    ImmutableList.Builder<RlqsBucketUsage> reports = ImmutableList.builder();
+    for (RlqsBucket bucket : bucketCache.getBucketsToReport(reportingIntervalMillis)) {
+      reports.add(bucket.snapshotAndResetUsage());
+    }
     // TODO(sergiitk): [IMPL] destroy timer if empty
-    rlqsClient.sendUsageReports(bucketsToReport);
+    rlqsClient.sendUsageReports(reports.build());
   }
 
   public void shutdown() {
