@@ -384,6 +384,7 @@ public final class ServerCalls {
         unaryResponse = response;
       }
     }
+
     @Override
     public void onError(Throwable t) {
       if (!serverStreamingOrBidi) {
