@@ -20,39 +20,47 @@ package io.grpc.xds.internal.rlqs;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import io.grpc.xds.internal.datatype.RateLimitStrategy;
+import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Consumer;
 
 final class RlqsBucketCache {
   // TODO(sergiitk): consider volatile + synchronize instead
   private final ConcurrentMap<Long, Set<RlqsBucket>> bucketsPerInterval = new ConcurrentHashMap<>();
   private final ConcurrentMap<RlqsBucketId, RlqsBucket> buckets = new ConcurrentHashMap<>();
 
-  RlqsBucket getBucket(RlqsBucketId bucketId) {
-    return buckets.get(bucketId);
-  }
-
-  void insertBucket(RlqsBucket bucket) {
+  RlqsBucket getOrCreate(
+      RlqsBucketId bucketId, RlqsBucketSettings bucketSettings, Consumer<RlqsBucket> onCreate) {
     // read synchronize trick
-    if (buckets.get(bucket.getBucketId()) != null) {
-      return;
+    RlqsBucket bucket = buckets.get(bucketId);
+    if (bucket != null) {
+      return bucket;
     }
     synchronized (this) {
+      bucket = new RlqsBucket(bucketId, bucketSettings);
       long interval = bucket.getReportingIntervalMillis();
-      if (!bucketsPerInterval.containsKey(interval)) {
-        bucketsPerInterval.put(interval, Sets.newConcurrentHashSet());
-      }
-
-      bucketsPerInterval.get(bucket.getReportingIntervalMillis()).add(bucket);
+      bucketsPerInterval.computeIfAbsent(interval, k -> Sets.newConcurrentHashSet()).add(bucket);
       buckets.put(bucket.getBucketId(), bucket);
+      // TODO(sergiitk): [IMPL] call async
+      onCreate.accept(bucket);
+      return bucket;
     }
   }
 
   void deleteBucket(RlqsBucketId bucketId) {
     RlqsBucket bucket = buckets.get(bucketId);
-    bucketsPerInterval.get(bucket.getReportingIntervalMillis()).remove(bucket);
-    buckets.remove(bucket.getBucketId());
+    if (bucket == null) {
+      return;
+    }
+    synchronized (this) {
+      buckets.remove(bucket.getBucketId());
+      bucketsPerInterval.computeIfPresent(bucket.getReportingIntervalMillis(), (k, buckets) -> {
+        buckets.remove(bucket);
+        return buckets.isEmpty() ? null : buckets;
+      });
+    }
   }
 
   void updateBucket(RlqsBucketId bucketId, RateLimitStrategy rateLimitStrategy, long ttlMillis) {
@@ -61,10 +69,7 @@ final class RlqsBucketCache {
   }
 
   public ImmutableList<RlqsBucket> getBucketsToReport(long reportingIntervalMillis) {
-    ImmutableList.Builder<RlqsBucket> report = ImmutableList.builder();
-    for (RlqsBucket bucket : bucketsPerInterval.get(reportingIntervalMillis)) {
-      report.add(bucket);
-    }
-    return report.build();
+    return ImmutableList.copyOf(
+        bucketsPerInterval.getOrDefault(reportingIntervalMillis, Collections.emptySet()));
   }
 }

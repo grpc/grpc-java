@@ -52,6 +52,10 @@ public final class RlqsClient {
   }
 
   void sendUsageReports(List<RlqsBucketUsage> bucketUsage) {
+    if (bucketUsage.isEmpty()) {
+      return;
+    }
+    // TODO(sergiitk): [impl] offload to serialized executor.
     rlqsStream.reportUsage(bucketUsage);
   }
 

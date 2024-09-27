@@ -22,6 +22,8 @@ import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RlqsBucketUsage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -36,7 +38,7 @@ public class RlqsEngine {
   private final RlqsBucketCache bucketCache;
   private final String configHash;
   private final ScheduledExecutorService scheduler;
-  private final ConcurrentHashMap<Long, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Long, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
 
   public RlqsEngine(
       RemoteServerInfo rlqsServer, String domain,
@@ -49,44 +51,46 @@ public class RlqsEngine {
     rlqsClient = new RlqsClient(rlqsServer, domain, bucketCache);
   }
 
-  // TODO(sergiitk): Instead, we should do something similar to computeIfAbsent().
   public RlqsRateLimitResult rateLimit(HttpMatchInput input) {
     RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
     RlqsBucketId bucketId = bucketSettings.toBucketId(input);
-    RlqsBucket bucket = bucketCache.getBucket(bucketId);
-    if (bucket != null) {
-      return bucket.rateLimit();
-    }
-    // Create the new bucket.
-    bucket = new RlqsBucket(bucketId, bucketSettings);
-    bucketCache.insertBucket(bucket);
-    // Register the first request to the bucket before the initial report.
-    RlqsRateLimitResult rlqsRateLimitResult = bucket.rateLimit();
-    rlqsClient.sendUsageReports(ImmutableList.of(bucket.snapshotAndResetUsage()));
-    registerReportTimer(bucketSettings.reportingIntervalMillis());
-    return rlqsRateLimitResult;
+    RlqsBucket bucket = bucketCache.getOrCreate(bucketId, bucketSettings, newBucket -> {
+      // Called if a new bucket was created.
+      scheduleImmediateReport(newBucket);
+      registerReportTimer(newBucket.getReportingIntervalMillis());
+    });
+    return bucket.rateLimit();
   }
 
-  private void registerReportTimer(final long reportingIntervalMillis) {
+  private void scheduleImmediateReport(RlqsBucket newBucket) {
+    try {
+      ScheduledFuture<?> unused = scheduler.schedule(
+          () -> rlqsClient.sendUsageReports(ImmutableList.of(newBucket.snapshotAndResetUsage())),
+          1, TimeUnit.MICROSECONDS);
+    } catch (RejectedExecutionException e) {
+      // Shouldn't happen.
+      logger.finer("Couldn't schedule immediate report for bucket " + newBucket.getBucketId());
+    }
+  }
+
+  private void registerReportTimer(final long intervalMillis) {
     // TODO(sergiitk): [IMPL] cap the interval.
-    if (timers.containsKey(reportingIntervalMillis)) {
-      return;
-    }
-    // TODO(sergiitk): [IMPL] consider manually extending.
-    ScheduledFuture<?> schedule = scheduler.scheduleWithFixedDelay(
-        () -> reportBucketsWithInterval(reportingIntervalMillis),
-        reportingIntervalMillis,
-        reportingIntervalMillis,
-        TimeUnit.MILLISECONDS);
-    timers.put(reportingIntervalMillis, schedule);
+    timers.computeIfAbsent(intervalMillis, k -> newTimer(intervalMillis));
   }
 
-  private void reportBucketsWithInterval(long reportingIntervalMillis) {
+  private ScheduledFuture<?> newTimer(final long intervalMillis) {
+    return scheduler.scheduleWithFixedDelay(
+        () -> reportBucketsWithInterval(intervalMillis),
+        intervalMillis,
+        intervalMillis,
+        TimeUnit.MILLISECONDS);
+  }
+
+  private void reportBucketsWithInterval(long intervalMillis) {
     ImmutableList.Builder<RlqsBucketUsage> reports = ImmutableList.builder();
-    for (RlqsBucket bucket : bucketCache.getBucketsToReport(reportingIntervalMillis)) {
+    for (RlqsBucket bucket : bucketCache.getBucketsToReport(intervalMillis)) {
       reports.add(bucket.snapshotAndResetUsage());
     }
-    // TODO(sergiitk): [IMPL] destroy timer if empty
     rlqsClient.sendUsageReports(reports.build());
   }
 
