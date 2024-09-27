@@ -89,10 +89,10 @@ public final class S2AHandshakerServiceChannelTest {
 
   /**
    * Creates two {@code Resoure<Channel>}s for the same target address and verifies that they are
-   * equal.
+   * distinct.
    */
   @Test
-  public void getChannelResource_twoEqualChannels() {
+  public void getChannelResource_twoUnEqualChannels() {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
@@ -101,19 +101,19 @@ public final class S2AHandshakerServiceChannelTest {
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
             InsecureChannelCredentials.create());
-    assertThat(resource).isEqualTo(resourceTwo);
+    assertThat(resource).isNotEqualTo(resourceTwo);
   }
 
-  /** Same as getChannelResource_twoEqualChannels, but use mTLS. */
+  /** Same as getChannelResource_twoUnEqualChannels, but use mTLS. */
   @Test
-  public void getChannelResource_mtlsTwoEqualChannels() throws Exception {
+  public void getChannelResource_mtlsTwoUnEqualChannels() throws Exception {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + mtlsServer.getPort(), getTlsChannelCredentials());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + mtlsServer.getPort(), getTlsChannelCredentials());
-    assertThat(resource).isEqualTo(resourceTwo);
+    assertThat(resource).isNotEqualTo(resourceTwo);
   }
 
   /**
