@@ -23,9 +23,11 @@ import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
 import io.grpc.xds.internal.datatype.RateLimitStrategy;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
+import io.grpc.xds.internal.rlqs.RlqsRateLimitResult.DenyResponse;
 
 @AutoValue
 public abstract class RlqsBucketSettings {
+  // TODO(sergiitk): [IMPL] this misses most of the parsing and implementation.
 
   public abstract ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder();
 
@@ -35,6 +37,10 @@ public abstract class RlqsBucketSettings {
 
   public RateLimitStrategy noAssignmentStrategy() {
     return null;
+  }
+
+  public DenyResponse denyResponse() {
+    return DenyResponse.DEFAULT;
   }
 
   public RateLimitStrategy expiredAssignmentStrategy() {

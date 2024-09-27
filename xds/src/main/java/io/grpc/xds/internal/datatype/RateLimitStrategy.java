@@ -19,7 +19,6 @@ package io.grpc.xds.internal.datatype;
 import com.google.auto.value.AutoOneOf;
 import io.envoyproxy.envoy.type.v3.RateLimitStrategy.BlanketRule;
 import io.envoyproxy.envoy.type.v3.TokenBucket;
-import io.grpc.xds.internal.rlqs.RateLimitResult;
 
 @AutoOneOf(RateLimitStrategy.Kind.class)
 public abstract class RateLimitStrategy {
@@ -29,15 +28,15 @@ public abstract class RateLimitStrategy {
 
   public abstract Kind getKind();
 
-  public final RateLimitResult rateLimit() {
+  public final boolean rateLimit() {
     switch (getKind()) {
       case BLANKET_RULE:
         switch (blanketRule()) {
           case DENY_ALL:
-            return RateLimitResult.deny(null);
+            return true;
           case ALLOW_ALL:
           default:
-            return RateLimitResult.allow();
+            return false;
         }
       case TOKEN_BUCKET:
         throw new UnsupportedOperationException("Not implemented yet");

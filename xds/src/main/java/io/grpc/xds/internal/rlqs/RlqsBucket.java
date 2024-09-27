@@ -19,6 +19,7 @@ package io.grpc.xds.internal.rlqs;
 import com.google.auto.value.AutoValue;
 import io.grpc.Deadline;
 import io.grpc.xds.internal.datatype.RateLimitStrategy;
+import io.grpc.xds.internal.rlqs.RlqsRateLimitResult.DenyResponse;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
@@ -34,6 +35,7 @@ public class RlqsBucket {
   private final AtomicLong lastSnapshotTimeNanos = new AtomicLong(-1);
   private final AtomicLong numRequestsAllowed = new AtomicLong();
   private final AtomicLong numRequestsDenied = new AtomicLong();
+  private final DenyResponse denyResponse;
 
   // TODO(sergiitk): [impl] consider AtomicReferenceFieldUpdater
   @Nullable
@@ -48,6 +50,7 @@ public class RlqsBucket {
     reportingIntervalMillis = bucketSettings.reportingIntervalMillis();
     expiredAssignmentStrategy = bucketSettings.expiredAssignmentStrategy();
     noAssignmentStrategy = bucketSettings.noAssignmentStrategy();
+    denyResponse = bucketSettings.denyResponse();
   }
 
   public RlqsBucketId getBucketId() {
@@ -58,16 +61,14 @@ public class RlqsBucket {
     return reportingIntervalMillis;
   }
 
-  public RateLimitResult rateLimit() {
-    RateLimitResult rateLimitResult = resolveStrategy().rateLimit();
-    if (rateLimitResult.isAllowed()) {
+  public RlqsRateLimitResult rateLimit() {
+    boolean rateLimited = resolveStrategy().rateLimit();
+    if (!rateLimited) {
       numRequestsAllowed.incrementAndGet();
-    } else {
-      numRequestsDenied.incrementAndGet();
+      return RlqsRateLimitResult.allow();
     }
-    // TODO(sergiitk): [impl] when RateLimitResult broken into RlqsRateLimitResult,
-    //   augment with deny response strategy
-    return rateLimitResult;
+    numRequestsDenied.incrementAndGet();
+    return RlqsRateLimitResult.deny(denyResponse);
   }
 
   private RateLimitStrategy resolveStrategy() {

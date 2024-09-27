@@ -38,10 +38,10 @@ import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
 import io.grpc.xds.internal.matchers.MatcherList;
 import io.grpc.xds.internal.matchers.OnMatch;
-import io.grpc.xds.internal.rlqs.RateLimitResult;
 import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
 import io.grpc.xds.internal.rlqs.RlqsCache;
 import io.grpc.xds.internal.rlqs.RlqsEngine;
+import io.grpc.xds.internal.rlqs.RlqsRateLimitResult;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
@@ -170,11 +170,11 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         // AI: follow up with Eric on how cache is shared, this changes if we need to cache
         //     interceptor
         // AI: discuss the lifetime of RLQS channel and the cache - needs wider per-lang discussion.
-        RateLimitResult result = rlqsEngine.rateLimit(HttpMatchInput.create(headers, call));
+        RlqsRateLimitResult result = rlqsEngine.rateLimit(HttpMatchInput.create(headers, call));
         if (result.isAllowed()) {
           return next.startCall(call, headers);
         }
-        RateLimitResult.DenyResponse denyResponse = result.denyResponse().get();
+        RlqsRateLimitResult.DenyResponse denyResponse = result.denyResponse().get();
         call.close(denyResponse.status(), denyResponse.headersToAdd());
         return new ServerCall.Listener<ReqT>(){};
       }

@@ -23,7 +23,7 @@ import java.util.Optional;
 import javax.annotation.Nullable;
 
 @AutoValue
-public abstract class RateLimitResult {
+public abstract class RlqsRateLimitResult {
   // TODO(sergiitk): make RateLimitResult an interface,
   //  RlqsRateLimitResult extends it - which contains DenyResponse.
 
@@ -37,33 +37,32 @@ public abstract class RateLimitResult {
     return denyResponse().isPresent();
   }
 
-  public static RateLimitResult deny(@Nullable DenyResponse denyResponse) {
+  public static RlqsRateLimitResult deny(@Nullable DenyResponse denyResponse) {
     if (denyResponse == null) {
-      denyResponse = DenyResponse.create();
+      denyResponse = DenyResponse.DEFAULT;
     }
-    return new AutoValue_RateLimitResult(Optional.of(denyResponse));
+    return new AutoValue_RlqsRateLimitResult(Optional.of(denyResponse));
   }
 
-  public static RateLimitResult allow() {
-    return new AutoValue_RateLimitResult(Optional.empty());
+  public static RlqsRateLimitResult allow() {
+    return new AutoValue_RlqsRateLimitResult(Optional.empty());
   }
 
   @AutoValue
   public abstract static class DenyResponse {
+    public static final DenyResponse DEFAULT =
+        DenyResponse.create(Status.UNAVAILABLE.withDescription(""));
+
     public abstract Status status();
 
     public abstract Metadata headersToAdd();
 
     public static DenyResponse create(Status status, Metadata headersToAdd) {
-      return new AutoValue_RateLimitResult_DenyResponse(status, headersToAdd);
+      return new AutoValue_RlqsRateLimitResult_DenyResponse(status, headersToAdd);
     }
 
     public static DenyResponse create(Status status) {
       return create(status, new Metadata());
-    }
-
-    public static DenyResponse create() {
-      return create(Status.UNAVAILABLE.withDescription(""));
     }
   }
 }

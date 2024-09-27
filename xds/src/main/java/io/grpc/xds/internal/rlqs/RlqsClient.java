@@ -50,12 +50,12 @@ public final class RlqsClient {
     this.bucketCache = bucketCache;
   }
 
-  RateLimitResult sendInitialReport(RlqsBucket bucket) {
+  RlqsRateLimitResult sendInitialReport(RlqsBucket bucket) {
     bucketCache.insertBucket(bucket);
     // Register the first request to the bucket for the initial report.
-    RateLimitResult rateLimitResult = bucket.rateLimit();
+    RlqsRateLimitResult rlqsRateLimitResult = bucket.rateLimit();
     rlqsStream.reportUsage(ImmutableList.of(bucket.snapshotAndResetUsage()));
-    return rateLimitResult;
+    return rlqsRateLimitResult;
   }
 
   void sendUsageReports(List<RlqsBucket> buckets) {
