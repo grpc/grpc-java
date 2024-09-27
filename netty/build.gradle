@@ -20,6 +20,7 @@ dependencies {
             libraries.netty.codec.http2
     implementation project(':grpc-core'),
             libs.netty.handler.proxy,
+            libs.netty.transport.epoll,
             libraries.guava,
             libraries.errorprone.annotations,
             libraries.perfmark.api,
