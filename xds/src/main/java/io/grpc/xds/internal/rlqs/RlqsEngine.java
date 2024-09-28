@@ -18,9 +18,11 @@ package io.grpc.xds.internal.rlqs;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
+import io.grpc.xds.internal.datatype.RateLimitStrategy;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RlqsBucketUsage;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.RejectedExecutionException;
@@ -48,7 +50,7 @@ public class RlqsEngine {
     this.configHash = configHash;
     this.scheduler = scheduler;
     bucketCache = new RlqsBucketCache();
-    rlqsClient = new RlqsClient(rlqsServer, domain, bucketCache);
+    rlqsClient = new RlqsClient(rlqsServer, domain, this::onBucketsUpdate);
   }
 
   public RlqsRateLimitResult rateLimit(HttpMatchInput input) {
@@ -60,6 +62,19 @@ public class RlqsEngine {
       registerReportTimer(newBucket.getReportingIntervalMillis());
     });
     return bucket.rateLimit();
+  }
+
+  private void onBucketsUpdate(List<RlqsUpdateBucketAction> bucketActions) {
+    // TODO(sergiitk): [impl] ensure no more than 1 update at a time.
+    for (RlqsUpdateBucketAction bucketAction : bucketActions) {
+      RlqsBucketId bucketId = bucketAction.bucketId();
+      RateLimitStrategy rateLimitStrategy = bucketAction.rateLimitStrategy();
+      if (rateLimitStrategy == null) {
+        bucketCache.deleteBucket(bucketId);
+        continue;
+      }
+      bucketCache.updateBucket(bucketId, rateLimitStrategy, bucketAction.ttlMillis());
+    }
   }
 
   private void scheduleImmediateReport(RlqsBucket newBucket) {
