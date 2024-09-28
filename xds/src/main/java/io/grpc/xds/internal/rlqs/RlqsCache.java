@@ -19,17 +19,14 @@ package io.grpc.xds.internal.rlqs;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.RlqsFilterConfig;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -80,34 +77,20 @@ public final class RlqsCache {
     // TODO(sergiitk): shutdown one
   }
 
-  public RlqsEngine getOrCreateRlqsEngine(RlqsFilterConfig config) {
-    final String configHash = hashRlqsFilterConfig(config);
-    if (enginePool.containsKey(configHash)) {
-      return enginePool.get(configHash);
-    }
+  public RlqsEngine getOrCreateRlqsEngine(final RlqsFilterConfig config) {
+    String configHash = hashRlqsFilterConfig(config);
+    return enginePool.computeIfAbsent(configHash, k -> newRlqsEngine(k, config));
+  }
 
-    final SettableFuture<RlqsEngine> future = SettableFuture.create();
-    syncContext.execute(() -> {
-      // TODO(sergiitk): [IMPL] get channel creds from the bootstrap.
-      RemoteServerInfo rlqsServer = RemoteServerInfo.create(config.rlqsService().targetUri(),
-          InsecureChannelCredentials.create());
-      RlqsEngine rlqsEngine = new RlqsEngine(
-          rlqsServer,
-          config.domain(),
-          config.bucketMatchers(),
-          configHash,
-          scheduler);
-
-      enginePool.put(configHash, rlqsEngine);
-      future.set(enginePool.get(configHash));
-    });
-    try {
-      // TODO(sergiitk): [IMPL] clarify time
-      return future.get(1, TimeUnit.SECONDS);
-    } catch (InterruptedException | ExecutionException | TimeoutException e) {
-      // TODO(sergiitk): [IMPL] handle properly
-      throw new RuntimeException(e);
-    }
+  private RlqsEngine newRlqsEngine(String configHash, RlqsFilterConfig config) {
+    // TODO(sergiitk): [IMPL] get channel creds from the bootstrap.
+    ChannelCredentials creds = InsecureChannelCredentials.create();
+    return new RlqsEngine(
+        RemoteServerInfo.create(config.rlqsService().targetUri(), creds),
+        config.domain(),
+        config.bucketMatchers(),
+        configHash,
+        scheduler);
   }
 
   private String hashRlqsFilterConfig(RlqsFilterConfig config) {
