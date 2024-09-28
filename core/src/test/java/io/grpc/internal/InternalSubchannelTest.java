@@ -1428,7 +1428,8 @@ public class InternalSubchannelTest {
     createInternalSubchannel(false, addrs);
   }
 
-  private void createInternalSubchannel(boolean reconnectDisabled, EquivalentAddressGroup ... addrs) {
+  private void createInternalSubchannel(boolean reconnectDisabled,
+                                        EquivalentAddressGroup ... addrs) {
     List<EquivalentAddressGroup> addressGroups = Arrays.asList(addrs);
     InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ AUTHORITY);
     ChannelTracer subchannelTracer = new ChannelTracer(logId, 10,

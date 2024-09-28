@@ -460,7 +460,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             scheduleBackoff();
           } else {
             subchannelData.subchannel.requestConnection();
-            subchannelData.updateState(CONNECTING);}
+            subchannelData.updateState(CONNECTING);
+          }
         }
         break;
       default:
