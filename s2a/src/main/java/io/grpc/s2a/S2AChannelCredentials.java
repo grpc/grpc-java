@@ -57,13 +57,11 @@ public final class S2AChannelCredentials {
   @NotThreadSafe
   public static final class Builder {
     private final String s2aAddress;
-    private ObjectPool<Channel> s2aChannelPool;
     private ChannelCredentials s2aChannelCredentials;
     private @Nullable S2AIdentity localIdentity = null;
 
     Builder(String s2aAddress) {
       this.s2aAddress = s2aAddress;
-      this.s2aChannelPool = null;
       this.s2aChannelCredentials = InsecureChannelCredentials.create();
     }
 
@@ -115,15 +113,14 @@ public final class S2AChannelCredentials {
 
     public ChannelCredentials build() {
       checkState(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
-      ObjectPool<Channel> s2aChannelPool =
-          SharedResourcePool.forResource(
-              S2AHandshakerServiceChannel.getChannelResource(s2aAddress, s2aChannelCredentials));
-      checkNotNull(s2aChannelPool, "s2aChannelPool");
-      this.s2aChannelPool = s2aChannelPool;
       return InternalNettyChannelCredentials.create(buildProtocolNegotiatorFactory());
     }
 
     InternalProtocolNegotiator.ClientFactory buildProtocolNegotiatorFactory() {
+      ObjectPool<Channel> s2aChannelPool =
+          SharedResourcePool.forResource(
+              S2AHandshakerServiceChannel.getChannelResource(s2aAddress, s2aChannelCredentials));
+      checkNotNull(s2aChannelPool, "s2aChannelPool");
       return S2AProtocolNegotiatorFactory.createClientFactory(localIdentity, s2aChannelPool);
     }
   }
