@@ -26,6 +26,11 @@ public abstract class RateLimitStrategy {
   //   and AllowAll DenyAll, TokenBucket extending it
   public enum Kind { BLANKET_RULE, TOKEN_BUCKET }
 
+  public static final RateLimitStrategy ALLOW_ALL =
+      AutoOneOf_RateLimitStrategy.blanketRule(BlanketRule.ALLOW_ALL);
+  public static final RateLimitStrategy DENY_ALL =
+      AutoOneOf_RateLimitStrategy.blanketRule(BlanketRule.DENY_ALL);
+
   public abstract Kind getKind();
 
   public final boolean rateLimit() {
@@ -52,7 +57,14 @@ public abstract class RateLimitStrategy {
   public abstract TokenBucket tokenBucket();
 
   public static RateLimitStrategy ofBlanketRule(BlanketRule blanketRuleProto) {
-    return AutoOneOf_RateLimitStrategy.blanketRule(blanketRuleProto);
+    switch (blanketRuleProto) {
+      case ALLOW_ALL:
+        return RateLimitStrategy.ALLOW_ALL;
+      case DENY_ALL:
+        return RateLimitStrategy.DENY_ALL;
+      default:
+        throw new UnsupportedOperationException("Wrong BlanketRule proto");
+    }
   }
 
   public static RateLimitStrategy ofTokenBucket(TokenBucket tokenBucketProto) {

@@ -16,11 +16,10 @@
 
 package io.grpc.xds.internal.rlqs;
 
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.service.rate_limit_quota.v3.BucketId;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse.BucketAction;
-import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse.BucketAction.QuotaAssignmentAction;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaServiceGrpc;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaServiceGrpc.RateLimitQuotaServiceStub;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaUsageReports;
@@ -30,11 +29,11 @@ import io.grpc.ManagedChannel;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
-import io.grpc.xds.internal.datatype.RateLimitStrategy;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RlqsBucketUsage;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -42,32 +41,24 @@ public final class RlqsClient {
   private static final Logger logger = Logger.getLogger(RlqsClient.class.getName());
 
   private final RemoteServerInfo serverInfo;
+  private final Consumer<List<RlqsUpdateBucketAction>> bucketsUpdateCallback;
   private final RlqsStream rlqsStream;
-  private final RlqsBucketCache bucketCache;
 
-  RlqsClient(RemoteServerInfo serverInfo, String domain, RlqsBucketCache bucketCache) {
+  RlqsClient(
+      RemoteServerInfo serverInfo, String domain,
+      Consumer<List<RlqsUpdateBucketAction>> bucketsUpdateCallback) {
+    // TODO(sergiitk): [post] check not null.
     this.serverInfo = serverInfo;
+    this.bucketsUpdateCallback = bucketsUpdateCallback;
     this.rlqsStream = new RlqsStream(serverInfo, domain);
-    this.bucketCache = bucketCache;
   }
 
-  void sendUsageReports(List<RlqsBucketUsage> bucketUsage) {
+  public void sendUsageReports(List<RlqsBucketUsage> bucketUsage) {
     if (bucketUsage.isEmpty()) {
       return;
     }
     // TODO(sergiitk): [impl] offload to serialized executor.
     rlqsStream.reportUsage(bucketUsage);
-  }
-
-  void abandonBucket(BucketId bucketId) {
-    bucketCache.deleteBucket(RlqsBucketId.fromEnvoyProto(bucketId));
-  }
-
-  void updateBucketAssignment(BucketId bucketId, QuotaAssignmentAction quotaAssignment) {
-    bucketCache.updateBucket(
-        RlqsBucketId.fromEnvoyProto(bucketId),
-        RateLimitStrategy.fromEnvoyProto(quotaAssignment.getRateLimitStrategy()),
-        Durations.toMillis(quotaAssignment.getAssignmentTimeToLive()));
   }
 
   public void shutdown() {
@@ -97,8 +88,6 @@ public final class RlqsClient {
       clientCallStream = (ClientCallStreamObserver<RateLimitQuotaUsageReports>)
           stub.streamRateLimitQuotas(new RlqsStreamObserver());
       // TODO(sergiitk): [IMPL] set on ready handler?
-      // TODO(sergiitk): [QUESTION] a nice way to handle setting domain in the first usage report?
-      //                 - probably an interceptor
     }
 
     private BucketQuotaUsage toUsageReport(RlqsBucket.RlqsBucketUsage usage) {
@@ -130,20 +119,11 @@ public final class RlqsClient {
     private class RlqsStreamObserver implements StreamObserver<RateLimitQuotaResponse> {
       @Override
       public void onNext(RateLimitQuotaResponse response) {
+        ImmutableList.Builder<RlqsUpdateBucketAction> bucketUpdates = ImmutableList.builder();
         for (BucketAction bucketAction : response.getBucketActionList()) {
-          switch (bucketAction.getBucketActionCase()) {
-            case ABANDON_ACTION:
-              abandonBucket(bucketAction.getBucketId());
-              break;
-            case QUOTA_ASSIGNMENT_ACTION:
-              updateBucketAssignment(
-                  bucketAction.getBucketId(),
-                  bucketAction.getQuotaAssignmentAction());
-              break;
-            default:
-              // TODO(sergiitk): error
-          }
+          bucketUpdates.add(RlqsUpdateBucketAction.fromEnvoyProto(bucketAction));
         }
+        bucketsUpdateCallback.accept(bucketUpdates.build());
       }
 
       @Override
