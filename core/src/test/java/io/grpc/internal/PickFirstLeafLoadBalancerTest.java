@@ -2764,7 +2764,7 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   private void forwardTimeByBackoffDelay() {
-    backoffMillis *= 1.8; // backoff factor for ExponentialBackoffProvider is 1.6 with Jitter .2
+    backoffMillis = (long) (backoffMillis * 1.8); // backoff factor default is 1.6 with Jitter .2
     fakeClock.forwardTime(backoffMillis, TimeUnit.MILLISECONDS);
   }
 
