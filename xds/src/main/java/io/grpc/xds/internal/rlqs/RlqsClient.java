@@ -53,12 +53,12 @@ public final class RlqsClient {
     this.rlqsStream = new RlqsStream(serverInfo, domain);
   }
 
-  public void sendUsageReports(List<RlqsBucketUsage> bucketUsage) {
-    if (bucketUsage.isEmpty()) {
+  public void sendUsageReports(List<RlqsBucketUsage> bucketUsages) {
+    if (bucketUsages.isEmpty()) {
       return;
     }
     // TODO(sergiitk): [impl] offload to serialized executor.
-    rlqsStream.reportUsage(bucketUsage);
+    rlqsStream.reportUsage(bucketUsages);
   }
 
   public void shutdown() {
@@ -119,11 +119,11 @@ public final class RlqsClient {
     private class RlqsStreamObserver implements StreamObserver<RateLimitQuotaResponse> {
       @Override
       public void onNext(RateLimitQuotaResponse response) {
-        ImmutableList.Builder<RlqsUpdateBucketAction> bucketUpdates = ImmutableList.builder();
+        ImmutableList.Builder<RlqsUpdateBucketAction> updateActions = ImmutableList.builder();
         for (BucketAction bucketAction : response.getBucketActionList()) {
-          bucketUpdates.add(RlqsUpdateBucketAction.fromEnvoyProto(bucketAction));
+          updateActions.add(RlqsUpdateBucketAction.fromEnvoyProto(bucketAction));
         }
-        bucketsUpdateCallback.accept(bucketUpdates.build());
+        bucketsUpdateCallback.accept(updateActions.build());
       }
 
       @Override
