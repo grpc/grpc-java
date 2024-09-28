@@ -30,12 +30,12 @@ public class RlqsBucket {
 
   private final RateLimitStrategy noAssignmentStrategy;
   private final RateLimitStrategy expiredAssignmentStrategy;
+  private final DenyResponse denyResponse;
 
   // TODO(sergiitk): [impl] consider AtomicLongFieldUpdater
   private final AtomicLong lastSnapshotTimeNanos = new AtomicLong(-1);
   private final AtomicLong numRequestsAllowed = new AtomicLong();
   private final AtomicLong numRequestsDenied = new AtomicLong();
-  private final DenyResponse denyResponse;
 
   // TODO(sergiitk): [impl] consider AtomicReferenceFieldUpdater
   @Nullable

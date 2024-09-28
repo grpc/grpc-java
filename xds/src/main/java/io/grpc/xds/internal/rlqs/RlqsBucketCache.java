@@ -31,7 +31,7 @@ final class RlqsBucketCache {
   private final ConcurrentMap<Long, Set<RlqsBucket>> bucketsPerInterval = new ConcurrentHashMap<>();
   private final ConcurrentMap<RlqsBucketId, RlqsBucket> buckets = new ConcurrentHashMap<>();
 
-  RlqsBucket getOrCreate(
+  public RlqsBucket getOrCreate(
       RlqsBucketId bucketId, RlqsBucketSettings bucketSettings, Consumer<RlqsBucket> onCreate) {
     // read synchronize trick
     RlqsBucket bucket = buckets.get(bucketId);
@@ -49,7 +49,7 @@ final class RlqsBucketCache {
     }
   }
 
-  void deleteBucket(RlqsBucketId bucketId) {
+  public void deleteBucket(RlqsBucketId bucketId) {
     RlqsBucket bucket = buckets.get(bucketId);
     if (bucket == null) {
       return;
@@ -63,7 +63,8 @@ final class RlqsBucketCache {
     }
   }
 
-  void updateBucket(RlqsBucketId bucketId, RateLimitStrategy rateLimitStrategy, long ttlMillis) {
+  public void updateBucket(
+      RlqsBucketId bucketId, RateLimitStrategy rateLimitStrategy, long ttlMillis) {
     RlqsBucket bucket = buckets.get(bucketId);
     bucket.updateAction(rateLimitStrategy, ttlMillis);
   }
