@@ -56,12 +56,23 @@ public class RlqsEngine {
   public RlqsRateLimitResult rateLimit(HttpMatchInput input) {
     RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
     RlqsBucketId bucketId = bucketSettings.toBucketId(input);
+    // Special case when bucket id builder not set.
+    if (bucketId == null) {
+      return rateLimitWithoutReports(bucketSettings);
+    }
     RlqsBucket bucket = bucketCache.getOrCreate(bucketId, bucketSettings, newBucket -> {
       // Called if a new bucket was created.
       scheduleImmediateReport(newBucket);
       registerReportTimer(newBucket.getReportingIntervalMillis());
     });
     return bucket.rateLimit();
+  }
+
+  private static RlqsRateLimitResult rateLimitWithoutReports(RlqsBucketSettings bucketSettings) {
+    if (bucketSettings.noAssignmentStrategy().rateLimit()) {
+      return RlqsRateLimitResult.deny(bucketSettings.denyResponse());
+    }
+    return RlqsRateLimitResult.allow();
   }
 
   private void onBucketsUpdate(List<RlqsUpdateBucketAction> bucketActions) {
