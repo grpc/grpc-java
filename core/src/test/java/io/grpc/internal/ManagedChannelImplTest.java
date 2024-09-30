@@ -84,7 +84,6 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
-import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
