@@ -102,8 +102,7 @@ class S2AStub implements AutoCloseable {
       if (exception != null) {
         throw new IOException(
             "Received an unexpected response from a host at the S2A's address. The S2A might be"
-                + " unavailable."
-                + exception.getMessage());
+                + " unavailable.", exception);
       } else {
         throw new IOException("Received an unexpected response from a host at the S2A's address.");
       }
