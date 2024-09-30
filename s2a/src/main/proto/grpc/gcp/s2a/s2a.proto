@@ -24,7 +24,7 @@ import "grpc/gcp/s2a/s2a_context.proto";
 
 option java_multiple_files = true;
 option java_outer_classname = "S2AProto";
-option java_package = "io.grpc.s2a.handshaker";
+option java_package = "io.grpc.s2a.internal.handshaker";
 
 enum SignatureAlgorithm {
   S2A_SSL_SIGN_UNSPECIFIED = 0;

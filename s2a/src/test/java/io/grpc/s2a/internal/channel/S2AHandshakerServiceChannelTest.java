@@ -36,7 +36,7 @@ import io.grpc.TlsServerCredentials;
 import io.grpc.benchmarks.Utils;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.s2a.channel.S2AHandshakerServiceChannel.HandshakerServiceChannel;
+import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel.HandshakerServiceChannel;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;

@@ -31,7 +31,7 @@ public final class AccessTokenManager {
     Optional<?> tokenFetcher;
     try {
       Class<?> singleTokenFetcherClass =
-          Class.forName("io.grpc.s2a.handshaker.tokenmanager.SingleTokenFetcher");
+          Class.forName("io.grpc.s2a.internal.handshaker.tokenmanager.SingleTokenFetcher");
       Method createTokenFetcher = singleTokenFetcherClass.getMethod("create");
       tokenFetcher = (Optional) createTokenFetcher.invoke(null);
     } catch (ClassNotFoundException e) {

@@ -31,7 +31,7 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.grpc.s2a.internal.handshaker.S2AProtocolNegotiatorFactory;
-
+import java.io.IOException;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
