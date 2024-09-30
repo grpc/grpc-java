@@ -31,7 +31,6 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.s2a.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.handshaker.S2AIdentity;
 import io.grpc.s2a.handshaker.S2AProtocolNegotiatorFactory;
-import java.io.IOException;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -59,13 +58,11 @@ public final class S2AChannelCredentials {
   public static final class Builder {
     private final String s2aAddress;
     private final ChannelCredentials s2aChannelCredentials;
-    private ObjectPool<Channel> s2aChannelPool;
     private @Nullable S2AIdentity localIdentity = null;
 
     Builder(String s2aAddress, ChannelCredentials s2aChannelCredentials) {
       this.s2aAddress = s2aAddress;
       this.s2aChannelCredentials = s2aChannelCredentials;
-      this.s2aChannelPool = null;
     }
 
     /**
@@ -107,16 +104,15 @@ public final class S2AChannelCredentials {
       return this;
     }
 
-    public ChannelCredentials build() throws IOException {
-      ObjectPool<Channel> s2aChannelPool =
-          SharedResourcePool.forResource(
-              S2AHandshakerServiceChannel.getChannelResource(s2aAddress, s2aChannelCredentials));
-      checkNotNull(s2aChannelPool, "s2aChannelPool");
-      this.s2aChannelPool = s2aChannelPool;
+    public ChannelCredentials build() {
       return InternalNettyChannelCredentials.create(buildProtocolNegotiatorFactory());
     }
 
     InternalProtocolNegotiator.ClientFactory buildProtocolNegotiatorFactory() {
+      ObjectPool<Channel> s2aChannelPool =
+          SharedResourcePool.forResource(
+              S2AHandshakerServiceChannel.getChannelResource(s2aAddress, s2aChannelCredentials));
+      checkNotNull(s2aChannelPool, "s2aChannelPool");
       return S2AProtocolNegotiatorFactory.createClientFactory(localIdentity, s2aChannelPool);
     }
   }
