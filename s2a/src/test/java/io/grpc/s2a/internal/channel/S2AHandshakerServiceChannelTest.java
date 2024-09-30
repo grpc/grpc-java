@@ -18,16 +18,13 @@ package io.grpc.s2a.internal.channel;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertThrows;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -39,16 +36,13 @@ import io.grpc.TlsServerCredentials;
 import io.grpc.benchmarks.Utils;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.s2a.channel.S2AHandshakerServiceChannel.EventLoopHoldingChannel;
+import io.grpc.s2a.channel.S2AHandshakerServiceChannel.HandshakerServiceChannel;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
-import io.netty.channel.EventLoopGroup;
 import java.io.File;
-import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -60,8 +54,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class S2AHandshakerServiceChannelTest {
   @ClassRule public static final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
-  private static final Duration CHANNEL_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
-  private final EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
   private Server mtlsServer;
   private Server plaintextServer;
 
@@ -82,7 +74,7 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     assertThat(resource.toString()).isEqualTo("grpc-s2a-channel");
   }
 
@@ -97,31 +89,31 @@ public final class S2AHandshakerServiceChannelTest {
 
   /**
    * Creates two {@code Resoure<Channel>}s for the same target address and verifies that they are
-   * equal.
+   * distinct.
    */
   @Test
-  public void getChannelResource_twoEqualChannels() {
+  public void getChannelResource_twoUnEqualChannels() {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
-    assertThat(resource).isEqualTo(resourceTwo);
+            InsecureChannelCredentials.create());
+    assertThat(resource).isNotEqualTo(resourceTwo);
   }
 
-  /** Same as getChannelResource_twoEqualChannels, but use mTLS. */
+  /** Same as getChannelResource_twoUnEqualChannels, but use mTLS. */
   @Test
-  public void getChannelResource_mtlsTwoEqualChannels() throws Exception {
+  public void getChannelResource_mtlsTwoUnEqualChannels() throws Exception {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + mtlsServer.getPort(), getTlsChannelCredentials());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + mtlsServer.getPort(), getTlsChannelCredentials());
-    assertThat(resource).isEqualTo(resourceTwo);
+    assertThat(resource).isNotEqualTo(resourceTwo);
   }
 
   /**
@@ -133,10 +125,10 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
-            "localhost:" + Utils.pickUnusedPort(), /* s2aChannelCredentials= */ Optional.empty());
+            "localhost:" + Utils.pickUnusedPort(), InsecureChannelCredentials.create());
     assertThat(resourceTwo).isNotEqualTo(resource);
   }
 
@@ -161,7 +153,7 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Channel channel = resource.create();
     resource.close(channel);
     StatusRuntimeException expected =
@@ -191,7 +183,7 @@ public final class S2AHandshakerServiceChannelTest {
   }
 
   /**
-   * Verifies that an {@code EventLoopHoldingChannel}'s {@code newCall} method can be used to
+   * Verifies that an {@code HandshakerServiceChannel}'s {@code newCall} method can be used to
    * perform a simple RPC.
    */
   @Test
@@ -199,9 +191,9 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Channel channel = resource.create();
-    assertThat(channel).isInstanceOf(EventLoopHoldingChannel.class);
+    assertThat(channel).isInstanceOf(HandshakerServiceChannel.class);
     assertThat(
             SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance()))
         .isEqualToDefaultInstance();
@@ -214,53 +206,49 @@ public final class S2AHandshakerServiceChannelTest {
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + mtlsServer.getPort(), getTlsChannelCredentials());
     Channel channel = resource.create();
-    assertThat(channel).isInstanceOf(EventLoopHoldingChannel.class);
+    assertThat(channel).isInstanceOf(HandshakerServiceChannel.class);
     assertThat(
             SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance()))
         .isEqualToDefaultInstance();
   }
 
-  /** Creates a {@code EventLoopHoldingChannel} instance and verifies its authority. */
+  /** Creates a {@code HandshakerServiceChannel} instance and verifies its authority. */
   @Test
   public void authority_success() throws Exception {
     ManagedChannel channel = new FakeManagedChannel(true);
-    EventLoopHoldingChannel eventLoopHoldingChannel =
-        EventLoopHoldingChannel.create(channel, mockEventLoopGroup);
+    HandshakerServiceChannel eventLoopHoldingChannel =
+        HandshakerServiceChannel.create(channel);
     assertThat(eventLoopHoldingChannel.authority()).isEqualTo("FakeManagedChannel");
   }
 
   /**
-   * Creates and closes a {@code EventLoopHoldingChannel} when its {@code ManagedChannel} terminates
-   * successfully.
+   * Creates and closes a {@code HandshakerServiceChannel} when its {@code ManagedChannel}
+   * terminates successfully.
    */
   @Test
   public void close_withDelegateTerminatedSuccess() throws Exception {
     ManagedChannel channel = new FakeManagedChannel(true);
-    EventLoopHoldingChannel eventLoopHoldingChannel =
-        EventLoopHoldingChannel.create(channel, mockEventLoopGroup);
+    HandshakerServiceChannel eventLoopHoldingChannel =
+        HandshakerServiceChannel.create(channel);
     eventLoopHoldingChannel.close();
     assertThat(channel.isShutdown()).isTrue();
-    verify(mockEventLoopGroup, times(1))
-        .shutdownGracefully(0, CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
   }
 
   /**
-   * Creates and closes a {@code EventLoopHoldingChannel} when its {@code ManagedChannel} does not
+   * Creates and closes a {@code HandshakerServiceChannel} when its {@code ManagedChannel} does not
    * terminate successfully.
    */
   @Test
   public void close_withDelegateTerminatedFailure() throws Exception {
     ManagedChannel channel = new FakeManagedChannel(false);
-    EventLoopHoldingChannel eventLoopHoldingChannel =
-        EventLoopHoldingChannel.create(channel, mockEventLoopGroup);
+    HandshakerServiceChannel eventLoopHoldingChannel =
+        HandshakerServiceChannel.create(channel);
     eventLoopHoldingChannel.close();
     assertThat(channel.isShutdown()).isTrue();
-    verify(mockEventLoopGroup, times(1))
-        .shutdownGracefully(1, CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
   }
 
   /**
-   * Creates and closes a {@code EventLoopHoldingChannel}, creates a new channel from the same
+   * Creates and closes a {@code HandshakerServiceChannel}, creates a new channel from the same
    * resource, and verifies that this second channel is useable.
    */
   @Test
@@ -268,12 +256,12 @@ public final class S2AHandshakerServiceChannelTest {
     Resource<Channel> resource =
         S2AHandshakerServiceChannel.getChannelResource(
             "localhost:" + plaintextServer.getPort(),
-            /* s2aChannelCredentials= */ Optional.empty());
+            InsecureChannelCredentials.create());
     Channel channelOne = resource.create();
     resource.close(channelOne);
 
     Channel channelTwo = resource.create();
-    assertThat(channelTwo).isInstanceOf(EventLoopHoldingChannel.class);
+    assertThat(channelTwo).isInstanceOf(HandshakerServiceChannel.class);
     assertThat(
             SimpleServiceGrpc.newBlockingStub(channelTwo)
                 .unaryRpc(SimpleRequest.getDefaultInstance()))
@@ -291,7 +279,7 @@ public final class S2AHandshakerServiceChannelTest {
     resource.close(channelOne);
 
     Channel channelTwo = resource.create();
-    assertThat(channelTwo).isInstanceOf(EventLoopHoldingChannel.class);
+    assertThat(channelTwo).isInstanceOf(HandshakerServiceChannel.class);
     assertThat(
             SimpleServiceGrpc.newBlockingStub(channelTwo)
                 .unaryRpc(SimpleRequest.getDefaultInstance()))
@@ -320,15 +308,14 @@ public final class S2AHandshakerServiceChannelTest {
         ServerBuilder.forPort(Utils.pickUnusedPort()).addService(service).build());
   }
 
-  private static Optional<ChannelCredentials> getTlsChannelCredentials() throws Exception {
+  private static ChannelCredentials getTlsChannelCredentials() throws Exception {
     File clientCert = new File("src/test/resources/client_cert.pem");
     File clientKey = new File("src/test/resources/client_key.pem");
     File rootCert = new File("src/test/resources/root_cert.pem");
-    return Optional.of(
-        TlsChannelCredentials.newBuilder()
+    return TlsChannelCredentials.newBuilder()
             .keyManager(clientCert, clientKey)
             .trustManager(rootCert)
-            .build());
+            .build();
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

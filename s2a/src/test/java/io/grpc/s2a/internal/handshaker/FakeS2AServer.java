@@ -17,6 +17,7 @@
 package io.grpc.s2a.internal.handshaker;
 
 import io.grpc.stub.StreamObserver;
+import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.logging.Logger;
@@ -38,7 +39,11 @@ public final class FakeS2AServer extends S2AServiceGrpc.S2AServiceImplBase {
       @Override
       public void onNext(SessionReq req) {
         logger.info("Received a request from client.");
-        responseObserver.onNext(writer.handleResponse(req));
+        try {
+          responseObserver.onNext(writer.handleResponse(req));
+        } catch (IOException e) {
+          responseObserver.onError(e);
+        }
       }
 
       @Override

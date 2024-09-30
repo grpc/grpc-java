@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Maps;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
@@ -29,20 +28,16 @@ import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.util.concurrent.DefaultThreadFactory;
 import java.time.Duration;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Provides APIs for managing gRPC channels to S2A servers. Each channel is local and plaintext. If
- * credentials are provided, they are used to secure the channel.
+ * Provides APIs for managing gRPC channels to an S2A server. Each channel is local and plaintext.
+ * If credentials are provided, they are used to secure the channel.
  *
- * <p>This is done as follows: for each S2A server, provides an implementation of gRPC's {@link
+ * <p>This is done as follows: for an S2A server, provides an implementation of gRPC's {@link
  * SharedResourceHolder.Resource} interface called a {@code Resource<Channel>}. A {@code
  * Resource<Channel>} is a factory for creating gRPC channels to the S2A server at a given address,
  * and a channel must be returned to the {@code Resource<Channel>} when it is no longer needed.
@@ -59,9 +54,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class S2AHandshakerServiceChannel {
-  private static final ConcurrentMap<String, Resource<Channel>> SHARED_RESOURCE_CHANNELS =
-      Maps.newConcurrentMap();
-  private static final Duration DELEGATE_TERMINATION_TIMEOUT = Duration.ofSeconds(2);
   private static final Duration CHANNEL_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
 
   /**
@@ -74,10 +66,9 @@ public final class S2AHandshakerServiceChannel {
    *     running at {@code s2aAddress}.
    */
   public static Resource<Channel> getChannelResource(
-      String s2aAddress, Optional<ChannelCredentials> s2aChannelCredentials) {
+      String s2aAddress, ChannelCredentials s2aChannelCredentials) {
     checkNotNull(s2aAddress);
-    return SHARED_RESOURCE_CHANNELS.computeIfAbsent(
-        s2aAddress, channelResource -> new ChannelResource(s2aAddress, s2aChannelCredentials));
+    return new ChannelResource(s2aAddress, s2aChannelCredentials);
   }
 
   /**
@@ -87,49 +78,31 @@ public final class S2AHandshakerServiceChannel {
    */
   private static class ChannelResource implements Resource<Channel> {
     private final String targetAddress;
-    private final Optional<ChannelCredentials> channelCredentials;
+    private final ChannelCredentials channelCredentials;
 
-    public ChannelResource(String targetAddress, Optional<ChannelCredentials> channelCredentials) {
+    public ChannelResource(String targetAddress, ChannelCredentials channelCredentials) {
       this.targetAddress = targetAddress;
       this.channelCredentials = channelCredentials;
     }
 
     /**
-     * Creates a {@code EventLoopHoldingChannel} instance to the service running at {@code
-     * targetAddress}. This channel uses a dedicated thread pool for its {@code EventLoopGroup}
-     * instance to avoid blocking.
+     * Creates a {@code HandshakerServiceChannel} instance to the service running at {@code
+     * targetAddress}.
      */
     @Override
     public Channel create() {
-      EventLoopGroup eventLoopGroup =
-          new NioEventLoopGroup(1, new DefaultThreadFactory("S2A channel pool", true));
-      ManagedChannel channel = null;
-      if (channelCredentials.isPresent()) {
-        // Create a secure channel.
-        channel =
-            NettyChannelBuilder.forTarget(targetAddress, channelCredentials.get())
-                .channelType(NioSocketChannel.class)
-                .directExecutor()
-                .eventLoopGroup(eventLoopGroup)
-                .build();
-      } else {
-        // Create a plaintext channel.
-        channel =
-            NettyChannelBuilder.forTarget(targetAddress)
-                .channelType(NioSocketChannel.class)
-                .directExecutor()
-                .eventLoopGroup(eventLoopGroup)
-                .usePlaintext()
-                .build();
-      }
-      return EventLoopHoldingChannel.create(channel, eventLoopGroup);
+      ManagedChannel channel =
+          NettyChannelBuilder.forTarget(targetAddress, channelCredentials)
+              .directExecutor()
+              .build();
+      return HandshakerServiceChannel.create(channel);
     }
 
-    /** Destroys a {@code EventLoopHoldingChannel} instance. */
+    /** Destroys a {@code HandshakerServiceChannel} instance. */
     @Override
     public void close(Channel instanceChannel) {
       checkNotNull(instanceChannel);
-      EventLoopHoldingChannel channel = (EventLoopHoldingChannel) instanceChannel;
+      HandshakerServiceChannel channel = (HandshakerServiceChannel) instanceChannel;
       channel.close();
     }
 
@@ -140,23 +113,21 @@ public final class S2AHandshakerServiceChannel {
   }
 
   /**
-   * Manages a channel using a {@link ManagedChannel} instance that belong to the {@code
-   * EventLoopGroup} thread pool.
+   * Manages a channel using a {@link ManagedChannel} instance.
    */
   @VisibleForTesting
-  static class EventLoopHoldingChannel extends Channel {
+  static class HandshakerServiceChannel extends Channel {
+    private static final Logger logger =
+          Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
     private final ManagedChannel delegate;
-    private final EventLoopGroup eventLoopGroup;
 
-    static EventLoopHoldingChannel create(ManagedChannel delegate, EventLoopGroup eventLoopGroup) {
+    static HandshakerServiceChannel create(ManagedChannel delegate) {
       checkNotNull(delegate);
-      checkNotNull(eventLoopGroup);
-      return new EventLoopHoldingChannel(delegate, eventLoopGroup);
+      return new HandshakerServiceChannel(delegate);
     }
 
-    private EventLoopHoldingChannel(ManagedChannel delegate, EventLoopGroup eventLoopGroup) {
+    private HandshakerServiceChannel(ManagedChannel delegate) {
       this.delegate = delegate;
-      this.eventLoopGroup = eventLoopGroup;
     }
 
     /**
@@ -178,16 +149,12 @@ public final class S2AHandshakerServiceChannel {
     @SuppressWarnings("FutureReturnValueIgnored")
     public void close() {
       delegate.shutdownNow();
-      boolean isDelegateTerminated;
       try {
-        isDelegateTerminated =
-            delegate.awaitTermination(DELEGATE_TERMINATION_TIMEOUT.getSeconds(), SECONDS);
+        delegate.awaitTermination(CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
       } catch (InterruptedException e) {
-        isDelegateTerminated = false;
+        Thread.currentThread().interrupt();
+        logger.log(Level.WARNING, "Channel to S2A was not shutdown.");
       }
-      long quietPeriodSeconds = isDelegateTerminated ? 0 : 1;
-      eventLoopGroup.shutdownGracefully(
-          quietPeriodSeconds, CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
     }
   }
 

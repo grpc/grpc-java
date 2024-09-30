@@ -27,7 +27,6 @@ public final class AccessTokenManager {
   private final TokenFetcher tokenFetcher;
 
   /** Creates an {@code AccessTokenManager} based on the environment where the application runs. */
-  @SuppressWarnings("RethrowReflectiveOperationExceptionAsLinkageError")
   public static Optional<AccessTokenManager> create() {
     Optional<?> tokenFetcher;
     try {
@@ -38,7 +37,7 @@ public final class AccessTokenManager {
     } catch (ClassNotFoundException e) {
       tokenFetcher = Optional.empty();
     } catch (ReflectiveOperationException e) {
-      throw new AssertionError(e);
+      throw new LinkageError(e.getMessage(), e);
     }
     return tokenFetcher.isPresent()
         ? Optional.of(new AccessTokenManager((TokenFetcher) tokenFetcher.get()))

@@ -31,47 +31,6 @@ public final class ProtoUtilTest {
   @Rule public final Expect expect = Expect.create();
 
   @Test
-  public void convertCiphersuite_success() {
-    expect
-        .that(
-            ProtoUtil.convertCiphersuite(
-                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256))
-        .isEqualTo("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256");
-    expect
-        .that(
-            ProtoUtil.convertCiphersuite(
-                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384))
-        .isEqualTo("TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384");
-    expect
-        .that(
-            ProtoUtil.convertCiphersuite(
-                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256))
-        .isEqualTo("TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256");
-    expect
-        .that(
-            ProtoUtil.convertCiphersuite(Ciphersuite.CIPHERSUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256))
-        .isEqualTo("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
-    expect
-        .that(
-            ProtoUtil.convertCiphersuite(Ciphersuite.CIPHERSUITE_ECDHE_RSA_WITH_AES_256_GCM_SHA384))
-        .isEqualTo("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384");
-    expect
-        .that(
-            ProtoUtil.convertCiphersuite(
-                Ciphersuite.CIPHERSUITE_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256))
-        .isEqualTo("TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256");
-  }
-
-  @Test
-  public void convertCiphersuite_withUnspecifiedCiphersuite_fails() {
-    AssertionError expected =
-        assertThrows(
-            AssertionError.class,
-            () -> ProtoUtil.convertCiphersuite(Ciphersuite.CIPHERSUITE_UNSPECIFIED));
-    expect.that(expected).hasMessageThat().isEqualTo("Ciphersuite 0 is not supported.");
-  }
-
-  @Test
   public void convertTlsProtocolVersion_success() {
     expect
         .that(ProtoUtil.convertTlsProtocolVersion(TLSVersion.TLS_VERSION_1_3))

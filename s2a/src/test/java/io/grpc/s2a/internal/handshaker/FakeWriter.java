@@ -23,7 +23,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.ByteString;
 import io.grpc.stub.StreamObserver;
+import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -50,59 +53,18 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     FAILURE
   }
 
-  public static final String LEAF_CERT =
-      "-----BEGIN CERTIFICATE-----\n"
-          + "MIICkDCCAjagAwIBAgIUSAtcrPhNNs1zxv51lIfGOVtkw6QwCgYIKoZIzj0EAwIw\n"
-          + "QTEXMBUGA1UECgwOc2VjdXJpdHktcmVhbG0xEDAOBgNVBAsMB2NvbnRleHQxFDAS\n"
-          + "BgorBgEEAdZ5AggBDAQyMDIyMCAXDTIzMDcxNDIyMzYwNFoYDzIwNTAxMTI5MjIz\n"
-          + "NjA0WjARMQ8wDQYDVQQDDAZ1bnVzZWQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNC\n"
-          + "AAQGFlJpLxJMh4HuUm0DKjnUF7larH3tJvroQ12xpk+pPKQepn4ILoq9lZ8Xd3jz\n"
-          + "U98eDRXG5f4VjnX98DDHE4Ido4IBODCCATQwDgYDVR0PAQH/BAQDAgeAMCAGA1Ud\n"
-          + "JQEB/wQWMBQGCCsGAQUFBwMCBggrBgEFBQcDATAMBgNVHRMBAf8EAjAAMIGxBgNV\n"
-          + "HREBAf8EgaYwgaOGSnNwaWZmZTovL3NpZ25lci1yb2xlLmNvbnRleHQuc2VjdXJp\n"
-          + "dHktcmVhbG0ucHJvZC5nb29nbGUuY29tL3JvbGUvbGVhZi1yb2xlgjNzaWduZXIt\n"
-          + "cm9sZS5jb250ZXh0LnNlY3VyaXR5LXJlYWxtLnByb2Quc3BpZmZlLmdvb2eCIGZx\n"
-          + "ZG4tb2YtdGhlLW5vZGUucHJvZC5nb29nbGUuY29tMB0GA1UdDgQWBBSWSd5Fw6dI\n"
-          + "TGpt0m1Uxwf0iKqebzAfBgNVHSMEGDAWgBRm5agVVdpWfRZKM7u6OMuzHhqPcDAK\n"
-          + "BggqhkjOPQQDAgNIADBFAiB0sjRPSYy2eFq8Y0vQ8QN4AZ2NMajskvxnlifu7O4U\n"
-          + "RwIhANTh5Fkyx2nMYFfyl+W45dY8ODTw3HnlZ4b51hTAdkWl\n"
-          + "-----END CERTIFICATE-----";
-  public static final String INTERMEDIATE_CERT_2 =
-      "-----BEGIN CERTIFICATE-----\n"
-          + "MIICQjCCAeigAwIBAgIUKxXRDlnWXefNV5lj5CwhDuXEq7MwCgYIKoZIzj0EAwIw\n"
-          + "OzEXMBUGA1UECgwOc2VjdXJpdHktcmVhbG0xEDAOBgNVBAsMB2NvbnRleHQxDjAM\n"
-          + "BgNVBAMMBTEyMzQ1MCAXDTIzMDcxNDIyMzYwNFoYDzIwNTAxMTI5MjIzNjA0WjBB\n"
-          + "MRcwFQYDVQQKDA5zZWN1cml0eS1yZWFsbTEQMA4GA1UECwwHY29udGV4dDEUMBIG\n"
-          + "CisGAQQB1nkCCAEMBDIwMjIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT/Zu7x\n"
-          + "UYVyg+T/vg2H+y4I6t36Kc4qxD0eqqZjRLYBVKkUQHxBqc14t0DpoROMYQCNd4DF\n"
-          + "pcxv/9m6DaJbRk6Ao4HBMIG+MA4GA1UdDwEB/wQEAwIBBjASBgNVHRMBAf8ECDAG\n"
-          + "AQH/AgEBMFgGA1UdHgEB/wROMEygSjA1gjNzaWduZXItcm9sZS5jb250ZXh0LnNl\n"
-          + "Y3VyaXR5LXJlYWxtLnByb2Quc3BpZmZlLmdvb2cwEYIPcHJvZC5nb29nbGUuY29t\n"
-          + "MB0GA1UdDgQWBBRm5agVVdpWfRZKM7u6OMuzHhqPcDAfBgNVHSMEGDAWgBQcjNAh\n"
-          + "SCHTj+BW8KrzSSLo2ASEgjAKBggqhkjOPQQDAgNIADBFAiEA6KyGd9VxXDZceMZG\n"
-          + "IsbC40rtunFjLYI0mjZw9RcRWx8CIHCIiIHxafnDaCi+VB99NZfzAdu37g6pJptB\n"
-          + "gjIY71MO\n"
-          + "-----END CERTIFICATE-----";
-  public static final String INTERMEDIATE_CERT_1 =
-      "-----BEGIN CERTIFICATE-----\n"
-          + "MIICODCCAd6gAwIBAgIUXtZECORWRSKnS9rRTJYkiALUXswwCgYIKoZIzj0EAwIw\n"
-          + "NzEXMBUGA1UECgwOc2VjdXJpdHktcmVhbG0xDTALBgNVBAsMBHJvb3QxDTALBgNV\n"
-          + "BAMMBDEyMzQwIBcNMjMwNzE0MjIzNjA0WhgPMjA1MDExMjkyMjM2MDRaMDsxFzAV\n"
-          + "BgNVBAoMDnNlY3VyaXR5LXJlYWxtMRAwDgYDVQQLDAdjb250ZXh0MQ4wDAYDVQQD\n"
-          + "DAUxMjM0NTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAycVTZrjockbpD59f1a\n"
-          + "4l1SNL7nSyXz66Guz4eDveQqLmaMBg7vpACfO4CtiAGnolHEffuRtSkdM434m5En\n"
-          + "bXCjgcEwgb4wDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQIwWAYD\n"
-          + "VR0eAQH/BE4wTKBKMDWCM3NpZ25lci1yb2xlLmNvbnRleHQuc2VjdXJpdHktcmVh\n"
-          + "bG0ucHJvZC5zcGlmZmUuZ29vZzARgg9wcm9kLmdvb2dsZS5jb20wHQYDVR0OBBYE\n"
-          + "FByM0CFIIdOP4FbwqvNJIujYBISCMB8GA1UdIwQYMBaAFMX+vebuj/lYfYEC23IA\n"
-          + "8HoIW0HsMAoGCCqGSM49BAMCA0gAMEUCIQCfxeXEBd7UPmeImT16SseCRu/6cHxl\n"
-          + "kTDsq9sKZ+eXBAIgA+oViAVOUhUQO1/6Mjlczg8NmMy2vNtG4V/7g9dMMVU=\n"
-          + "-----END CERTIFICATE-----";
+  public static final File leafCertFile =
+      new File("src/test/resources/leaf_cert_ec.pem");
+  public static final File cert2File =
+      new File("src/test/resources/int_cert2_ec.pem");
+  public static final File cert1File =
+      new File("src/test/resources/int_cert1_ec.pem");
 
+  // src/test/resources/leaf_key_ec.pem
   private static final String PRIVATE_KEY =
-      "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgqA2U0ld1OOHLMXWf"
-          + "uyN4GSaqhhudEIaKkll3rdIq0M+hRANCAAQGFlJpLxJMh4HuUm0DKjnUF7larH3t"
-          + "JvroQ12xpk+pPKQepn4ILoq9lZ8Xd3jzU98eDRXG5f4VjnX98DDHE4Id";
+      "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgR2HBqtWTWu4NLiow"
+          + "ar8vh+9vAmCONE59C+jXNAb9r8ehRANCAATRM8ozcr8PTOVsZNWh+rTmJ6t+rODu"
+          + "g3LwWpUQq9h7AddjGlLrrTNrceOyO7nh9aEk5plKhs/h7PO8+vkEFsEx";
   private static final ImmutableMap<SignatureAlgorithm, String>
       ALGORITHM_TO_SIGNATURE_INSTANCE_IDENTIFIER =
           ImmutableMap.of(
@@ -167,24 +129,32 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   }
 
   void sendGetTlsConfigResp() {
-    reader.onNext(
-        SessionResp.newBuilder()
-            .setGetTlsConfigurationResp(
-                GetTlsConfigurationResp.newBuilder()
-                    .setClientTlsConfiguration(
-                        GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                            .addCertificateChain(LEAF_CERT)
-                            .addCertificateChain(INTERMEDIATE_CERT_2)
-                            .addCertificateChain(INTERMEDIATE_CERT_1)
-                            .setMinTlsVersion(TLS_VERSION_1_3)
-                            .setMaxTlsVersion(TLS_VERSION_1_3)
-                            .addCiphersuites(
-                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
-                            .addCiphersuites(
-                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
-                            .addCiphersuites(
-                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)))
-            .build());
+    try {
+      reader.onNext(
+          SessionResp.newBuilder()
+              .setGetTlsConfigurationResp(
+                  GetTlsConfigurationResp.newBuilder()
+                      .setClientTlsConfiguration(
+                          GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
+                              .addCertificateChain(new String(Files.readAllBytes(
+                                FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
+                              .addCertificateChain(new String(Files.readAllBytes(
+                                FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
+                              .addCertificateChain(new String(Files.readAllBytes(
+                                FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
+                              .setMinTlsVersion(TLS_VERSION_1_3)
+                              .setMaxTlsVersion(TLS_VERSION_1_3)
+                              .addCiphersuites(
+                                  Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
+                              .addCiphersuites(
+                                  Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
+                              .addCiphersuites(
+                                  Ciphersuite
+                                  .CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)))
+              .build());
+    } catch (IOException e) {
+      reader.onError(e);
+    }
   }
 
   boolean isFakeWriterClosed() {
@@ -195,7 +165,11 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   public void onNext(SessionReq sessionReq) {
     switch (behavior) {
       case OK_STATUS:
-        reader.onNext(handleResponse(sessionReq));
+        try {
+          reader.onNext(handleResponse(sessionReq));
+        } catch (IOException e) {
+          reader.onError(e);
+        }
         break;
       case EMPTY_RESPONSE:
         reader.onNext(SessionResp.getDefaultInstance());
@@ -216,25 +190,36 @@ final class FakeWriter implements StreamObserver<SessionReq> {
         reader.onCompleted();
         break;
       case BAD_TLS_VERSION_RESPONSE:
-        reader.onNext(
-            SessionResp.newBuilder()
-                .setGetTlsConfigurationResp(
-                    GetTlsConfigurationResp.newBuilder()
-                        .setClientTlsConfiguration(
-                            GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                                .addCertificateChain(LEAF_CERT)
-                                .addCertificateChain(INTERMEDIATE_CERT_2)
-                                .addCertificateChain(INTERMEDIATE_CERT_1)
-                                .setMinTlsVersion(TLS_VERSION_1_3)
-                                .setMaxTlsVersion(TLS_VERSION_1_2)))
-                .build());
+        try {
+          reader.onNext(
+              SessionResp.newBuilder()
+                  .setGetTlsConfigurationResp(
+                      GetTlsConfigurationResp.newBuilder()
+                          .setClientTlsConfiguration(
+                              GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
+                                  .addCertificateChain(new String(Files.readAllBytes(
+                                    FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
+                                  .addCertificateChain(new String(Files.readAllBytes(
+                                    FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
+                                  .addCertificateChain(new String(Files.readAllBytes(
+                                    FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
+                                  .setMinTlsVersion(TLS_VERSION_1_3)
+                                  .setMaxTlsVersion(TLS_VERSION_1_2)))
+                  .build());
+        } catch (IOException e) {
+          reader.onError(e);
+        }
         break;
       default:
-        reader.onNext(handleResponse(sessionReq));
+        try {
+          reader.onNext(handleResponse(sessionReq));
+        } catch (IOException e) {
+          reader.onError(e);
+        }
     }
   }
 
-  SessionResp handleResponse(SessionReq sessionReq) {
+  SessionResp handleResponse(SessionReq sessionReq) throws IOException {
     if (sessionReq.hasGetTlsConfigurationReq()) {
       return handleGetTlsConfigurationReq(sessionReq.getGetTlsConfigurationReq());
     }
@@ -253,7 +238,8 @@ final class FakeWriter implements StreamObserver<SessionReq> {
         .build();
   }
 
-  private SessionResp handleGetTlsConfigurationReq(GetTlsConfigurationReq req) {
+  private SessionResp handleGetTlsConfigurationReq(GetTlsConfigurationReq req)
+      throws IOException {
     if (!req.getConnectionSide().equals(ConnectionSide.CONNECTION_SIDE_CLIENT)) {
       return SessionResp.newBuilder()
           .setStatus(
@@ -267,9 +253,12 @@ final class FakeWriter implements StreamObserver<SessionReq> {
             GetTlsConfigurationResp.newBuilder()
                 .setClientTlsConfiguration(
                     GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                        .addCertificateChain(LEAF_CERT)
-                        .addCertificateChain(INTERMEDIATE_CERT_2)
-                        .addCertificateChain(INTERMEDIATE_CERT_1)
+                        .addCertificateChain(new String(Files.readAllBytes(
+                          FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
+                        .addCertificateChain(new String(Files.readAllBytes(
+                          FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
+                        .addCertificateChain(new String(Files.readAllBytes(
+                          FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
                         .setMinTlsVersion(TLS_VERSION_1_3)
                         .setMaxTlsVersion(TLS_VERSION_1_3)
                         .addCiphersuites(

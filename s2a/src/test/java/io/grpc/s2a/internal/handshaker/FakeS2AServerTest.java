@@ -29,6 +29,9 @@ import io.grpc.ServerBuilder;
 import io.grpc.benchmarks.Utils;
 import io.grpc.s2a.internal.handshaker.ValidatePeerCertificateChainReq.VerificationMode;
 import io.grpc.stub.StreamObserver;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,9 +48,7 @@ public final class FakeS2AServerTest {
   private static final Logger logger = Logger.getLogger(FakeS2AServerTest.class.getName());
 
   private static final ImmutableList<ByteString> FAKE_CERT_DER_CHAIN =
-      ImmutableList.of(
-          ByteString.copyFrom(
-              new byte[] {'f', 'a', 'k', 'e', '-', 'd', 'e', 'r', '-', 'c', 'h', 'a', 'i', 'n'}));
+      ImmutableList.of(ByteString.copyFrom("fake-der-chain".getBytes(StandardCharsets.US_ASCII)));
   private int port;
   private String serverAddress;
   private SessionResp response = null;
@@ -68,7 +69,7 @@ public final class FakeS2AServerTest {
 
   @Test
   public void callS2AServerOnce_getTlsConfiguration_returnsValidResult()
-      throws InterruptedException {
+      throws InterruptedException, IOException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
@@ -122,9 +123,12 @@ public final class FakeS2AServerTest {
                 GetTlsConfigurationResp.newBuilder()
                     .setClientTlsConfiguration(
                         GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                            .addCertificateChain(FakeWriter.LEAF_CERT)
-                            .addCertificateChain(FakeWriter.INTERMEDIATE_CERT_2)
-                            .addCertificateChain(FakeWriter.INTERMEDIATE_CERT_1)
+                            .addCertificateChain(new String(Files.readAllBytes(
+                              FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
+                            .addCertificateChain(new String(Files.readAllBytes(
+                              FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
+                            .addCertificateChain(new String(Files.readAllBytes(
+                              FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
                             .setMinTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .setMaxTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .addCiphersuites(

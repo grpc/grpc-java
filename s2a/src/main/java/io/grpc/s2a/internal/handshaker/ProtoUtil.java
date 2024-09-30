@@ -16,36 +16,11 @@
 
 package io.grpc.s2a.internal.handshaker;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 
 /** Converts proto messages to Netty strings. */
 final class ProtoUtil {
-  /**
-   * Converts {@link Ciphersuite} to its {@link String} representation.
-   *
-   * @param ciphersuite the {@link Ciphersuite} to be converted.
-   * @return a {@link String} representing the ciphersuite.
-   * @throws AssertionError if the {@link Ciphersuite} is not one of the supported ciphersuites.
-   */
-  static String convertCiphersuite(Ciphersuite ciphersuite) {
-    switch (ciphersuite) {
-      case CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
-        return "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256";
-      case CIPHERSUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
-        return "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384";
-      case CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:
-        return "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256";
-      case CIPHERSUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-        return "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256";
-      case CIPHERSUITE_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-        return "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
-      case CIPHERSUITE_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:
-        return "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256";
-      default:
-        throw new AssertionError(
-            String.format("Ciphersuite %d is not supported.", ciphersuite.getNumber()));
-    }
-  }
 
   /**
    * Converts a {@link TLSVersion} object to its {@link String} representation.
@@ -54,6 +29,7 @@ final class ProtoUtil {
    * @return a {@link String} representation of the TLS version.
    * @throws AssertionError if the {@code tlsVersion} is not one of the supported TLS versions.
    */
+  @VisibleForTesting
   static String convertTlsProtocolVersion(TLSVersion tlsVersion) {
     switch (tlsVersion) {
       case TLS_VERSION_1_3:
