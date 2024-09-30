@@ -21,15 +21,16 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.benchmarks.Utils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.s2a.MtlsToS2AChannelCredentials;
 import io.grpc.s2a.S2AChannelCredentials;
 import io.grpc.s2a.handshaker.FakeS2AServer;
 import io.grpc.stub.StreamObserver;
@@ -124,7 +125,8 @@ public final class IntegrationTest {
   @Test
   public void clientCommunicateUsingS2ACredentials_succeeds() throws Exception {
     ChannelCredentials credentials =
-        S2AChannelCredentials.newBuilder(s2aAddress).setLocalSpiffeId("test-spiffe-id").build();
+        S2AChannelCredentials.newBuilder(s2aAddress, InsecureChannelCredentials.create())
+            .setLocalSpiffeId("test-spiffe-id").build();
     ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
     assertThat(doUnaryRpc(channel)).isTrue();
@@ -132,7 +134,8 @@ public final class IntegrationTest {
 
   @Test
   public void clientCommunicateUsingS2ACredentialsNoLocalIdentity_succeeds() throws Exception {
-    ChannelCredentials credentials = S2AChannelCredentials.newBuilder(s2aAddress).build();
+    ChannelCredentials credentials = S2AChannelCredentials.newBuilder(s2aAddress,
+        InsecureChannelCredentials.create()).build();
     ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
     assertThat(doUnaryRpc(channel)).isTrue();
@@ -140,15 +143,22 @@ public final class IntegrationTest {
 
   @Test
   public void clientCommunicateUsingMtlsToS2ACredentials_succeeds() throws Exception {
+    String privateKeyPath = "src/test/resources/client_key.pem";
+    String certChainPath = "src/test/resources/client_cert.pem";
+    String trustBundlePath = "src/test/resources/root_cert.pem";
+    File privateKeyFile = new File(privateKeyPath);
+    File certChainFile = new File(certChainPath);
+    File trustBundleFile = new File(trustBundlePath);
+    ChannelCredentials s2aChannelCredentials =
+        TlsChannelCredentials.newBuilder()
+          .keyManager(certChainFile, privateKeyFile)
+          .trustManager(trustBundleFile)
+          .build();
+
     ChannelCredentials credentials =
-        MtlsToS2AChannelCredentials.newBuilder(
-                /* s2aAddress= */ mtlsS2AAddress,
-                /* privateKeyPath= */ "src/test/resources/client_key.pem",
-                /* certChainPath= */ "src/test/resources/client_cert.pem",
-                /* trustBundlePath= */ "src/test/resources/root_cert.pem")
-            .build()
-            .setLocalSpiffeId("test-spiffe-id")
-            .build();
+        S2AChannelCredentials.newBuilder(mtlsS2AAddress, s2aChannelCredentials)
+          .setLocalSpiffeId("test-spiffe-id")
+          .build();
     ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
     assertThat(doUnaryRpc(channel)).isTrue();
@@ -156,7 +166,8 @@ public final class IntegrationTest {
 
   @Test
   public void clientCommunicateUsingS2ACredentials_s2AdelayStart_succeeds() throws Exception {
-    ChannelCredentials credentials = S2AChannelCredentials.newBuilder(s2aDelayAddress).build();
+    ChannelCredentials credentials = S2AChannelCredentials.newBuilder(s2aDelayAddress,
+        InsecureChannelCredentials.create()).build();
     ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
     FutureTask<Boolean> rpc = new FutureTask<>(() -> doUnaryRpc(channel));
