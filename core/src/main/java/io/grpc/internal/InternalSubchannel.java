@@ -78,7 +78,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
-  private final boolean reconectDisabled;
+  private final boolean reconnectDisabled;
 
   private final List<ClientTransportFilter> transportFilters;
 
@@ -191,7 +191,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.logId = Preconditions.checkNotNull(logId, "logId");
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.transportFilters = transportFilters;
-    this.reconectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
+    this.reconnectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
   }
 
   ChannelLogger getChannelLogger() {
@@ -295,7 +295,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     gotoState(ConnectivityStateInfo.forTransientFailure(status));
 
-    if (reconectDisabled) {
+    if (reconnectDisabled) {
       return;
     }
 
@@ -347,7 +347,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     if (state.getState() != newState.getState()) {
       Preconditions.checkState(state.getState() != SHUTDOWN,
           "Cannot transition out of SHUTDOWN to " + newState);
-      if (reconectDisabled && newState.getState() == TRANSIENT_FAILURE) {
+      if (reconnectDisabled && newState.getState() == TRANSIENT_FAILURE) {
         state = ConnectivityStateInfo.forNonError(IDLE);
       } else {
         state = newState;
