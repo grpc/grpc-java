@@ -1160,7 +1160,8 @@ public class ManagedChannelImplTest {
     resolver.listener.onError(resolutionError);
 
     InternalConfigSelector configSelector = channel.getConfigSelector();
-    ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) configSelector.selectConfig(null).getConfig();
+    ManagedChannelServiceConfig config =
+        (ManagedChannelServiceConfig) configSelector.selectConfig(null).getConfig();
     MethodInfo methodConfig = config.getMethodConfig(method);
     assertThat(methodConfig.waitForReady).isTrue();
     timer.forwardNanos(1234);
@@ -1170,15 +1171,12 @@ public class ManagedChannelImplTest {
         .setTimestampNanos(0)
         .build());
 
-    // Check that lastServiceConfig has been set above, so a config resolution with the same config
-    // doesn't change it
+    // Check that "lastServiceConfig" variable has been set above: a config resolution with the same
+    // config simply gets ignored and not gets reassigned.
     resolver.resolved();
     timer.forwardNanos(1234);
-    assertThat(getStats(channel).channelTrace.events).doesNotContain(new ChannelTrace.Event.Builder()
-        .setDescription("Service config changed")
-        .setSeverity(Severity.CT_ERROR)
-        .setTimestampNanos(1234)
-        .build());
+    assertThat(getStats(channel).channelTrace.events.stream().filter(
+        event -> event.description.equals("Service config changed")).count()).isEqualTo(0);
   }
 
   @Test
