@@ -255,7 +255,8 @@ public class SpiffeUtilTest {
     public void extractSpiffeIdFromChainTest() throws CertificateParsingException {
       X509Certificate[] leafWithSpiffeChain = new X509Certificate[]{spiffeCert[0], serverCert0[0]};
       assertTrue(SpiffeUtil.extractSpiffeId(leafWithSpiffeChain).isPresent());
-      X509Certificate[] leafWithoutSpiffeChain = new X509Certificate[]{serverCert0[0], spiffeCert[0]};
+      X509Certificate[] leafWithoutSpiffeChain =
+          new X509Certificate[]{serverCert0[0], spiffeCert[0]};
       assertFalse(SpiffeUtil.extractSpiffeId(leafWithoutSpiffeChain).isPresent());
     }
 
@@ -270,7 +271,8 @@ public class SpiffeUtilTest {
     }
 
     @Test
-    public void loadTrustBundleFromFileSuccessTest() throws IOException, CertificateParsingException {
+    public void loadTrustBundleFromFileSuccessTest() throws IOException,
+        CertificateParsingException {
       SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(getClass().getClassLoader()
           .getResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_FILE).getPath());
       assertEquals(4, tb.getSequenceNumbers().size());
