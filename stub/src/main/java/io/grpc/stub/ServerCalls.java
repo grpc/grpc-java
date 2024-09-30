@@ -400,7 +400,7 @@ public final class ServerCalls {
 
     @Override
     public void onCompleted() {
-      if (!serverStreamingOrBidi) {
+      if (!serverStreamingOrBidi && unaryResponse != null) {
         if (!sentHeaders) {
           call.sendHeaders(new Metadata());
           sentHeaders = true;
