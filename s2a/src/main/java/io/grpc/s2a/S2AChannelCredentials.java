@@ -57,7 +57,7 @@ public final class S2AChannelCredentials {
   @NotThreadSafe
   public static final class Builder {
     private final String s2aAddress;
-    private ChannelCredentials s2aChannelCredentials;
+    private final ChannelCredentials s2aChannelCredentials;
     private @Nullable S2AIdentity localIdentity = null;
 
     Builder(String s2aAddress, ChannelCredentials s2aChannelCredentials) {
