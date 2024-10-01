@@ -104,8 +104,9 @@ public class GoogleAuthClient {
    * arg0 = project name in the form "projects/balmy-cirrus-225307" where "balmy-cirrus-225307" is
    *        the project ID for the project you created.
    *
-   * JSON file is unnecessary on Google platforms, if it's still required somewhere else then we can set the location
-   * (path of the JSON file where its available) of JSON file to GOOGLE_APPLICATION_CREDENTIALS env variable.
+   * On non-Google platforms, the GOOGLE_APPLICATION_CREDENTIALS env variable should be set to the
+   * location of the JSON file for the service account you created in the GCP console.
+   *
    */
   public static void main(String[] args) throws Exception {
     if (args.length < 1) {
