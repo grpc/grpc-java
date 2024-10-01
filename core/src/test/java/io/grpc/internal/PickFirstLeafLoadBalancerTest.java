@@ -2606,7 +2606,7 @@ public class PickFirstLeafLoadBalancerTest {
       listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
     }
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
-    assertFalse("Index should be at end", loadBalancer.indexIntrospector.isValid());
+    assertFalse("Index should be at end", loadBalancer.isIndexValid());
 
     forwardTimeByBackoffDelay(); // should trigger retry
     for (int i = 0; i < subchannels.length; i++) {
@@ -2618,7 +2618,7 @@ public class PickFirstLeafLoadBalancerTest {
     forwardTimeByBackoffDelay(); // should trigger retry again
     for (int i = 0; i < subchannels.length; i++) {
       inOrder.verify(subchannels[i]).requestConnection();
-      assertEquals(i, loadBalancer.indexIntrospector.getGroupIndex());
+      assertEquals(i, loadBalancer.getGroupIndex());
       listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error)); // cascade
     }
   }

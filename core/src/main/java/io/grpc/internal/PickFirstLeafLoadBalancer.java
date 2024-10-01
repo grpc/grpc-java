@@ -75,8 +75,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @Nullable
   private ScheduledHandle reconnectTask = null;
   private final boolean serializingRetries = isSerializingRetries();
-  @VisibleForTesting
-  final IndexIntrospector indexIntrospector = new IndexIntrospector();
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -294,7 +292,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         }
 
-        if (isPassComplete()) {
+        if (!firstPass || isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
               new Picker(PickResult.withError(stateInfo.getStatus())));
@@ -330,9 +328,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       @Override
       public void run() {
         reconnectTask = null;
-        if (rawConnectivityState == SHUTDOWN) {
-          return;
-        }
         addressIndex.reset();
         requestConnection();
       }
@@ -529,8 +524,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private boolean isPassComplete() {
-    if ((!serializingRetries && addressIndex.isValid())
-        || subchannels.size() < addressIndex.size()) {
+    if (subchannels.size() < addressIndex.size()) {
       return false;
     }
     for (SubchannelData sc : subchannels.values()) {
@@ -719,15 +713,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   @VisibleForTesting
-  final class IndexIntrospector {
+  int getGroupIndex() {
+    return addressIndex.groupIndex;
+  }
 
-    public int getGroupIndex() {
-      return addressIndex.groupIndex;
-    }
-
-    public boolean isValid() {
-      return addressIndex.isValid();
-    }
+  @VisibleForTesting
+  boolean isIndexValid() {
+    return addressIndex.isValid();
   }
 
   private static final class SubchannelData {

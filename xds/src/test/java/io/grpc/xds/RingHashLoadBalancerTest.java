@@ -150,8 +150,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()
-                            || !PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 2 : 1;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
+                            && !PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
     verify(subchannel, times(expectedTimes)).requestConnection();
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
