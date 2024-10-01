@@ -65,7 +65,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
    ```bash
    git fetch upstream
    git checkout -b v$MAJOR.$MINOR.x \
-     $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
+     $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle" upstream/master)^
    git push upstream v$MAJOR.$MINOR.x
    ```
 5. Continue with Google-internal steps at go/grpc-java/releasing, but stop
@@ -132,7 +132,9 @@ Tagging the Release
      compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
    ./gradlew build
    git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
+   git push -u origin release-v$MAJOR.$MINOR.$PATCH
    ```
+   Raise a PR and set the base branch of the PR to v$MAJOR.$MINOR.x of the upstream grpc-java repo.
 6. Go through PR review and push the release tag and updated release branch to
    GitHub (DO NOT click the merge button on the GitHub page):
 

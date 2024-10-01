@@ -79,7 +79,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   /**
    * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
-   * Override this if keys are not Endpoints or if child policies have configuration.
+   * Override this if keys are not Endpoints or if child policies have configuration. Null map
+   * values preserve the child without delivering the child an update.
    */
   protected Map<Object, ResolvedAddresses> createChildAddressesMap(
       ResolvedAddresses resolvedAddresses) {
@@ -181,8 +182,10 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         childLbState = createChildLbState(entry.getKey());
         childLbStates.put(entry.getKey(), childLbState);
       }
-      childLbState.setResolvedAddresses(entry.getValue()); // update child
-      childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
+      if (entry.getValue() != null) {
+        childLbState.setResolvedAddresses(entry.getValue()); // update child
+        childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
+      }
     }
   }
 
@@ -238,12 +241,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   public final ChildLbState getChildLbState(Object key) {
-    if (key == null) {
-      return null;
-    }
-    if (key instanceof EquivalentAddressGroup) {
-      key = new Endpoint((EquivalentAddressGroup) key);
-    }
     return childLbStates.get(key);
   }
 

@@ -956,7 +956,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // Must run in SynchronizationContext.
     void onConfigError() {
       if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-        updateConfigSelector(null);
+        // Apply Default Service Config if initial name resolution fails.
+        if (defaultServiceConfig != null) {
+          updateConfigSelector(defaultServiceConfig.getDefaultConfigSelector());
+          lastServiceConfig = defaultServiceConfig;
+          channelLogger.log(ChannelLogLevel.ERROR,
+              "Initial Name Resolution error, using default service config");
+        } else {
+          updateConfigSelector(null);
+        }
       }
     }
 

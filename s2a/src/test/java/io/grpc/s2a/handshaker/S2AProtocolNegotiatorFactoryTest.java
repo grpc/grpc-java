@@ -50,6 +50,7 @@ import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.util.AsciiString;
+import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -246,7 +247,11 @@ public class S2AProtocolNegotiatorFactoryTest {
       return new StreamObserver<SessionReq>() {
         @Override
         public void onNext(SessionReq req) {
-          responseObserver.onNext(writer.handleResponse(req));
+          try {
+            responseObserver.onNext(writer.handleResponse(req));
+          } catch (IOException e) {
+            responseObserver.onError(e);
+          }
         }
 
         @Override
