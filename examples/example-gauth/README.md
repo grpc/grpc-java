@@ -44,8 +44,14 @@ gcloud pubsub topics create Topic1
 [service account](https://cloud.google.com/docs/authentication/#service_accounts) in order to access
 Pub/Sub via gRPC APIs as described [here](https://cloud.google.com/iam/docs/creating-managing-service-accounts).
 Assign the [role](https://cloud.google.com/iam/docs/granting-roles-to-service-accounts) `Project -> Owner`
-You can also use the `gcloud` shell commands to
+and for Key type select JSON. Once you click `Create`, a JSON file containing your key is downloaded to
+your computer. Note down the path of this file or copy this file to the computer and file system where
+you will be running the example application as described later. Assume this JSON file is available at
+`/path/to/JSON/file`. You can also use the `gcloud` shell commands to
 [create the service account](https://cloud.google.com/iam/docs/creating-managing-service-accounts#iam-service-accounts-create-gcloud)
+
+Note : JSON file is unnecessary on Google platforms, if it's still required somewhere else then we can set the location
+(path of the JSON file where its available) of JSON file to GOOGLE_APPLICATION_CREDENTIALS env variable.
 
 #### To build the examples
 

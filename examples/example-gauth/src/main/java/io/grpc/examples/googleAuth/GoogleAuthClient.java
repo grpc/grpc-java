@@ -38,13 +38,7 @@ import java.util.logging.Logger;
  * Also @see <a href="https://cloud.google.com/pubsub/docs/reference/rpc/">Google Cloud Pubsub via gRPC</a>
  */
 public class GoogleAuthClient {
-  /**
-   * GoogleAuthClient Logger.
-   */
   private static final Logger logger = Logger.getLogger(GoogleAuthClient.class.getName());
-  /**
-   * ManagedChannel.
-   */
   private final ManagedChannel channel;
   /**
    * stub generated from the proto file.
@@ -110,6 +104,8 @@ public class GoogleAuthClient {
    * arg0 = project name in the form "projects/balmy-cirrus-225307" where "balmy-cirrus-225307" is
    *        the project ID for the project you created.
    *
+   * JSON file is unnecessary on Google platforms, if it's still required somewhere else then we can set the location
+   * (path of the JSON file where its available) of JSON file to GOOGLE_APPLICATION_CREDENTIALS env variable.
    */
   public static void main(String[] args) throws Exception {
     if (args.length < 1) {
