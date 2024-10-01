@@ -87,6 +87,7 @@ compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
+```gradle
 implementation 'io.grpc:grpc-okhttp:1.67.1'
 implementation 'io.grpc:grpc-protobuf-lite:1.67.1'
 implementation 'io.grpc:grpc-stub:1.67.1'
