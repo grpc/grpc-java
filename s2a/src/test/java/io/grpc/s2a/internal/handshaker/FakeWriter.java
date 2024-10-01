@@ -23,17 +23,18 @@ import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.ByteString;
 import io.grpc.stub.StreamObserver;
+import io.grpc.util.CertificateUtils;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.Base64;
 
 /** A fake Writer Class to mock the behavior of S2A server. */
 final class FakeWriter implements StreamObserver<SessionReq> {
@@ -59,12 +60,8 @@ final class FakeWriter implements StreamObserver<SessionReq> {
       new File("src/test/resources/int_cert2_ec.pem");
   public static final File cert1File =
       new File("src/test/resources/int_cert1_ec.pem");
-
-  // src/test/resources/leaf_key_ec.pem
-  private static final String PRIVATE_KEY =
-      "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgR2HBqtWTWu4NLiow"
-          + "ar8vh+9vAmCONE59C+jXNAb9r8ehRANCAATRM8ozcr8PTOVsZNWh+rTmJ6t+rODu"
-          + "g3LwWpUQq9h7AddjGlLrrTNrceOyO7nh9aEk5plKhs/h7PO8+vkEFsEx";
+  public static final File keyFile = 
+      new File("src/test/resources/leaf_key_ec.pem");
   private static final ImmutableMap<SignatureAlgorithm, String>
       ALGORITHM_TO_SIGNATURE_INSTANCE_IDENTIFIER =
           ImmutableMap.of(
@@ -107,10 +104,12 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   }
 
   @CanIgnoreReturnValue
-  FakeWriter initializePrivateKey() throws InvalidKeySpecException, NoSuchAlgorithmException {
+  FakeWriter initializePrivateKey() throws InvalidKeySpecException, NoSuchAlgorithmException,
+                    IOException, FileNotFoundException, UnsupportedEncodingException {
+    FileInputStream keyInputStream =
+        new FileInputStream(keyFile);
     privateKey =
-        KeyFactory.getInstance("EC")
-            .generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(PRIVATE_KEY)));
+        CertificateUtils.getPrivateKey(keyInputStream);
     return this;
   }
 
