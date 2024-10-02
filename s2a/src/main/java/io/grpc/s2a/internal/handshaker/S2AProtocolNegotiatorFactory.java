@@ -37,8 +37,6 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.InternalProtocolNegotiators.ProtocolNegotiationHandler;
-import io.grpc.s2a.internal.channel.S2AChannelPool;
-import io.grpc.s2a.internal.channel.S2AGrpcChannelPool;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -70,17 +68,16 @@ public final class S2AProtocolNegotiatorFactory {
   public static InternalProtocolNegotiator.ClientFactory createClientFactory(
       @Nullable S2AIdentity localIdentity, ObjectPool<Channel> s2aChannelPool) {
     checkNotNull(s2aChannelPool, "S2A channel pool should not be null.");
-    S2AChannelPool channelPool = S2AGrpcChannelPool.create(s2aChannelPool);
-    return new S2AClientProtocolNegotiatorFactory(localIdentity, channelPool);
+    return new S2AClientProtocolNegotiatorFactory(localIdentity, s2aChannelPool);
   }
 
   static final class S2AClientProtocolNegotiatorFactory
       implements InternalProtocolNegotiator.ClientFactory {
     private final @Nullable S2AIdentity localIdentity;
-    private final S2AChannelPool channelPool;
+    private final ObjectPool<Channel> channelPool;
 
     S2AClientProtocolNegotiatorFactory(
-        @Nullable S2AIdentity localIdentity, S2AChannelPool channelPool) {
+        @Nullable S2AIdentity localIdentity, ObjectPool<Channel> channelPool) {
       this.localIdentity = localIdentity;
       this.channelPool = channelPool;
     }
@@ -100,13 +97,14 @@ public final class S2AProtocolNegotiatorFactory {
   @VisibleForTesting
   static final class S2AProtocolNegotiator implements ProtocolNegotiator {
 
-    private final S2AChannelPool channelPool;
+    private final ObjectPool<Channel> channelPool;
+    private final Channel channel;
     private final Optional<S2AIdentity> localIdentity;
     private final ListeningExecutorService service =
         MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(1));
 
     static S2AProtocolNegotiator createForClient(
-        S2AChannelPool channelPool, @Nullable S2AIdentity localIdentity) {
+        ObjectPool<Channel> channelPool, @Nullable S2AIdentity localIdentity) {
       checkNotNull(channelPool, "Channel pool should not be null.");
       if (localIdentity == null) {
         return new S2AProtocolNegotiator(channelPool, Optional.empty());
@@ -123,9 +121,11 @@ public final class S2AProtocolNegotiatorFactory {
       return HostAndPort.fromString(authority).getHost();
     }
 
-    private S2AProtocolNegotiator(S2AChannelPool channelPool, Optional<S2AIdentity> localIdentity) {
+    private S2AProtocolNegotiator(ObjectPool<Channel> channelPool,
+        Optional<S2AIdentity> localIdentity) {
       this.channelPool = channelPool;
       this.localIdentity = localIdentity;
+      this.channel = channelPool.getObject();
     }
 
     @Override
@@ -139,13 +139,13 @@ public final class S2AProtocolNegotiatorFactory {
       String hostname = getHostNameFromAuthority(grpcHandler.getAuthority());
       checkArgument(!isNullOrEmpty(hostname), "hostname should not be null or empty.");
       return new S2AProtocolNegotiationHandler(
-        grpcHandler, channelPool, localIdentity, hostname, service);
+        grpcHandler, channel, localIdentity, hostname, service);
     }
 
     @Override
     public void close() {
       service.shutdown();
-      channelPool.close();
+      channelPool.returnObject(channel);
     }
   }
 
@@ -180,7 +180,7 @@ public final class S2AProtocolNegotiatorFactory {
   }
 
   private static final class S2AProtocolNegotiationHandler extends ProtocolNegotiationHandler {
-    private final S2AChannelPool channelPool;
+    private final Channel channel;
     private final Optional<S2AIdentity> localIdentity;
     private final String hostname;
     private final GrpcHttp2ConnectionHandler grpcHandler;
@@ -188,7 +188,7 @@ public final class S2AProtocolNegotiatorFactory {
 
     private S2AProtocolNegotiationHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
-        S2AChannelPool channelPool,
+        Channel channel,
         Optional<S2AIdentity> localIdentity,
         String hostname,
         ListeningExecutorService service) {
@@ -204,7 +204,7 @@ public final class S2AProtocolNegotiatorFactory {
           },
           grpcHandler.getNegotiationLogger());
       this.grpcHandler = grpcHandler;
-      this.channelPool = channelPool;
+      this.channel = channel;
       this.localIdentity = localIdentity;
       this.hostname = hostname;
       checkNotNull(service, "service should not be null.");
@@ -217,8 +217,7 @@ public final class S2AProtocolNegotiatorFactory {
       BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, bufferReads);
 
-      Channel ch = channelPool.getChannel();
-      S2AServiceGrpc.S2AServiceStub stub = S2AServiceGrpc.newStub(ch);
+      S2AServiceGrpc.S2AServiceStub stub = S2AServiceGrpc.newStub(channel);
       S2AStub s2aStub = S2AStub.newInstance(stub);
 
       ListenableFuture<SslContext> sslContextFuture =

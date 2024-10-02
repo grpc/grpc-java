@@ -21,10 +21,10 @@ import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.google.common.truth.Expect;
+import io.grpc.Channel;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
-import io.grpc.s2a.internal.channel.S2AChannelPool;
-import io.grpc.s2a.internal.channel.S2AGrpcChannelPool;
 import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
@@ -53,12 +53,11 @@ public class S2AStubTest {
 
   @Test
   public void send_receiveOkStatus() throws Exception {
-    S2AChannelPool channelPool =
-        S2AGrpcChannelPool.create(
-            SharedResourcePool.forResource(
-                S2AHandshakerServiceChannel.getChannelResource(
-                    S2A_ADDRESS, InsecureChannelCredentials.create())));
-    S2AServiceGrpc.S2AServiceStub serviceStub = S2AServiceGrpc.newStub(channelPool.getChannel());
+    ObjectPool<Channel> channelPool =
+        SharedResourcePool.forResource(
+            S2AHandshakerServiceChannel.getChannelResource(
+                S2A_ADDRESS, InsecureChannelCredentials.create()));
+    S2AServiceGrpc.S2AServiceStub serviceStub = S2AServiceGrpc.newStub(channelPool.getObject());
     S2AStub newStub = S2AStub.newInstance(serviceStub);
 
     IOException expected =

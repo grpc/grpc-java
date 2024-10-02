@@ -20,13 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
 import static org.junit.Assert.assertThrows;
 
-import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
-import io.grpc.ClientCall;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
@@ -36,14 +33,12 @@ import io.grpc.TlsServerCredentials;
 import io.grpc.benchmarks.Utils;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel.HandshakerServiceChannel;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.File;
-import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -183,72 +178,7 @@ public final class S2AHandshakerServiceChannelTest {
   }
 
   /**
-   * Verifies that an {@code HandshakerServiceChannel}'s {@code newCall} method can be used to
-   * perform a simple RPC.
-   */
-  @Test
-  public void newCall_performSimpleRpcSuccess() {
-    Resource<Channel> resource =
-        S2AHandshakerServiceChannel.getChannelResource(
-            "localhost:" + plaintextServer.getPort(),
-            InsecureChannelCredentials.create());
-    Channel channel = resource.create();
-    assertThat(channel).isInstanceOf(HandshakerServiceChannel.class);
-    assertThat(
-            SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance()))
-        .isEqualToDefaultInstance();
-  }
-
-  /** Same as newCall_performSimpleRpcSuccess, but use mTLS. */
-  @Test
-  public void newCall_mtlsPerformSimpleRpcSuccess() throws Exception {
-    Resource<Channel> resource =
-        S2AHandshakerServiceChannel.getChannelResource(
-            "localhost:" + mtlsServer.getPort(), getTlsChannelCredentials());
-    Channel channel = resource.create();
-    assertThat(channel).isInstanceOf(HandshakerServiceChannel.class);
-    assertThat(
-            SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance()))
-        .isEqualToDefaultInstance();
-  }
-
-  /** Creates a {@code HandshakerServiceChannel} instance and verifies its authority. */
-  @Test
-  public void authority_success() throws Exception {
-    ManagedChannel channel = new FakeManagedChannel(true);
-    HandshakerServiceChannel eventLoopHoldingChannel =
-        HandshakerServiceChannel.create(channel);
-    assertThat(eventLoopHoldingChannel.authority()).isEqualTo("FakeManagedChannel");
-  }
-
-  /**
-   * Creates and closes a {@code HandshakerServiceChannel} when its {@code ManagedChannel}
-   * terminates successfully.
-   */
-  @Test
-  public void close_withDelegateTerminatedSuccess() throws Exception {
-    ManagedChannel channel = new FakeManagedChannel(true);
-    HandshakerServiceChannel eventLoopHoldingChannel =
-        HandshakerServiceChannel.create(channel);
-    eventLoopHoldingChannel.close();
-    assertThat(channel.isShutdown()).isTrue();
-  }
-
-  /**
-   * Creates and closes a {@code HandshakerServiceChannel} when its {@code ManagedChannel} does not
-   * terminate successfully.
-   */
-  @Test
-  public void close_withDelegateTerminatedFailure() throws Exception {
-    ManagedChannel channel = new FakeManagedChannel(false);
-    HandshakerServiceChannel eventLoopHoldingChannel =
-        HandshakerServiceChannel.create(channel);
-    eventLoopHoldingChannel.close();
-    assertThat(channel.isShutdown()).isTrue();
-  }
-
-  /**
-   * Creates and closes a {@code HandshakerServiceChannel}, creates a new channel from the same
+   * Creates and closes a {@code ManagedChannel}, creates a new channel from the same
    * resource, and verifies that this second channel is useable.
    */
   @Test
@@ -261,7 +191,7 @@ public final class S2AHandshakerServiceChannelTest {
     resource.close(channelOne);
 
     Channel channelTwo = resource.create();
-    assertThat(channelTwo).isInstanceOf(HandshakerServiceChannel.class);
+    assertThat(channelTwo).isInstanceOf(ManagedChannel.class);
     assertThat(
             SimpleServiceGrpc.newBlockingStub(channelTwo)
                 .unaryRpc(SimpleRequest.getDefaultInstance()))
@@ -279,7 +209,7 @@ public final class S2AHandshakerServiceChannelTest {
     resource.close(channelOne);
 
     Channel channelTwo = resource.create();
-    assertThat(channelTwo).isInstanceOf(HandshakerServiceChannel.class);
+    assertThat(channelTwo).isInstanceOf(ManagedChannel.class);
     assertThat(
             SimpleServiceGrpc.newBlockingStub(channelTwo)
                 .unaryRpc(SimpleRequest.getDefaultInstance()))
@@ -323,55 +253,6 @@ public final class S2AHandshakerServiceChannelTest {
     public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> streamObserver) {
       streamObserver.onNext(SimpleResponse.getDefaultInstance());
       streamObserver.onCompleted();
-    }
-  }
-
-  private static class FakeManagedChannel extends ManagedChannel {
-    private final boolean isDelegateTerminatedSuccess;
-    private boolean isShutdown = false;
-
-    FakeManagedChannel(boolean isDelegateTerminatedSuccess) {
-      this.isDelegateTerminatedSuccess = isDelegateTerminatedSuccess;
-    }
-
-    @Override
-    public String authority() {
-      return "FakeManagedChannel";
-    }
-
-    @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
-        MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions options) {
-      throw new UnsupportedOperationException("This method should not be called.");
-    }
-
-    @Override
-    public ManagedChannel shutdown() {
-      throw new UnsupportedOperationException("This method should not be called.");
-    }
-
-    @Override
-    public boolean isShutdown() {
-      return isShutdown;
-    }
-
-    @Override
-    public boolean isTerminated() {
-      throw new UnsupportedOperationException("This method should not be called.");
-    }
-
-    @Override
-    public ManagedChannel shutdownNow() {
-      isShutdown = true;
-      return null;
-    }
-
-    @Override
-    public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
-      if (isDelegateTerminatedSuccess) {
-        return true;
-      }
-      throw new InterruptedException("Await termination was interrupted.");
     }
   }
 }
