@@ -336,6 +336,8 @@ public final class ServerCalls {
     private boolean completed = false;
     private Runnable onCloseHandler;
 
+    private RespT unaryMessage;
+
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi) {
       this.call = call;
