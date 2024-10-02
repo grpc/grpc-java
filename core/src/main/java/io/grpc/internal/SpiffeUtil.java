@@ -56,6 +56,8 @@ public final class SpiffeUtil {
   private static final Integer URI_SAN_TYPE = 6;
   private static final String USE_PARAMETER_VALUE = "x509-svid";
   private static final String KTY_PARAMETER_VALUE = "RSA";
+  private static final String CERTIFICATE_PREFIX = "-----BEGIN CERTIFICATE-----";
+  private static final String CERTIFICATE_SUFFIX = "-----END CERTIFICATE-----";
   private static final String PREFIX = "spiffe://";
 
   private SpiffeUtil() {}
@@ -163,6 +165,7 @@ public final class SpiffeUtil {
    * @param trustBundleFile the file path to the JSON file containing the trust bundle
    * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md">JSON format</a>
    * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/X509-SVID.md#61-publishing-spiffe-bundle-elements">JWK entry format</a>
+   * @see <a href="https://datatracker.ietf.org/doc/html/rfc7517#appendix-B">x5c (certificate) parameter</a>
    */
   public static SpiffeBundle loadTrustBundleFromFile(String trustBundleFile) throws IOException {
     Map<String, ?> trustDomainsNode = readTrustDomainsFromFile(trustBundleFile);
@@ -236,20 +239,22 @@ public final class SpiffeUtil {
       if (!checkJwkEntry(keyNode, trustDomainName)) {
         break;
       }
-      String rawCert = JsonUtil.getString(keyNode, "x5c");
-      if (rawCert == null) {
+      List<String> rawCerts = JsonUtil.getListOfStrings(keyNode, "x5c");
+      if (rawCerts == null) {
         break;
       }
-      InputStream stream = new ByteArrayInputStream(rawCert.getBytes(StandardCharsets.UTF_8));
+      if (rawCerts.size() != 1) {
+        log.log(Level.SEVERE, String.format("Exactly 1 certificate is expected, but %s found for "
+            + "domain %s.", rawCerts.size(), trustDomainName));
+        break;
+      }
+      InputStream stream = new ByteArrayInputStream((CERTIFICATE_PREFIX + System.lineSeparator() +
+          rawCerts.get(0) + System.lineSeparator() + CERTIFICATE_SUFFIX)
+          .getBytes(StandardCharsets.UTF_8));
       try {
         Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")
             .generateCertificates(stream);
-        if (certs.size() != 1) {
-          log.log(Level.SEVERE, String.format("Exactly 1 certificate is expected, but %s found for "
-              + "domain %s.", certs.size(), trustDomainName));
-        } else {
-          result.add(certs.toArray(new X509Certificate[0])[0]);
-        }
+        result.add(certs.toArray(new X509Certificate[0])[0]);
       } catch (CertificateException e) {
         log.log(Level.SEVERE, String.format("Certificate for domain %s can't be parsed.",
             trustDomainName), e);

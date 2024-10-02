@@ -36,8 +36,7 @@
         {
           "kty": "RSA",
           "use": "x509-svid",
-          "x5c": "-----BEGIN CERTIFICATE-----
-          MIIFsjCCA5qgAwIBAgIURygVMMzdr+Q7rsUaz189JozyHMwwDQYJKoZIhvcNAQEL
+          "x5c": ["MIIFsjCCA5qgAwIBAgIURygVMMzdr+Q7rsUaz189JozyHMwwDQYJKoZIhvcNAQEL
           BQAwTjELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMQwwCgYDVQQHDANTVkwxDTAL
           BgNVBAoMBGdSUEMxFTATBgNVBAMMDHRlc3QtY2xpZW50MTAeFw0yMTEyMjMxODQy
           NTJaFw0zMTEyMjExODQyNTJaME4xCzAJBgNVBAYTAlVTMQswCQYDVQQIDAJDQTEM
@@ -67,10 +66,8 @@
           z6zdhItB9CRbXPreWC+wCB1xDovIzFKOVsLs5+Gqs1m7VinG2LxbDqaKyo/FB0Hx
           x0acBNzezLWoDwXYQrN0T0S4pnqhKD1CYPpdArBkNezUYAjS725FkApuK+mnBX3U
           0msBffEaUEOkcyar1EW2m/33vpetD/k3eQQkmvQf4Hbiu9AF+9cNDm/hMuXEw5EX
-          GA91fn0891b5eEW8BJHXX0jri0aN8g==
-          -----END CERTIFICATE-----
-          -----BEGIN CERTIFICATE-----
-          MIIELTCCAxWgAwIBAgIUVXGlXjNENtOZbI12epjgIhMaShEwDQYJKoZIhvcNAQEL
+          GA91fn0891b5eEW8BJHXX0jri0aN8g==",
+          "MIIELTCCAxWgAwIBAgIUVXGlXjNENtOZbI12epjgIhMaShEwDQYJKoZIhvcNAQEL
           BQAwVjELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoM
           GEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDEPMA0GA1UEAwwGdGVzdGNhMB4XDTI0
           MDkxNzE2MTk0NFoXDTM0MDkxNTE2MTk0NFowTjELMAkGA1UEBhMCVVMxCzAJBgNV
@@ -92,8 +89,7 @@
           GlyZdVMghA1bBJLBMwiD5VT5noqoJBD7hDy6v9yNmt1Sw2iYBJPqI3Gnf5bMjR3s
           UICaxmFyqaMCZsPkfJh0DmZpInGJys3m4QqGz6ZE2DWgcSr1r/ML7/5bSPjjr8j4
           WFFSqFR3dMu8CbGnfZTCTXa4GTX/rARXbAO67Z/oJbJBK7VKayskL+PzKuohb9ox
-          jGL772hQMbwtFCOFXu5VP0s=
-          -----END CERTIFICATE-----"
+          jGL772hQMbwtFCOFXu5VP0s="]
         }
       ]
     }
