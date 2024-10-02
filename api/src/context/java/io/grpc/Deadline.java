@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
@@ -69,11 +68,6 @@ public final class Deadline implements Comparable<Deadline> {
     return after(duration, units, SYSTEM_TICKER);
   }
 
-  public static Deadline after(Duration duration) {
-    return after(TimeUnit.NANOSECONDS.convert(duration.getSeconds(), TimeUnit.SECONDS),
-        TimeUnit.NANOSECONDS, SYSTEM_TICKER);
-  }
-
   /**
    * Create a deadline that will expire at the specified offset based on the given {@link Ticker}.
    *
@@ -99,11 +93,6 @@ public final class Deadline implements Comparable<Deadline> {
   public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
-  }
-
-  public static Deadline after(Duration duration, Ticker ticker) {
-    return after(TimeUnit.NANOSECONDS.convert(duration.getSeconds(), TimeUnit.SECONDS),
-        TimeUnit.NANOSECONDS, ticker);
   }
 
   private final Ticker ticker;

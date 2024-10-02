@@ -29,7 +29,6 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.testing.EqualsTester;
 import com.google.common.truth.Truth;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -136,12 +135,6 @@ public class DeadlineTest {
   @Test
   public void deadlineMatchesLongValue() {
     assertEquals(10, Deadline.after(10, TimeUnit.MINUTES, ticker).timeRemaining(TimeUnit.MINUTES));
-  }
-
-  @Test
-  public void deadLineMatchesDurationValue() {
-    assertEquals(10, Deadline.after(Duration.ofMinutes(10), ticker)
-        .timeRemaining(TimeUnit.MINUTES));
   }
 
   @Test
@@ -286,36 +279,6 @@ public class DeadlineTest {
   public void tickersDontMatch() {
     Deadline d1 = Deadline.after(10, TimeUnit.SECONDS);
     Deadline d2 = Deadline.after(10, TimeUnit.SECONDS, ticker);
-    boolean success = false;
-    try {
-      d1.compareTo(d2);
-      success = true;
-    } catch (AssertionError e) {
-      // Expected
-    }
-    assertFalse(success);
-
-    try {
-      d1.minimum(d2);
-      success = true;
-    } catch (AssertionError e) {
-      // Expected
-    }
-    assertFalse(success);
-
-    try {
-      d1.isBefore(d2);
-      success = true;
-    } catch (AssertionError e) {
-      // Expected
-    }
-    assertFalse(success);
-  }
-
-  @Test
-  public void tickersDontMatchDuration() {
-    Deadline d1 = Deadline.after(Duration.ofSeconds(10));
-    Deadline d2 = Deadline.after(Duration.ofSeconds(10), ticker);
     boolean success = false;
     try {
       d1.compareTo(d2);
