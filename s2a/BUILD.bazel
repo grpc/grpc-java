@@ -33,7 +33,9 @@ java_library(
 
 java_library(
     name = "token_manager",
-    srcs = ["src/main/java/io/grpc/s2a/internal/handshaker/tokenmanager/*.java"],
+    srcs = glob([
+        "src/main/java/io/grpc/s2a/internal/handshaker/tokenmanager/*.java",
+    ]),
     deps = [
         ":s2a_identity",
         artifact("com.google.code.findbugs:jsr305"),
