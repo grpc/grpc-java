@@ -210,7 +210,7 @@ public class SpiffeUtilTest {
 
   public static class CertificateApiTest {
     private static final String SPIFFE_PEM_FILE = "spiffe_cert.pem";
-    private static final String SPIFFE_MULTI_VALUES_PEM_FILE = "spiffe_cert_multi.pem";
+    private static final String MULTI_URI_SAN_PEM_FILE = "spiffe_multi_uri_san_cert.pem";
     private static final String SERVER_0_PEM_FILE = "server0.pem";
     private static final String TEST_DIRECTORY_PREFIX = "io/grpc/internal/";
     private static final String SPIFFE_TRUST_BUNDLE_FILE = "spiffebundle.json";
@@ -223,14 +223,14 @@ public class SpiffeUtilTest {
 
 
     private X509Certificate[] spiffeCert;
-    private X509Certificate[] spiffeMultiCert;
+    private X509Certificate[] multipleUriSanCert;
     private X509Certificate[] serverCert0;
 
     @Before
     public void setUp() throws CertificateException {
       spiffeCert = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SPIFFE_PEM_FILE));
-      spiffeMultiCert = CertificateUtils.getX509Certificates(TlsTesting
-          .loadCert(SPIFFE_MULTI_VALUES_PEM_FILE));
+      multipleUriSanCert = CertificateUtils.getX509Certificates(TlsTesting
+          .loadCert(MULTI_URI_SAN_PEM_FILE));
       serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
     }
 
@@ -246,7 +246,7 @@ public class SpiffeUtilTest {
       Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(serverCert0);
       assertFalse(spiffeId.isPresent());
       IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .extractSpiffeId(spiffeMultiCert));
+          .extractSpiffeId(multipleUriSanCert));
       assertEquals("Multiple URI SAN values found in the leaf cert.", iae.getMessage());
 
     }

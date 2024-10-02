@@ -137,6 +137,7 @@ public final class SpiffeUtil {
       return Optional.absent();
     }
     String uri = null;
+    // Search for the unique URI SAN.
     for (List<?> altName : subjectAltNames) {
       if (altName.size() < 2 ) {
         continue;
@@ -291,7 +292,7 @@ public final class SpiffeUtil {
 
     private final ImmutableMap<String, ImmutableList<X509Certificate>> bundleMap;
 
-    public SpiffeBundle(Map<String, Long> sequenceNumbers,
+    private SpiffeBundle(Map<String, Long> sequenceNumbers,
         Map<String, List<X509Certificate>> trustDomainMap) {
       this.sequenceNumbers = ImmutableMap.copyOf(sequenceNumbers);
       ImmutableMap.Builder<String, ImmutableList<X509Certificate>> builder = ImmutableMap.builder();
