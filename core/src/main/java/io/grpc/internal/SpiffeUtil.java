@@ -248,8 +248,8 @@ public final class SpiffeUtil {
             + "domain %s.", rawCerts.size(), trustDomainName));
         break;
       }
-      InputStream stream = new ByteArrayInputStream((CERTIFICATE_PREFIX + System.lineSeparator() +
-          rawCerts.get(0) + System.lineSeparator() + CERTIFICATE_SUFFIX)
+      InputStream stream = new ByteArrayInputStream((CERTIFICATE_PREFIX + System.lineSeparator()
+          + rawCerts.get(0) + System.lineSeparator() + CERTIFICATE_SUFFIX)
           .getBytes(StandardCharsets.UTF_8));
       try {
         Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")

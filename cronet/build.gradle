@@ -1,94 +1,94 @@
-plugins {
-    id "maven-publish"
-
-    id "com.android.library"
-}
-
-description = "gRPC: Cronet Android"
-
-repositories {
-    google()
-    mavenCentral()
-}
-
-android {
-    namespace 'io.grpc.cronet'
-    compileSdkVersion 33
-    defaultConfig {
-        minSdkVersion 21
-        targetSdkVersion 33
-        versionCode 1
-        versionName "1.0"
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-    }
-    buildTypes {
-        debug { minifyEnabled false }
-        release {
-            minifyEnabled false
-            consumerProguardFiles 'proguard-rules.pro'
-        }
-    }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-    testOptions { unitTests { includeAndroidResources = true } }
-    lintOptions { disable 'InvalidPackage' }
-    publishing {
-        singleVariant('release') {
-            withSourcesJar()
-            withJavadocJar()
-        }
-    }
-}
-
-dependencies {
-    api project(':grpc-api'),
-            libraries.cronet.api
-    implementation project(':grpc-core')
-    implementation libraries.guava
-    testImplementation project(':grpc-testing')
-
-    testImplementation libraries.cronet.embedded
-
-    testImplementation libraries.junit
-    testImplementation libraries.mockito.core
-    testImplementation libraries.robolectric
-}
-
-task javadocs(type: Javadoc) {
-    source = android.sourceSets.main.java.srcDirs
-    classpath += files(android.getBootClasspath())
-    classpath += files({
-        android.libraryVariants.collect { variant ->
-            variant.javaCompileProvider.get().classpath
-        }
-    })
-    options {
-        // Disable JavaDoc doclint on Java 8.
-        if (JavaVersion.current().isJava8Compatible()) {
-            addStringOption('Xdoclint:none', '-quiet')
-        }
-    }
-    exclude 'io/grpc/cronet/Internal*'
-}
-
-task javadocJar(type: Jar, dependsOn: javadocs) {
-    archiveClassifier = 'javadoc'
-    from javadocs.destinationDir
-}
-
-task sourcesJar(type: Jar) {
-    archiveClassifier = 'sources'
-    from android.sourceSets.main.java.srcDirs
-}
-
-publishing {
-    publications {
-        maven {
-            afterEvaluate {
-                from components.release
-            }
-        }
-    }
-}
+//plugins {
+//    id "maven-publish"
+//
+//    id "com.android.library"
+//}
+//
+//description = "gRPC: Cronet Android"
+//
+//repositories {
+//    google()
+//    mavenCentral()
+//}
+//
+//android {
+//    namespace 'io.grpc.cronet'
+//    compileSdkVersion 33
+//    defaultConfig {
+//        minSdkVersion 21
+//        targetSdkVersion 33
+//        versionCode 1
+//        versionName "1.0"
+//        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+//    }
+//    buildTypes {
+//        debug { minifyEnabled false }
+//        release {
+//            minifyEnabled false
+//            consumerProguardFiles 'proguard-rules.pro'
+//        }
+//    }
+//    compileOptions {
+//        sourceCompatibility JavaVersion.VERSION_1_8
+//        targetCompatibility JavaVersion.VERSION_1_8
+//    }
+//    testOptions { unitTests { includeAndroidResources = true } }
+//    lintOptions { disable 'InvalidPackage' }
+//    publishing {
+//        singleVariant('release') {
+//            withSourcesJar()
+//            withJavadocJar()
+//        }
+//    }
+//}
+//
+//dependencies {
+//    api project(':grpc-api'),
+//            libraries.cronet.api
+//    implementation project(':grpc-core')
+//    implementation libraries.guava
+//    testImplementation project(':grpc-testing')
+//
+//    testImplementation libraries.cronet.embedded
+//
+//    testImplementation libraries.junit
+//    testImplementation libraries.mockito.core
+//    testImplementation libraries.robolectric
+//}
+//
+//task javadocs(type: Javadoc) {
+//    source = android.sourceSets.main.java.srcDirs
+//    classpath += files(android.getBootClasspath())
+//    classpath += files({
+//        android.libraryVariants.collect { variant ->
+//            variant.javaCompileProvider.get().classpath
+//        }
+//    })
+//    options {
+//        // Disable JavaDoc doclint on Java 8.
+//        if (JavaVersion.current().isJava8Compatible()) {
+//            addStringOption('Xdoclint:none', '-quiet')
+//        }
+//    }
+//    exclude 'io/grpc/cronet/Internal*'
+//}
+//
+//task javadocJar(type: Jar, dependsOn: javadocs) {
+//    archiveClassifier = 'javadoc'
+//    from javadocs.destinationDir
+//}
+//
+//task sourcesJar(type: Jar) {
+//    archiveClassifier = 'sources'
+//    from android.sourceSets.main.java.srcDirs
+//}
+//
+//publishing {
+//    publications {
+//        maven {
+//            afterEvaluate {
+//                from components.release
+//            }
+//        }
+//    }
+//}
