@@ -23,9 +23,7 @@ import static org.mockito.Mockito.verify;
 import com.google.common.testing.NullPointerTester;
 import com.google.common.testing.NullPointerTester.Visibility;
 import io.grpc.Channel;
-import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.benchmarks.Utils;
@@ -35,8 +33,6 @@ import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
-import io.grpc.s2a.internal.channel.S2AChannelPool;
-import io.grpc.s2a.internal.channel.S2AGrpcChannelPool;
 import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.grpc.s2a.internal.handshaker.S2AProtocolNegotiatorFactory.S2AProtocolNegotiator;
@@ -52,8 +48,6 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.util.AsciiString;
 import java.io.IOException;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -112,15 +106,14 @@ public class S2AProtocolNegotiatorFactoryTest {
 
   @Test
   public void createProtocolNegotiator_nullArgument() throws Exception {
-    S2AChannelPool pool =
-        S2AGrpcChannelPool.create(
+    ObjectPool<Channel> pool =
             SharedResourcePool.forResource(
                 S2AHandshakerServiceChannel.getChannelResource(
-                    "localhost:8080", InsecureChannelCredentials.create())));
+                    "localhost:8080", InsecureChannelCredentials.create()));
 
     NullPointerTester tester =
         new NullPointerTester()
-            .setDefault(S2AChannelPool.class, pool)
+            .setDefault(ObjectPool.class, pool)
             .setDefault(Optional.class, Optional.empty());
 
     tester.testStaticMethods(S2AProtocolNegotiator.class, Visibility.PACKAGE);
@@ -175,40 +168,14 @@ public class S2AProtocolNegotiatorFactoryTest {
 
   @Test
   public void createChannelHandler_addHandlerToMockContext() throws Exception {
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    ManagedChannel channel =
-        Grpc.newChannelBuilder(authority, InsecureChannelCredentials.create())
-            .executor(executor)
-            .build();
-    FakeS2AChannelPool fakeChannelPool = new FakeS2AChannelPool(channel);
     ProtocolNegotiator clientNegotiator =
         S2AProtocolNegotiatorFactory.S2AProtocolNegotiator.createForClient(
-            fakeChannelPool, LOCAL_IDENTITY);
+            channelPool, LOCAL_IDENTITY);
 
     ChannelHandler channelHandler = clientNegotiator.newHandler(fakeConnectionHandler);
 
     ((ChannelDuplexHandler) channelHandler).userEventTriggered(mockChannelHandlerContext, "event");
     verify(mockChannelHandlerContext).fireUserEventTriggered("event");
-  }
-
-  /** A {@link S2AChannelPool} that returns the given channel. */
-  private static class FakeS2AChannelPool implements S2AChannelPool {
-    private final Channel channel;
-
-    FakeS2AChannelPool(Channel channel) {
-      this.channel = channel;
-    }
-
-    @Override
-    public Channel getChannel() {
-      return channel;
-    }
-
-    @Override
-    public void returnToPool(Channel channel) {}
-
-    @Override
-    public void close() {}
   }
 
   /** A {@code GrpcHttp2ConnectionHandler} that does nothing. */

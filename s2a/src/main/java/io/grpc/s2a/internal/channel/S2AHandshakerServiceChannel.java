@@ -91,6 +91,7 @@ public final class S2AHandshakerServiceChannel {
     public Channel create() {
       return NettyChannelBuilder.forTarget(targetAddress, channelCredentials)
               .directExecutor()
+              .idleTimeout(5, SECONDS)
               .build();
     }
 
