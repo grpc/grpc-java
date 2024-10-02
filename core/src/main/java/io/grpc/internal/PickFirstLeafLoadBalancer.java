@@ -292,7 +292,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           }
         }
 
-        if (!firstPass || isPassComplete()) {
+        if (isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
               new Picker(PickResult.withError(stateInfo.getStatus())));
