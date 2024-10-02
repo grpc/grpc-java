@@ -36,12 +36,13 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   public static final String GRPC_PF_USE_HAPPY_EYEBALLS = "GRPC_PF_USE_HAPPY_EYEBALLS";
   private static final String SHUFFLE_ADDRESS_LIST_KEY = "shuffleAddressList";
 
-  private static boolean enableNewPickFirst =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", false);
-
   public static boolean isEnabledHappyEyeballs() {
-
     return GrpcUtil.getFlag(GRPC_PF_USE_HAPPY_EYEBALLS, false);
+  }
+
+  @VisibleForTesting
+  public static boolean isEnabledNewPickFirst() {
+    return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_NEW_PICK_FIRST", false);
   }
 
   @Override
@@ -61,7 +62,7 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-    if (enableNewPickFirst) {
+    if (isEnabledNewPickFirst()) {
       return new PickFirstLeafLoadBalancer(helper);
     } else {
       return new PickFirstLoadBalancer(helper);
@@ -82,15 +83,10 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
   private static Object getLbPolicyConfig(Map<String, ?> rawLbPolicyConfig) {
     Boolean shuffleAddressList = JsonUtil.getBoolean(rawLbPolicyConfig, SHUFFLE_ADDRESS_LIST_KEY);
-    if (enableNewPickFirst) {
+    if (isEnabledNewPickFirst()) {
       return new PickFirstLeafLoadBalancerConfig(shuffleAddressList);
     } else {
       return new PickFirstLoadBalancerConfig(shuffleAddressList);
     }
-  }
-
-  @VisibleForTesting
-  public static boolean isEnabledNewPickFirst() {
-    return enableNewPickFirst;
   }
 }
