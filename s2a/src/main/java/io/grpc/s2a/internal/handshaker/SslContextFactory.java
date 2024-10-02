@@ -63,7 +63,8 @@ final class SslContextFactory {
           KeyStoreException,
           NoSuchAlgorithmException,
           UnrecoverableKeyException,
-          GeneralSecurityException {
+          GeneralSecurityException,
+          IllegalArgumentException {
     checkNotNull(stub, "stub should not be null.");
     checkNotNull(targetName, "targetName should not be null on client side.");
     GetTlsConfigurationResp.ClientTlsConfiguration clientTlsConfiguration;
@@ -136,7 +137,8 @@ final class SslContextFactory {
           IOException,
           KeyStoreException,
           NoSuchAlgorithmException,
-          UnrecoverableKeyException {
+          UnrecoverableKeyException,
+          IllegalArgumentException {
     sslContextBuilder.keyManager(createKeylessManager(clientTlsConfiguration));
     ImmutableSet<String> tlsVersions =
         ProtoUtil.buildTlsProtocolVersionSet(
