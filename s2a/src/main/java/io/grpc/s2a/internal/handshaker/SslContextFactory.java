@@ -63,8 +63,7 @@ final class SslContextFactory {
           KeyStoreException,
           NoSuchAlgorithmException,
           UnrecoverableKeyException,
-          GeneralSecurityException,
-          IllegalArgumentException {
+          GeneralSecurityException {
     checkNotNull(stub, "stub should not be null.");
     checkNotNull(targetName, "targetName should not be null on client side.");
     GetTlsConfigurationResp.ClientTlsConfiguration clientTlsConfiguration;
@@ -137,12 +136,16 @@ final class SslContextFactory {
           IOException,
           KeyStoreException,
           NoSuchAlgorithmException,
-          UnrecoverableKeyException,
-          IllegalArgumentException {
+          UnrecoverableKeyException {
     sslContextBuilder.keyManager(createKeylessManager(clientTlsConfiguration));
-    ImmutableSet<String> tlsVersions =
-        ProtoUtil.buildTlsProtocolVersionSet(
-            clientTlsConfiguration.getMinTlsVersion(), clientTlsConfiguration.getMaxTlsVersion());
+    ImmutableSet<String> tlsVersions;
+    try {
+      tlsVersions =
+          ProtoUtil.buildTlsProtocolVersionSet(
+              clientTlsConfiguration.getMinTlsVersion(), clientTlsConfiguration.getMaxTlsVersion());
+    } catch (IllegalArgumentException e) {
+      throw new IOException("Received invalid TLS version information from S2A.", e);
+    }
     if (tlsVersions.isEmpty()) {
       throw new S2AConnectionException("Set of TLS versions received from S2A server is empty.");
     }
