@@ -106,10 +106,12 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   @CanIgnoreReturnValue
   FakeWriter initializePrivateKey() throws InvalidKeySpecException, NoSuchAlgorithmException,
                     IOException, FileNotFoundException, UnsupportedEncodingException {
-    FileInputStream keyInputStream =
-        new FileInputStream(keyFile);
-    privateKey =
-        CertificateUtils.getPrivateKey(keyInputStream);
+    FileInputStream keyInputStream = new FileInputStream(keyFile);
+    try {
+      privateKey = CertificateUtils.getPrivateKey(keyInputStream);
+    } finally {
+      keyInputStream.close();
+    }
     return this;
   }
 
