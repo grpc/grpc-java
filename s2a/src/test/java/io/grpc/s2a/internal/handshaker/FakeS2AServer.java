@@ -28,7 +28,7 @@ public final class FakeS2AServer extends S2AServiceGrpc.S2AServiceImplBase {
 
   private final FakeWriter writer;
 
-  public FakeS2AServer() throws InvalidKeySpecException, NoSuchAlgorithmException {
+  public FakeS2AServer() throws InvalidKeySpecException, NoSuchAlgorithmException, IOException {
     this.writer = new FakeWriter();
     this.writer.setVerificationResult(FakeWriter.VerificationResult.SUCCESS).initializePrivateKey();
   }
