@@ -20,7 +20,6 @@ import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.netty.NettyServerHandlerTest.streamListenerMessageQueue;
 import static io.grpc.netty.NettyServerHandlerTest.streamTransportState;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -289,20 +288,10 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
         StatsTraceContext.NOOP);
     framer.writePayload(new ByteArrayInputStream(message));
     framer.close();
- /*   ChannelHandlerContext ctx = newMockContext();
-    new DefaultHttp2FrameWriter().writeData(ctx, streamId, compressionFrame, 0, endStream,
-        newPromise());
-    return captureWrite(ctx);*/
     return compressionFrame;
   }
 
   protected final ByteBuf grpcDataFrame(int streamId, boolean endStream, byte[] content) {
-    /*// Need to retain the content since the frameWriter releases it.
-    content.retain();
-
-    ChannelHandlerContext ctx = newMockContext();
-    new DefaultHttp2FrameWriter().writeData(ctx, streamId, content, 0, endStream, newPromise());
-    return captureWrite(ctx);*/
     return dataFrame(streamId, endStream, grpcFrame(content));
   }
 

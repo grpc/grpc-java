@@ -299,7 +299,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verify(streamListener, atLeastOnce())
         .messagesAvailable(any(StreamListener.MessageProducer.class));
     InputStream message = streamListenerMessageQueue.poll();
-    //assertArrayEquals(ByteBufUtil.getBytes(content()), ByteStreams.toByteArray(message));
     assertArrayEquals(contentAsArray(), ByteStreams.toByteArray(message));
     message.close();
     assertNull("no additional message expected", streamListenerMessageQueue.poll());
