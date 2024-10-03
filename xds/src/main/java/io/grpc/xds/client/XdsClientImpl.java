@@ -141,12 +141,14 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   @Override
   public void handleStreamClosed(Status error) {
     syncContext.throwIfNotInThisSynchronizationContext();
-    cleanUpResourceTimers();
-    for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
-        resourceSubscribers.values()) {
-      for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-        if (!subscriber.hasResult()) {
-          subscriber.onError(error, null);
+    if (!error.isOk()) {
+      cleanUpResourceTimers();
+      for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
+          resourceSubscribers.values()) {
+        for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
+          if (!subscriber.hasResult()) {
+            subscriber.onError(error, null);
+          }
         }
       }
     }
