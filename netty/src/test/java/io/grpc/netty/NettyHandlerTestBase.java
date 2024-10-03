@@ -70,7 +70,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
-
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -437,7 +436,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
     byte[] data = initXkbBuffer(1);
     int wireSize = data.length + 5; // 5 is the size of the header
-    System.out.println("windowUpdateMatchesTarget->streamTransportState="+ streamTransportState);
+    System.out.println("windowUpdateMatchesTarget->streamTransportState=" + streamTransportState);
     streamTransportState.requestMessagesFromDeframerForTesting(1);
     ByteBuf frame = grpcDataFrame(3, false, data);
     channelRead(frame);
@@ -455,14 +454,16 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     }
 
     System.out.println("for loop after->outboundMessages=" + channel().outboundMessages().size());
-    System.out.println("before close streamListenerMessageQueue=" + streamListenerMessageQueue.size());
+    System.out.println("before close streamListenerMessageQueue="
+        + streamListenerMessageQueue.size());
 
     while (!streamListenerMessageQueue.isEmpty()) {
       InputStream message = streamListenerMessageQueue.poll();
       message.close();
     }
 
-    System.out.println("after close streamListenerMessageQueue=" + streamListenerMessageQueue.size());
+    System.out.println("after close streamListenerMessageQueue="
+        + streamListenerMessageQueue.size());
 
     long pingData = handler.flowControlPing().payload();
     channelRead(pingFrame(true, pingData));

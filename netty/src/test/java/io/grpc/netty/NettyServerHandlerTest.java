@@ -37,7 +37,13 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -189,14 +195,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   private static class TransportStateImpl extends NettyServerStream.TransportState {
-    public TransportStateImpl (
+    public TransportStateImpl(
         NettyServerHandler handler,
         EventLoop eventLoop,
         int maxMessageSize,
         Http2Stream http2Stream,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer) {
-      super (
+      super(
           handler,
           eventLoop,
           http2Stream,
@@ -213,7 +219,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
 
-    streamTransportState = new TransportStateImpl (
+    streamTransportState = new TransportStateImpl(
         handler(),
         channel().eventLoop(),
         DEFAULT_MAX_MESSAGE_SIZE,
@@ -221,7 +227,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         StatsTraceContext.NOOP,
         transportTracer);
     streamTransportState.setListener(mock(ServerStreamListener.class));
-    System.out.println("manualSetUp->streamTransportState="+ streamTransportState);
+    System.out.println("manualSetUp->streamTransportState=" + streamTransportState);
 
     // replace the keepAliveManager with spyKeepAliveManager
     spyKeepAliveManager =
@@ -908,7 +914,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     for (int i = 0; i < 10; i++) {
       future = enqueue(
           //new SendGrpcFrameCommand(stream.transportState(), content().retainedSlice(), false));
-              new SendGrpcFrameCommand(stream.transportState(), content(), false));
+          new SendGrpcFrameCommand(stream.transportState(), content(), false));
       future.get();
       channel().releaseOutbound();
       channelRead(pingFrame(false /* isAck */, 1L));
