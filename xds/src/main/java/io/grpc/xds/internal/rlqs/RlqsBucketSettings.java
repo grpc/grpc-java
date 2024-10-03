@@ -17,22 +17,31 @@
 package io.grpc.xds.internal.rlqs;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
 import io.grpc.xds.internal.datatype.RateLimitStrategy;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.rlqs.RlqsRateLimitResult.DenyResponse;
+import java.util.function.Function;
+import javax.annotation.Nullable;
 
 @AutoValue
 public abstract class RlqsBucketSettings {
   // TODO(sergiitk): [IMPL] this misses most of the parsing and implementation.
 
+  @Nullable
   public abstract ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder();
 
-  public RlqsBucketId toBucketId(HttpMatchInput input) {
-    return null;
+  abstract RlqsBucketId staticBucketId();
+
+  public abstract long reportingIntervalMillis();
+
+  public final RlqsBucketId toBucketId(HttpMatchInput input) {
+    if (bucketIdBuilder() == null) {
+      return staticBucketId();
+    }
+    return processBucketBuilder(bucketIdBuilder(), input);
   }
 
   public RateLimitStrategy noAssignmentStrategy() {
@@ -47,11 +56,34 @@ public abstract class RlqsBucketSettings {
     return null;
   }
 
-  public abstract long reportingIntervalMillis();
-
   public static RlqsBucketSettings create(
       ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder,
       Duration reportingInterval) {
-    return new AutoValue_RlqsBucketSettings(bucketIdBuilder, Durations.toMillis(reportingInterval));
+    // TODO(sergiitk): instead of create, use Builder pattern.
+    RlqsBucketId staticBucketId = processBucketBuilder(bucketIdBuilder, null);
+    return new AutoValue_RlqsBucketSettings(
+        staticBucketId.isEmpty() ? bucketIdBuilder : null,
+        staticBucketId,
+        Durations.toMillis(reportingInterval));
+  }
+
+  private static RlqsBucketId processBucketBuilder(
+      ImmutableMap<String, Function<HttpMatchInput, String>> bucketIdBuilder,
+      HttpMatchInput input) {
+    ImmutableMap.Builder<String, String> bucketIdMapBuilder = ImmutableMap.builder();
+    if (input == null) {
+      // TODO(sergiitk): [IMPL] calculate static map
+      return RlqsBucketId.EMPTY;
+    }
+    for (String key : bucketIdBuilder.keySet()) {
+      Function<HttpMatchInput, String> fn = bucketIdBuilder.get(key);
+      String value = null;
+      if (fn != null) {
+        value = fn.apply(input);
+      }
+      bucketIdMapBuilder.put(key, value != null ? value : "");
+    }
+    ImmutableMap<String, String> bucketIdMap = bucketIdMapBuilder.build();
+    return bucketIdMap.isEmpty() ? RlqsBucketId.EMPTY : RlqsBucketId.create(bucketIdMap);
   }
 }

@@ -24,19 +24,25 @@ import java.util.Map;
 
 @AutoValue
 public abstract class RlqsBucketId {
+  // No class loading deadlock, see
+  // https://github.com/google/error-prone/issues/2062#issuecomment-1566253739
+  public static final RlqsBucketId EMPTY = create(ImmutableMap.of());
+
   public abstract ImmutableMap<String, String> bucketId();
 
-  public static RlqsBucketId create(ImmutableMap<String, String> bucketId) {
-    return new AutoValue_RlqsBucketId(bucketId);
+  public static RlqsBucketId create(Map<String, String> bucketIdMap) {
+    if (bucketIdMap.isEmpty()) {
+      return EMPTY;
+    }
+    return new AutoValue_RlqsBucketId(ImmutableMap.copyOf(bucketIdMap));
+  }
+
+  public final boolean isEmpty() {
+    return bucketId().isEmpty();
   }
 
   public static RlqsBucketId fromEnvoyProto(BucketId envoyProto) {
-    ImmutableMap.Builder<String, String> bucketId = ImmutableMap.builder();
-    for (Map.Entry<String, String> entry : envoyProto.getBucketMap().entrySet()) {
-      bucketId.put(entry.getKey(), entry.getValue());
-    }
-    return RlqsBucketId.create(bucketId.build());
-
+    return RlqsBucketId.create(ImmutableMap.copyOf(envoyProto.getBucketMap().entrySet()));
   }
 
   @Memoized
