@@ -347,7 +347,7 @@ public class SpiffeUtilTest {
     }
 
     @Test
-    public void fsTest() throws Exception{
+    public void fsTest() throws Exception {
       log.log(Level.SEVERE, "fsTest");
       log.log(Level.SEVERE, getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
           + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath());
