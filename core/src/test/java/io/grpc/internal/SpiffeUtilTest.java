@@ -211,6 +211,8 @@ public class SpiffeUtilTest {
     private static final String TEST_DIRECTORY_PREFIX = "io/grpc/internal/";
     private static final String SPIFFE_TRUST_BUNDLE_FILE = "spiffebundle.json";
     private static final String SPIFFE_TRUST_BUNDLE_MALFORMED = "spiffebundle_malformed.json";
+    private static final String SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT =
+        "spiffebundle_corrupted_cert.json";
     private static final String SPIFFE_TRUST_BUNDLE_WRONG_KTY = "spiffebundle_wrong_kty.json";
     private static final String SPIFFE_TRUST_BUNDLE_WRONG_KID = "spiffebundle_wrong_kid.json";
     private static final String SPIFFE_TRUST_BUNDLE_WRONG_USE = "spiffebundle_wrong_use.json";
@@ -254,6 +256,8 @@ public class SpiffeUtilTest {
 
     @Test
     public void extractSpiffeIdFromChainTest() throws Exception {
+      // Check that the SPIFFE ID is extracted only from the leaf cert in the chain (spiffeCert
+      // contains it, but serverCert0 does not).
       X509Certificate[] leafWithSpiffeChain = new X509Certificate[]{spiffeCert[0], serverCert0[0]};
       assertTrue(SpiffeUtil.extractSpiffeId(leafWithSpiffeChain).isPresent());
       X509Certificate[] leafWithoutSpiffeChain =
@@ -305,6 +309,12 @@ public class SpiffeUtilTest {
           .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
               + SPIFFE_TRUST_BUNDLE_DUPLICATES).getPath()));
       assertEquals("Duplicate key found: google.com", iae.getMessage());
+      // Check the exception if 'x5c' value cannot be parsed
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT).getPath()));
+      assertEquals("Certificate can't be parsed." + DOMAIN_ERROR_MESSAGE,
+          iae.getMessage());
       // Check the exception if 'kty' value differs from 'RSA'
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
           .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX

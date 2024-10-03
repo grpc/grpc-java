@@ -246,7 +246,10 @@ public final class SpiffeUtil {
       try {
         Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")
             .generateCertificates(stream);
-        result.add(certs.toArray(new X509Certificate[0])[0]);
+        X509Certificate[] certsArray = certs.toArray(new X509Certificate[0]);
+        checkArgument(certsArray.length == 1, "Unexpected size of certsArray: " +
+            certsArray.length);
+        result.add(certsArray[0]);
       } catch (CertificateException e) {
         throw new IllegalArgumentException(String.format("Certificate can't be parsed. Certificate "
             + "loading for trust domain '%s' failed.", trustDomainName), e);
