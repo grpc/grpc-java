@@ -88,7 +88,6 @@ import org.mockito.verification.VerificationMode;
 public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   protected static final int STREAM_ID = 3;
-  private ByteBuf content;
 
   private EmbeddedChannel channel;
 
@@ -110,14 +109,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   protected final TransportTracer transportTracer = new TransportTracer();
   protected int flowControlWindow = DEFAULT_WINDOW_SIZE;
   protected boolean autoFlowControl = false;
-
   private final FakeClock fakeClock = new FakeClock();
-
-  //private final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
-
-  //private NettyServerStream.TransportState streamTransportState;
-
-  private NettyServerStream stream;
 
   FakeClock fakeClock() {
     return fakeClock;
@@ -135,7 +127,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
    * Must be called by subclasses to initialize the handler and channel.
    */
   protected final void initChannel(Http2HeadersDecoder headersDecoder) throws Exception {
-    content = Unpooled.copiedBuffer("hello world", UTF_8);
+    ByteBuf content = Unpooled.copiedBuffer("hello world", UTF_8);
     frameWriter = mock(Http2FrameWriter.class, delegatesTo(new DefaultHttp2FrameWriter()));
     frameReader = new DefaultHttp2FrameReader(headersDecoder);
 
