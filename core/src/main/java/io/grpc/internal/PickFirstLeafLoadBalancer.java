@@ -33,7 +33,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -61,7 +60,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
-  private Index addressIndex;
+  private final Index addressIndex = new Index(ImmutableList.of());
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
@@ -70,6 +69,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private ConnectivityState concludedState = IDLE;
   private final boolean enableHappyEyeballs =
       PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  private boolean notAPetiolePolicy = true; // means not under a petiole policy
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -80,6 +80,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (rawConnectivityState == SHUTDOWN) {
       return Status.FAILED_PRECONDITION.withDescription("Already shut down");
     }
+
+    // Cache whether or not this is a petiole policy, which is based off of an address attribute
+    Boolean isPetiolePolicy = resolvedAddresses.getAttributes().get(IS_PETIOLE_POLICY);
+    this.notAPetiolePolicy = isPetiolePolicy == null || !isPetiolePolicy;
 
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
 
@@ -122,9 +126,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
         ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
 
-    if (addressIndex == null) {
-      addressIndex = new Index(newImmutableAddressGroups);
-    } else if (rawConnectivityState == READY) {
+    if (rawConnectivityState == READY) {
       // If the previous ready subchannel exists in new address list,
       // keep this connection and don't create new subchannels
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
@@ -133,9 +135,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         SubchannelData subchannelData = subchannels.get(previousAddress);
         subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
         return Status.OK;
-      } else {
-        addressIndex.reset(); // Previous ready subchannel not in the new list of addresses
       }
+      // Previous ready subchannel not in the new list of addresses
     } else {
       addressIndex.updateGroups(newImmutableAddressGroups);
     }
@@ -156,20 +157,18 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    if (oldAddrs.size() == 0 || rawConnectivityState == CONNECTING
-        || rawConnectivityState == READY) {
-      // start connection attempt at first address
+    if (oldAddrs.size() == 0) {
+      // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
       updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
-      cancelScheduleTask();
-      requestConnection();
+    }
 
-    } else if (rawConnectivityState == IDLE) {
-      // start connection attempt at first address when requested
-      SubchannelPicker picker = new RequestConnectionPicker(this);
-      updateBalancingState(IDLE, picker);
+    if (rawConnectivityState == READY) {
+      // connect from beginning when prompted
+      rawConnectivityState = IDLE;
+      updateBalancingState(IDLE, new RequestConnectionPicker(this));
 
-    } else if (rawConnectivityState == TRANSIENT_FAILURE) {
+    } else if (rawConnectivityState == CONNECTING || rawConnectivityState == TRANSIENT_FAILURE) {
       // start connection attempt at first address
       cancelScheduleTask();
       requestConnection();
@@ -207,9 +206,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       subchannelData.getSubchannel().shutdown();
     }
     subchannels.clear();
-    if (addressIndex != null) {
-      addressIndex.updateGroups(null);
-    }
+    addressIndex.updateGroups(ImmutableList.of());
     rawConnectivityState = TRANSIENT_FAILURE;
     updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
@@ -311,7 +308,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (subchannelData.state != READY) {
       return;
     }
-    if (subchannelData.getHealthState() == READY) {
+
+    if (notAPetiolePolicy || subchannelData.getHealthState() == READY) {
       updateBalancingState(READY,
           new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel)));
     } else if (subchannelData.getHealthState() == TRANSIENT_FAILURE) {
@@ -372,7 +370,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (addressIndex == null || !addressIndex.isValid() || rawConnectivityState == SHUTDOWN ) {
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
       return;
     }
 
@@ -390,22 +388,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         scheduleNextConnection();
         break;
       case CONNECTING:
-        if (enableHappyEyeballs) {
-          scheduleNextConnection();
-        } else {
-          subchannelData.subchannel.requestConnection();
-        }
+        scheduleNextConnection();
         break;
       case TRANSIENT_FAILURE:
         addressIndex.increment();
         requestConnection();
         break;
-      case READY: // Shouldn't ever happen
-        log.warning("Requesting a connection even though we have a READY subchannel");
-        break;
-      case SHUTDOWN:
       default:
-        // Makes checkstyle happy
+        // Wait for current subchannel to change state
     }
   }
 
@@ -430,16 +420,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
-    SynchronizationContext synchronizationContext = null;
-    try {
-      synchronizationContext = helper.getSynchronizationContext();
-    } catch (NullPointerException e) {
-      // All helpers should have a sync context, but if one doesn't (ex. user had a custom test)
-      // we don't want to break previously working functionality.
-      return;
-    }
-
-    scheduleConnectionTask = synchronizationContext.schedule(
+    scheduleConnectionTask = helper.getSynchronizationContext().schedule(
         new StartNextConnection(),
         CONNECTION_DELAY_INTERVAL_MS,
         TimeUnit.MILLISECONDS,
@@ -469,7 +450,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     hcListener.subchannelData = subchannelData;
     subchannels.put(addr, subchannelData);
     Attributes scAttrs = subchannel.getAttributes();
-    if (scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
+    if (notAPetiolePolicy || scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
       subchannelData.healthStateInfo = ConnectivityStateInfo.forNonError(READY);
     }
     subchannel.start(stateInfo -> processSubchannelState(subchannelData, stateInfo));
@@ -477,8 +458,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private boolean isPassComplete() {
-    if (addressIndex == null || addressIndex.isValid()
-        || subchannels.size() < addressIndex.size()) {
+    if (addressIndex.isValid() || subchannels.size() < addressIndex.size()) {
       return false;
     }
     for (SubchannelData sc : subchannels.values()) {
@@ -494,15 +474,19 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     @Override
     public void onSubchannelState(ConnectivityStateInfo newState) {
+      if (notAPetiolePolicy) {
+        log.log(Level.WARNING,
+            "Ignoring health status {0} for subchannel {1} as this is not under a petiole policy",
+            new Object[]{newState, subchannelData.subchannel});
+        return;
+      }
+
       log.log(Level.FINE, "Received health status {0} for subchannel {1}",
           new Object[]{newState, subchannelData.subchannel});
       subchannelData.healthStateInfo = newState;
-      try {
-        if (subchannelData == subchannels.get(addressIndex.getCurrentAddress())) {
-          updateHealthCheckedState(subchannelData);
-        }
-      } catch (IllegalStateException e) {
-        log.fine("Health listener received state change after subchannel was removed");
+      if (addressIndex.isValid()
+          && subchannelData == subchannels.get(addressIndex.getCurrentAddress())) {
+        updateHealthCheckedState(subchannelData);
       }
     }
   }
@@ -566,11 +550,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final class Index {
     private List<EquivalentAddressGroup> addressGroups;
+    private int size;
     private int groupIndex;
     private int addressIndex;
 
     public Index(List<EquivalentAddressGroup> groups) {
-      this.addressGroups = groups != null ? groups : Collections.emptyList();
+      updateGroups(groups);
     }
 
     public boolean isValid() {
@@ -629,9 +614,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     /**
      * Update to new groups, resetting the current index.
      */
-    public void updateGroups(ImmutableList<EquivalentAddressGroup> newGroups) {
-      addressGroups = newGroups != null ? newGroups : Collections.emptyList();
+    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
+      addressGroups = checkNotNull(newGroups, "newGroups");
       reset();
+      int size = 0;
+      for (EquivalentAddressGroup eag : newGroups) {
+        size += eag.getAddresses().size();
+      }
+      this.size = size;
     }
 
     /**
@@ -652,7 +642,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     public int size() {
-      return (addressGroups != null) ? addressGroups.size() : 0;
+      return size;
     }
   }
 

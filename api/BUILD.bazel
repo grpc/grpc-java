@@ -13,6 +13,5 @@ java_library(
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:failureaccess"),  # future transitive dep of Guava. See #5214
         artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
     ],
 )

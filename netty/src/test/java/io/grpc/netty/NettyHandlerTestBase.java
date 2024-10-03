@@ -20,6 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.netty.NettyServerHandlerTest.streamListenerMessageQueue;
 import static io.grpc.netty.NettyServerHandlerTest.streamTransportState;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;

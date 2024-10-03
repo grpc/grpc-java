@@ -146,12 +146,12 @@ public class XdsServerTestHelper {
 
     @Override
     @Nullable
-    public ObjectPool<XdsClient> get() {
+    public ObjectPool<XdsClient> get(String target) {
       throw new UnsupportedOperationException("Should not be called");
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+    public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -164,6 +164,11 @@ public class XdsServerTestHelper {
           return null;
         }
       };
+    }
+
+    @Override
+    public List<String> getTargets() {
+      return Collections.singletonList("fake-target");
     }
   }
 
