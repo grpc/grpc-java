@@ -56,8 +56,8 @@ public class RlqsEngine {
   public RlqsRateLimitResult rateLimit(HttpMatchInput input) {
     RlqsBucketSettings bucketSettings = bucketMatchers.match(input);
     RlqsBucketId bucketId = bucketSettings.toBucketId(input);
-    // Special case when bucket id builder not set.
-    if (bucketId == null) {
+    // Special case when bucket id builder not set, or has no values.
+    if (bucketId.isEmpty()) {
       return rateLimitWithoutReports(bucketSettings);
     }
     RlqsBucket bucket = bucketCache.getOrCreate(bucketId, bucketSettings, newBucket -> {
