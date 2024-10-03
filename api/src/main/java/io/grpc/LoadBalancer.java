@@ -122,6 +122,12 @@ public abstract class LoadBalancer {
       LoadBalancer.CreateSubchannelArgs.Key.create("internal:health-check-consumer-listener");
 
   @Internal
+  public static final LoadBalancer.CreateSubchannelArgs.Key<Boolean>
+      DISABLE_SUBCHANNEL_RECONNECT_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.createWithDefault(
+          "internal:disable-subchannel-reconnect", Boolean.FALSE);
+
+  @Internal
   public static final Attributes.Key<Boolean>
       HAS_HEALTH_PRODUCER_LISTENER_KEY =
       Attributes.Key.create("internal:has-health-check-producer-listener");
