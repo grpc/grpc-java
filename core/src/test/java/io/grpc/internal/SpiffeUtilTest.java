@@ -26,10 +26,13 @@ import io.grpc.internal.SpiffeUtil.SpiffeBundle;
 import io.grpc.internal.SpiffeUtil.SpiffeId;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
+import java.io.File;
 import java.nio.file.NoSuchFileException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
@@ -41,6 +44,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Enclosed.class)
 public class SpiffeUtilTest {
+
+  private static final Logger log = Logger.getLogger(SpiffeUtilTest.class.getName());
 
   @RunWith(Parameterized.class)
   public static class ParseSuccessTest {
@@ -339,6 +344,22 @@ public class SpiffeUtilTest {
               + SPIFFE_TRUST_BUNDLE_WRONG_MULTI_CERTs).getPath()));
       assertEquals("Exactly 1 certificate is expected, but 2 found." + DOMAIN_ERROR_MESSAGE,
           iae.getMessage());
+    }
+
+    @Test
+    public void fsTest() throws Exception{
+      log.log(Level.SEVERE, "fsTest");
+      log.log(Level.SEVERE, getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath());
+      log.log(Level.SEVERE, SpiffeUtilTest.class.getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath());
+      log.log(Level.SEVERE, SpiffeUtilTest.class.getClassLoader().getResource(TEST_DIRECTORY_PREFIX
+          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getFile());
+      log.log(Level.SEVERE, new File("src/test/resources").getAbsolutePath());
+      log.log(Level.SEVERE, new File("src/test/resources/io/grpc/internal/spiffebundle.json")
+          .getAbsolutePath());
+      log.log(Level.SEVERE, new File("non-exist")
+          .getAbsolutePath());
     }
 
     @Test
