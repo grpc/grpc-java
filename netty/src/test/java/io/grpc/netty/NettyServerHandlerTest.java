@@ -188,7 +188,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .messagesAvailable(any(StreamListener.MessageProducer.class));
   }
 
-  private class TransportStateImpl extends NettyServerStream.TransportState {
+  private static class TransportStateImpl extends NettyServerStream.TransportState {
     public TransportStateImpl (
         NettyServerHandler handler,
         EventLoop eventLoop,
