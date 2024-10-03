@@ -42,8 +42,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Provides utilities to manage SPIFFE bundles, extract SPIFFE IDs from X.509 certificate chains,
@@ -51,8 +49,6 @@ import java.util.logging.Logger;
  * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">Standard</a>
  */
 public final class SpiffeUtil {
-
-  private static final Logger log = Logger.getLogger(SpiffeUtil.class.getName());
 
   private static final Integer URI_SAN_TYPE = 6;
   private static final String USE_PARAMETER_VALUE = "x509-svid";
