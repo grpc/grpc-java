@@ -1,0 +1,15 @@
+{
+  "trust_domains": {
+    "google.com": {
+      "sequence_number": 123,
+      "keys": [
+        {
+          "kty": "RSA",
+          "use": "i_am_not_x509-svid",
+          "kid": "",
+          "x5c": "VALUE_DOESN'T_MATTER"
+        }
+      ]
+    }
+  }
+}

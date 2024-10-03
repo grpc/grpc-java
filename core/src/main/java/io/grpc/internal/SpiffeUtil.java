@@ -46,7 +46,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Provides utilities to load, extract, and parse SPIFFE ID according the SPIFFE ID standard.
+ * Provides utilities to manage SPIFFE bundles, extract SPIFFE IDs from X.509 certificate chains,
+ * and parse SPIFFE IDs.
  * @see <a href="https://github.com/spiffe/spiffe/blob/master/standards/SPIFFE-ID.md">Standard</a>
  */
 public final class SpiffeUtil {
@@ -133,7 +134,7 @@ public final class SpiffeUtil {
    */
   public static Optional<SpiffeId> extractSpiffeId(X509Certificate[] certChain)
       throws CertificateParsingException {
-    checkArgument(checkNotNull(certChain, "certChain").length > 0, "CertChain can't be empty");
+    checkArgument(checkNotNull(certChain, "certChain").length > 0, "certChain can't be empty");
     Collection<List<?>> subjectAltNames = certChain[0].getSubjectAlternativeNames();
     if (subjectAltNames == null) {
       return Optional.absent();
@@ -159,8 +160,9 @@ public final class SpiffeUtil {
 
   /**
    * Loads a SPIFFE trust bundle from a file, parsing it from the JSON format.
-   * In case of success, returns trust domains, their associated sequence numbers, and X.509
-   * certificates.
+   * In case of success, returns {@link SpiffeBundle}.
+   * If any element of the JSON content is invalid or unsupported, an
+   * {@link IllegalArgumentException} is thrown and the entire Bundle is considered invalid.
    *
    * @param trustBundleFile the file path to the JSON file containing the trust bundle
    * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md">JSON format</a>
@@ -207,46 +209,40 @@ public final class SpiffeUtil {
     return trustDomainsNode;
   }
 
-  private static boolean checkJwkEntry(Map<String, ?> jwkNode, String trustDomainName) {
+  private static void checkJwkEntry(Map<String, ?> jwkNode, String trustDomainName) {
     String kty = JsonUtil.getString(jwkNode, "kty");
     if (kty == null || !kty.equals(KTY_PARAMETER_VALUE)) {
-      log.log(Level.SEVERE, String.format("'kty' parameter must be '%s' but '%s' found. "
-              + "Skipping certificate loading for trust domain '%s'.", KTY_PARAMETER_VALUE, kty,
-          trustDomainName));
-      return false;
+      throw new IllegalArgumentException(String.format("'kty' parameter must be '%s' but '%s' "
+              + "found. Certificate loading for trust domain '%s' failed.", KTY_PARAMETER_VALUE,
+          kty, trustDomainName));
     }
     String kid = JsonUtil.getString(jwkNode, "kid");
     if (kid != null && !kid.equals("")) {
-      log.log(Level.SEVERE, String.format("'kid' parameter must not be set but value '%s' "
-              + "found. Skipping certificate loading for trust domain '%s'.", kid,
+      throw new IllegalArgumentException(String.format("'kid' parameter must not be set but value "
+              + "'%s' found. Certificate loading for trust domain '%s' failed.", kid,
           trustDomainName));
-      return false;
     }
     String use = JsonUtil.getString(jwkNode, "use");
     if (use == null || !use.equals(USE_PARAMETER_VALUE)) {
-      log.log(Level.SEVERE, String.format("'use' parameter must be '%s' but '%s' found. "
-              + "Skipping certificate loading for trust domain '%s'.", USE_PARAMETER_VALUE, use,
-          trustDomainName));
-      return false;
+      throw new IllegalArgumentException(String.format("'use' parameter must be '%s' but '%s' "
+              + "found. Certificate loading for trust domain '%s' failed.", USE_PARAMETER_VALUE,
+          use, trustDomainName));
     }
-    return true;
   }
 
   private static List<X509Certificate> extractCert(List<Map<String, ?>> keysNode,
       String trustDomainName) {
     List<X509Certificate> result = new ArrayList<>();
     for (Map<String, ?> keyNode : keysNode) {
-      if (!checkJwkEntry(keyNode, trustDomainName)) {
-        break;
-      }
+      checkJwkEntry(keyNode, trustDomainName);
       List<String> rawCerts = JsonUtil.getListOfStrings(keyNode, "x5c");
       if (rawCerts == null) {
         break;
       }
       if (rawCerts.size() != 1) {
-        log.log(Level.SEVERE, String.format("Exactly 1 certificate is expected, but %s found for "
-            + "domain %s.", rawCerts.size(), trustDomainName));
-        break;
+        throw new IllegalArgumentException(String.format("Exactly 1 certificate is expected, but "
+            + "%s found. Certificate loading for trust domain '%s' failed.", rawCerts.size(),
+            trustDomainName));
       }
       InputStream stream = new ByteArrayInputStream((CERTIFICATE_PREFIX + System.lineSeparator()
           + rawCerts.get(0) + System.lineSeparator() + CERTIFICATE_SUFFIX)
@@ -256,8 +252,8 @@ public final class SpiffeUtil {
             .generateCertificates(stream);
         result.add(certs.toArray(new X509Certificate[0])[0]);
       } catch (CertificateException e) {
-        log.log(Level.SEVERE, String.format("Certificate for domain %s can't be parsed.",
-            trustDomainName), e);
+        throw new IllegalArgumentException(String.format("Certificate can't be parsed. Certificate "
+            + "loading for trust domain '%s' failed.", trustDomainName), e);
       }
     }
     return result;
@@ -287,8 +283,8 @@ public final class SpiffeUtil {
   }
 
   /**
-   * Represents a Trust Bundle inspired by SPIFFE Bundle Format standard. Only trust domain's
-   * sequence numbers and x509 certificates are supported.
+   * Represents a SPIFFE trust bundle; that is, a map from trust domain to set of trusted
+   * certificates. Only trust domain's sequence numbers and x509 certificates are supported.
    * @see <a href="https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md#4-spiffe-bundle-format">Standard</a>
    */
   public static final class SpiffeBundle {

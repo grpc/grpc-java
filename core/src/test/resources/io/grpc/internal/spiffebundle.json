@@ -1,22 +1,5 @@
 {
   "trust_domains": {
-    "google.com": {
-      "sequence_number": 123,
-      "keys": [
-        {
-          "x5c": "CORRUPTED_BYTES=="
-        }
-      ]
-    },
-    "test.google.com": {
-      "sequence_number": 123,
-      "keys": [
-        {
-          "some_id": "1",
-          "some_key": "some_value"
-        }
-      ]
-    },
     "test.google.com.au": {},
     "example.com": {
       "sequence_number": 12035488,
@@ -55,13 +38,6 @@
           x0acBNzezLWoDwXYQrN0T0S4pnqhKD1CYPpdArBkNezUYAjS725FkApuK+mnBX3U
           0msBffEaUEOkcyar1EW2m/33vpetD/k3eQQkmvQf4Hbiu9AF+9cNDm/hMuXEw5EX
           GA91fn0891b5eEW8BJHXX0jri0aN8g=="],
-          "n": "<base64urlUint-encoded value>",
-          "e": "AQAB"
-        },
-        {
-          "kty": "RSA",
-          "kid": "<JWT key id>",
-          "use": "jwt-svid",
           "n": "<base64urlUint-encoded value>",
           "e": "AQAB"
         }
