@@ -17,7 +17,6 @@
 package io.grpc.s2a.internal.handshaker.tokenmanager;
 
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
-import java.lang.reflect.Method;
 import java.util.Optional;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -28,19 +27,9 @@ public final class AccessTokenManager {
 
   /** Creates an {@code AccessTokenManager} based on the environment where the application runs. */
   public static Optional<AccessTokenManager> create() {
-    Optional<?> tokenFetcher;
-    try {
-      Class<?> singleTokenFetcherClass =
-          Class.forName("io.grpc.s2a.internal.handshaker.tokenmanager.SingleTokenFetcher");
-      Method createTokenFetcher = singleTokenFetcherClass.getMethod("create");
-      tokenFetcher = (Optional) createTokenFetcher.invoke(null);
-    } catch (ClassNotFoundException e) {
-      tokenFetcher = Optional.empty();
-    } catch (ReflectiveOperationException e) {
-      throw new LinkageError(e.getMessage(), e);
-    }
+    Optional<TokenFetcher> tokenFetcher = SingleTokenFetcher.create();
     return tokenFetcher.isPresent()
-        ? Optional.of(new AccessTokenManager((TokenFetcher) tokenFetcher.get()))
+        ? Optional.of(new AccessTokenManager(tokenFetcher.get()))
         : Optional.empty();
   }
 
