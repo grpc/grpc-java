@@ -43,7 +43,7 @@ gcloud pubsub topics create Topic1
 5. You will now need to set up [authentication](https://cloud.google.com/docs/authentication/) and a
 [service account](https://cloud.google.com/docs/authentication/#service_accounts) in order to access
 Pub/Sub via gRPC APIs as described [here](https://cloud.google.com/iam/docs/creating-managing-service-accounts).
-   (**Note:** This step is unnecessary on Google platforms (Google App Engine / Google Cloud Shell / Google Compute Engine) as it will
+(**Note:** This step is unnecessary on Google platforms (Google App Engine / Google Cloud Shell / Google Compute Engine) as it will
 automatically use the in-built Google credentials). Assign the [role](https://cloud.google.com/iam/docs/granting-roles-to-service-accounts) `Project -> Owner`
 and for Key type select JSON. Once you click `Create`, a JSON file containing your key is downloaded to
 your computer. Note down the path of this file or copy this file to the computer and file system where
