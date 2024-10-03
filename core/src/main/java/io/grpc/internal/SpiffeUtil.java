@@ -247,8 +247,7 @@ public final class SpiffeUtil {
         Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")
             .generateCertificates(stream);
         X509Certificate[] certsArray = certs.toArray(new X509Certificate[0]);
-        checkArgument(certsArray.length == 1, "Unexpected size of certsArray: " +
-            certsArray.length);
+        assert certsArray.length == 1;
         result.add(certsArray[0]);
       } catch (CertificateException e) {
         throw new IllegalArgumentException(String.format("Certificate can't be parsed. Certificate "
