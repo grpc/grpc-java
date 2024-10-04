@@ -37,6 +37,7 @@ public class StatusOrTest {
   }
 
   @Test
+  @SuppressWarnings("TruthIncompatibleType")
   public void equals_differentValueTypes() {
     assertThat(StatusOr.fromValue(1)).isNotEqualTo(StatusOr.fromValue("1"));
   }
@@ -60,5 +61,21 @@ public class StatusOrTest {
   @Test
   public void equals_sameStatuses() {
     assertThat(StatusOr.fromStatus(Status.ABORTED)).isEqualTo(StatusOr.fromStatus(Status.ABORTED));
+  }
+
+  @Test
+  public void toString_value() {
+    assertThat(StatusOr.fromValue(1).toString()).isEqualTo("StatusOr{value=1}");
+  }
+
+  @Test
+  public void toString_nullValue() {
+    assertThat(StatusOr.fromValue(null).toString()).isEqualTo("StatusOr{value=null}");
+  }
+
+  @Test
+  public void toString_errorStatus() {
+    assertThat(StatusOr.fromStatus(Status.ABORTED).toString()).isEqualTo(
+        "StatusOr{error=Status{code=ABORTED, description=null, cause=null}}");
   }
 }

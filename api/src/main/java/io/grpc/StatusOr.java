@@ -19,6 +19,8 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Objects;
 import javax.annotation.Nullable;
 
@@ -82,6 +84,17 @@ public class StatusOr<T> {
   @Override
   public int hashCode() {
     return Objects.hashCode(status, value);
+  }
+
+  @Override
+  public String toString() {
+    ToStringHelper stringHelper = MoreObjects.toStringHelper(this);
+    if (status == null) {
+      stringHelper.add("value", value);
+    } else {
+      stringHelper.add("error", status);
+    }
+    return stringHelper.toString();
   }
 
   private final Status status;

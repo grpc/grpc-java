@@ -44,8 +44,6 @@ import org.mockito.junit.MockitoRule;
 /** Unit tests for the inner classes in {@link NameResolver}. */
 @RunWith(JUnit4.class)
 public class NameResolverTest {
-  @Rule
-  public final MockitoRule mocks = MockitoJUnit.rule();
   private static final List<EquivalentAddressGroup> ADDRESSES =
       Collections.singletonList(
           new EquivalentAddressGroup(new FakeSocketAddress("fake-address-1"), Attributes.EMPTY));
@@ -53,6 +51,9 @@ public class NameResolverTest {
   private static Attributes ATTRIBUTES = Attributes.newBuilder()
       .set(YOLO_KEY, "To be, or not to be?").build();
   private static ConfigOrError CONFIG = ConfigOrError.fromConfig("foo");
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   private final int defaultPort = 293;
   private final ProxyDetector proxyDetector = mock(ProxyDetector.class);
   private final SynchronizationContext syncContext =
@@ -105,6 +106,7 @@ public class NameResolverTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void startOnOldListener_wrapperListener2UsedToStart() {
     final Listener2[] listener2 = new Listener2[1];
     NameResolver nameResolver = new NameResolver() {
@@ -131,6 +133,7 @@ public class NameResolverTest {
   }
 
   @Test
+  @SuppressWarnings({"deprecation", "InlineMeInliner"})
   public void listener2AddressesToListener2ResolutionResultConversion() {
     final ResolutionResult[] resolutionResult = new ResolutionResult[1];
     NameResolver.Listener2 listener2 = new Listener2() {
@@ -158,33 +161,9 @@ public class NameResolverTest {
         .build();
 
     assertThat(resolutionResult.toString()).isEqualTo(
-        "ResolutionResult{addresses=[[[FakeSocketAddress-fake-address-1]/{}]], "
-            + "attributes={yolo=To be, or not to be?}, serviceConfig=ConfigOrError{config=foo}}");
-  }
-
-  @Test
-  public void resolutionResult_toString_addressResolutionError() {
-    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
-        .setAddressesOrError(StatusOr.fromStatus(Status.UNAVAILABLE))
-        .setAttributes(ATTRIBUTES)
-        .setServiceConfig(CONFIG)
-        .build();
-
-    assertThat(resolutionResult.toString()).isEqualTo(
-        "ResolutionResult{address resolution error=Status{code=UNAVAILABLE, description=null, "
-            + "cause=null}, attributes={yolo=To be, or not to be?}, "
-            + "serviceConfig=ConfigOrError{config=foo}}");
-  }
-
-  @Test
-  public void resolutionResult_toString_serviceConfigError() {
-    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
-        .setServiceConfig(ConfigOrError.fromError(Status.UNAVAILABLE))
-        .build();
-
-    assertThat(resolutionResult.toString()).isEqualTo("ResolutionResult{addresses=[], "
-        + "attributes={}, serviceConfig error=Status{code=UNAVAILABLE, description=null, "
-        + "cause=null}}");
+        "ResolutionResult{addressesOrError=StatusOr{value="
+            + "[[[FakeSocketAddress-fake-address-1]/{}]]}, attributes={yolo=To be, or not to be?}, "
+            + "serviceConfigOrError=ConfigOrError{config=foo}}");
   }
 
   @Test

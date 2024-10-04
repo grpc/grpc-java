@@ -602,16 +602,6 @@ public abstract class NameResolver {
       this.serviceConfig = serviceConfig;
     }
 
-    @Deprecated
-    ResolutionResult(
-        List<EquivalentAddressGroup> addresses,
-        @ResolutionResultAttr Attributes attributes,
-        ConfigOrError serviceConfig) {
-      this.addressesOrError = StatusOr.fromValue(addresses);
-      this.attributes = checkNotNull(attributes, "attributes");
-      this.serviceConfig = serviceConfig;
-    }
-
     /**
      * Constructs a new builder of a name resolution result.
      *
@@ -677,17 +667,9 @@ public abstract class NameResolver {
     @Override
     public String toString() {
       ToStringHelper stringHelper = MoreObjects.toStringHelper(this);
-      if (addressesOrError.hasValue()) {
-        stringHelper.add("addresses", addressesOrError.getValue());
-      } else {
-        stringHelper.add("address resolution error", addressesOrError.getStatus());
-      }
+      stringHelper.add("addressesOrError", addressesOrError.toString());
       stringHelper.add("attributes", attributes);
-      if (serviceConfig.getConfig() != null) {
-        stringHelper.add("serviceConfig", serviceConfig);
-      } else {
-        stringHelper.add("serviceConfig error", serviceConfig.getError());
-      }
+      stringHelper.add("serviceConfigOrError", serviceConfig);
       return stringHelper.toString();
     }
 
