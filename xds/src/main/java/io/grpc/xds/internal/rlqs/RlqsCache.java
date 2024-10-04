@@ -24,6 +24,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.RlqsFilterConfig;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -41,7 +42,7 @@ public final class RlqsCache {
     throw new RlqsPoolSynchronizationException(message, error);
   });
 
-  private final ConcurrentHashMap<String, RlqsEngine> enginePool = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Long, RlqsEngine> enginePool = new ConcurrentHashMap<>();
   Set<String> enginesToShutdown = Sets.newConcurrentHashSet();
   private final ScheduledExecutorService scheduler;
 
@@ -65,7 +66,7 @@ public final class RlqsCache {
       shutdown = true;
       logger.log(Level.FINER, "Shutting down RlqsCache");
       enginesToShutdown.clear();
-      for (String configHash : enginePool.keySet()) {
+      for (long configHash : enginePool.keySet()) {
         enginePool.get(configHash).shutdown();
       }
       enginePool.clear();
@@ -78,11 +79,11 @@ public final class RlqsCache {
   }
 
   public RlqsEngine getOrCreateRlqsEngine(final RlqsFilterConfig config) {
-    String configHash = hashRlqsFilterConfig(config);
+    long configHash = hashRlqsFilterConfig(config);
     return enginePool.computeIfAbsent(configHash, k -> newRlqsEngine(k, config));
   }
 
-  private RlqsEngine newRlqsEngine(String configHash, RlqsFilterConfig config) {
+  private RlqsEngine newRlqsEngine(long configHash, RlqsFilterConfig config) {
     // TODO(sergiitk): [IMPL] get channel creds from the bootstrap.
     ChannelCredentials creds = InsecureChannelCredentials.create();
     return new RlqsEngine(
@@ -93,11 +94,13 @@ public final class RlqsCache {
         scheduler);
   }
 
-  private String hashRlqsFilterConfig(RlqsFilterConfig config) {
+  private long hashRlqsFilterConfig(RlqsFilterConfig config) {
     // TODO(sergiitk): [QUESTION] better name? - ask Eric.
     // TODO(sergiitk): [DESIGN] the key should be hashed (domain + buckets) merged config?
     // TODO(sergiitk): [IMPL] Hash buckets
-    return config.rlqsService().targetUri() + config.domain();
+    int k1 = Objects.hash(config.rlqsService().targetUri(), config.domain());
+    int k2 = config.bucketMatchers().hashCode();
+    return Long.rotateLeft(Integer.toUnsignedLong(k1), 32) + Integer.toUnsignedLong(k2);
   }
 
   /**

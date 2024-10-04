@@ -38,13 +38,13 @@ public class RlqsEngine {
   private final RlqsClient rlqsClient;
   private final Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers;
   private final RlqsBucketCache bucketCache;
-  private final String configHash;
+  private final long configHash;
   private final ScheduledExecutorService scheduler;
   private final ConcurrentMap<Long, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
 
   public RlqsEngine(
       RemoteServerInfo rlqsServer, String domain,
-      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, String configHash,
+      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, long configHash,
       ScheduledExecutorService scheduler) {
     this.bucketMatchers = bucketMatchers;
     this.configHash = configHash;
