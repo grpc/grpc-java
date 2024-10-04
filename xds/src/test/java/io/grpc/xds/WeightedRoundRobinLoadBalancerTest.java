@@ -244,7 +244,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     String weightedPickerStr = weightedPicker.toString();
     assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
     assertThat(weightedPickerStr).contains("errorUtilizationPenalty=1.0");
-    assertThat(weightedPickerStr).contains("list=");
+    assertThat(weightedPickerStr).contains("pickers=");
 
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
@@ -536,8 +536,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue().getClass().getName())
-        .isEqualTo("io.grpc.util.RoundRobinLoadBalancer$EmptyPicker");
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
+        .isEqualTo(PickResult.withNoResult());
     int expectedCount = isEnabledHappyEyeballs() ? servers.size() + 1 : 1;
     assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo( expectedCount);
   }

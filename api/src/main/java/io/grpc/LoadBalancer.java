@@ -122,6 +122,12 @@ public abstract class LoadBalancer {
       LoadBalancer.CreateSubchannelArgs.Key.create("internal:health-check-consumer-listener");
 
   @Internal
+  public static final LoadBalancer.CreateSubchannelArgs.Key<Boolean>
+      DISABLE_SUBCHANNEL_RECONNECT_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.createWithDefault(
+          "internal:disable-subchannel-reconnect", Boolean.FALSE);
+
+  @Internal
   public static final Attributes.Key<Boolean>
       HAS_HEALTH_PRODUCER_LISTENER_KEY =
       Attributes.Key.create("internal:has-health-check-producer-listener");
@@ -1428,6 +1434,18 @@ public abstract class LoadBalancer {
     public Object getInternalSubchannel() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * (Internal use only) returns attributes of the address subchannel is connected to.
+     *
+     * <p>Warning: this is INTERNAL API, is not supposed to be used by external users, and may
+     * change without notice. If you think you must use it, please file an issue and we can consider
+     * removing its "internal" status.
+     */
+    @Internal
+    public Attributes getConnectedAddressAttributes() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -1525,6 +1543,20 @@ public abstract class LoadBalancer {
     @Override
     public String toString() {
       return "FixedResultPicker(" + result + ")";
+    }
+
+    @Override
+    public int hashCode() {
+      return result.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof FixedResultPicker)) {
+        return false;
+      }
+      FixedResultPicker that = (FixedResultPicker) o;
+      return this.result.equals(that.result);
     }
   }
 }

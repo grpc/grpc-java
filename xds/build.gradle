@@ -20,6 +20,7 @@ sourceSets {
             srcDir 'third_party/envoy/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/xds/src/main/proto'
+            srcDir 'third_party/cel-spec/src/main/proto'
             srcDir 'third_party/googleapis/src/main/proto'
             srcDir 'third_party/istio/src/main/proto'
         }
@@ -51,6 +52,7 @@ dependencies {
             project(':grpc-services'),
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
+            libraries.guava,
             libraries.gson,
             libraries.re2j,
             libraries.auto.value.annotations,
@@ -185,6 +187,7 @@ tasks.named("shadowJar").configure {
     relocate 'com.google.api.expr', "${prefixName}.shaded.com.google.api.expr"
     relocate 'com.google.security', "${prefixName}.shaded.com.google.security"
     // TODO: missing java_package option in .proto
+    relocate 'dev.cel.expr', "${prefixName}.shaded.dev.cel.expr"
     relocate 'envoy.annotations', "${prefixName}.shaded.envoy.annotations"
     relocate 'io.envoyproxy', "${prefixName}.shaded.io.envoyproxy"
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
@@ -212,6 +215,7 @@ tasks.named("jacocoTestReport").configure {
                 '**/com/github/xds/**',
                 '**/com/google/api/expr/**',
                 '**/com/google/security/**',
+                '**/cel/expr/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
                 '**/udpa/annotations/**',

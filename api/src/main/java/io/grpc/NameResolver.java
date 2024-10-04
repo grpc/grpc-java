@@ -256,7 +256,8 @@ public abstract class NameResolver {
      * @since 1.66
      */
     public Status onResult2(ResolutionResult resolutionResult) {
-      throw new UnsupportedOperationException("Not implemented.");
+      onResult(resolutionResult);
+      return Status.OK;
     }
   }
 

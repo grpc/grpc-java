@@ -252,7 +252,7 @@ public class LeastRequestLoadBalancerTest {
 
   private LeastRequestLbState getChildLbState(PickResult pickResult) {
     EquivalentAddressGroup eag = pickResult.getSubchannel().getAddresses();
-    return (LeastRequestLbState) loadBalancer.getChildLbState(eag);
+    return (LeastRequestLbState) loadBalancer.getChildLbStateEag(eag);
   }
 
   @Test

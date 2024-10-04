@@ -569,7 +569,7 @@ public class OutlierDetectionLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
     // The PickFirstLeafLB has an extra level of indirection because of health
-    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 16 : 12;
+    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 8 : 12;
     generateLoad(ImmutableMap.of(subchannel2, Status.DEADLINE_EXCEEDED), expectedStateChanges);
 
     // Move forward in time to a point where the detection timer has fired.
@@ -604,7 +604,7 @@ public class OutlierDetectionLoadBalancerTest {
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
 
     // Now we produce more load, but the subchannel has started working and is no longer an outlier.
-    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 16 : 12;
+    int expectedStateChanges = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 8 : 12;
     generateLoad(ImmutableMap.of(), expectedStateChanges);
 
     // Move forward in time to a point where the detection timer has fired.

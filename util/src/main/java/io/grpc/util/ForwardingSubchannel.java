@@ -74,9 +74,15 @@ public abstract class ForwardingSubchannel extends LoadBalancer.Subchannel {
     return delegate().getInternalSubchannel();
   }
 
+
   @Override
   public void updateAddresses(List<EquivalentAddressGroup> addrs) {
     delegate().updateAddresses(addrs);
+  }
+
+  @Override
+  public Attributes getConnectedAddressAttributes() {
+    return delegate().getConnectedAddressAttributes();
   }
 
   @Override
