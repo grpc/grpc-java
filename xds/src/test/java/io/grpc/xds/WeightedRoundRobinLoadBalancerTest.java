@@ -19,9 +19,12 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -34,11 +37,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.Duration;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -47,11 +53,27 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.LongCounterMetricInstrument;
+import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
+import io.grpc.MetricSink;
+import io.grpc.NoopMetricSink;
+import io.grpc.ServerCall;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.TestUtils;
+import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
+import io.grpc.stub.ClientCalls;
+import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
@@ -70,7 +92,6 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
@@ -79,6 +100,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -92,9 +114,11 @@ import org.mockito.stubbing.Answer;
 public class WeightedRoundRobinLoadBalancerTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
+  @Rule
+  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
-  private final TestHelper testHelperInstance = new TestHelper();
-  private Helper helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  private final TestHelper testHelperInstance;
+  private final Helper helper;
 
   @Mock
   private LoadBalancer.PickSubchannelArgs mockArgs;
@@ -117,6 +141,9 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   private final FakeClock fakeClock = new FakeClock();
 
+  @Mock
+  private MetricRecorder mockMetricRecorder;
+
   private WeightedRoundRobinLoadBalancerConfig weightedConfig =
           WeightedRoundRobinLoadBalancerConfig.newBuilder().build();
 
@@ -132,6 +159,14 @@ public class WeightedRoundRobinLoadBalancerTest {
             throw new AssertionError(e);
           }
       });
+
+  private String channelTarget = "channel-target";
+  private String locality = "locality";
+
+  public WeightedRoundRobinLoadBalancerTest() {
+    testHelperInstance = new TestHelper();
+    helper = mock(Helper.class, delegatesTo(testHelperInstance));
+  }
 
   @Before
   public void setup() {
@@ -160,6 +195,23 @@ public class WeightedRoundRobinLoadBalancerTest {
         new FakeRandom(0));
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    reset(helper);
+  }
+
+  @Test
+  public void pickChildLbTF() throws Exception {
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers.subList(0, 1)).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(affinity).build()));
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+        .forTransientFailure(Status.UNAVAILABLE));
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    final WeightedRoundRobinPicker weightedPicker =
+        (WeightedRoundRobinPicker) pickerCaptor.getValue();
+    weightedPicker.pickSubchannel(mockArgs);
   }
 
   @Test
@@ -167,9 +219,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
                 .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
                 any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -192,7 +244,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     String weightedPickerStr = weightedPicker.toString();
     assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
     assertThat(weightedPickerStr).contains("errorUtilizationPenalty=1.0");
-    assertThat(weightedPickerStr).contains("list=");
+    assertThat(weightedPickerStr).contains("pickers=");
 
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
@@ -202,7 +254,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
 
     assertThat(getAddressesFromPick(weightedPicker)).isEqualTo(weightedChild1.getEag());
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
@@ -212,13 +265,13 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     syncContext.execute(() -> wrr.shutdown());
     for (Subchannel subchannel: subchannels.values()) {
       verify(subchannel).shutdown();
     }
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(0);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(0);
     verifyNoMoreInteractions(mockArgs);
   }
 
@@ -235,7 +288,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -256,7 +309,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.9, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     PickResult pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(getAddresses(pickResult))
         .isEqualTo(weightedChild1.getEag());
@@ -289,9 +343,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -472,19 +526,20 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(null)
             .setAttributes(affinity).build()).isOk()).isFalse();
-    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper, never()).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(fakeClock.getPendingTasks()).isEmpty();
 
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue().getClass().getName())
-        .isEqualTo("io.grpc.util.RoundRobinLoadBalancer$EmptyPicker");
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs))
+        .isEqualTo(PickResult.withNoResult());
+    int expectedCount = isEnabledHappyEyeballs() ? servers.size() + 1 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo( expectedCount);
   }
 
   @Test
@@ -492,9 +547,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
-            any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -515,7 +569,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedCount = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(5, TimeUnit.SECONDS)).isEqualTo(expectedCount);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 10000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
@@ -540,14 +595,18 @@ public class WeightedRoundRobinLoadBalancerTest {
             .isLessThan(0.002);
   }
 
+  private boolean isEnabledHappyEyeballs() {
+    return PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  }
+
   @Test
   public void updateWeightTimer() {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
         any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -575,17 +634,18 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(11, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     assertThat(getAddressesFromPick(weightedPicker))
         .isEqualTo(weightedChild1.getEag());
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder()
         .setWeightUpdatePeriodNanos(500_000_000L) //.5s
         .build();
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
     weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
@@ -593,7 +653,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         InternalCallMetricRecorder.createMetricReport(
             0.1, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
     //timer fires, new weight updated
-    assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(1);
+    expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(500, TimeUnit.MILLISECONDS)).isEqualTo(expectedTasks);
     assertThat(getAddressesFromPick(weightedPicker))
         .isEqualTo(weightedChild2.getEag());
     assertThat(getAddressesFromPick(weightedPicker))
@@ -605,9 +666,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -628,7 +689,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     weightedChild2.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
         InternalCallMetricRecorder.createMetricReport(
             0.2, 0, 0.1, 1, 0, new HashMap<>(), new HashMap<>(), new HashMap<>()));
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     Map<EquivalentAddressGroup, Integer> pickCount = new HashMap<>();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddressesFromPick(weightedPicker);
@@ -659,9 +721,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
         any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -674,7 +736,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     Map<EquivalentAddressGroup, Integer> qpsByChannel = ImmutableMap.of(weightedChild1.getEag(), 2,
@@ -726,9 +789,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class)); // 3 from setup plus 3 from the execute
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -774,9 +837,9 @@ public class WeightedRoundRobinLoadBalancerTest {
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
             .setAttributes(affinity).build()));
-    verify(helper, times(6)).createSubchannel(
+    verify(helper, times(3)).createSubchannel(
             any(CreateSubchannelArgs.class));
-    assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
+    assertThat(getNumFilteredPendingTasks()).isEqualTo(1);
 
     Iterator<Subchannel> it = subchannels.values().iterator();
     Subchannel readySubchannel1 = it.next();
@@ -817,7 +880,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         }
       }
     }).start();
-    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     barrier.await();
     for (int i = 0; i < 1000; i++) {
       EquivalentAddressGroup result = getAddresses(weightedPicker.pickSubchannel(mockArgs));
@@ -1085,6 +1149,191 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
 
+  @Test
+  public void metrics() {
+    // Give WRR some valid addresses to work with.
+    Attributes attributesWithLocality = Attributes.newBuilder()
+        .set(WeightedTargetLoadBalancer.CHILD_NAME, locality).build();
+    syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
+        .setAttributes(attributesWithLocality).build()));
+
+    // Flip the three subchannels to READY state to initiate the WRR logic
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel1 = it.next();
+    getSubchannelStateListener(readySubchannel1).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel2  = it.next();
+    getSubchannelStateListener(readySubchannel2).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+    Subchannel readySubchannel3  = it.next();
+    getSubchannelStateListener(readySubchannel3).onSubchannelState(ConnectivityStateInfo
+        .forNonError(ConnectivityState.READY));
+
+    // WRR creates a picker that updates the weights for each of the child subchannels. This should
+    // give us three "rr_fallback" metric events as we don't yet have any weights to do weighted
+    // round-robin.
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 3, 1);
+
+    // We should also see six records of endpoint weights. They should all be for 0 as we don't yet
+    // have valid weights.
+    verifyDoubleHistogramRecord("grpc.lb.wrr.endpoint_weights", 6, 0);
+
+    // We should not yet be seeing any "endpoint_weight_stale" events since we don't even have
+    // valid weights yet.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_stale", 0, 1);
+
+    // Each time weights are updated, WRR will see if each subchannel weight is useable. As we have
+    // no weights yet, we should see three "endpoint_weight_not_yet_usable" metric events with the
+    // value increasing by one each time as all the endpoints come online.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 1);
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 2);
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 1, 3);
+
+    // Send one child LB state an ORCA update with some valid utilization/qps data so that weights
+    // can be calculated, but it's still essentially round_robin
+    Iterator<ChildLbState> childLbStates = wrr.getChildLbStates().iterator();
+    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
+            new HashMap<>(), new HashMap<>()));
+
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+
+    // Now send a second child LB state an ORCA update, so there's real weights
+    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
+            new HashMap<>(), new HashMap<>()));
+    ((WeightedChildLbState)childLbStates.next()).new OrcaReportListener(
+        weightedConfig.errorUtilizationPenalty).onLoadReport(
+        InternalCallMetricRecorder.createMetricReport(0.1, 0, 0.1, 1, 0, new HashMap<>(),
+            new HashMap<>(), new HashMap<>()));
+
+    // Let's reset the mock MetricsRecorder so that it's easier to verify what happened after the
+    // weights were updated
+    reset(mockMetricRecorder);
+
+    // We go forward in time past the default 10s blackout period for the first child. The weights
+    // would get updated as the default update interval is 1s.
+    fakeClock.forwardTime(9, TimeUnit.SECONDS);
+
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 1, 1);
+
+    // And after another second the other children have weights
+    reset(mockMetricRecorder);
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+
+    // Since we have weights on all the child LB states, the weight update should not result in
+    // further rr_fallback metric entries.
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 0, 1);
+
+    // We should not see an increase to the earlier count of "endpoint_weight_not_yet_usable".
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 0, 1);
+
+    // No endpoints should have gotten stale yet either.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_stale", 0, 1);
+
+    // Now with valid weights we should have seen the value in the endpoint weights histogram.
+    verifyDoubleHistogramRecord("grpc.lb.wrr.endpoint_weights", 3, 10);
+
+    reset(mockMetricRecorder);
+
+    // Weights become stale in three minutes. Let's move ahead in time by 3 minutes and make sure
+    // we get metrics events for each endpoint.
+    fakeClock.forwardTime(3, TimeUnit.MINUTES);
+
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_stale", 1, 3);
+
+    // With the weights stale each three endpoints should report 0 weights.
+    verifyDoubleHistogramRecord("grpc.lb.wrr.endpoint_weights", 3, 0);
+
+    // Since the weights are now stale the update should have triggered an additional rr_fallback
+    // event.
+    verifyLongCounterRecord("grpc.lb.wrr.rr_fallback", 1, 1);
+
+    // No further weights-not-useable events should occur, since we have received weights and
+    // are out of the blackout.
+    verifyLongCounterRecord("grpc.lb.wrr.endpoint_weight_not_yet_usable", 0, 1);
+
+    // All metric events should be accounted for.
+    verifyNoMoreInteractions(mockMetricRecorder);
+  }
+
+  @Test
+  public void metricWithRealChannel() throws Exception {
+    String serverName = "wrr-metrics";
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName(serverName)
+        .addService(ServerServiceDefinition.builder(
+            TestMethodDescriptors.voidMethod().getServiceName())
+          .addMethod(TestMethodDescriptors.voidMethod(), (call, headers) -> {
+            call.sendHeaders(new Metadata());
+            call.sendMessage(null);
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<Void>() {};
+          })
+          .build())
+        .directExecutor()
+        .build()
+        .start());
+    MetricSink metrics = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+    Channel channel = grpcCleanupRule.register(
+        InternalManagedChannelBuilder.addMetricSink(
+            InProcessChannelBuilder.forName(serverName)
+            .defaultServiceConfig(Collections.singletonMap(
+                "loadBalancingConfig", Arrays.asList(Collections.singletonMap(
+                    "weighted_round_robin", Collections.emptyMap()))))
+            .directExecutor(),
+        metrics)
+        .directExecutor()
+        .build());
+
+    // Ping-pong to wait for channel to fully start
+    StreamRecorder<Void> recorder = StreamRecorder.create();
+    StreamObserver<Void> requestObserver = ClientCalls.asyncClientStreamingCall(
+        channel.newCall(TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT), recorder);
+    requestObserver.onCompleted();
+    assertThat(recorder.awaitCompletion(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(recorder.getError()).isNull();
+
+    // Make sure at least one metric works. The other tests will make sure other metrics and the
+    // edge cases are working.
+    verify(metrics).addLongCounter(
+        argThat((instr) -> instr.getName().equals("grpc.lb.wrr.rr_fallback")),
+        eq(1L),
+        eq(Arrays.asList("directaddress:///wrr-metrics")),
+        eq(Arrays.asList("")));
+  }
+
+  // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
+  // given metric name, the given number of times
+  private void verifyLongCounterRecord(String name, int times, long value) {
+    verify(mockMetricRecorder, times(times)).addLongCounter(
+        argThat(new ArgumentMatcher<LongCounterMetricInstrument>() {
+          @Override
+          public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
+            return longCounterInstrument.getName().equals(name);
+          }
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
+  }
+
+  // Verifies that the MetricRecorder has been called to record a given double histogram value the
+  // given amount of times.
+  private void verifyDoubleHistogramRecord(String name, int times, double value) {
+    verify(mockMetricRecorder, times(times)).recordDoubleHistogram(
+        argThat(new ArgumentMatcher<DoubleHistogramMetricInstrument>() {
+          @Override
+          public boolean matches(DoubleHistogramMetricInstrument doubleHistogramInstrument) {
+            return doubleHistogramInstrument.getName().equals(name);
+          }
+        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
+  }
+
+  private int getNumFilteredPendingTasks() {
+    return AbstractTestHelper.getNumFilteredPendingTasks(fakeClock);
+  }
+
   private static final class VerifyingScheduler {
     private final StaticStrideScheduler delegate;
     private final int max;
@@ -1131,6 +1380,9 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   private class TestHelper extends AbstractTestHelper {
+    public TestHelper() {
+      super(fakeClock, syncContext);
+    }
 
     @Override
     public Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap() {
@@ -1148,15 +1400,13 @@ public class WeightedRoundRobinLoadBalancerTest {
     }
 
     @Override
-    public SynchronizationContext getSynchronizationContext() {
-      return syncContext;
+    public MetricRecorder getMetricRecorder() {
+      return mockMetricRecorder;
     }
 
     @Override
-    public ScheduledExecutorService getScheduledExecutorService() {
-      return fakeClock.getScheduledExecutorService();
+    public String getChannelTarget() {
+      return channelTarget;
     }
-
-
   }
 }

@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -26,6 +27,7 @@ import com.google.common.util.concurrent.ListenableScheduledFuture;
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.protobuf.ByteString;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -40,7 +42,9 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.Status;
+import io.grpc.gcp.csm.observability.CsmObservability;
 import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.services.AdminInterface;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest;
@@ -51,9 +55,11 @@ import io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse
 import io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse.MethodStats;
 import io.grpc.testing.integration.Messages.LoadBalancerStatsRequest;
 import io.grpc.testing.integration.Messages.LoadBalancerStatsResponse;
+import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.xds.XdsChannelCredentials;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -88,10 +94,14 @@ public final class XdsTestClient {
   private int rpcTimeoutSec = 20;
   private boolean secureMode = false;
   private String server = "localhost:8080";
+  private int requestSize;
+  private int responseSize;
+  private boolean enableCsmObservability;
   private int statsPort = 8081;
   private Server statsServer;
   private long currentRequestId;
   private ListeningScheduledExecutorService exec;
+  private CsmObservability csmObservability;
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -151,6 +161,12 @@ public final class XdsTestClient {
         rpcTimeoutSec = Integer.valueOf(value);
       } else if ("server".equals(key)) {
         server = value;
+      } else if ("request_payload_size".equals(key)) {
+        requestSize = Integer.valueOf(value);
+      } else if ("response_payload_size".equals(key)) {
+        responseSize = Integer.valueOf(value);
+      } else if ("enable_csm_observability".equals(key)) {
+        enableCsmObservability = Boolean.valueOf(value);
       } else if ("stats_port".equals(key)) {
         statsPort = Integer.valueOf(value);
       } else if ("secure_mode".equals(key)) {
@@ -194,6 +210,10 @@ public final class XdsTestClient {
               + c.server
               + "\n  --secure_mode=BOOLEAN  Use true to enable XdsCredentials. Default: "
               + c.secureMode
+              + "\n  --request_payload_size=INT   Per-request size. Default: " + c.requestSize
+              + "\n  --response_payload_size=INT  Per-response size. Default: " + c.responseSize
+              + "\n  --enable_csm_observability=BOOL  Enable CSM observability reporting. Default: "
+              + c.enableCsmObservability
               + "\n  --stats_port=INT       Port to expose peer distribution stats service. "
               + "Default: "
               + c.statsPort);
@@ -241,11 +261,24 @@ public final class XdsTestClient {
   }
 
   private void run() {
+    if (enableCsmObservability) {
+      csmObservability = CsmObservability.newBuilder()
+          .sdk(AutoConfiguredOpenTelemetrySdk.builder()
+              .addPropertiesSupplier(() -> ImmutableMap.of(
+                  "otel.logs.exporter", "none",
+                  "otel.metrics.exporter", "prometheus",
+                  "otel.traces.exporter", "none"))
+              .build()
+              .getOpenTelemetrySdk())
+          .build();
+      csmObservability.registerGlobal();
+    }
     statsServer =
         Grpc.newServerBuilderForPort(statsPort, InsecureServerCredentials.create())
             .addService(new XdsStatsImpl())
             .addService(new ConfigureUpdateServiceImpl())
             .addService(ProtoReflectionService.newInstance())
+            .addService(ProtoReflectionServiceV1.newInstance())
             .addServices(AdminInterface.getStandardServices())
             .build();
     try {
@@ -261,7 +294,10 @@ public final class XdsTestClient {
                 .build());
       }
       exec = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
-      runQps();
+      Payload requestPayload = Payload.newBuilder()
+          .setBody(ByteString.copyFrom(new byte[requestSize]))
+          .build();
+      runQps(requestPayload);
     } catch (Throwable t) {
       logger.log(Level.SEVERE, "Error running client", t);
       System.exit(1);
@@ -281,10 +317,13 @@ public final class XdsTestClient {
     if (exec != null) {
       exec.shutdownNow();
     }
+    if (csmObservability != null) {
+      csmObservability.close();
+    }
   }
 
 
-  private void runQps() throws InterruptedException, ExecutionException {
+  private void runQps(Payload requestPayload) throws InterruptedException, ExecutionException {
     final SettableFuture<Void> failure = SettableFuture.create();
     final class PeriodicRpc implements Runnable {
 
@@ -357,7 +396,11 @@ public final class XdsTestClient {
                 public void onNext(EmptyProtos.Empty response) {}
               });
         } else if (config.rpcType == RpcType.UNARY_CALL) {
-          SimpleRequest request = SimpleRequest.newBuilder().setFillServerId(true).build();
+          SimpleRequest request = SimpleRequest.newBuilder()
+              .setFillServerId(true)
+              .setPayload(requestPayload)
+              .setResponseSize(responseSize)
+              .build();
           stub.unaryCall(
               request,
               new StreamObserver<SimpleResponse>() {

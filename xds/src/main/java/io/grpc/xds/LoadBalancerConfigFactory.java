@@ -39,8 +39,9 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.LoadBalancerConfigFactory.LoadBalancingPolicyConverter.MaxRecursionReachedException;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.io.IOException;
 import java.util.Map;
 
@@ -97,15 +98,14 @@ class LoadBalancerConfigFactory {
    *
    * @throws ResourceInvalidException If the {@link Cluster} has an invalid LB configuration.
    */
-  static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest,
-      boolean enableWrr, boolean enablePickFirst)
+  static ImmutableMap<String, ?> newConfig(Cluster cluster, boolean enableLeastRequest)
       throws ResourceInvalidException {
     // The new load_balancing_policy will always be used if it is set, but for backward
     // compatibility we will fall back to using the old lb_policy field if the new field is not set.
     if (cluster.hasLoadBalancingPolicy()) {
       try {
         return LoadBalancingPolicyConverter.convertToServiceConfig(cluster.getLoadBalancingPolicy(),
-            0, enableWrr, enablePickFirst);
+            0);
       } catch (MaxRecursionReachedException e) {
         throw new ResourceInvalidException("Maximum LB config recursion depth reached", e);
       }
@@ -212,8 +212,7 @@ class LoadBalancerConfigFactory {
      * Converts a {@link LoadBalancingPolicy} object to a service config JSON object.
      */
     private static ImmutableMap<String, ?> convertToServiceConfig(
-        LoadBalancingPolicy loadBalancingPolicy, int recursionDepth, boolean enableWrr,
-        boolean enablePickFirst)
+        LoadBalancingPolicy loadBalancingPolicy, int recursionDepth)
         throws ResourceInvalidException, MaxRecursionReachedException {
       if (recursionDepth > MAX_RECURSION) {
         throw new MaxRecursionReachedException();
@@ -227,20 +226,16 @@ class LoadBalancerConfigFactory {
             serviceConfig = convertRingHashConfig(typedConfig.unpack(RingHash.class));
           } else if (typedConfig.is(WrrLocality.class)) {
             serviceConfig = convertWrrLocalityConfig(typedConfig.unpack(WrrLocality.class),
-                recursionDepth, enableWrr, enablePickFirst);
+                recursionDepth);
           } else if (typedConfig.is(RoundRobin.class)) {
             serviceConfig = convertRoundRobinConfig();
           } else if (typedConfig.is(LeastRequest.class)) {
             serviceConfig = convertLeastRequestConfig(typedConfig.unpack(LeastRequest.class));
           } else if (typedConfig.is(ClientSideWeightedRoundRobin.class)) {
-            if (enableWrr) {
-              serviceConfig = convertWeightedRoundRobinConfig(
-                  typedConfig.unpack(ClientSideWeightedRoundRobin.class));
-            }
+            serviceConfig = convertWeightedRoundRobinConfig(
+                typedConfig.unpack(ClientSideWeightedRoundRobin.class));
           } else if (typedConfig.is(PickFirst.class)) {
-            if (enablePickFirst) {
-              serviceConfig = convertPickFirstConfig(typedConfig.unpack(PickFirst.class));
-            }
+            serviceConfig = convertPickFirstConfig(typedConfig.unpack(PickFirst.class));
           } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
             serviceConfig = convertCustomConfig(
                 typedConfig.unpack(com.github.xds.type.v3.TypedStruct.class));
@@ -309,12 +304,10 @@ class LoadBalancerConfigFactory {
      * Converts a wrr_locality {@link Any} configuration to service config format.
      */
     private static ImmutableMap<String, ?> convertWrrLocalityConfig(WrrLocality wrrLocality,
-        int recursionDepth, boolean enableWrr, boolean enablePickFirst)
-        throws ResourceInvalidException,
-        MaxRecursionReachedException {
+        int recursionDepth)
+        throws ResourceInvalidException, MaxRecursionReachedException {
       return buildWrrLocalityConfig(
-          convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(),
-              recursionDepth + 1, enableWrr, enablePickFirst));
+          convertToServiceConfig(wrrLocality.getEndpointPickingPolicy(), recursionDepth + 1));
     }
 
     /**

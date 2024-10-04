@@ -19,8 +19,7 @@ description = 'gRPC: Core'
 dependencies {
     api project(':grpc-api')
     // force dependent jars to depend on latest grpc-context
-    runtimeOnly project(":grpc-context"),
-            project(":grpc-util")  // need grpc-util to pull in round robin
+    runtimeOnly project(":grpc-context")
     implementation libraries.gson,
             libraries.android.annotations,
             libraries.animalsniffer.annotations,
@@ -33,7 +32,6 @@ dependencies {
             libraries.truth,
             project(':grpc-testing')
     testImplementation testFixtures(project(':grpc-api')),
-            project(':grpc-inprocess'),
             project(':grpc-testing')
     testImplementation libraries.guava.testlib
 

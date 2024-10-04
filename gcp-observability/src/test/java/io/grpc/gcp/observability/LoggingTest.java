@@ -71,7 +71,7 @@ public class LoggingTest {
       new StaticTestingClassLoader(getClass().getClassLoader(), Pattern.compile("io\\.grpc\\..*"));
 
   /**
-   * Cloud logging test using GlobalInterceptors.
+   * Cloud logging test using global interceptors.
    *
    * <p> Ignoring test, because it calls external Cloud Logging APIs.
    * To test cloud logging setup locally,

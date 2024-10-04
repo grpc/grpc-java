@@ -51,8 +51,12 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.LoadReportClient;
+import io.grpc.xds.client.LoadStatsManager2;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.Locality;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -92,7 +96,7 @@ public class LoadReportClientTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClient.LoadReportingTask.class.getSimpleName());
+              .contains("LoadReportingTask");
         }
       };
   private static final FakeClock.TaskFilter LRS_RPC_RETRY_TASK_FILTER =
@@ -100,7 +104,7 @@ public class LoadReportClientTest {
         @Override
         public boolean shouldAccept(Runnable command) {
           return command.toString()
-              .contains(LoadReportClient.LrsRpcRetryTask.class.getSimpleName());
+              .contains("LrsRpcRetryTask");
         }
       };
 
@@ -174,7 +178,9 @@ public class LoadReportClientTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     addFakeStatsData();
-    lrsClient = new LoadReportClient(loadStatsManager, channel, Context.ROOT, NODE,
+    lrsClient = new LoadReportClient(loadStatsManager,
+        GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY.createForTest(channel),
+        NODE,
         syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
         fakeClock.getStopwatchSupplier());
     syncContext.execute(new Runnable() {

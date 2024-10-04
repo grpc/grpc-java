@@ -41,7 +41,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /** Configuration for RLS load balancing policy. */
@@ -203,9 +202,8 @@ final class LbPolicyConfiguration {
     }
   }
 
-  /** Factory for {@link ChildPolicyWrapper}. */
+  /** Factory for {@link ChildPolicyWrapper}. Not thread-safe. */
   static final class RefCountedChildPolicyWrapperFactory {
-    // GuardedBy CachingRlsLbClient.lock
     @VisibleForTesting
     final Map<String /* target */, RefCountedChildPolicyWrapper> childPolicyMap =
         new HashMap<>();
@@ -227,7 +225,10 @@ final class LbPolicyConfiguration {
       this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
     }
 
-    // GuardedBy CachingRlsLbClient.lock
+    void init() {
+      childLbHelperProvider.init();
+    }
+
     ChildPolicyWrapper createOrGet(String target) {
       // TODO(creamsoup) check if the target is valid or not
       RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);
@@ -247,7 +248,6 @@ final class LbPolicyConfiguration {
       }
     }
 
-    // GuardedBy CachingRlsLbClient.lock
     List<ChildPolicyWrapper> createOrGet(List<String> targets) {
       List<ChildPolicyWrapper> retVal = new ArrayList<>();
       for (String target : targets) {
@@ -256,7 +256,6 @@ final class LbPolicyConfiguration {
       return retVal;
     }
 
-    // GuardedBy CachingRlsLbClient.lock
     void release(ChildPolicyWrapper childPolicyWrapper) {
       checkNotNull(childPolicyWrapper, "childPolicyWrapper");
       String target = childPolicyWrapper.getTarget();
@@ -402,7 +401,7 @@ final class LbPolicyConfiguration {
   private static final class RefCountedChildPolicyWrapper
       implements ObjectPool<ChildPolicyWrapper> {
 
-    private final AtomicLong refCnt = new AtomicLong();
+    private long refCnt;
     @Nullable
     private ChildPolicyWrapper childPolicyWrapper;
 
@@ -413,7 +412,7 @@ final class LbPolicyConfiguration {
     @Override
     public ChildPolicyWrapper getObject() {
       checkState(!isReleased(), "ChildPolicyWrapper is already released");
-      refCnt.getAndIncrement();
+      refCnt++;
       return childPolicyWrapper;
     }
 
@@ -426,7 +425,7 @@ final class LbPolicyConfiguration {
       checkState(
           childPolicyWrapper == object,
           "returned object doesn't match the pooled childPolicyWrapper");
-      long newCnt = refCnt.decrementAndGet();
+      long newCnt = --refCnt;
       checkState(newCnt != -1, "Cannot return never pooled childPolicyWrapper");
       if (newCnt == 0) {
         childPolicyWrapper.shutdown();
@@ -447,7 +446,7 @@ final class LbPolicyConfiguration {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("object", childPolicyWrapper)
-          .add("refCnt", refCnt.get())
+          .add("refCnt", refCnt)
           .toString();
     }
   }

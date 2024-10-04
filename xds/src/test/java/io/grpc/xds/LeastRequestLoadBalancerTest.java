@@ -31,6 +31,7 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -58,12 +59,12 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.LeastRequestLoadBalancer.EmptyPicker;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestLbState;
-import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestPicker;
 import io.grpc.xds.LeastRequestLoadBalancer.ReadyPicker;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -158,7 +159,7 @@ public class LeastRequestLoadBalancerTest {
     assertEquals(READY, stateCaptor.getAllValues().get(1));
     assertThat(getList(pickerCaptor.getValue())).containsExactly(readySubchannel);
 
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -225,7 +226,7 @@ public class LeastRequestLoadBalancerTest {
 
     assertThat(getList(pickerCaptor.getValue())).containsExactly(oldSubchannel, newSubchannel);
 
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   private Subchannel getSubchannel(EquivalentAddressGroup removedEag) {
@@ -251,7 +252,7 @@ public class LeastRequestLoadBalancerTest {
 
   private LeastRequestLbState getChildLbState(PickResult pickResult) {
     EquivalentAddressGroup eag = pickResult.getSubchannel().getAddresses();
-    return (LeastRequestLbState) loadBalancer.getChildLbState(eag);
+    return (LeastRequestLbState) loadBalancer.getChildLbStateEag(eag);
   }
 
   @Test
@@ -267,30 +268,27 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
 
-    deliverSubchannelState(subchannel,
-        ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
     assertThat(childLbState.getCurrentState()).isEqualTo(READY);
 
     Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
-    deliverSubchannelState(subchannel,
-        ConnectivityStateInfo.forTransientFailure(error));
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
-    inOrder.verify(helper).refreshNameResolution();
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    refreshInvokedAndUpdateBS(inOrder, CONNECTING);
     assertThat(pickerCaptor.getValue()).isInstanceOf(EmptyPicker.class);
 
-    deliverSubchannelState(subchannel,
-        ConnectivityStateInfo.forNonError(IDLE));
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(helper).refreshNameResolution();
     assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     assertThat(childLbState.getCurrentPicker().toString()).contains(error.toString());
 
-    verify(subchannel, times(2)).requestConnection();
+    int expectedCount = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
+    verify(subchannel, times(expectedCount)).requestConnection();
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -321,7 +319,7 @@ public class LeastRequestLoadBalancerTest {
     // At this point it should use a ReadyPicker with newConfig
     pickerCaptor.getValue().pickSubchannel(mockArgs);
     verify(mockRandom, times(oldConfig.choiceCount + newConfig.choiceCount)).nextInt(1);
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -359,14 +357,15 @@ public class LeastRequestLoadBalancerTest {
       Subchannel sc = getSubchannel(childLbState);
       Status error = Status.UNKNOWN.withDescription("connection broken");
       deliverSubchannelState(sc, ConnectivityStateInfo.forTransientFailure(error));
-      inOrder.verify(helper).refreshNameResolution();
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(CONNECTING));
       assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
     }
-    inOrder.verify(helper)
-        .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertThat(getStatusString((LeastRequestPicker)pickerCaptor.getValue()))
+
+    verify(helper, atLeast(loadBalancer.getChildLbStates().size())).refreshNameResolution();
+    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertThat(getStatusString(pickerCaptor.getValue()))
         .contains("Status{code=UNKNOWN, description=connection broken");
+    inOrder.verify(helper, atLeast(0)).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
 
     ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
@@ -376,41 +375,28 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
 
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
-  private String getStatusString(LeastRequestPicker picker) {
+  private String getStatusString(SubchannelPicker picker) {
     if (picker == null) {
       return "";
     }
 
-    if (picker instanceof EmptyPicker) {
-      if (((EmptyPicker) picker).getStatus() == null) {
+    if (picker instanceof ReadyPicker) {
+      List<SubchannelPicker> childPickers = ((ReadyPicker)picker).getChildPickers();
+      if (childPickers == null || childPickers.isEmpty()) {
         return "";
       }
-      return ((EmptyPicker) picker).getStatus().toString();
-    } else if (picker instanceof ReadyPicker) {
-      List<ChildLbState> childLbStates = ((ReadyPicker)picker).getChildLbStates();
-      if (childLbStates == null || childLbStates.isEmpty()) {
-        return "";
-      };
 
-      // Note that this is dependent on PickFirst's picker toString retaining the representation
-      // of the status, but since it is a test and we don't want to expose this value it seems
-      // a reasonable tradeoff
-      String pickerStr = childLbStates.get(0).getCurrentPicker().toString();
-      int beg = pickerStr.indexOf(", status=Status{");
-      if (beg < 0) {
-        return "";
-      }
-      int end = pickerStr.indexOf('}', beg);
-      if (end < 0) {
-        return "";
-      }
-      return pickerStr.substring(beg + ", status=".length(), end + 1);
+      picker = childPickers.get(0);
     }
 
-    throw new IllegalArgumentException("Unrecognized picker: " + picker);
+    Status status = picker.pickSubchannel(mockArgs).getStatus();
+    if (status == null) {
+      return "";
+    }
+    return status.toString();
   }
 
   @Test
@@ -440,7 +426,7 @@ public class LeastRequestLoadBalancerTest {
       inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     }
 
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -474,7 +460,8 @@ public class LeastRequestLoadBalancerTest {
 
     ReadyPicker picker = (ReadyPicker) pickerCaptor.getValue();
 
-    assertThat(picker.getChildLbStates()).containsExactlyElementsIn(childLbStates);
+    assertThat(picker.getChildEags())
+        .containsExactlyElementsIn(childLbStates.stream().map(ChildLbState::getEag).toArray());
 
     // Make random return 0, then 2 for the sample indexes.
     when(mockRandom.nextInt(childLbStates.size())).thenReturn(0, 2);
@@ -508,11 +495,10 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void pickerEmptyList() throws Exception {
-    SubchannelPicker picker = new EmptyPicker(Status.UNKNOWN);
+    SubchannelPicker picker = new EmptyPicker();
 
     assertNull(picker.pickSubchannel(mockArgs).getSubchannel());
-    assertEquals(Status.UNKNOWN,
-        picker.pickSubchannel(mockArgs).getStatus());
+    assertEquals(Status.OK, picker.pickSubchannel(mockArgs).getStatus());
   }
 
   @Test
@@ -562,7 +548,7 @@ public class LeastRequestLoadBalancerTest {
     LoadBalancer.PickResult pickResult2 = pickerCaptor.getValue().pickSubchannel(mockArgs);
     verify(mockRandom, times(choiceCount * 2)).nextInt(1);
     assertEquals(readySubchannel, pickResult2.getSubchannel());
-    verifyNoMoreInteractions(helper);
+    AbstractTestHelper.verifyNoMoreMeaningfulInteractions(helper);
   }
 
   @Test
@@ -623,9 +609,8 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void internalPickerComparisons() {
-    EmptyPicker emptyOk1 = new EmptyPicker(Status.OK);
-    EmptyPicker emptyOk2 = new EmptyPicker(Status.OK.withDescription("different OK"));
-    EmptyPicker emptyErr = new EmptyPicker(Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯"));
+    EmptyPicker empty1 = new EmptyPicker();
+    EmptyPicker empty2 = new EmptyPicker();
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
@@ -641,15 +626,14 @@ public class LeastRequestLoadBalancerTest {
     ReadyPicker ready5 = new ReadyPicker(Arrays.asList(child2, child1), 2, mockRandom);
     ReadyPicker ready6 = new ReadyPicker(Arrays.asList(child2, child1), 8, mockRandom);
 
-    assertTrue(emptyOk1.isEquivalentTo(emptyOk2));
-    assertFalse(emptyOk1.isEquivalentTo(emptyErr));
-    assertFalse(ready1.isEquivalentTo(ready2));
-    assertTrue(ready1.isEquivalentTo(ready3));
-    assertTrue(ready3.isEquivalentTo(ready4));
-    assertTrue(ready4.isEquivalentTo(ready5));
-    assertFalse(emptyOk1.isEquivalentTo(ready1));
-    assertFalse(ready1.isEquivalentTo(emptyOk1));
-    assertFalse(ready5.isEquivalentTo(ready6));
+    assertTrue(empty1.equals(empty2));
+    assertFalse(ready1.equals(ready2));
+    assertTrue(ready1.equals(ready3));
+    assertTrue(ready3.equals(ready4));
+    assertTrue(ready4.equals(ready5));
+    assertFalse(empty1.equals(ready1));
+    assertFalse(ready1.equals(empty1));
+    assertFalse(ready5.equals(ready6));
   }
 
   @Test
@@ -664,7 +648,7 @@ public class LeastRequestLoadBalancerTest {
 
   private List<Subchannel> getList(SubchannelPicker picker) {
     if (picker instanceof ReadyPicker) {
-      return ((ReadyPicker) picker).getChildLbStates().stream()
+      return ((ReadyPicker) picker).getChildEags().stream()
           .map(this::getSubchannel)
           .collect(Collectors.toList());
     } else {
@@ -674,6 +658,19 @@ public class LeastRequestLoadBalancerTest {
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     testHelperInstance.deliverSubchannelState(subchannel, newState);
+  }
+
+  // Old PF and new PF reverse calling order of updateBlaancingState and refreshNameResolution
+  private void refreshInvokedAndUpdateBS(InOrder inOrder, ConnectivityState state) {
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
+
+    inOrder.verify(helper).refreshNameResolution();
+
+    if (!PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
   }
 
   private static class FakeSocketAddress extends SocketAddress {

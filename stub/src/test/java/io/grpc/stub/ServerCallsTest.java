@@ -452,6 +452,31 @@ public class ServerCallsTest {
   }
 
   @Test
+  public void setOnReadyThreshold() throws Exception {
+    final int testThreshold = Integer.MAX_VALUE;
+    ServerCallHandler<Integer, Integer> callHandler =
+        ServerCalls.asyncServerStreamingCall(
+            new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+                ServerCallStreamObserver<Integer> serverCallObserver =
+                    (ServerCallStreamObserver<Integer>) responseObserver;
+                serverCallObserver.setOnReadyThreshold(req);
+              }
+            });
+    ServerCall.Listener<Integer> callListener =
+        callHandler.startCall(serverCall, new Metadata());
+    serverCall.isReady = true;
+    serverCall.isCancelled = false;
+    callListener.onReady();
+    callListener.onMessage(testThreshold);
+    // half-closing triggers the unary request delivery and onReady
+    callListener.onHalfClose();
+    
+    assertEquals(testThreshold, serverCall.getOnReadyThreshold());
+  }
+
+  @Test
   public void clientSendsOne_errorMissingRequest_unary() {
     ServerCallRecorder serverCall = new ServerCallRecorder(UNARY_METHOD);
     ServerCallHandler<Integer, Integer> callHandler =
@@ -626,6 +651,7 @@ public class ServerCallsTest {
     private Status status;
     private boolean isCancelled;
     private boolean isReady;
+    private int onReadyThreshold;
 
     public ServerCallRecorder(MethodDescriptor<Integer, Integer> methodDescriptor) {
       this.methodDescriptor = methodDescriptor;
@@ -661,8 +687,18 @@ public class ServerCallsTest {
     }
 
     @Override
+    public void setOnReadyThreshold(int numBytes) {
+      super.setOnReadyThreshold(numBytes);
+      onReadyThreshold = numBytes;
+    }
+
+    @Override
     public MethodDescriptor<Integer, Integer> getMethodDescriptor() {
       return methodDescriptor;
+    }
+
+    public int getOnReadyThreshold() {
+      return onReadyThreshold;
     }
   }
 }

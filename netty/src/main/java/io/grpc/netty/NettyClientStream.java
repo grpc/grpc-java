@@ -182,20 +182,10 @@ class NettyClientStream extends AbstractClientStream {
       if (numBytes > 0) {
         // Add the bytes to outbound flow control.
         onSendingBytes(numBytes);
+        ChannelFutureListener failureListener =
+            future -> transportState().onWriteFrameData(future, numMessages, numBytes);
         writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush)
-            .addListener(new ChannelFutureListener() {
-              @Override
-              public void operationComplete(ChannelFuture future) throws Exception {
-                // If the future succeeds when http2stream is null, the stream has been cancelled
-                // before it began and Netty is purging pending writes from the flow-controller.
-                if (future.isSuccess() && transportState().http2Stream() != null) {
-                  // Remove the bytes from outbound flow control, optionally notifying
-                  // the client that they can send more bytes.
-                  transportState().onSentBytes(numBytes);
-                  NettyClientStream.this.getTransportTracer().reportMessageSent(numMessages);
-                }
-              }
-            });
+            .addListener(failureListener);
       } else {
         // The frame is empty and will not impact outbound flow control. Just send it.
         writeQueue.enqueue(
@@ -237,8 +227,9 @@ class NettyClientStream extends AbstractClientStream {
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer,
-        String methodName) {
-      super(maxMessageSize, statsTraceCtx, transportTracer);
+        String methodName,
+        CallOptions options) {
+      super(maxMessageSize, statsTraceCtx, transportTracer, options);
       this.methodName = checkNotNull(methodName, "methodName");
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = checkNotNull(eventLoop, "eventLoop");
@@ -304,6 +295,29 @@ class NettyClientStream extends AbstractClientStream {
     protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
       transportReportStatus(status, stopDelivery, trailers);
       handler.getWriteQueue().enqueue(new CancelClientStreamCommand(this, status), true);
+    }
+
+    private void onWriteFrameData(ChannelFuture future, int numMessages, int numBytes) {
+      // If the future succeeds when http2stream is null, the stream has been cancelled
+      // before it began and Netty is purging pending writes from the flow-controller.
+      if (future.isSuccess() && http2Stream() == null) {
+        return;
+      }
+
+      if (future.isSuccess()) {
+        // Remove the bytes from outbound flow control, optionally notifying
+        // the client that they can send more bytes.
+        onSentBytes(numBytes);
+        getTransportTracer().reportMessageSent(numMessages);
+      } else if (!isStreamDeallocated()) {
+        // Future failed, fail RPC.
+        // Normally we don't need to do anything here because the cause of a failed future
+        // while writing DATA frames would be an IO error and the stream is already closed.
+        // However, we still need handle any unexpected failures raised in Netty.
+        // Note: isStreamDeallocated() protects from spamming stream resets by scheduling multiple
+        // CancelClientStreamCommand commands.
+        http2ProcessingFailed(statusFromFailedFuture(future), true, new Metadata());
+      }
     }
 
     @Override

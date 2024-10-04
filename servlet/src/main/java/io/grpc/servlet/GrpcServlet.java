@@ -16,7 +16,6 @@
 
 package io.grpc.servlet;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import java.io.IOException;
@@ -40,7 +39,6 @@ public class GrpcServlet extends HttpServlet {
 
   private final ServletAdapter servletAdapter;
 
-  @VisibleForTesting
   GrpcServlet(ServletAdapter servletAdapter) {
     this.servletAdapter = servletAdapter;
   }

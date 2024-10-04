@@ -36,5 +36,6 @@ dependencies {
 }
 
 tasks.named("javadoc").configure {
-    options.links 'https://protobuf.dev/reference/java/api-docs/'
+    options.linksOffline 'https://protobuf.dev/reference/java/api-docs/',
+        "${rootProject.projectDir}/gradle/javadoc/protobuf.dev-reference-java-api-docs/"
 }

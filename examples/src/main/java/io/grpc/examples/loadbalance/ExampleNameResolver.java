@@ -28,12 +28,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static io.grpc.examples.loadbalance.LoadBalanceClient.exampleServiceName;
 
 public class ExampleNameResolver extends NameResolver {
 
+    static private final int[] SERVER_PORTS = {50051, 50052, 50053};
     private Listener2 listener;
 
     private final URI uri;
@@ -44,12 +44,11 @@ public class ExampleNameResolver extends NameResolver {
         this.uri = targetUri;
         // This is a fake name resolver, so we just hard code the address here.
         addrStore = ImmutableMap.<String,List<InetSocketAddress>>builder()
-                .put(exampleServiceName,
-                Stream.iterate(LoadBalanceServer.startPort,p->p+1)
-                        .limit(LoadBalanceServer.serverCount)
-                        .map(port->new InetSocketAddress("localhost",port))
-                        .collect(Collectors.toList())
-                )
+            .put(exampleServiceName,
+                Arrays.stream(SERVER_PORTS)
+                    .mapToObj(port->new InetSocketAddress("localhost",port))
+                    .collect(Collectors.toList())
+            )
                 .build();
     }
 

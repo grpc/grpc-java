@@ -28,10 +28,10 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
-import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsInitializationException;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.internal.security.certprovider.CertProviderClientSslContextProviderFactory;
 import io.grpc.xds.internal.security.certprovider.CertificateProvider;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderProvider;

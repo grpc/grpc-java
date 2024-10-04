@@ -28,11 +28,8 @@ import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
-import java.security.AccessController;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
 import java.security.Provider;
 import java.security.Security;
 import java.util.ArrayList;
@@ -218,40 +215,20 @@ public class Platform {
       SSLContext context = SSLContext.getInstance("TLS", sslProvider);
       context.init(null, null, null);
       SSLEngine engine = context.createSSLEngine();
-      Method getEngineApplicationProtocol =
-          AccessController.doPrivileged(
-              new PrivilegedExceptionAction<Method>() {
-                @Override
-                public Method run() throws Exception {
-                  return SSLEngine.class.getMethod("getApplicationProtocol");
-                }
-              });
+      Method getEngineApplicationProtocol = SSLEngine.class.getMethod("getApplicationProtocol");
       getEngineApplicationProtocol.invoke(engine);
 
       Method setApplicationProtocols =
-          AccessController.doPrivileged(
-              new PrivilegedExceptionAction<Method>() {
-                @Override
-                public Method run() throws Exception {
-                  return SSLParameters.class.getMethod("setApplicationProtocols", String[].class);
-                }
-              });
-      Method getApplicationProtocol =
-          AccessController.doPrivileged(
-              new PrivilegedExceptionAction<Method>() {
-                @Override
-                public Method run() throws Exception {
-                  return SSLSocket.class.getMethod("getApplicationProtocol");
-                }
-              });
+          SSLParameters.class.getMethod("setApplicationProtocols", String[].class);
+      Method getApplicationProtocol = SSLSocket.class.getMethod("getApplicationProtocol");
       return new JdkAlpnPlatform(sslProvider, setApplicationProtocols, getApplicationProtocol);
     } catch (NoSuchAlgorithmException ignored) {
       // On older Java
     } catch (KeyManagementException ignored) {
       // On older Java
-    } catch (PrivilegedActionException ignored) {
-      // On older Java
     } catch (IllegalAccessException ignored) {
+      // On older Java
+    } catch (NoSuchMethodException ignored) {
       // On older Java
     } catch (InvocationTargetException ignored) {
       // On older Java
@@ -306,7 +283,7 @@ public class Platform {
 
   /**
    * Select the first recognized security provider according to the preference order returned by
-   * {@link Security#getProviders}. If a recognized provider is not found then warn but continue.
+   * {@link Security#getProviders}.
    */
   private static Provider getAndroidSecurityProvider() {
     Provider[] providers = Security.getProviders();
@@ -318,7 +295,6 @@ public class Platform {
         }
       }
     }
-    logger.log(Level.WARNING, "Unable to find Conscrypt");
     return null;
   }
 

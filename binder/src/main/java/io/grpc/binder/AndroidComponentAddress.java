@@ -72,8 +72,8 @@ public final class AndroidComponentAddress extends SocketAddress {
   }
 
   /**
-   * Creates an address referencing a {@link android.app.Service} in another
-   * application and using the default binding {@link Intent}.
+   * Creates an address referencing a {@link android.app.Service} in another application and using
+   * the default binding {@link Intent}.
    *
    * @param applicationPackage The package name of the application containing the server.
    * @param serviceClassName The full class name of the Android Service to bind to.

@@ -16,7 +16,6 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
@@ -30,6 +29,7 @@ import static io.grpc.netty.Utils.STATUS_OK;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -1000,7 +1000,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
           maxMessageSize,
           StatsTraceContext.NOOP,
           transportTracer,
-          "methodName");
+          "methodName",
+          CallOptions.DEFAULT);
     }
 
     @Override

@@ -39,7 +39,6 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TimeProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -60,12 +59,25 @@ import javax.annotation.Nullable;
  *
  * <p>This implements the outlier detection gRFC:
  * https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
+ *
+ * <p>The implementation maintains two maps. Each endpoint status is tracked using an
+ * EndpointTracker. E.g. for two endpoints with these address list and their tracker:
+ * Endpoint e1 : [a1, a2] is tracked with EndpointTracker t1
+ * Endpoint e2 : [a3] is tracked with EndpointTracker t2
+ * The two maps are:
+ * First, addressMap maps from socket address -> endpoint tracker : [a1 -> t1, a2 -> t1, a3 -> t2]
+ * EndpointTracker has reference to all the subchannels of the corresponding endpoint.
+ * Second, trackerMap maps from unordered address set -> endpoint tracker.
+ * Updated upon address updates.
  */
 @Internal
 public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
-  final AddressTrackerMap trackerMap;
+  final EndpointTrackerMap endpointTrackerMap;
+
+  @VisibleForTesting
+  final Map<SocketAddress, EndpointTracker> addressMap = new HashMap<>();
 
   private final SynchronizationContext syncContext;
   private final Helper childHelper;
@@ -77,8 +89,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
   private final ChannelLogger logger;
 
-  private static final Attributes.Key<AddressTracker> ADDRESS_TRACKER_ATTR_KEY
-      = Attributes.Key.create("addressTrackerKey");
+  private static final Attributes.Key<EndpointTracker> ENDPOINT_TRACKER_KEY
+      = Attributes.Key.create("endpointTrackerKey");
 
   /**
    * Creates a new instance of {@link OutlierDetectionLoadBalancer}.
@@ -87,7 +99,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     logger = helper.getChannelLogger();
     childHelper = new ChildHelper(checkNotNull(helper, "helper"));
     switchLb = new GracefulSwitchLoadBalancer(childHelper);
-    trackerMap = new AddressTrackerMap();
+    endpointTrackerMap = new EndpointTrackerMap();
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.timeProvider = timeProvider;
@@ -100,19 +112,32 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     OutlierDetectionLoadBalancerConfig config
         = (OutlierDetectionLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
 
-    // The map should only retain entries for addresses in this latest update.
-    ArrayList<SocketAddress> addresses = new ArrayList<>();
+    // The map should only retain entries for endpoints in this latest update.
+    Set<Set<SocketAddress>> endpoints = new HashSet<>();
+    Map<SocketAddress, Set<SocketAddress>> addressEndpointMap = new HashMap<>();
     for (EquivalentAddressGroup addressGroup : resolvedAddresses.getAddresses()) {
-      addresses.addAll(addressGroup.getAddresses());
+      Set<SocketAddress> endpoint = ImmutableSet.copyOf(addressGroup.getAddresses());
+      endpoints.add(endpoint);
+      for (SocketAddress address : addressGroup.getAddresses()) {
+        if (addressEndpointMap.containsKey(address)) {
+          logger.log(ChannelLogLevel.WARNING,
+              "Unexpected duplicated address {0} belongs to multiple endpoints", address);
+        }
+        addressEndpointMap.put(address, endpoint);
+      }
     }
-    trackerMap.keySet().retainAll(addresses);
+    endpointTrackerMap.keySet().retainAll(endpoints);
 
-    trackerMap.updateTrackerConfigs(config);
+    endpointTrackerMap.updateTrackerConfigs(config);
 
     // Add any new ones.
-    trackerMap.putNewTrackers(config, addresses);
+    endpointTrackerMap.putNewTrackers(config, endpoints);
 
-    switchLb.switchTo(config.childPolicy.getProvider());
+    // Update address -> tracker map.
+    addressMap.clear();
+    for (Map.Entry<SocketAddress, Set<SocketAddress>> e : addressEndpointMap.entrySet()) {
+      addressMap.put(e.getKey(), endpointTrackerMap.get(e.getValue()));
+    }
 
     // If outlier detection is actually configured, start a timer that will periodically try to
     // detect outliers.
@@ -133,7 +158,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       // for a fresh start.
       if (detectionTimerHandle != null) {
         detectionTimerHandle.cancel();
-        trackerMap.resetCallCounters();
+        endpointTrackerMap.resetCallCounters();
       }
 
       detectionTimerHandle = syncContext.scheduleWithFixedDelay(new DetectionTimer(config, logger),
@@ -143,12 +168,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       // uneject any addresses we may have ejected.
       detectionTimerHandle.cancel();
       detectionTimerStartNanos = null;
-      trackerMap.cancelTracking();
+      endpointTrackerMap.cancelTracking();
     }
 
     switchLb.handleResolvedAddresses(
-        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
-            .build());
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childConfig).build());
     return Status.OK;
   }
 
@@ -180,13 +204,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public void run() {
       detectionTimerStartNanos = timeProvider.currentTimeNanos();
 
-      trackerMap.swapCounters();
+      endpointTrackerMap.swapCounters();
 
       for (OutlierEjectionAlgorithm algo : OutlierEjectionAlgorithm.forConfig(config, logger)) {
-        algo.ejectOutliers(trackerMap, detectionTimerStartNanos);
+        algo.ejectOutliers(endpointTrackerMap, detectionTimerStartNanos);
       }
 
-      trackerMap.maybeUnejectOutliers(detectionTimerStartNanos);
+      endpointTrackerMap.maybeUnejectOutliers(detectionTimerStartNanos);
     }
   }
 
@@ -217,8 +241,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       // the subchannel will be added to the map and be included in outlier detection.
       List<EquivalentAddressGroup> addressGroups = args.getAddresses();
       if (hasSingleAddress(addressGroups)
-          && trackerMap.containsKey(addressGroups.get(0).getAddresses().get(0))) {
-        AddressTracker tracker = trackerMap.get(addressGroups.get(0).getAddresses().get(0));
+          && addressMap.containsKey(addressGroups.get(0).getAddresses().get(0))) {
+        EndpointTracker tracker = addressMap.get(addressGroups.get(0).getAddresses().get(0));
         tracker.addSubchannel(subchannel);
 
         // If this address has already been ejected, we need to immediately eject this Subchannel.
@@ -239,7 +263,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   class OutlierDetectionSubchannel extends ForwardingSubchannel {
 
     private final Subchannel delegate;
-    private AddressTracker addressTracker;
+    private EndpointTracker endpointTracker;
     private boolean ejected;
     private ConnectivityStateInfo lastSubchannelState;
 
@@ -275,16 +299,16 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public void shutdown() {
-      if (addressTracker != null) {
-        addressTracker.removeSubchannel(this);
+      if (endpointTracker != null) {
+        endpointTracker.removeSubchannel(this);
       }
       super.shutdown();
     }
 
     @Override
     public Attributes getAttributes() {
-      if (addressTracker != null) {
-        return delegate.getAttributes().toBuilder().set(ADDRESS_TRACKER_ATTR_KEY, addressTracker)
+      if (endpointTracker != null) {
+        return delegate.getAttributes().toBuilder().set(ENDPOINT_TRACKER_KEY, endpointTracker)
             .build();
       } else {
         return delegate.getAttributes();
@@ -300,22 +324,22 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       // No change in address plurality, we replace the single one with a new one.
       if (hasSingleAddress(getAllAddresses()) && hasSingleAddress(addressGroups)) {
         // Remove the current subchannel from the old address it is associated with in the map.
-        if (trackerMap.containsValue(addressTracker)) {
-          addressTracker.removeSubchannel(this);
+        if (endpointTrackerMap.containsValue(endpointTracker)) {
+          endpointTracker.removeSubchannel(this);
         }
 
         // If the map has an entry for the new address, we associate this subchannel with it.
         SocketAddress address = addressGroups.get(0).getAddresses().get(0);
-        if (trackerMap.containsKey(address)) {
-          trackerMap.get(address).addSubchannel(this);
+        if (addressMap.containsKey(address)) {
+          addressMap.get(address).addSubchannel(this);
         }
       } else if (hasSingleAddress(getAllAddresses()) && !hasSingleAddress(addressGroups)) {
         // We go from a single address to having multiple, making this subchannel uneligible for
         // outlier detection. Remove it from all trackers and reset the call counters of all the
         // associated trackers.
         // Remove the current subchannel from the old address it is associated with in the map.
-        if (trackerMap.containsKey(getAddresses().getAddresses().get(0))) {
-          AddressTracker tracker = trackerMap.get(getAddresses().getAddresses().get(0));
+        if (addressMap.containsKey(getAddresses().getAddresses().get(0))) {
+          EndpointTracker tracker = addressMap.get(getAddresses().getAddresses().get(0));
           tracker.removeSubchannel(this);
           tracker.resetCallCounters();
         }
@@ -323,8 +347,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         // We go from, previously uneligble, multiple address mode to a single address. If the map
         // has an entry for the new address, we associate this subchannel with it.
         SocketAddress address = addressGroups.get(0).getAddresses().get(0);
-        if (trackerMap.containsKey(address)) {
-          AddressTracker tracker = trackerMap.get(address);
+        if (addressMap.containsKey(address)) {
+          EndpointTracker tracker = addressMap.get(address);
           tracker.addSubchannel(this);
         }
       }
@@ -337,20 +361,21 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     /**
      * If the {@link Subchannel} is considered for outlier detection the associated {@link
-     * AddressTracker} should be set.
+     * EndpointTracker} should be set.
      */
-    void setAddressTracker(AddressTracker addressTracker) {
-      this.addressTracker = addressTracker;
+    void setEndpointTracker(EndpointTracker endpointTracker) {
+      this.endpointTracker = endpointTracker;
     }
 
-    void clearAddressTracker() {
-      this.addressTracker = null;
+    void clearEndpointTracker() {
+      this.endpointTracker = null;
     }
 
     void eject() {
       ejected = true;
-      subchannelStateListener.onSubchannelState(
-          ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+      subchannelStateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(
+          Status.UNAVAILABLE.withDescription(
+              "The subchannel has been ejected by outlier detection")));
       logger.log(ChannelLogLevel.INFO, "Subchannel ejected: {0}", this);
     }
 
@@ -419,7 +444,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       Subchannel subchannel = pickResult.getSubchannel();
       if (subchannel != null) {
         return PickResult.withSubchannel(subchannel, new ResultCountingClientStreamTracerFactory(
-            subchannel.getAttributes().get(ADDRESS_TRACKER_ATTR_KEY),
+            subchannel.getAttributes().get(ENDPOINT_TRACKER_KEY),
             pickResult.getStreamTracerFactory()));
       }
 
@@ -432,12 +457,12 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
      */
     class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
 
-      private final AddressTracker tracker;
+      private final EndpointTracker tracker;
 
       @Nullable
       private final ClientStreamTracer.Factory delegateFactory;
 
-      ResultCountingClientStreamTracerFactory(AddressTracker tracker,
+      ResultCountingClientStreamTracerFactory(EndpointTracker tracker,
           @Nullable ClientStreamTracer.Factory delegateFactory) {
         this.tracker = tracker;
         this.delegateFactory = delegateFactory;
@@ -472,10 +497,9 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Tracks additional information about a set of equivalent addresses needed for outlier
-   * detection.
+   * Tracks additional information about the endpoint needed for outlier detection.
    */
-  static class AddressTracker {
+  static class EndpointTracker {
 
     private OutlierDetectionLoadBalancerConfig config;
     // Marked as volatile to assure that when the inactive counter is swapped in as the new active
@@ -486,7 +510,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     private int ejectionTimeMultiplier;
     private final Set<OutlierDetectionSubchannel> subchannels = new HashSet<>();
 
-    AddressTracker(OutlierDetectionLoadBalancerConfig config) {
+    EndpointTracker(OutlierDetectionLoadBalancerConfig config) {
       this.config = config;
     }
 
@@ -506,12 +530,12 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       } else if (!subchannelsEjected() && subchannel.isEjected()) {
         subchannel.uneject();
       }
-      subchannel.setAddressTracker(this);
+      subchannel.setEndpointTracker(this);
       return subchannels.add(subchannel);
     }
 
     boolean removeSubchannel(OutlierDetectionSubchannel subchannel) {
-      subchannel.clearAddressTracker();
+      subchannel.clearEndpointTracker();
       return subchannels.remove(subchannel);
     }
 
@@ -631,46 +655,42 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public String toString() {
-      return "AddressTracker{"
+      return "EndpointTracker{"
               + "subchannels=" + subchannels
               + '}';
     }
   }
 
   /**
-   * Maintains a mapping from addresses to their trackers.
+   * Maintains a mapping from endpoint (a set of addresses) to their trackers.
    */
-  static class AddressTrackerMap extends ForwardingMap<SocketAddress, AddressTracker> {
-    private final Map<SocketAddress, AddressTracker> trackerMap;
+  static class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
+    private final Map<Set<SocketAddress>, EndpointTracker> trackerMap;
 
-    AddressTrackerMap() {
+    EndpointTrackerMap() {
       trackerMap = new HashMap<>();
     }
 
     @Override
-    protected Map<SocketAddress, AddressTracker> delegate() {
+    protected Map<Set<SocketAddress>, EndpointTracker> delegate() {
       return trackerMap;
     }
 
     void updateTrackerConfigs(OutlierDetectionLoadBalancerConfig config) {
-      for (AddressTracker tracker: trackerMap.values()) {
+      for (EndpointTracker tracker: trackerMap.values()) {
         tracker.setConfig(config);
       }
     }
 
     /** Adds a new tracker for every given address. */
     void putNewTrackers(OutlierDetectionLoadBalancerConfig config,
-        Collection<SocketAddress> addresses) {
-      for (SocketAddress address : addresses) {
-        if (!trackerMap.containsKey(address)) {
-          trackerMap.put(address, new AddressTracker(config));
-        }
-      }
+        Set<Set<SocketAddress>> endpoints) {
+      endpoints.forEach(e -> trackerMap.putIfAbsent(e, new EndpointTracker(config)));
     }
 
     /** Resets the call counters for all the trackers in the map. */
     void resetCallCounters() {
-      for (AddressTracker tracker : trackerMap.values()) {
+      for (EndpointTracker tracker : trackerMap.values()) {
         tracker.resetCallCounters();
       }
     }
@@ -680,7 +700,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
      * to reset the ejection time multiplier.
      */
     void cancelTracking() {
-      for (AddressTracker tracker : trackerMap.values()) {
+      for (EndpointTracker tracker : trackerMap.values()) {
         if (tracker.subchannelsEjected()) {
           tracker.unejectSubchannels();
         }
@@ -690,7 +710,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     /** Swaps the active and inactive counters for each tracker. */
     void swapCounters() {
-      for (AddressTracker tracker : trackerMap.values()) {
+      for (EndpointTracker tracker : trackerMap.values()) {
         tracker.swapCounters();
       }
     }
@@ -701,7 +721,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
      * time allowed.
      */
     void maybeUnejectOutliers(Long detectionTimerStartNanos) {
-      for (AddressTracker tracker : trackerMap.values()) {
+      for (EndpointTracker tracker : trackerMap.values()) {
         if (!tracker.subchannelsEjected()) {
           tracker.decrementEjectionTimeMultiplier();
         }
@@ -720,15 +740,15 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       if (trackerMap.isEmpty()) {
         return 0;
       }
-      int totalAddresses = 0;
-      int ejectedAddresses = 0;
-      for (AddressTracker tracker : trackerMap.values()) {
-        totalAddresses++;
+      int totalEndpoints = 0;
+      int ejectedEndpoints = 0;
+      for (EndpointTracker tracker : trackerMap.values()) {
+        totalEndpoints++;
         if (tracker.subchannelsEjected()) {
-          ejectedAddresses++;
+          ejectedEndpoints++;
         }
       }
-      return ((double)ejectedAddresses / totalAddresses) * 100;
+      return ((double)ejectedEndpoints / totalEndpoints) * 100;
     }
   }
 
@@ -739,7 +759,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   interface OutlierEjectionAlgorithm {
 
     /** Eject any outlier addresses. */
-    void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos);
+    void ejectOutliers(EndpointTrackerMap trackerMap, long ejectionTimeNanos);
 
     /** Builds a list of algorithms that are enabled in the given config. */
     @Nullable
@@ -775,12 +795,12 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos) {
+    public void ejectOutliers(EndpointTrackerMap trackerMap, long ejectionTimeNanos) {
 
       // Only consider addresses that have the minimum request volume specified in the config.
-      List<AddressTracker> trackersWithVolume = trackersWithVolume(trackerMap,
+      List<EndpointTracker> trackersWithVolume = trackersWithVolume(trackerMap,
           config.successRateEjection.requestVolume);
-      // If we don't have enough addresses with significant volume then there's nothing to do.
+      // If we don't have enough endpoints with significant volume then there's nothing to do.
       if (trackersWithVolume.size() < config.successRateEjection.minimumHosts
           || trackersWithVolume.size() == 0) {
         return;
@@ -788,7 +808,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
       // Calculate mean and standard deviation of the fractions of successful calls.
       List<Double> successRates = new ArrayList<>();
-      for (AddressTracker tracker : trackersWithVolume) {
+      for (EndpointTracker tracker : trackersWithVolume) {
         successRates.add(tracker.successRate());
       }
       double mean = mean(successRates);
@@ -797,7 +817,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       double requiredSuccessRate =
           mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
 
-      for (AddressTracker tracker : trackersWithVolume) {
+      for (EndpointTracker tracker : trackersWithVolume) {
         // If we are above or equal to the max ejection percentage, don't eject any more. This will
         // allow the total ejections to go one above the max, but at the same time it assures at
         // least one ejection, which the spec calls for. This behavior matches what Envoy proxy
@@ -813,7 +833,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
                           + "Parameters: successRate={1}, mean={2}, stdev={3}, "
                           + "requiredSuccessRate={4}",
                   tracker, tracker.successRate(),  mean, stdev, requiredSuccessRate);
-          // Only eject some addresses based on the enforcement percentage.
+          // Only eject some endpoints based on the enforcement percentage.
           if (new Random().nextInt(100) < config.successRateEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeNanos);
           }
@@ -859,19 +879,19 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void ejectOutliers(AddressTrackerMap trackerMap, long ejectionTimeNanos) {
+    public void ejectOutliers(EndpointTrackerMap trackerMap, long ejectionTimeNanos) {
 
-      // Only consider addresses that have the minimum request volume specified in the config.
-      List<AddressTracker> trackersWithVolume = trackersWithVolume(trackerMap,
+      // Only consider endpoints that have the minimum request volume specified in the config.
+      List<EndpointTracker> trackersWithVolume = trackersWithVolume(trackerMap,
           config.failurePercentageEjection.requestVolume);
-      // If we don't have enough addresses with significant volume then there's nothing to do.
+      // If we don't have enough endpoints with significant volume then there's nothing to do.
       if (trackersWithVolume.size() < config.failurePercentageEjection.minimumHosts
           || trackersWithVolume.size() == 0) {
         return;
       }
 
-      // If this address does not have enough volume to be considered, skip to the next one.
-      for (AddressTracker tracker : trackersWithVolume) {
+      // If this endpoint does not have enough volume to be considered, skip to the next one.
+      for (EndpointTracker tracker : trackersWithVolume) {
         // If we are above or equal to the max ejection percentage, don't eject any more. This will
         // allow the total ejections to go one above the max, but at the same time it assures at
         // least one ejection, which the spec calls for. This behavior matches what Envoy proxy
@@ -900,10 +920,10 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   }
 
   /** Returns only the trackers that have the minimum configured volume to be considered. */
-  private static List<AddressTracker> trackersWithVolume(AddressTrackerMap trackerMap,
-      int volume) {
-    List<AddressTracker> trackersWithVolume = new ArrayList<>();
-    for (AddressTracker tracker : trackerMap.values()) {
+  private static List<EndpointTracker> trackersWithVolume(EndpointTrackerMap trackerMap,
+                                                          int volume) {
+    List<EndpointTracker> trackersWithVolume = new ArrayList<>();
+    for (EndpointTracker tracker : trackerMap.values()) {
       if (tracker.inactiveVolume() >= volume) {
         trackersWithVolume.add(tracker);
       }
@@ -934,7 +954,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public final Integer maxEjectionPercent;
     public final SuccessRateEjection successRateEjection;
     public final FailurePercentageEjection failurePercentageEjection;
-    public final PolicySelection childPolicy;
+    public final Object childConfig;
 
     private OutlierDetectionLoadBalancerConfig(Long intervalNanos,
         Long baseEjectionTimeNanos,
@@ -942,14 +962,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         Integer maxEjectionPercent,
         SuccessRateEjection successRateEjection,
         FailurePercentageEjection failurePercentageEjection,
-        PolicySelection childPolicy) {
+        Object childConfig) {
       this.intervalNanos = intervalNanos;
       this.baseEjectionTimeNanos = baseEjectionTimeNanos;
       this.maxEjectionTimeNanos = maxEjectionTimeNanos;
       this.maxEjectionPercent = maxEjectionPercent;
       this.successRateEjection = successRateEjection;
       this.failurePercentageEjection = failurePercentageEjection;
-      this.childPolicy = childPolicy;
+      this.childConfig = childConfig;
     }
 
     /** Builds a new {@link OutlierDetectionLoadBalancerConfig}. */
@@ -960,7 +980,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       Integer maxEjectionPercent = 10;
       SuccessRateEjection successRateEjection;
       FailurePercentageEjection failurePercentageEjection;
-      PolicySelection childPolicy;
+      Object childConfig;
 
       /** The interval between outlier detection sweeps. */
       public Builder setIntervalNanos(Long intervalNanos) {
@@ -1004,19 +1024,22 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         return this;
       }
 
-      /** Sets the child policy the {@link OutlierDetectionLoadBalancer} delegates to. */
-      public Builder setChildPolicy(PolicySelection childPolicy) {
-        checkState(childPolicy != null);
-        this.childPolicy = childPolicy;
+      /**
+       * Sets the graceful child switch config the {@link OutlierDetectionLoadBalancer} delegates
+       * to.
+       */
+      public Builder setChildConfig(Object childConfig) {
+        checkState(childConfig != null);
+        this.childConfig = childConfig;
         return this;
       }
 
       /** Builds a new instance of {@link OutlierDetectionLoadBalancerConfig}. */
       public OutlierDetectionLoadBalancerConfig build() {
-        checkState(childPolicy != null);
+        checkState(childConfig != null);
         return new OutlierDetectionLoadBalancerConfig(intervalNanos, baseEjectionTimeNanos,
             maxEjectionTimeNanos, maxEjectionPercent, successRateEjection,
-            failurePercentageEjection, childPolicy);
+            failurePercentageEjection, childConfig);
       }
     }
 

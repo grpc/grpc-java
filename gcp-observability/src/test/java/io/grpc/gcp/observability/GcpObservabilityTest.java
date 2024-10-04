@@ -30,13 +30,14 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
-import io.grpc.InternalGlobalInterceptors;
+import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.StaticTestingClassLoader;
+import io.grpc.gcp.observability.GcpObservability.ObservabilityConfigurator;
 import io.grpc.gcp.observability.interceptors.ConditionalClientInterceptor;
 import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
@@ -56,7 +57,8 @@ public class GcpObservabilityTest {
       new StaticTestingClassLoader(
           getClass().getClassLoader(),
           Pattern.compile(
-              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
+              "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
+                  + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
                   + "io\\.grpc\\.gcp\\.observability\\.[^.]+|"
                   + "io\\.grpc\\.gcp\\.observability\\.interceptors\\.[^.]+|"
                   + "io\\.grpc\\.gcp\\.observability\\.GcpObservabilityTest\\$.*"));
@@ -197,12 +199,15 @@ public class GcpObservabilityTest {
       try (GcpObservability unused =
           GcpObservability.grpcInit(
               sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
-        List<ClientInterceptor> list = InternalGlobalInterceptors.getClientInterceptors();
+        List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
+        assertThat(configurators).hasSize(1);
+        ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
+        List<ClientInterceptor> list = configurator.clientInterceptors;
         assertThat(list).hasSize(3);
         assertThat(list.get(1)).isInstanceOf(ConditionalClientInterceptor.class);
         assertThat(list.get(2)).isInstanceOf(ConditionalClientInterceptor.class);
-        assertThat(InternalGlobalInterceptors.getServerInterceptors()).hasSize(1);
-        assertThat(InternalGlobalInterceptors.getServerStreamTracerFactories()).hasSize(2);
+        assertThat(configurator.serverInterceptors).hasSize(1);
+        assertThat(configurator.tracerFactories).hasSize(2);
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
@@ -228,9 +233,12 @@ public class GcpObservabilityTest {
       try (GcpObservability unused =
           GcpObservability.grpcInit(
               sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
-        assertThat(InternalGlobalInterceptors.getClientInterceptors()).isEmpty();
-        assertThat(InternalGlobalInterceptors.getServerInterceptors()).isEmpty();
-        assertThat(InternalGlobalInterceptors.getServerStreamTracerFactories()).isEmpty();
+        List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
+        assertThat(configurators).hasSize(1);
+        ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
+        assertThat(configurator.clientInterceptors).isEmpty();
+        assertThat(configurator.serverInterceptors).isEmpty();
+        assertThat(configurator.tracerFactories).isEmpty();
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }

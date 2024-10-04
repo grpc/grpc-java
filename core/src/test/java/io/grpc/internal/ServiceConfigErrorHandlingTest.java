@@ -45,6 +45,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.NameResolverProvider;
 import io.grpc.Status;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
@@ -161,10 +162,14 @@ public class ServiceConfigErrorHandlingTest {
 
     when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
         InetSocketAddress.class));
+    NameResolverProvider nameResolverProvider =
+        channelBuilder.nameResolverRegistry.getProviderForScheme(expectedUri.getScheme());
     channel =
         new ManagedChannelImpl(
             channelBuilder,
             mockTransportFactory,
+            expectedUri,
+            nameResolverProvider,
             new FakeBackoffPolicyProvider(),
             balancerRpcExecutorPool,
             timer.getStopwatchSupplier(),
@@ -277,7 +282,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("12");
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
-    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.IDLE);
+    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.CONNECTING);
 
     reset(mockLoadBalancer);
     nameResolverFactory.servers.clear();
@@ -480,7 +485,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(newResolvedAddress.getLoadBalancingPolicyConfig()).isEqualTo("1st raw config");
     assertThat(channel.getConfigSelector()).isSameInstanceAs(configSelector);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
-    assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
+    assertThat(channel.getState(false)).isEqualTo(ConnectivityState.CONNECTING);
   }
 
   @Test

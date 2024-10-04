@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import com.google.common.base.Preconditions;
+import java.util.Locale;
 
 /**
  * Enum of interop test cases.
@@ -79,6 +80,11 @@ public enum TestCases {
    */
   public static TestCases fromString(String s) {
     Preconditions.checkNotNull(s, "s");
-    return TestCases.valueOf(s.toUpperCase());
+    return TestCases.valueOf(s.toUpperCase(Locale.ROOT));
+  }
+
+  @Override
+  public String toString() {
+    return name().toLowerCase(Locale.ROOT);
   }
 }

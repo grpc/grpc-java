@@ -30,6 +30,7 @@ import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
@@ -97,7 +98,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return false;
     }
     return ignoreCase
-        ? altNameFromCert.toLowerCase().startsWith(sanToVerifyPrefix.toLowerCase())
+        ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
+            sanToVerifyPrefix.toLowerCase(Locale.ROOT))
         : altNameFromCert.startsWith(sanToVerifyPrefix);
   }
 
@@ -107,7 +109,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return false;
     }
     return ignoreCase
-            ? altNameFromCert.toLowerCase().endsWith(sanToVerifySuffix.toLowerCase())
+            ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
+                sanToVerifySuffix.toLowerCase(Locale.ROOT))
             : altNameFromCert.endsWith(sanToVerifySuffix);
   }
 
@@ -117,7 +120,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return false;
     }
     return ignoreCase
-            ? altNameFromCert.toLowerCase().contains(sanToVerifySubstring.toLowerCase())
+            ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
+                sanToVerifySubstring.toLowerCase(Locale.ROOT))
             : altNameFromCert.contains(sanToVerifySubstring);
   }
 
@@ -225,7 +229,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       SSLSocket sslSocket = (SSLSocket) socket;
       SSLParameters sslParams = sslSocket.getSSLParameters();
       if (sslParams != null) {
-        sslParams.setEndpointIdentificationAlgorithm(null);
+        sslParams.setEndpointIdentificationAlgorithm("");
         sslSocket.setSSLParameters(sslParams);
       }
     }
@@ -238,7 +242,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       throws CertificateException {
     SSLParameters sslParams = sslEngine.getSSLParameters();
     if (sslParams != null) {
-      sslParams.setEndpointIdentificationAlgorithm(null);
+      sslParams.setEndpointIdentificationAlgorithm("");
       sslEngine.setSSLParameters(sslParams);
     }
     delegate.checkServerTrusted(chain, authType, sslEngine);

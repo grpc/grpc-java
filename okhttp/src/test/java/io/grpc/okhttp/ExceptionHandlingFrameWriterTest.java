@@ -16,9 +16,9 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.okhttp.ExceptionHandlingFrameWriter.getLogLevel;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;

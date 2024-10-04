@@ -188,7 +188,8 @@ class NettyClientTransport implements ConnectionClientTransport {
             maxMessageSize,
             statsTraceCtx,
             transportTracer,
-            method.getFullMethodName()) {
+            method.getFullMethodName(),
+            callOptions) {
           @Override
           protected Status statusFromFailedFuture(ChannelFuture f) {
             return NettyClientTransport.this.statusFromFailedFuture(f);

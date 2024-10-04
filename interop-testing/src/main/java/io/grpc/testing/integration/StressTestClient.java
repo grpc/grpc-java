@@ -308,7 +308,9 @@ public class StressTestClient {
     }
 
     try {
-      metricsServer.shutdownNow();
+      if (metricsServer != null) {
+        metricsServer.shutdownNow();
+      }
     } catch (Throwable t) {
       log.log(Level.WARNING, "Error shutting down metrics service!", t);
     }
@@ -434,7 +436,7 @@ public class StressTestClient {
   private static String validTestCasesHelpText() {
     StringBuilder builder = new StringBuilder();
     for (TestCases testCase : TestCases.values()) {
-      String strTestcase = testCase.name().toLowerCase();
+      String strTestcase = testCase.toString();
       builder.append("\n      ")
           .append(strTestcase)
           .append(": ")

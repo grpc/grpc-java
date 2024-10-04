@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -115,9 +116,10 @@ public class InteropInstrumentationTest {
       result = executor.submit(new TestCallable(
               TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, useTls, testCa),
               testCase)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-      assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
-    } catch (ExecutionException | InterruptedException e) {
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
+      Log.e(LOG_TAG, "Error while executing test case " + testCase, e);
       result = e.getMessage();
     }
+    assertEquals(testCase + " failed", TestCallable.SUCCESS_MESSAGE, result);
   }
 }

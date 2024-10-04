@@ -273,7 +273,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
     Subchannel[] wrappedSubchannels = new Subchannel[NUM_SUBCHANNELS];
 
-    // Simulate that the orignal LB creates Subchannels
+    // Simulate that the original LB creates Subchannels
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       // Subchannel attributes set by origLb are correctly plumbed in
       String subchannelAttrValue = "eag attr " + i;

@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
+import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -47,8 +47,6 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.AuthorityInfo;
-import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
@@ -60,12 +58,15 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
-import io.grpc.xds.XdsClient.ResourceWatcher;
-import io.grpc.xds.XdsListenerResource.LdsUpdate;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -104,6 +105,7 @@ final class XdsNameResolver extends NameResolver {
   private final XdsLogger logger;
   @Nullable
   private final String targetAuthority;
+  private final String target;
   private final String serviceAuthority;
   // Encoded version of the service authority as per 
   // https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
@@ -133,23 +135,24 @@ final class XdsNameResolver extends NameResolver {
   private boolean receivedConfig;
 
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
+      URI targetUri, String name, @Nullable String overrideAuthority,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
-    this(targetAuthority, name, overrideAuthority, serviceConfigParser, syncContext, scheduler,
-        SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
-        FilterRegistry.getDefaultRegistry(), bootstrapOverride);
+    this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
+        syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
+        ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
   XdsNameResolver(
-      @Nullable String targetAuthority, String name, @Nullable String overrideAuthority,
-      ServiceConfigParser serviceConfigParser,
+      URI targetUri, @Nullable String targetAuthority, String name,
+      @Nullable String overrideAuthority, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     this.targetAuthority = targetAuthority;
+    target = targetUri.toString();
 
     // The name might have multiple slashes so encode it before verifying.
     serviceAuthority = checkNotNull(name, "name");
@@ -180,7 +183,7 @@ final class XdsNameResolver extends NameResolver {
   public void start(Listener2 listener) {
     this.listener = checkNotNull(listener, "listener");
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate();
+      xdsClientPool = xdsClientPoolFactory.getOrCreate(target);
     } catch (Exception e) {
       listener.onError(
           Status.UNAVAILABLE.withDescription("Failed to initialize xDS").withCause(e));
@@ -622,7 +625,7 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
-  private class ResolveState implements ResourceWatcher<LdsUpdate> {
+  private class ResolveState implements ResourceWatcher<XdsListenerResource.LdsUpdate> {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
     private final String ldsResourceName;
@@ -637,7 +640,7 @@ final class XdsNameResolver extends NameResolver {
     }
 
     @Override
-    public void onChanged(final LdsUpdate update) {
+    public void onChanged(final XdsListenerResource.LdsUpdate update) {
       if (stopped) {
         return;
       }
@@ -696,7 +699,7 @@ final class XdsNameResolver extends NameResolver {
     // called in syncContext
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
-      String authority = overrideAuthority != null ? overrideAuthority : ldsResourceName;
+      String authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
       if (virtualHost == null) {
         String error = "Failed to find virtual host matching hostname: " + authority;
@@ -812,10 +815,12 @@ final class XdsNameResolver extends NameResolver {
       // the config selector handles the error message itself. Once the LB API allows providing
       // failure information for addresses yet still providing a service config, the config seector
       // could be avoided.
+      String errorWithNodeId =
+          error + ", xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
       listener.onResult(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
             .set(InternalConfigSelector.KEY,
-              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(error)))
+              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(errorWithNodeId)))
             .build())
           .setServiceConfig(emptyServiceConfig)
           .build());

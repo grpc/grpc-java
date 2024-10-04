@@ -160,6 +160,33 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T intercept(ClientInterceptor... interceptors);
 
   /**
+   * Internal-only: Adds a factory that will construct an interceptor based on the channel's target.
+   * This can be used to work around nameResolverFactory() changing the target string.
+   */
+  @Internal
+  protected T interceptWithTarget(InterceptorFactory factory) {
+    throw new UnsupportedOperationException();
+  }
+
+  /** Internal-only. */
+  @Internal
+  protected interface InterceptorFactory {
+    ClientInterceptor newInterceptor(String target);
+  }
+
+  /**
+   * Adds a {@link ClientTransportFilter}. The order of filters being added is the order they will
+   * be executed
+   *
+   * @return this
+   * @since 1.60.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10652")
+  public T addTransportFilter(ClientTransportFilter filter) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Provides a custom {@code User-Agent} for the application.
    *
    * <p>It's an optional parameter. The library will provide a user agent independent of this
@@ -594,6 +621,18 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public T disableServiceConfigLookUp() {
     throw new UnsupportedOperationException();
   }
+
+  /**
+   * Adds a {@link MetricSink} for channel to use for configuring and recording metrics.
+   *
+   * @return this
+   * @since 1.64.0
+   */
+  @Internal
+  protected T addMetricSink(MetricSink metricSink) {
+    throw new UnsupportedOperationException();
+  }
+
 
   /**
    * Builds a channel using the given parameters.

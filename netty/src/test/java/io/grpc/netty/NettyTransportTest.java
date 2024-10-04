@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
@@ -143,6 +144,11 @@ public class NettyTransportTest extends AbstractTransportTest {
       public void transportInUse(boolean inUse) {
         Throwable t = new Throwable("transport should have failed and shutdown but didnt");
         future.setException(t);
+      }
+
+      @Override
+      public Attributes filterTransport(Attributes attributes) {
+        return attributes;
       }
     });
     if (runnable != null) {

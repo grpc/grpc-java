@@ -1,3 +1,5 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 java_library(
     name = "protobuf-lite",
     srcs = glob([
@@ -6,11 +8,10 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ] + select({
-        ":android": ["@com_google_protobuf_javalite//:protobuf_javalite"],
+        ":android": ["@com_google_protobuf//:protobuf_javalite"],
         "//conditions:default": ["@com_google_protobuf//:protobuf_java"],
     }),
 )

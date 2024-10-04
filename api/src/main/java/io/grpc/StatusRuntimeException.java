@@ -29,8 +29,6 @@ public class StatusRuntimeException extends RuntimeException {
   private final Status status;
   private final Metadata trailers;
 
-  private final boolean fillInStackTrace;
-
   /**
    * Constructs the exception with both a status. See also {@link Status#asRuntimeException()}.
    *
@@ -51,21 +49,10 @@ public class StatusRuntimeException extends RuntimeException {
   }
 
   StatusRuntimeException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
-    super(Status.formatThrowableMessage(status), status.getCause());
+    super(Status.formatThrowableMessage(status), status.getCause(),
+            /* enable suppressions */ true, /* writableStackTrace */ fillInStackTrace);
     this.status = status;
     this.trailers = trailers;
-    this.fillInStackTrace = fillInStackTrace;
-    fillInStackTrace();
-  }
-
-  @Override
-  public synchronized Throwable fillInStackTrace() {
-    // Let's observe final variables in two states!  This works because Throwable will invoke this
-    // method before fillInStackTrace is set, thus doing nothing.  After the constructor has set
-    // fillInStackTrace, this method will properly fill it in.  Additionally, sub classes may call
-    // this normally, because fillInStackTrace will either be set, or this method will be
-    // overriden.
-    return fillInStackTrace ? super.fillInStackTrace() : this;
   }
 
   /**

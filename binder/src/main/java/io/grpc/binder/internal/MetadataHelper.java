@@ -50,7 +50,7 @@ public final class MetadataHelper {
 
   /** The generic metadata marshaller we use for reading parcelables from the transport. */
   private static final Metadata.BinaryStreamMarshaller<Parcelable> TRANSPORT_INBOUND_MARSHALLER =
-    new ParcelableMetadataMarshaller<>(null, true);
+      new ParcelableMetadataMarshaller<>(null, true);
 
   /** Indicates the following value is a parcelable. */
   private static final int PARCELABLE_SENTINEL = -1;
@@ -96,14 +96,16 @@ public final class MetadataHelper {
           InputStream stream = (InputStream) value;
           int total = 0;
           while (total < buffer.length) {
-            int read = stream.read(buffer, total, buffer.length - total); 
+            int read = stream.read(buffer, total, buffer.length - total);
             if (read == -1) {
               break;
             }
             total += read;
           }
           if (total == buffer.length) {
-            throw Status.RESOURCE_EXHAUSTED.withDescription("Metadata value too large").asException();
+            throw Status.RESOURCE_EXHAUSTED
+                .withDescription("Metadata value too large")
+                .asException();
           }
           parcel.writeInt(total);
           if (total > 0) {
@@ -148,6 +150,9 @@ public final class MetadataHelper {
         }
         int parcelableStartPos = parcel.dataPosition();
         try {
+          // readParcelable(Classloader, Class<>) requires SDK 33 and at this layer we can't know
+          // value's type anyway.
+          @SuppressWarnings("deprecation")
           Parcelable value = parcel.readParcelable(MetadataHelper.class.getClassLoader());
           if (value == null) {
             throw Status.INTERNAL.withDescription("Read null parcelable in metadata").asException();
@@ -179,10 +184,8 @@ public final class MetadataHelper {
   }
 
   /** Read a byte array checking that we're not reading too much. */
-  private static byte[] readBytesChecked(
-      Parcel parcel,
-      int numBytes,
-      int bytesRead) throws StatusException {
+  private static byte[] readBytesChecked(Parcel parcel, int numBytes, int bytesRead)
+      throws StatusException {
     if (bytesRead + numBytes > GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE) {
       throw Status.RESOURCE_EXHAUSTED.withDescription("Metadata too large").asException();
     }
@@ -200,7 +203,8 @@ public final class MetadataHelper {
     @Nullable private final Parcelable.Creator<P> creator;
     private final boolean immutableType;
 
-    public ParcelableMetadataMarshaller(@Nullable Parcelable.Creator<P> creator, boolean immutableType) {
+    public ParcelableMetadataMarshaller(
+        @Nullable Parcelable.Creator<P> creator, boolean immutableType) {
       this.creator = creator;
       this.immutableType = immutableType;
     }

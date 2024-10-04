@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Attributes;
 import io.grpc.Status;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -38,9 +39,7 @@ public interface ManagedClientTransport extends ClientTransport {
   /**
    * Starts transport. This method may only be called once.
    *
-   * <p>Implementations must not call {@code listener} from within {@link #start}; implementations
-   * are expected to notify listener on a separate thread or when the returned {@link Runnable} is
-   * run. This method and the returned {@code Runnable} should not throw any exceptions.
+   * <p>This method and the returned {@code Runnable} should not throw any exceptions.
    *
    * @param listener non-{@code null} listener of transport events
    * @return a {@link Runnable} that is executed after-the-fact by the original caller, typically
@@ -104,5 +103,13 @@ public interface ManagedClientTransport extends ClientTransport {
      * at least one stream.
      */
     void transportInUse(boolean inUse);
+
+    /**
+     * Called just before {@link #transportReady} to allow direct modification of transport
+     * Attributes.
+     */
+    default Attributes filterTransport(Attributes attributes) {
+      return attributes;
+    }
   }
 }

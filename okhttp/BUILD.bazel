@@ -1,3 +1,5 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 java_library(
     name = "okhttp",
     srcs = glob([
@@ -12,12 +14,11 @@ java_library(
         "//api",
         "//core:internal",
         "//util",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-        "@com_squareup_okhttp_okhttp//jar",
-        "@com_squareup_okio_okio//jar",
-        "@io_perfmark_perfmark_api//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.squareup.okhttp:okhttp"),
+        artifact("com.squareup.okio:okio"),
+        artifact("io.perfmark:perfmark-api"),
     ],
 )

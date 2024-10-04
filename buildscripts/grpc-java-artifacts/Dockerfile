@@ -1,17 +1,15 @@
-FROM centos:7.9.2009
+FROM almalinux:8
 
 RUN yum install -y \
             autoconf \
             automake \
+            diffutils \
             gcc-c++ \
-            gcc-c++.i686 \
             glibc-devel \
             glibc-devel.i686 \
             java-11-openjdk-devel \
             libstdc++-devel \
             libstdc++-devel.i686 \
-            libstdc++-static \
-            libstdc++-static.i686 \
             libtool \
             make \
             tar \
@@ -30,6 +28,6 @@ RUN mkdir -p "$ANDROID_HOME/cmdline-tools" && \
     yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
 
 # Install Maven
-RUN curl -Ls https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.3.9/apache-maven-3.3.9-bin.tar.gz | \
+RUN curl -Ls https://dlcdn.apache.org/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz | \
     tar xz -C /var/local
-ENV PATH /var/local/apache-maven-3.3.9/bin:$PATH
+ENV PATH /var/local/apache-maven-3.8.8/bin:$PATH

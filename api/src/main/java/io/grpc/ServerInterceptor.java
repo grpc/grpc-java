@@ -19,7 +19,7 @@ package io.grpc;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Interface for intercepting incoming calls before that are dispatched by
+ * Interface for intercepting incoming calls before they are dispatched by
  * {@link ServerCallHandler}.
  *
  * <p>Implementers use this mechanism to add cross-cutting behavior to server-side calls. Common

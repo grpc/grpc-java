@@ -1,3 +1,4 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
 load("//:java_grpc_library.bzl", "java_grpc_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -27,7 +28,7 @@ java_library(
     deps = [
         ":channelz",
         "//api",
-        "@com_google_code_findbugs_jsr305//jar",
+        artifact("com.google.code.findbugs:jsr305"),
     ],
 )
 
@@ -36,15 +37,15 @@ java_library(
     srcs = [
         "src/main/java/io/grpc/services/CallMetricRecorder.java",
         "src/main/java/io/grpc/services/MetricRecorder.java",
-        "src/main/java/io/grpc/services/MetricReport.java",
         "src/main/java/io/grpc/services/MetricRecorderHelper.java",
+        "src/main/java/io/grpc/services/MetricReport.java",
     ],
     deps = [
         "//api",
         "//context",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -72,16 +73,15 @@ java_library(
         "src/main/java/io/grpc/protobuf/services/BinlogHelper.java",
         "src/main/java/io/grpc/protobuf/services/InetAddressUtil.java",
         "src/main/java/io/grpc/protobuf/services/TempFileSink.java",
-        "src/main/java/io/grpc/services/BinaryLogs.java",
     ],
     deps = [
         "//api",
         "//context",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_proto//:binarylog_java_proto",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -96,11 +96,11 @@ java_library(
         ":_channelz_java_grpc",
         "//api",
         "//stub",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_proto//:channelz_java_proto",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -108,17 +108,20 @@ java_library(
     name = "reflection",
     srcs = [
         "src/main/java/io/grpc/protobuf/services/ProtoReflectionService.java",
+        "src/main/java/io/grpc/protobuf/services/ProtoReflectionServiceV1.java",
     ],
     deps = [
         ":_reflection_java_grpc",
+        ":_reflection_v1_java_grpc",
         "//api",
         "//protobuf",
         "//stub",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:reflection_java_proto",
         "@io_grpc_grpc_proto//:reflection_java_proto_deprecated",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -134,9 +137,9 @@ java_library(
         "//api",
         "//context",
         "//stub",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@io_grpc_grpc_proto//:health_java_proto",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -155,9 +158,9 @@ java_library(
         "//api",
         "//core:internal",
         "//util",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
         "@io_grpc_grpc_proto//:health_java_proto",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )
 
@@ -169,6 +172,13 @@ java_grpc_library(
     srcs = ["@io_grpc_grpc_proto//:reflection_proto_deprecated"],
     visibility = ["//visibility:private"],
     deps = ["@io_grpc_grpc_proto//:reflection_java_proto_deprecated"],
+)
+
+java_grpc_library(
+    name = "_reflection_v1_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:reflection_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:reflection_java_proto"],
 )
 
 java_grpc_library(

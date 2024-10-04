@@ -23,6 +23,8 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 
 /**
@@ -74,6 +76,13 @@ public final class InternalXdsAttributes {
   @EquivalentAddressGroup.Attr
   static final Attributes.Key<Locality> ATTR_LOCALITY =
       Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.locality");
+
+  /**
+   * The name of the locality that this EquivalentAddressGroup is in.
+   */
+  @EquivalentAddressGroup.Attr
+  static final Attributes.Key<String> ATTR_LOCALITY_NAME =
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.localityName");
 
   /**
    * Endpoint weight for load balancing purposes.

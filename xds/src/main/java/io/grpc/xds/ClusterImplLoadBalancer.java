@@ -21,10 +21,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -36,23 +39,28 @@ import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.util.GracefulSwitchLoadBalancer;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
-import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -71,8 +79,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
 
-  private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
-      Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
+  private static final Attributes.Key<AtomicReference<ClusterLocality>> ATTR_CLUSTER_LOCALITY =
+      Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocality");
 
   private final XdsLogger logger;
   private final Helper helper;
@@ -106,13 +114,19 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
       xdsClientPool = attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL);
+      assert xdsClientPool != null;
       xdsClient = xdsClientPool.getObject();
     }
     if (callCounterProvider == null) {
       callCounterProvider = attributes.get(InternalXdsAttributes.CALL_COUNTER_PROVIDER);
     }
+
     ClusterImplConfig config =
         (ClusterImplConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (config == null) {
+      return Status.INTERNAL.withDescription("No cluster configuration found");
+    }
+
     if (cluster == null) {
       cluster = config.cluster;
       edsServiceName = config.edsServiceName;
@@ -125,15 +139,16 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         dropStats = xdsClient.addClusterDropStats(config.lrsServerInfo, cluster, edsServiceName);
       }
     }
+
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
+    childLbHelper.updateFilterMetadata(config.filterMetadata);
 
-    childSwitchLb.switchTo(config.childPolicy.getProvider());
     childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
-            .setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
+            .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
     return Status.OK;
   }
@@ -145,6 +160,13 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     } else {
       helper.updateBalancingState(
           ConnectivityState.TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
+    }
+  }
+
+  @Override
+  public void requestConnection() {
+    if (childSwitchLb != null) {
+      childSwitchLb.requestConnection();
     }
   }
 
@@ -177,6 +199,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable
     private SslContextProviderSupplier sslContextProviderSupplier;
+    private Map<String, Struct> filterMetadata = ImmutableMap.of();
     @Nullable
     private final ServerInfo lrsServerInfo;
 
@@ -189,35 +212,54 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
       currentState = newState;
       currentPicker =  newPicker;
-      SubchannelPicker picker =
-          new RequestLimitingSubchannelPicker(newPicker, dropPolicies, maxConcurrentRequests);
+      SubchannelPicker picker = new RequestLimitingSubchannelPicker(
+          newPicker, dropPolicies, maxConcurrentRequests, filterMetadata);
       delegate().updateBalancingState(newState, picker);
     }
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       List<EquivalentAddressGroup> addresses = withAdditionalAttributes(args.getAddresses());
-      Locality locality = args.getAddresses().get(0).getAttributes().get(
-          InternalXdsAttributes.ATTR_LOCALITY);  // all addresses should be in the same locality
-      // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
-      // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
-      // In case of not (which really shouldn't), loads are aggregated under an empty locality.
-      if (locality == null) {
-        locality = Locality.create("", "", "");
-      }
-      final ClusterLocalityStats localityStats = lrsServerInfo == null ? null
-          : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster, edsServiceName, locality);
-      Attributes attrs = args.getAttributes().toBuilder().set(
-          ATTR_CLUSTER_LOCALITY_STATS, localityStats).build();
+      // This value for  ClusterLocality is not recommended for general use.
+      // Currently, we extract locality data from the first address, even before the subchannel is
+      // READY.
+      // This is mainly to accommodate scenarios where a Load Balancing API (like "pick first")
+      // might return the subchannel before it is READY. Typically, we wouldn't report load for such
+      // selections because the channel will disregard the chosen (not-ready) subchannel.
+      // However, we needed to ensure this case is handled.
+      ClusterLocality clusterLocality = createClusterLocalityFromAttributes(
+          args.getAddresses().get(0).getAttributes());
+      AtomicReference<ClusterLocality> localityAtomicReference = new AtomicReference<>(
+          clusterLocality);
+      Attributes attrs = args.getAttributes().toBuilder()
+          .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference)
+          .build();
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrs).build();
       final Subchannel subchannel = delegate().createSubchannel(args);
 
       return new ForwardingSubchannel() {
         @Override
+        public void start(SubchannelStateListener listener) {
+          delegate().start(new SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(ConnectivityStateInfo newState) {
+              // Do nothing if LB has been shutdown
+              if (xdsClient != null && newState.getState().equals(ConnectivityState.READY)) {
+                // Get locality based on the connected address attributes
+                ClusterLocality updatedClusterLocality = createClusterLocalityFromAttributes(
+                    subchannel.getConnectedAddressAttributes());
+                ClusterLocality oldClusterLocality = localityAtomicReference
+                    .getAndSet(updatedClusterLocality);
+                oldClusterLocality.release();
+              }
+              listener.onSubchannelState(newState);
+            }
+          });
+        }
+
+        @Override
         public void shutdown() {
-          if (localityStats != null) {
-            localityStats.release();
-          }
+          localityAtomicReference.get().release();
           delegate().shutdown();
         }
 
@@ -247,6 +289,28 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
       return newAddresses;
+    }
+
+    private ClusterLocality createClusterLocalityFromAttributes(Attributes addressAttributes) {
+      Locality locality = addressAttributes.get(InternalXdsAttributes.ATTR_LOCALITY);
+      String localityName = addressAttributes.get(InternalXdsAttributes.ATTR_LOCALITY_NAME);
+
+      // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
+      // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
+      // In case of not (which really shouldn't), loads are aggregated under an empty
+      // locality.
+      if (locality == null) {
+        locality = Locality.create("", "", "");
+        localityName = "";
+      }
+
+      final ClusterLocalityStats localityStats =
+          (lrsServerInfo == null)
+              ? null
+              : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster,
+                  edsServiceName, locality);
+
+      return new ClusterLocality(localityStats, localityName);
     }
 
     @Override
@@ -285,24 +349,34 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
       sslContextProviderSupplier =
           tlsContext != null
-              ? new SslContextProviderSupplier(tlsContext, xdsClient.getTlsContextManager())
+              ? new SslContextProviderSupplier(tlsContext,
+                                               (TlsContextManager) xdsClient.getSecurityConfig())
               : null;
+    }
+
+    private void updateFilterMetadata(Map<String, Struct> filterMetadata) {
+      this.filterMetadata = ImmutableMap.copyOf(filterMetadata);
     }
 
     private class RequestLimitingSubchannelPicker extends SubchannelPicker {
       private final SubchannelPicker delegate;
       private final List<DropOverload> dropPolicies;
       private final long maxConcurrentRequests;
+      private final Map<String, Struct> filterMetadata;
 
       private RequestLimitingSubchannelPicker(SubchannelPicker delegate,
-          List<DropOverload> dropPolicies, long maxConcurrentRequests) {
+          List<DropOverload> dropPolicies, long maxConcurrentRequests,
+          Map<String, Struct> filterMetadata) {
         this.delegate = delegate;
         this.dropPolicies = dropPolicies;
         this.maxConcurrentRequests = maxConcurrentRequests;
+        this.filterMetadata = checkNotNull(filterMetadata, "filterMetadata");
       }
 
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
+        args.getCallOptions().getOption(ClusterImplLoadBalancerProvider.FILTER_METADATA_CONSUMER)
+            .accept(filterMetadata);
         for (DropOverload dropOverload : dropPolicies) {
           int rand = random.nextInt(1_000_000);
           if (rand < dropOverload.dropsPerMillion()) {
@@ -326,14 +400,23 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                   "Cluster max concurrent requests limit exceeded"));
             }
           }
-          final ClusterLocalityStats stats =
-              result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY_STATS);
-          if (stats != null) {
-            ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
-                stats, inFlights, result.getStreamTracerFactory());
-            ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
-                .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
-            return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
+          final AtomicReference<ClusterLocality> clusterLocality =
+              result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY);
+
+          if (clusterLocality != null) {
+            ClusterLocalityStats stats = clusterLocality.get().getClusterLocalityStats();
+            if (stats != null) {
+              String localityName =
+                  result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY).get()
+                      .getClusterLocalityName();
+              args.getPickDetailsConsumer().addOptionalLabel("grpc.lb.locality", localityName);
+
+              ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
+                  stats, inFlights, result.getStreamTracerFactory());
+              ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
+                  .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
+              return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
+            }
           }
         }
         return result;
@@ -348,7 +431,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   private static final class CountingStreamTracerFactory extends
       ClientStreamTracer.Factory {
-    private ClusterLocalityStats stats;
+    private final ClusterLocalityStats stats;
     private final AtomicLong inFlights;
     @Nullable
     private final ClientStreamTracer.Factory delegate;
@@ -406,6 +489,35 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     @Override
     public void onLoadReport(MetricReport report) {
       stats.recordBackendLoadMetricStats(report.getNamedMetrics());
+    }
+  }
+
+  /**
+   * Represents the {@link ClusterLocalityStats} and network locality name of a cluster.
+   */
+  static final class ClusterLocality {
+    private final ClusterLocalityStats clusterLocalityStats;
+    private final String clusterLocalityName;
+
+    @VisibleForTesting
+    ClusterLocality(ClusterLocalityStats localityStats, String localityName) {
+      this.clusterLocalityStats = localityStats;
+      this.clusterLocalityName = localityName;
+    }
+
+    ClusterLocalityStats getClusterLocalityStats() {
+      return clusterLocalityStats;
+    }
+
+    String getClusterLocalityName() {
+      return clusterLocalityName;
+    }
+
+    @VisibleForTesting
+    void release() {
+      if (clusterLocalityStats != null) {
+        clusterLocalityStats.release();
+      }
     }
   }
 }

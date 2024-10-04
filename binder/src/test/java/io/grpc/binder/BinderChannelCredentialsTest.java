@@ -18,7 +18,7 @@ public class BinderChannelCredentialsTest {
     BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault();
     assertThat(channelCredentials.getDevicePolicyAdminComponentName()).isNull();
   }
-  
+
   @Test
   public void binderChannelCredentialsForDevicePolicyAdmin() {
     String deviceAdminClassName = "DevicePolicyAdmin";

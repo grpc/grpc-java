@@ -46,7 +46,7 @@ class DelayedStream implements ClientStream {
   private volatile boolean passThrough;
   /**
    * Non-{@code null} iff start has been called. Used to assert methods are called in appropriate
-   * order, but also used if an error occurrs before {@code realStream} is set.
+   * order, but also used if an error occurs before {@code realStream} is set.
    */
   private ClientStreamListener listener;
   /** Must hold {@code this} lock when setting. */

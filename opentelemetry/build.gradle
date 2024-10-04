@@ -1,5 +1,8 @@
 plugins {
     id "java-library"
+    id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: OpenTelemetry'
@@ -11,12 +14,17 @@ dependencies {
             libraries.opentelemetry.api,
             libraries.auto.value.annotations
 
-    testImplementation testFixtures(project(':grpc-core')),
-            project(':grpc-testing'),
+    testImplementation project(':grpc-testing'),
+            project(':grpc-inprocess'),
+            testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
             libraries.opentelemetry.sdk.testing,
-            "org.assertj:assertj-core:3.24.2"
+            libraries.assertj.core // opentelemetry.sdk.testing uses compileOnly for assertj
 
     annotationProcessor libraries.auto.value
+
+    signature libraries.signature.java
+    signature libraries.signature.android
 }
 
 tasks.named("jar").configure {
@@ -34,4 +42,8 @@ tasks.named("compileJava").configure {
             it.options.errorprone.excludedPaths,
             ".*/build/generated/sources/annotationProcessor/java/.*",
             "|")
+}
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/opentelemetry/internal/**'
 }

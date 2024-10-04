@@ -35,7 +35,7 @@ public final class ComputeEngineChannelBuilder
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
-  public static final ComputeEngineChannelBuilder forTarget(String target) {
+  public static ComputeEngineChannelBuilder forTarget(String target) {
     return new ComputeEngineChannelBuilder(target);
   }
 

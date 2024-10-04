@@ -32,7 +32,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class AltsHandshakerStubTest {
   /** Mock status of handshaker service. */
-  private static enum Status {
+  private enum Status {
     OK,
     ERROR,
     COMPLETE

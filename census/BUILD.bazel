@@ -1,3 +1,5 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 java_library(
     name = "census",
     srcs = glob([
@@ -5,11 +7,11 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-            "//api",
-            "//context",
-            "@com_google_code_findbugs_jsr305//jar",
-            "@com_google_guava_guava//jar",
-            "@io_opencensus_opencensus_api//jar",
-            "@io_opencensus_opencensus_contrib_grpc_metrics//jar",
+        "//api",
+        "//context",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
+        artifact("io.opencensus:opencensus-api"),
+        artifact("io.opencensus:opencensus-contrib-grpc-metrics"),
     ],
 )

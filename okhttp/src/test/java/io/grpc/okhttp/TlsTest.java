@@ -31,6 +31,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TlsTesting;
@@ -41,6 +42,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSocketFactory;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
@@ -230,6 +233,55 @@ public class TlsTest {
     assertRpcFails(channel);
   }
 
+  @Test
+  public void hostnameVerifierTrusts_succeeds()
+      throws Exception {
+    ServerCredentials serverCreds;
+    try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+      serverCreds = TlsServerCredentials.newBuilder()
+          .keyManager(serverCert, serverPrivateKey)
+          .build();
+    }
+    SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
+        Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+    Server server = grpcCleanupRule.register(server(serverCreds));
+    ManagedChannel channel = grpcCleanupRule.register(
+        OkHttpChannelBuilder.forAddress("localhost", server.getPort())
+          .directExecutor()
+          .overrideAuthority("notgonnamatch.example.com")
+          .sslSocketFactory(sslSocketFactory)
+          .hostnameVerifier((hostname, session) -> true)
+          .build());
+
+    SimpleServiceGrpc.newBlockingStub(channel).unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  @Test
+  public void hostnameVerifierFails_fails()
+      throws Exception {
+    ServerCredentials serverCreds;
+    try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+      serverCreds = TlsServerCredentials.newBuilder()
+          .keyManager(serverCert, serverPrivateKey)
+          .build();
+    }
+    SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
+        Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+    Server server = grpcCleanupRule.register(server(serverCreds));
+    ManagedChannel channel = grpcCleanupRule.register(
+        OkHttpChannelBuilder.forAddress("localhost", server.getPort())
+          .directExecutor()
+          .overrideAuthority(TestUtils.TEST_SERVER_HOST)
+          .sslSocketFactory(sslSocketFactory)
+          .hostnameVerifier((hostname, session) -> false)
+          .build());
+
+    Status status = assertRpcFails(channel);
+    assertThat(status.getCause()).isInstanceOf(SSLPeerUnverifiedException.class);
+  }
+
   private static Server server(ServerCredentials creds) throws IOException {
     return OkHttpServerBuilder.forPort(0, creds)
         .directExecutor()
@@ -249,7 +301,8 @@ public class TlsTest {
     return clientChannelBuilder(server, creds).build();
   }
 
-  private static void assertRpcFails(ManagedChannel channel) {
+  private static Status assertRpcFails(ManagedChannel channel) {
+    Status status = null;
     SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(channel);
     try {
       stub.unaryRpc(SimpleRequest.getDefaultInstance());
@@ -258,6 +311,7 @@ public class TlsTest {
     } catch (StatusRuntimeException e) {
       assertWithMessage(Throwables.getStackTraceAsString(e))
           .that(e.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+      status = e.getStatus();
     }
     // We really want to see TRANSIENT_FAILURE here, but if the test runs slowly the 1s backoff
     // may be exceeded by the time the failure happens (since it counts from the start of the
@@ -265,6 +319,7 @@ public class TlsTest {
     // expect READY or IDLE.
     assertThat(channel.getState(false))
         .isAnyOf(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING);
+    return status;
   }
 
   private static final class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

@@ -18,6 +18,7 @@ package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
 import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannelBuilder;
@@ -38,7 +39,6 @@ import io.grpc.okhttp.OkHttpServerBuilder;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.testing.TlsTesting;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import org.junit.Test;
@@ -139,7 +139,7 @@ public class Http2Test extends AbstractInteropTest {
   @Test
   public void remoteAddr() {
     InetSocketAddress isa = (InetSocketAddress) obtainRemoteClientAddr();
-    assertEquals(InetAddress.getLoopbackAddress(), isa.getAddress());
+    assertTrue(isa.getAddress().isLoopbackAddress());
     // It should not be the same as the server
     assertNotEquals(((InetSocketAddress) getListenAddress()).getPort(), isa.getPort());
   }
@@ -147,7 +147,7 @@ public class Http2Test extends AbstractInteropTest {
   @Test
   public void localAddr() throws Exception {
     InetSocketAddress isa = (InetSocketAddress) obtainLocalServerAddr();
-    assertEquals(InetAddress.getLoopbackAddress(), isa.getAddress());
+    assertTrue(isa.getAddress().isLoopbackAddress());
     assertEquals(((InetSocketAddress) getListenAddress()).getPort(), isa.getPort());
   }
 

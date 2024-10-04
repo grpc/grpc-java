@@ -135,7 +135,6 @@ class ProxyDetectorImpl implements ProxyDetector {
             Level.WARNING,
             "failed to create URL for Authenticator: {0} {1}", new Object[] {protocol, host});
       }
-      // TODO(spencerfang): consider using java.security.AccessController here
       return Authenticator.requestPasswordAuthentication(
           host, addr, port, protocol, prompt, scheme, url, Authenticator.RequestorType.PROXY);
     }
@@ -144,7 +143,6 @@ class ProxyDetectorImpl implements ProxyDetector {
       new Supplier<ProxySelector>() {
         @Override
         public ProxySelector get() {
-          // TODO(spencerfang): consider using java.security.AccessController here
           return ProxySelector.getDefault();
         }
       };
@@ -204,14 +202,7 @@ class ProxyDetectorImpl implements ProxyDetector {
 
   private ProxiedSocketAddress detectProxy(InetSocketAddress targetAddr) throws IOException {
     URI uri;
-    String host;
-    try {
-      host = GrpcUtil.getHost(targetAddr);
-    } catch (Throwable t) {
-      // Workaround for Android API levels < 19 if getHostName causes a NetworkOnMainThreadException
-      log.log(Level.WARNING, "Failed to get host for proxy lookup, proceeding without proxy", t);
-      return null;
-    }
+    String host = targetAddr.getHostString();
     try {
       uri =
           new URI(
@@ -249,13 +240,14 @@ class ProxyDetectorImpl implements ProxyDetector {
     // The prompt string should be the realm as returned by the server.
     // We don't have it because we are avoiding the full handshake.
     String promptString = "";
-    PasswordAuthentication auth = authenticationProvider.requestPasswordAuthentication(
-        GrpcUtil.getHost(proxyAddr),
-        proxyAddr.getAddress(),
-        proxyAddr.getPort(),
-        PROXY_SCHEME,
-        promptString,
-        null);
+    PasswordAuthentication auth =
+        authenticationProvider.requestPasswordAuthentication(
+            proxyAddr.getHostString(),
+            proxyAddr.getAddress(),
+            proxyAddr.getPort(),
+            PROXY_SCHEME,
+            promptString,
+            null);
 
     final InetSocketAddress resolvedProxyAddr;
     if (proxyAddr.isUnresolved()) {

@@ -97,8 +97,8 @@ java_library(
         "@io_grpc_grpc_java//services:health",
         "@io_grpc_grpc_java//services:healthlb",
         "@io_grpc_grpc_java//stub",
-        "@io_grpc_grpc_proto//:health_proto",
         "@io_grpc_grpc_proto//:health_java_proto",
+        "@io_grpc_grpc_proto//:health_proto",
         "@maven//:com_google_api_grpc_proto_google_common_protos",
         "@maven//:com_google_code_findbugs_jsr305",
         "@maven//:com_google_code_gson_gson",
@@ -248,3 +248,30 @@ java_grpc_library(
     deps = ["@io_grpc_grpc_proto//:health_java_proto"],
 )
 
+java_binary(
+    name = "retrying-hello-world-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.retrying.RetryingHelloWorldClient",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+java_binary(
+    name = "retrying-hello-world-server",
+    testonly = 1,
+    main_class = "io.grpc.examples.retrying.RetryingHelloWorldServer",
+    runtime_deps = [
+        ":examples",
+    ],
+)
+
+# grpc-xds requires some WORKSPACE/MODULE deps that aren't needed by the other
+# targets. This just makes sure the example WORKSPACE/MODULE works with
+# grpc-xds.
+java_library(
+    name = "test_grpc_xds_compiles",
+    runtime_deps = [
+        "@io_grpc_grpc_java//xds",
+    ],
+)

@@ -14,7 +14,7 @@ set ESCWORKSPACE=%WORKSPACE:\=\\%
 
 @rem Clear JAVA_HOME to prevent a different Java version from being used
 set JAVA_HOME=
-set PATH=C:\Program Files\java\jdk1.8.0_152\bin;%PATH%
+set PATH=C:\Program Files\OpenJDK\openjdk-11.0.12_7\bin;%PATH%
 
 mkdir grpc-java-helper64
 cd grpc-java-helper64

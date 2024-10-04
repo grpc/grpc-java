@@ -95,6 +95,18 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
+  protected T interceptWithTarget(InterceptorFactory factory) {
+    delegate().interceptWithTarget(factory);
+    return thisT();
+  }
+
+  @Override
+  public T addTransportFilter(ClientTransportFilter transportFilter) {
+    delegate().addTransportFilter(transportFilter);
+    return thisT();
+  }
+
+  @Override
   public T userAgent(String userAgent) {
     delegate().userAgent(userAgent);
     return thisT();
@@ -242,6 +254,12 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   @Override
   public T disableServiceConfigLookUp() {
     delegate().disableServiceConfigLookUp();
+    return thisT();
+  }
+
+  @Override
+  protected T addMetricSink(MetricSink metricSink) {
+    delegate().addMetricSink(metricSink);
     return thisT();
   }
 

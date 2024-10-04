@@ -45,7 +45,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * Shows how to extract error information from a server response.
+ * Shows how to extract error information from a failed RPC.
  */
 public class ErrorHandlingClient {
   public static void main(String [] args) throws Exception {
@@ -60,6 +60,8 @@ public class ErrorHandlingClient {
         .addService(new GreeterGrpc.GreeterImplBase() {
       @Override
       public void sayHello(HelloRequest request, StreamObserver<HelloReply> responseObserver) {
+        // The server will always fail, and we'll see this failure on client-side. The exception is
+        // not sent to the client, only the status code (i.e., INTERNAL) and description.
         responseObserver.onError(Status.INTERNAL
             .withDescription("Eggplant Xerxes Crybaby Overbite Narwhal").asRuntimeException());
       }

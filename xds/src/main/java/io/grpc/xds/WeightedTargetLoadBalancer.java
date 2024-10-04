@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.collect.ImmutableMap;
+import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -32,7 +33,8 @@ import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,6 +43,8 @@ import javax.annotation.Nullable;
 
 /** Load balancer for weighted_target policy. */
 final class WeightedTargetLoadBalancer extends LoadBalancer {
+  public static final Attributes.Key<String> CHILD_NAME =
+      Attributes.Key.create("io.grpc.xds.WeightedTargetLoadBalancer.CHILD_NAME");
 
   private final XdsLogger logger;
   private final Map<String, GracefulSwitchLoadBalancer> childBalancers = new HashMap<>();
@@ -75,17 +79,11 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     WeightedTargetConfig weightedTargetConfig = (WeightedTargetConfig) lbConfig;
     Map<String, WeightedPolicySelection> newTargets = weightedTargetConfig.targets;
     for (String targetName : newTargets.keySet()) {
-      WeightedPolicySelection weightedChildLbConfig = newTargets.get(targetName);
       if (!targets.containsKey(targetName)) {
         ChildHelper childHelper = new ChildHelper(targetName);
         GracefulSwitchLoadBalancer childBalancer = new GracefulSwitchLoadBalancer(childHelper);
-        childBalancer.switchTo(weightedChildLbConfig.policySelection.getProvider());
         childHelpers.put(targetName, childHelper);
         childBalancers.put(targetName, childBalancer);
-      } else if (!weightedChildLbConfig.policySelection.getProvider().equals(
-          targets.get(targetName).policySelection.getProvider())) {
-        childBalancers.get(targetName)
-            .switchTo(weightedChildLbConfig.policySelection.getProvider());
       }
     }
     targets = newTargets;
@@ -93,7 +91,10 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       childBalancers.get(targetName).handleResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), targetName))
-              .setLoadBalancingPolicyConfig(targets.get(targetName).policySelection.getConfig())
+              .setLoadBalancingPolicyConfig(targets.get(targetName).childConfig)
+              .setAttributes(resolvedAddresses.getAttributes().toBuilder()
+                .set(CHILD_NAME, targetName)
+                .build())
               .build());
     }
 

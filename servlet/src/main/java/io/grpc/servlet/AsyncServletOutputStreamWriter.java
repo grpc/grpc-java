@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -87,6 +88,11 @@ final class AsyncServletOutputStreamWriter {
     Logger logger = Logger.getLogger(AsyncServletOutputStreamWriter.class.getName());
     this.log = new Log() {
       @Override
+      public boolean isLoggable(Level level) {
+        return logger.isLoggable(level);
+      }
+
+      @Override
       public void fine(String str, Object... params) {
         if (logger.isLoggable(FINE)) {
           logger.log(FINE, "[" + logId + "]" + str, params);
@@ -105,7 +111,9 @@ final class AsyncServletOutputStreamWriter {
     this.writeAction = (byte[] bytes, Integer numBytes) -> () -> {
       outputStream.write(bytes, 0, numBytes);
       transportState.runOnTransportThread(() -> transportState.onSentBytes(numBytes));
-      log.finest("outbound data: length={0}, bytes={1}", numBytes, toHexString(bytes, numBytes));
+      if (log.isLoggable(Level.FINEST)) {
+        log.finest("outbound data: length={0}, bytes={1}", numBytes, toHexString(bytes, numBytes));
+      }
     };
     this.flushAction = () -> {
       log.finest("flushBuffer");
@@ -245,6 +253,10 @@ final class AsyncServletOutputStreamWriter {
 
   @VisibleForTesting // Lincheck test can not run with java.util.logging dependency.
   interface Log {
+    default boolean isLoggable(Level level) {
+      return false; 
+    }
+
     default void fine(String str, Object...params) {}
 
     default void finest(String str, Object...params) {}

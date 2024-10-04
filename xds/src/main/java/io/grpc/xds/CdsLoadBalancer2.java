@@ -23,24 +23,24 @@ import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -174,13 +174,15 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                     clusterState.result.lrsServerInfo(),
                     clusterState.result.maxConcurrentRequests(),
                     clusterState.result.upstreamTlsContext(),
+                    clusterState.result.filterMetadata(),
                     clusterState.result.outlierDetection());
               } else {  // logical DNS
                 instance = DiscoveryMechanism.forLogicalDns(
                     clusterState.name, clusterState.result.dnsHostName(),
                     clusterState.result.lrsServerInfo(),
                     clusterState.result.maxConcurrentRequests(),
-                    clusterState.result.upstreamTlsContext());
+                    clusterState.result.upstreamTlsContext(),
+                    clusterState.result.filterMetadata());
               }
               instances.add(instance);
             }
@@ -204,8 +206,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
               }
               loopStatus = Status.UNAVAILABLE.withDescription(String.format(
                   "CDS error: circular aggregate clusters directly under %s for "
-                      + "root cluster %s, named %s",
-                  clusterState.name, root.name, namesCausingLoops));
+                      + "root cluster %s, named %s, xDS node ID: %s",
+                  clusterState.name, root.name, namesCausingLoops,
+                  xdsClient.getBootstrapInfo().node().getId()));
             }
           }
         }
@@ -222,34 +225,25 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           childLb.shutdown();
           childLb = null;
         }
-        Status unavailable =
-            Status.UNAVAILABLE.withDescription("CDS error: found 0 leaf (logical DNS or EDS) "
-                + "clusters for root cluster " + root.name);
+        Status unavailable = Status.UNAVAILABLE.withDescription(String.format(
+            "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster %s"
+                + " xDS node ID: %s", root.name, xdsClient.getBootstrapInfo().node().getId()));
         helper.updateBalancingState(
             TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(unavailable)));
         return;
       }
 
-      // The LB policy config is provided in service_config.proto/JSON format. It is unwrapped
-      // to determine the name of the policy in the load balancer registry.
-      LbConfig unwrappedLbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
-          root.result.lbPolicyConfig());
-      LoadBalancerProvider lbProvider = lbRegistry.getProvider(unwrappedLbConfig.getPolicyName());
-      if (lbProvider == null) {
-        throw NameResolver.ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
-                "No provider available for LB: " + unwrappedLbConfig.getPolicyName())).getError()
-            .asRuntimeException();
-      }
-      NameResolver.ConfigOrError configOrError = lbProvider.parseLoadBalancingPolicyConfig(
-          unwrappedLbConfig.getRawConfigValue());
+      // The LB policy config is provided in service_config.proto/JSON format.
+      NameResolver.ConfigOrError configOrError =
+          GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+              Arrays.asList(root.result.lbPolicyConfig()), lbRegistry);
       if (configOrError.getError() != null) {
         throw configOrError.getError().augmentDescription("Unable to parse the LB config")
             .asRuntimeException();
       }
 
       ClusterResolverConfig config = new ClusterResolverConfig(
-          Collections.unmodifiableList(instances),
-          new PolicySelection(lbProvider, configOrError.getConfig()));
+          Collections.unmodifiableList(instances), configOrError.getConfig());
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }
@@ -295,11 +289,14 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     }
 
     private void handleClusterDiscoveryError(Status error) {
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorWithNodeId = error.withDescription(
+              description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
       if (childLb != null) {
-        childLb.handleNameResolutionError(error);
+        childLb.handleNameResolutionError(errorWithNodeId);
       } else {
         helper.updateBalancingState(
-            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
+            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(errorWithNodeId)));
       }
     }
 

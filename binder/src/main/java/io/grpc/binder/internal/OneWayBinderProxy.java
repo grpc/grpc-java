@@ -46,7 +46,7 @@ public abstract class OneWayBinderProxy {
   private static final Logger logger = Logger.getLogger(OneWayBinderProxy.class.getName());
   protected final IBinder delegate;
 
-  private OneWayBinderProxy(IBinder iBinder) {
+  protected OneWayBinderProxy(IBinder iBinder) {
     this.delegate = iBinder;
   }
 
@@ -63,6 +63,22 @@ public abstract class OneWayBinderProxy {
         ? new InProcessImpl(iBinder, inProcessThreadHopExecutor)
         : new OutOfProcessImpl(iBinder);
   }
+
+  /**
+   * An abstract function that decorates instances of {@link OneWayBinderProxy}.
+   *
+   * <p>See https://en.wikipedia.org/wiki/Decorator_pattern.
+   */
+  public interface Decorator {
+    /**
+     * Returns an instance of {@link OneWayBinderProxy} that decorates {@code input} with some new
+     * behavior.
+     */
+    OneWayBinderProxy decorate(OneWayBinderProxy input);
+  }
+
+  /** A {@link Decorator} that does nothing. */
+  public static final Decorator IDENTITY_DECORATOR = (x) -> x;
 
   /**
    * Enqueues a transaction for the wrapped {@link IBinder} with guaranteed "oneway" semantics.

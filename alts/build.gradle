@@ -13,6 +13,7 @@ dependencies {
     api project(':grpc-api')
     implementation project(':grpc-auth'),
             project(':grpc-core'),
+            project(":grpc-context"), // Override google-auth dependency with our newer version
             project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),

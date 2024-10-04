@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfig;
 import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.util.HashMap;
 import java.util.Map;
@@ -35,10 +36,23 @@ public class PickFirstLoadBalancerProviderTest {
     rawConfig.put("shuffleAddressList", true);
     ConfigOrError parsedConfig = new PickFirstLoadBalancerProvider().parseLoadBalancingPolicyConfig(
         rawConfig);
-    PickFirstLoadBalancerConfig config = (PickFirstLoadBalancerConfig) parsedConfig.getConfig();
 
-    assertThat(config.shuffleAddressList).isTrue();
-    assertThat(config.randomSeed).isNull();
+    Boolean shuffleAddressList;
+    Long randomSeed;
+
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      PickFirstLeafLoadBalancerConfig config =
+          (PickFirstLeafLoadBalancerConfig) parsedConfig.getConfig();
+      shuffleAddressList = config.shuffleAddressList;
+      randomSeed = config.randomSeed;
+    } else {
+      PickFirstLoadBalancerConfig config = (PickFirstLoadBalancerConfig) parsedConfig.getConfig();
+      shuffleAddressList = config.shuffleAddressList;
+      randomSeed = config.randomSeed;
+    }
+
+    assertThat(shuffleAddressList).isTrue();
+    assertThat(randomSeed).isNull();
   }
 
   @Test
@@ -46,9 +60,22 @@ public class PickFirstLoadBalancerProviderTest {
     Map<String, Object> rawConfig = new HashMap<>();
     ConfigOrError parsedConfig = new PickFirstLoadBalancerProvider().parseLoadBalancingPolicyConfig(
         rawConfig);
-    PickFirstLoadBalancerConfig config = (PickFirstLoadBalancerConfig) parsedConfig.getConfig();
 
-    assertThat(config.shuffleAddressList).isNull();
-    assertThat(config.randomSeed).isNull();
+    Boolean shuffleAddressList;
+    Long randomSeed;
+
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      PickFirstLeafLoadBalancerConfig config =
+          (PickFirstLeafLoadBalancerConfig) parsedConfig.getConfig();
+      shuffleAddressList = config.shuffleAddressList;
+      randomSeed = config.randomSeed;
+    } else {
+      PickFirstLoadBalancerConfig config = (PickFirstLoadBalancerConfig) parsedConfig.getConfig();
+      shuffleAddressList = config.shuffleAddressList;
+      randomSeed = config.randomSeed;
+    }
+
+    assertThat(shuffleAddressList).isNull();
+    assertThat(randomSeed).isNull();
   }
 }

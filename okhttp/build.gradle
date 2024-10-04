@@ -45,7 +45,8 @@ tasks.named("checkstyleMain").configure {
 }
 
 tasks.named("javadoc").configure {
-    options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+    options.linksOffline 'https://square.github.io/okhttp/2.x/okhttp/',
+        "${rootProject.projectDir}/gradle/javadoc/square.github.io-okhttp-2.x-okhttp/"
     exclude 'io/grpc/okhttp/Internal*'
     exclude 'io/grpc/okhttp/*Provider.java'
     exclude 'io/grpc/okhttp/internal/**'

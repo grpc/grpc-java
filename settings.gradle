@@ -1,24 +1,27 @@
 pluginManagement {
     plugins {
         // https://developer.android.com/build/releases/gradle-plugin
-        id "com.android.application" version "7.4.0"
-        id "com.android.library" version "7.4.0"
+        // 8+ has many changes: https://github.com/grpc/grpc-java/issues/10152
+        id "com.android.application" version "7.4.1"
+        id "com.android.library" version "7.4.1"
         // https://github.com/johnrengelman/shadow/releases
         id "com.github.johnrengelman.shadow" version "8.1.1"
+	// https://github.com/kt3k/coveralls-gradle-plugin/tags
         id "com.github.kt3k.coveralls" version "2.12.2"
-        // https://github.com/GoogleCloudPlatform/app-gradle-plugin/releases
-        id "com.google.cloud.tools.appengine" version "2.4.5"
+	// https://github.com/GoogleCloudPlatform/appengine-plugins/releases
+        id "com.google.cloud.tools.appengine" version "2.8.0"
         // https://github.com/GoogleContainerTools/jib/blob/master/jib-gradle-plugin/CHANGELOG.md
-        id "com.google.cloud.tools.jib" version "3.3.2"
+        id "com.google.cloud.tools.jib" version "3.4.3"
+	// https://github.com/google/osdetector-gradle-plugin/tags
         id "com.google.osdetector" version "1.7.3"
         // https://github.com/google/protobuf-gradle-plugin/releases
         id "com.google.protobuf" version "0.9.4"
         // https://github.com/melix/japicmp-gradle-plugin/blob/master/CHANGELOG.txt
-        id "me.champeau.gradle.japicmp" version "0.4.1"
+        id "me.champeau.gradle.japicmp" version "0.4.2"
         // https://github.com/melix/jmh-gradle-plugin/releases
-        id "me.champeau.jmh" version "0.7.1"
+        id "me.champeau.jmh" version "0.7.2"
         // https://github.com/tbroyer/gradle-errorprone-plugin/releases
-        id "net.ltgt.errorprone" version "3.1.0"
+        id "net.ltgt.errorprone" version "4.0.1"
         // https://github.com/xvik/gradle-animalsniffer-plugin/releases
         id "ru.vyarus.animalsniffer" version "1.7.1"
     }
@@ -28,7 +31,7 @@ pluginManagement {
                 useModule("com.android.tools.build:gradle:${target.version}")
             }
             if (requested.id.id.startsWith('com.google.cloud.tools.appengine')) {
-                useModule("com.google.cloud.tools:appengine-gradle-plugin:${requested.version}")
+                useModule("com.google.cloud.tools:appengine-gradle-plugin:${target.version}")
             }
         }
     }
@@ -62,16 +65,19 @@ include ":grpc-benchmarks"
 include ":grpc-services"
 include ":grpc-servlet"
 include ":grpc-servlet-jakarta"
+include ":grpc-s2a"
 include ":grpc-xds"
 include ":grpc-bom"
 include ":grpc-rls"
 include ":grpc-authz"
+include ":grpc-gcp-csm-observability"
 include ":grpc-gcp-observability"
 include ":grpc-gcp-observability:interop"
 include ":grpc-istio-interop-testing"
 include ":grpc-inprocess"
 include ":grpc-util"
 include ":grpc-opentelemetry"
+include ":grpc-opentelemetry-context-storage-override"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
@@ -96,16 +102,19 @@ project(':grpc-benchmarks').projectDir = "$rootDir/benchmarks" as File
 project(':grpc-services').projectDir = "$rootDir/services" as File
 project(':grpc-servlet').projectDir = "$rootDir/servlet" as File
 project(':grpc-servlet-jakarta').projectDir = "$rootDir/servlet/jakarta" as File
+project(':grpc-s2a').projectDir = "$rootDir/s2a" as File
 project(':grpc-xds').projectDir = "$rootDir/xds" as File
 project(':grpc-bom').projectDir = "$rootDir/bom" as File
 project(':grpc-rls').projectDir = "$rootDir/rls" as File
 project(':grpc-authz').projectDir = "$rootDir/authz" as File
+project(':grpc-gcp-csm-observability').projectDir = "$rootDir/gcp-csm-observability" as File
 project(':grpc-gcp-observability').projectDir = "$rootDir/gcp-observability" as File
 project(':grpc-gcp-observability:interop').projectDir = "$rootDir/gcp-observability/interop" as File
 project(':grpc-istio-interop-testing').projectDir = "$rootDir/istio-interop-testing" as File
 project(':grpc-inprocess').projectDir = "$rootDir/inprocess" as File
 project(':grpc-util').projectDir = "$rootDir/util" as File
 project(':grpc-opentelemetry').projectDir = "$rootDir/opentelemetry" as File
+project(':grpc-opentelemetry-context-storage-override').projectDir = "$rootDir/contextstorage" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'

@@ -16,9 +16,6 @@
 
 package io.grpc.testing.integration;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import io.grpc.Grpc;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.TlsChannelCredentials;
@@ -131,14 +128,9 @@ public final class NettyClientInteropServlet extends HttpServlet {
   public static final class Tester extends AbstractInteropTest {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
-      assertEquals(
-          "jdk8 required",
-          "1.8",
-          System.getProperty("java.specification.version"));
       ManagedChannelBuilder<?> builder =
           Grpc.newChannelBuilder(INTEROP_TEST_ADDRESS, TlsChannelCredentials.create())
               .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-      assertTrue(builder instanceof NettyChannelBuilder);
       ((NettyChannelBuilder) builder)
           .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
       return builder;

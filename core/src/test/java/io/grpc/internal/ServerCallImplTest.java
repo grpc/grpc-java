@@ -16,8 +16,8 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -145,6 +145,12 @@ public class ServerCallImplTest {
     call.request(10);
 
     verify(stream).request(10);
+  }
+
+  @Test
+  public void setOnReadyThreshold() {
+    call.setOnReadyThreshold(10);
+    verify(stream).setOnReadyThreshold(10);
   }
 
   @Test

@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -482,6 +483,41 @@ public class AbstractClientStreamTest {
     assertThat(insight.toString()).isEqualTo("[remote_addr=fake_server_addr]");
   }
 
+  @Test
+  public void overrideOnReadyThreshold() {
+    AbstractClientStream.Sink sink = mock(AbstractClientStream.Sink.class);
+    BaseTransportState state = new BaseTransportState(statsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator,
+        state,
+        sink,
+        statsTraceCtx,
+        transportTracer,
+        CallOptions.DEFAULT.withOnReadyThreshold(10),
+        true);
+    ClientStreamListener listener = new NoopClientStreamListener();
+    stream.start(listener);
+    state.onStreamAllocated();
+
+    // Stream should be ready. 0 bytes are queued.
+    assertTrue(stream.isReady());
+
+    // Queue some bytes above the custom threshold and check that the stream is not ready.
+    stream.onSendingBytes(100);
+    assertFalse(stream.isReady());
+
+    // Simulate a flush and verify ready now.
+    stream.transportState().onSentBytes(91);
+    assertTrue(stream.isReady());
+  }
+
+  @Test
+  public void resetOnReadyThreshold() {
+    CallOptions options = CallOptions.DEFAULT.withOnReadyThreshold(10);
+    assertEquals(Integer.valueOf(10), options.getOnReadyThreshold());
+    assertNull(options.clearOnReadyThreshold().getOnReadyThreshold());
+  }
+
   /**
    * No-op base class for testing.
    */
@@ -517,9 +553,23 @@ public class AbstractClientStreamTest {
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer,
         boolean useGet) {
-      super(allocator, statsTraceCtx, transportTracer, new Metadata(), CallOptions.DEFAULT, useGet);
+      this(allocator, state, sink, statsTraceCtx, transportTracer, CallOptions.DEFAULT, useGet);
+    }
+
+    public BaseAbstractClientStream(
+        WritableBufferAllocator allocator,
+        TransportState state,
+        Sink sink,
+        StatsTraceContext statsTraceCtx,
+        TransportTracer transportTracer,
+        CallOptions callOptions,
+        boolean useGet) {
+      super(allocator, statsTraceCtx, transportTracer, new Metadata(), callOptions, useGet);
       this.state = state;
       this.sink = sink;
+      if (callOptions.getOnReadyThreshold() != null) {
+        this.transportState().setOnReadyThreshold(callOptions.getOnReadyThreshold());
+      }
     }
 
     @Override
@@ -567,7 +617,7 @@ public class AbstractClientStreamTest {
     }
 
     public BaseTransportState(StatsTraceContext statsTraceCtx, TransportTracer transportTracer) {
-      super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer);
+      super(DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer, CallOptions.DEFAULT);
     }
 
     @Override

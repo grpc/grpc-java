@@ -16,7 +16,7 @@
 # Update VERSION then execute this script
 
 set -e
-VERSION=ca1372c6d7bcb199638ebfdb40d2b2660bab7b88
+VERSION=114a745b2841a044e98cdbb19358ed29fcf4a5f1
 DOWNLOAD_URL="https://github.com/googleapis/googleapis/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="googleapis-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}"

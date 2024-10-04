@@ -16,7 +16,6 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.TruthJUnit.assume;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -29,6 +28,7 @@ import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_RST_COUNT_DISABLED;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -36,6 +36,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
@@ -80,6 +82,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.local.LocalChannel;
@@ -111,6 +114,7 @@ import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -148,6 +152,11 @@ public class NettyClientTransportTest {
   private InetSocketAddress address;
   private String authority;
   private NettyServer server;
+
+  @Before
+  public void setup() {
+    when(clientTransportListener.filterTransport(any())).thenAnswer(i -> i.getArguments()[0]);
+  }
 
   @After
   public void teardown() throws Exception {
@@ -511,15 +520,20 @@ public class NettyClientTransportTest {
   @Test
   public void channelFactoryShouldNNotSetSocketOptionKeepAlive() throws Exception {
     startServer();
-    NettyClientTransport transport = newTransport(newNegotiator(),
-        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
-        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
-        new ReflectiveChannelFactory<>(LocalChannel.class), group);
+    DefaultEventLoopGroup group = new DefaultEventLoopGroup(1);
+    try {
+      NettyClientTransport transport = newTransport(newNegotiator(),
+          DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
+          TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+          new ReflectiveChannelFactory<>(LocalChannel.class), group);
 
-    callMeMaybe(transport.start(clientTransportListener));
+      callMeMaybe(transport.start(clientTransportListener));
 
-    assertThat(transport.channel().config().getOption(ChannelOption.SO_KEEPALIVE))
-        .isNull();
+      assertThat(transport.channel().config().getOption(ChannelOption.SO_KEEPALIVE))
+          .isNull();
+    } finally {
+      group.shutdownGracefully(0, 10, TimeUnit.SECONDS);
+    }
   }
 
   @Test

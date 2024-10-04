@@ -23,6 +23,8 @@ import static io.grpc.netty.NettyTestUtil.messageFrame;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.STATUS_OK;
+import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
+import static io.netty.handler.codec.http2.Http2Exception.connectionError;
 import static io.netty.util.CharsetUtil.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -34,6 +36,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -62,6 +65,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
 import java.io.BufferedInputStream;
@@ -75,6 +79,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -203,6 +208,50 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         eq(new SendGrpcFrameCommand(
             stream.transportState(), messageFrame(MESSAGE).slice(5, 11), false)),
         eq(true));
+  }
+
+  @Test
+  public void writeFrameFutureFailedShouldCancelRpc() {
+    Http2Exception h2Error = connectionError(PROTOCOL_ERROR, "Stream does not exist %d", STREAM_ID);
+    // Fail all SendGrpcFrameCommands command sent to the queue.
+    when(writeQueue.enqueue(any(SendGrpcFrameCommand.class), anyBoolean())).thenReturn(
+        new DefaultChannelPromise(channel).setFailure(h2Error));
+
+    // Write multiple messages to ensure multiple SendGrpcFrameCommand are enqueued. We set up all
+    // of them to fail, which allows us to assert that only a single cancel is sent, and the stream
+    // isn't spammed with multiple RST_STREAM.
+    stream().transportState().setId(STREAM_ID);
+    stream.writeMessage(new ByteArrayInputStream(smallMessage()));
+    stream.writeMessage(new ByteArrayInputStream(largeMessage()));
+    stream.flush();
+
+    InOrder inOrder = Mockito.inOrder(writeQueue);
+    // Normal stream create and write frame.
+    inOrder.verify(writeQueue).enqueue(any(CreateStreamCommand.class), eq(false));
+    inOrder.verify(writeQueue).enqueue(any(SendGrpcFrameCommand.class), eq(false));
+    // Verify that failed SendGrpcFrameCommand results in immediate CancelClientStreamCommand.
+    inOrder.verify(writeQueue).enqueue(any(CancelClientStreamCommand.class), eq(true));
+    // Verify that any other failures do not produce another CancelClientStreamCommand in the queue.
+    inOrder.verify(writeQueue, atLeast(1)).enqueue(any(SendGrpcFrameCommand.class), eq(false));
+    inOrder.verify(writeQueue).enqueue(any(SendGrpcFrameCommand.class), eq(true));
+    inOrder.verifyNoMoreInteractions();
+
+    // Get the CancelClientStreamCommand written to the queue. Above we verified that there is
+    // only one CancelClientStreamCommand enqueued, and is the third enqueued command (create,
+    // frame write failure, cancel).
+    CancelClientStreamCommand cancelCommand = Mockito.mockingDetails(writeQueue).getInvocations()
+        // Get enqueue() innovations only
+        .stream().filter(invocation -> invocation.getMethod().getName().equals("enqueue"))
+        // Get the third invocation of enqueue()
+        .skip(2).findFirst().get()
+        // Get the first argument (QueuedCommand command)
+        .getArgument(0);
+
+    Status cancelReason = cancelCommand.reason();
+    assertThat(cancelReason.getCode()).isEqualTo(Status.INTERNAL.getCode());
+    assertThat(cancelReason.getCause()).isEqualTo(h2Error);
+    // Verify listener closed.
+    verify(listener).closed(same(cancelReason), eq(PROCESSED), any(Metadata.class));
   }
 
   @Test
@@ -563,7 +612,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
           maxMessageSize,
           StatsTraceContext.NOOP,
           transportTracer,
-          "methodName");
+          "methodName",
+          CallOptions.DEFAULT);
     }
 
     @Override

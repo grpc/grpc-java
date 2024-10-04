@@ -84,7 +84,7 @@ with OpenSSL](#tls-with-netty-tcnative-on-openssl) are other valid options.
 [Apache Tomcat's tcnative](https://tomcat.apache.org/native-doc/) and is a JNI
 wrapper around OpenSSL/BoringSSL/LibreSSL.
 
-We recommend BoringSSL for its simplicitly and low occurrence of security
+We recommend BoringSSL for its simplicity and low occurrence of security
 vulnerabilities relative to OpenSSL. BoringSSL is used by Conscrypt as well.
 
 ### TLS with netty-tcnative on BoringSSL
@@ -398,7 +398,8 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.56.x             | 4.1.87.Final          | 2.0.61.Final
 1.57.x-1.58.x      | 4.1.93.Final          | 2.0.61.Final
 1.59.x             | 4.1.97.Final          | 2.0.61.Final
-1.60.x-            | 4.1.100.Final         | 2.0.61.Final
+1.60.x-1.66.x      | 4.1.100.Final         | 2.0.61.Final
+1.67.x             | 4.1.110.Final         | 2.0.65.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 

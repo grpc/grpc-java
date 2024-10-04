@@ -888,7 +888,7 @@ public final class BinlogHelperTest {
       verify(sink).write(base);
     }
 
-    // server messsage
+    // server message
     {
       sinkWriterImpl.logRpcMessage(
           seq,
@@ -1433,16 +1433,16 @@ public final class BinlogHelperTest {
 
     // send server header
     {
-      Metadata serverInital = new Metadata();
-      interceptedCall.get().sendHeaders(serverInital);
+      Metadata serverInitial = new Metadata();
+      interceptedCall.get().sendHeaders(serverInitial);
       verify(mockSinkWriter).logServerHeader(
           /*seq=*/ eq(2L),
-          same(serverInital),
+          same(serverInitial),
           eq(Logger.LOGGER_SERVER),
           eq(CALL_ID),
           ArgumentMatchers.<SocketAddress>isNull());
       verifyNoMoreInteractions(mockSinkWriter);
-      assertSame(serverInital, actualServerInitial.get());
+      assertSame(serverInitial, actualServerInitial.get());
     }
 
     // receive client msg

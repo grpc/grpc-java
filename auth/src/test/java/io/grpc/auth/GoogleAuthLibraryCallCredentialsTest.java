@@ -16,7 +16,7 @@
 
 package io.grpc.auth;
 
-import static com.google.common.base.Charsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
+import com.google.auth.Retryable;
 import com.google.auth.http.HttpTransportFactory;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -191,8 +192,9 @@ public class GoogleAuthLibraryCallCredentialsTest {
   }
 
   @Test
-  public void credentialsFailsWithIoException() throws Exception {
-    Exception exception = new IOException("Broken");
+  public void credentialsFailsWithRetryableRetryableException() throws Exception {
+    boolean retryable = true;
+    Exception exception = new RetryableException(retryable);
     when(credentials.getRequestMetadata(eq(expectedUri))).thenThrow(exception);
 
     GoogleAuthLibraryCallCredentials callCredentials =
@@ -203,6 +205,23 @@ public class GoogleAuthLibraryCallCredentialsTest {
     verify(applier).fail(statusCaptor.capture());
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.UNAVAILABLE, status.getCode());
+    assertEquals(exception, status.getCause());
+  }
+
+  @Test
+  public void credentialsFailsWithUnretryableRetryableException() throws Exception {
+    boolean retryable = false;
+    Exception exception = new RetryableException(retryable);
+    when(credentials.getRequestMetadata(eq(expectedUri))).thenThrow(exception);
+
+    GoogleAuthLibraryCallCredentials callCredentials =
+        new GoogleAuthLibraryCallCredentials(credentials);
+    callCredentials.applyRequestMetadata(new RequestInfoImpl(), executor, applier);
+
+    verify(credentials).getRequestMetadata(eq(expectedUri));
+    verify(applier).fail(statusCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.UNAUTHENTICATED, status.getCode());
     assertEquals(exception, status.getCause());
   }
 
@@ -456,6 +475,23 @@ public class GoogleAuthLibraryCallCredentialsTest {
     @Override
     public Attributes getTransportAttrs() {
       return Attributes.EMPTY;
+    }
+  }
+
+  private static class RetryableException extends IOException implements Retryable {
+    private final boolean retryable;
+
+    public RetryableException(boolean retryable) {
+      super("Broken");
+      this.retryable = retryable;
+    }
+
+    @Override public boolean isRetryable() {
+      return retryable;
+    }
+
+    @Override public int getRetryCount() {
+      return 0;
     }
   }
 }

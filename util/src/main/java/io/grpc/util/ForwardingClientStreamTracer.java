@@ -49,8 +49,18 @@ public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   }
 
   @Override
+  public void inboundHeaders(Metadata headers) {
+    delegate().inboundHeaders(headers);
+  }
+
+  @Override
   public void inboundTrailers(Metadata trailers) {
     delegate().inboundTrailers(trailers);
+  }
+
+  @Override
+  public void addOptionalLabel(String key, String value) {
+    delegate().addOptionalLabel(key, value);
   }
 
   @Override

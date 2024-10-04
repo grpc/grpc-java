@@ -35,7 +35,7 @@ public final class GoogleDefaultChannelBuilder
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
-  public static final GoogleDefaultChannelBuilder forTarget(String target) {
+  public static GoogleDefaultChannelBuilder forTarget(String target) {
     return new GoogleDefaultChannelBuilder(target);
   }
 

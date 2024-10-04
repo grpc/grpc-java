@@ -27,6 +27,7 @@ android {
             withJavadocJar()
         }
     }
+    testFixtures { enable true }
 }
 
 repositories {
@@ -51,6 +52,7 @@ dependencies {
     testImplementation libraries.robolectric
     testImplementation libraries.guava.testlib
     testImplementation libraries.truth
+    testImplementation project(':grpc-protobuf-lite')
     testImplementation project(':grpc-testing')
     testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core'))
@@ -69,15 +71,20 @@ dependencies {
     androidTestImplementation libraries.androidx.lifecycle.service
     androidTestImplementation libraries.guava.testlib
     androidTestImplementation testFixtures(project(':grpc-core'))
+
+    testFixturesImplementation libraries.guava.testlib
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
-            "-Xlint:-cast"
+            "-Xlint:-cast",
+            // For junit-1.15-api & org.robolectric/shadows-framework/4.11.1
+            "-Xlint:-classfile",
+            // Unclaimed annotations. TODO(jdcormie): Fix?
+            "-Xlint:-processing",
     ]
-    options.compilerArgs -= ["-Werror"] // https://github.com/grpc/grpc-java/issues/10297
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
 }
 
@@ -121,4 +128,9 @@ publishing {
             }
         }
     }
+}
+
+afterEvaluate {
+    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseApiPublication) { skip() }
+    components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseRuntimePublication) { skip() }
 }

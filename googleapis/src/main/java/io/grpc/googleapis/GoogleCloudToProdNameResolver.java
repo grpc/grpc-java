@@ -19,7 +19,6 @@ package io.grpc.googleapis;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -34,20 +33,26 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * CloudToProd version of {@link NameResolver}.
  */
 final class GoogleCloudToProdNameResolver extends NameResolver {
+  private static final Logger logger =
+      Logger.getLogger(GoogleCloudToProdNameResolver.class.getName());
 
   @VisibleForTesting
   static final String METADATA_URL_ZONE =
@@ -142,13 +147,20 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (resolving || shutdown || delegate == null) {
       return;
     }
+
     resolving = true;
+    if (logger.isLoggable(Level.FINE)) {
+      logger.fine("resolve with schemaOverride = " + schemeOverride);
+    }
+
     if (schemeOverride.equals("dns")) {
       delegate.start(listener);
       succeeded = true;
       resolving = false;
       return;
     }
+
+    // Since not dns, we must be using xds
     if (executor == null) {
       executor = SharedResourceHolder.get(executorResource);
     }
@@ -251,7 +263,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       if (con.getResponseCode() != 200) {
         return "";
       }
-      try (Reader reader = new InputStreamReader(con.getInputStream(), Charsets.UTF_8)) {
+      try (Reader reader = new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8)) {
         respBody = CharStreams.toString(reader);
       }
     } finally {
@@ -267,7 +279,13 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     HttpURLConnection con = null;
     try {
       con = httpConnectionProvider.createConnection(url);
-      return con.getResponseCode() == 200;
+      if (con.getResponseCode() != 200 ) {
+        return false;
+      }
+      InputStream inputStream = con.getInputStream();
+      int c;
+      return (inputStream != null
+          && (c = inputStream.read()) != -1 && !Character.isWhitespace(c));
     } finally {
       if (con != null) {
         con.disconnect();

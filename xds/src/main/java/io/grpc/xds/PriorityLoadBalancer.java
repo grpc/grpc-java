@@ -25,16 +25,15 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -207,7 +206,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
     // Timer to delay shutdown and deletion of the priority. Scheduled whenever the child is
     // deactivated.
     @Nullable ScheduledHandle deletionTimer;
-    @Nullable String policy;
     ConnectivityState connectivityState = CONNECTING;
     SubchannelPicker picker = new FixedResultPicker(PickResult.withNoResult());
 
@@ -284,17 +282,10 @@ final class PriorityLoadBalancer extends LoadBalancer {
     void updateResolvedAddresses() {
       PriorityLbConfig config =
           (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      PolicySelection childPolicySelection = config.childConfigs.get(priority).policySelection;
-      LoadBalancerProvider lbProvider = childPolicySelection.getProvider();
-      String newPolicy = lbProvider.getPolicyName();
-      if (!newPolicy.equals(policy)) {
-        policy = newPolicy;
-        lb.switchTo(lbProvider);
-      }
       lb.handleResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), priority))
-              .setLoadBalancingPolicyConfig(childPolicySelection.getConfig())
+              .setLoadBalancingPolicyConfig(config.childConfigs.get(priority).childConfig)
               .build());
     }
 

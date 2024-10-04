@@ -16,10 +16,12 @@
 
 package io.grpc.binder.internal;
 
+import static android.os.IBinder.FLAG_ONEWAY;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.os.Parcel;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import io.grpc.binder.internal.LeakSafeOneWayBinder.TransactionHandler;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,39 +30,69 @@ import org.junit.runner.RunWith;
 public final class LeakSafeOneWayBinderTest {
 
   private LeakSafeOneWayBinder binder;
+  private final FakeHandler handler = new FakeHandler();
 
-  private int transactionsHandled;
-  private int lastCode;
-  private Parcel lastParcel;
+  static class FakeHandler implements TransactionHandler {
+    int transactionsHandled;
+    int lastCode;
+    Parcel lastParcel;
 
-  @Before
-  public void setUp() {
-    binder = new LeakSafeOneWayBinder((code, parcel) -> {
+    @Override
+    public boolean handleTransaction(int code, Parcel parcel) {
       transactionsHandled++;
       lastCode = code;
       lastParcel = parcel;
       return true;
-    });
+    }
+  }
+
+  @Before
+  public void setUp() {
+    binder = new LeakSafeOneWayBinder(handler);
   }
 
   @Test
   public void testTransaction() {
     Parcel p = Parcel.obtain();
-    assertThat(binder.onTransact(123, p, null, 0)).isTrue();
-    assertThat(transactionsHandled).isEqualTo(1);
-    assertThat(lastCode).isEqualTo(123);
-    assertThat(lastParcel).isSameInstanceAs(p);
+    assertThat(binder.onTransact(123, p, null, FLAG_ONEWAY)).isTrue();
+    assertThat(handler.transactionsHandled).isEqualTo(1);
+    assertThat(handler.lastCode).isEqualTo(123);
+    assertThat(handler.lastParcel).isSameInstanceAs(p);
     p.recycle();
+  }
+
+  @Test
+  public void testDropsTwoWayTransactions() {
+    Parcel p = Parcel.obtain();
+    Parcel reply = Parcel.obtain();
+    assertThat(binder.onTransact(123, p, reply, 0)).isFalse();
+    assertThat(handler.transactionsHandled).isEqualTo(0);
+    p.recycle();
+    reply.recycle();
   }
 
   @Test
   public void testDetach() {
     Parcel p = Parcel.obtain();
     binder.detach();
-    assertThat(binder.onTransact(456, p, null, 0)).isFalse();
+    assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isFalse();
 
     // The transaction shouldn't have been processed.
-    assertThat(transactionsHandled).isEqualTo(0);
+    assertThat(handler.transactionsHandled).isEqualTo(0);
+
+    p.recycle();
+  }
+
+  @Test
+  public void testReplace() {
+    binder = new LeakSafeOneWayBinder(handler);
+    Parcel p = Parcel.obtain();
+    FakeHandler handler2 = new FakeHandler();
+    binder.setHandler(handler2);
+    assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isTrue();
+
+    assertThat(handler.transactionsHandled).isEqualTo(0);
+    assertThat(handler2.transactionsHandled).isEqualTo(1);
 
     p.recycle();
   }
@@ -68,11 +100,11 @@ public final class LeakSafeOneWayBinderTest {
   @Test
   public void testMultipleTransactions() {
     Parcel p = Parcel.obtain();
-    assertThat(binder.onTransact(123, p, null, 0)).isTrue();
-    assertThat(binder.onTransact(456, p, null, 0)).isTrue();
-    assertThat(transactionsHandled).isEqualTo(2);
-    assertThat(lastCode).isEqualTo(456);
-    assertThat(lastParcel).isSameInstanceAs(p);
+    assertThat(binder.onTransact(123, p, null, FLAG_ONEWAY)).isTrue();
+    assertThat(binder.onTransact(456, p, null, FLAG_ONEWAY)).isTrue();
+    assertThat(handler.transactionsHandled).isEqualTo(2);
+    assertThat(handler.lastCode).isEqualTo(456);
+    assertThat(handler.lastParcel).isSameInstanceAs(p);
     p.recycle();
   }
 

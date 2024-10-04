@@ -16,9 +16,8 @@
 
 package io.grpc.binder;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import android.content.ComponentName;
+import androidx.annotation.RequiresApi;
 import io.grpc.ChannelCredentials;
 import io.grpc.ExperimentalApi;
 import javax.annotation.Nullable;
@@ -43,6 +42,7 @@ public final class BinderChannelCredentials extends ChannelCredentials {
    *     DevicePolicyManager.bindDeviceAdminServiceAsUser API.
    * @return a BinderChannelCredentials
    */
+  @RequiresApi(26)
   public static BinderChannelCredentials forDevicePolicyAdmin(
       ComponentName devicePolicyAdminComponentName) {
     return new BinderChannelCredentials(devicePolicyAdminComponentName);
@@ -59,9 +59,9 @@ public final class BinderChannelCredentials extends ChannelCredentials {
     return this;
   }
 
-  /** 
+  /**
    * Returns the admin component to be specified with DevicePolicyManager
-   * bindDeviceAdminServiceAsUser API. 
+   * bindDeviceAdminServiceAsUser API.
    */
   @Nullable
   public ComponentName getDevicePolicyAdminComponentName() {

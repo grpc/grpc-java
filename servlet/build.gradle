@@ -5,8 +5,6 @@ plugins {
 
 description = "gRPC: Servlet"
 
-def jettyVersion = '10.0.7'
-
 sourceSets {
     // Testing threading is more of a brute-force test and is very slow. No need to run it as part
     // of normal suite.
@@ -36,19 +34,18 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api')
-    compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
+    compileOnly libraries.javax.servlet.api,
             libraries.javax.annotation // java 9, 10 needs it
 
-    implementation project(':grpc-util'),
-            project(':grpc-core'),
+    implementation project(':grpc-core'),
             libraries.guava
 
-    testImplementation 'javax.servlet:javax.servlet-api:4.0.1'
+    testImplementation libraries.javax.servlet.api
 
     threadingTestImplementation project(':grpc-servlet'),
         libraries.truth,
-	'javax.servlet:javax.servlet-api:4.0.1',
-        'org.jetbrains.kotlinx:lincheck:2.14.1'
+        libraries.javax.servlet.api,
+        libraries.lincheck
 
     itImplementation project(':grpc-servlet'),
             project(':grpc-netty'),
@@ -60,13 +57,13 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    undertowTestImplementation 'io.undertow:undertow-servlet:2.2.14.Final'
+    undertowTestImplementation libraries.undertow.servlet22
 
-    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.56'
+    tomcatTestImplementation libraries.tomcat.embed.core9
 
-    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
-            "org.eclipse.jetty.http2:http2-server:${jettyVersion}",
-            "org.eclipse.jetty:jetty-client:${jettyVersion}",
+    jettyTestImplementation libraries.jetty.servlet10,
+            libraries.jetty.http2.server10,
+            libraries.jetty.client,
             project(':grpc-testing'),
             libraries.truth,
             libraries.protobuf.java

@@ -61,7 +61,7 @@ public interface ClientTransport extends InternalInstrumented<SocketStats> {
    * Pings a remote endpoint. When an acknowledgement is received, the given callback will be
    * invoked using the given executor.
    *
-   * <p>Pings are not necessarily sent to the same endpont, thus a successful ping only means at
+   * <p>Pings are not necessarily sent to the same endpoint, thus a successful ping only means at
    * least one endpoint responded, but doesn't imply the availability of other endpoints (if there
    * is any).
    *

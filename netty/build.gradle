@@ -9,10 +9,6 @@ plugins {
 
 description = "gRPC: Netty"
 
-configurations {
-    alpnagent
-}
-
 tasks.named("jar").configure {
     manifest {
         attributes('Automatic-Module-Name': 'io.grpc.netty')
@@ -28,6 +24,7 @@ dependencies {
             libraries.errorprone.annotations,
             libraries.perfmark.api,
             libraries.netty.unix.common
+    runtimeOnly project(":grpc-util")  // need grpc-util to pull in round robin
 
     // Tests depend on base class defined by core module.
     testImplementation testFixtures(project(':grpc-core')),
@@ -70,27 +67,22 @@ dependencies {
     }
     signature libraries.signature.java
     signature libraries.signature.android
-    alpnagent libraries.jetty.alpn.agent
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
 [tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
-    // Netty retuns a lot of futures that we mostly don't care about.
+    // Netty returns a lot of futures that we mostly don't care about.
     options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
 tasks.named("javadoc").configure {
-    options.links 'http://netty.io/4.1/api/'
+    options.linksOffline 'https://netty.io/4.1/api/',
+        "${rootProject.projectDir}/gradle/javadoc/netty.io-4.1-api/"
     exclude 'io/grpc/netty/*Provider.java'
     exclude 'io/grpc/netty/GrpcHttp2ConnectionHandler.java'
     exclude 'io/grpc/netty/Internal*'
     exclude 'io/grpc/netty/ProtocolNegotiationEvent.java'
-}
-
-tasks.named("test").configure {
-    // Allow testing Jetty ALPN in TlsTest
-    jvmArgs "-javaagent:" + configurations.alpnagent.asPath
 }
 
 tasks.named("jmh").configure {

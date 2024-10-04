@@ -1,3 +1,5 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 java_library(
     name = "api",
     srcs = glob([
@@ -7,10 +9,9 @@ java_library(
     javacopts = ["-Xep:DoNotCall:OFF"],  # Remove once requiring Bazel 3.4.0+; allows non-final
     visibility = ["//visibility:public"],
     deps = [
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_failureaccess//jar",  # future transitive dep of Guava. See #5214
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:failureaccess"),  # future transitive dep of Guava. See #5214
+        artifact("com.google.guava:guava"),
     ],
 )

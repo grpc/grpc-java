@@ -12,9 +12,11 @@ def subprojects = [
     project(':grpc-auth'),
     project(':grpc-core'),
     project(':grpc-grpclb'),
+    project(':grpc-gcp-csm-observability'),
     project(':grpc-inprocess'),
     project(':grpc-netty'),
     project(':grpc-okhttp'),
+    project(':grpc-opentelemetry'),
     project(':grpc-protobuf'),
     project(':grpc-protobuf-lite'),
     project(':grpc-rls'),
@@ -49,7 +51,7 @@ tasks.named("javadoc").configure {
             continue;
         }
         source subproject.javadoc.source
-        options.links subproject.javadoc.options.links.toArray(new String[0])
+        options.linksOffline.addAll subproject.javadoc.options.linksOffline
     }
 }
 

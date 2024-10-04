@@ -705,6 +705,7 @@ public class RetriableStreamTest {
     // cancel
     retriableStream.cancel(Status.CANCELLED);
     inOrder.verify(retriableStreamRecorder, never()).postCommit();
+    verify(masterListener, times(1)).closed(any(), any(), any());
   }
 
   @Test
@@ -733,6 +734,7 @@ public class RetriableStreamTest {
 
     verifyNoMoreInteractions(mockStream1);
     verifyNoMoreInteractions(mockStream2);
+    verify(masterListener, times(1)).closed(any(), any(), any());
   }
 
   @Test

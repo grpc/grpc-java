@@ -24,6 +24,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -47,10 +48,8 @@ import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -220,7 +219,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  public static final String IMPLEMENTATION_VERSION = "1.61.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  public static final String IMPLEMENTATION_VERSION = "1.68.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -632,25 +631,6 @@ public final class GrpcUtil {
     };
 
   /**
-   * Returns the host via {@link InetSocketAddress#getHostString} if it is possible,
-   * i.e. in jdk >= 7.
-   * Otherwise, return it via {@link InetSocketAddress#getHostName} which may incur a DNS lookup.
-   */
-  public static String getHost(InetSocketAddress addr) {
-    try {
-      Method getHostStringMethod = InetSocketAddress.class.getMethod("getHostString");
-      return (String) getHostStringMethod.invoke(addr);
-    } catch (NoSuchMethodException e) {
-      // noop
-    } catch (IllegalAccessException e) {
-      // noop
-    } catch (InvocationTargetException e) {
-      // noop
-    }
-    return addr.getHostName();
-  }
-
-  /**
    * Marshals a nanoseconds representation of the timeout to and from a string representation,
    * consisting of an ASCII decimal representation of a number with at most 8 digits, followed by a
    * unit. Available units:
@@ -947,6 +927,23 @@ public final class GrpcUtil {
       return encoded_authority.toString();
     }
   }
+
+  public static boolean getFlag(String envVarName, boolean enableByDefault) {
+    String envVar = System.getenv(envVarName);
+    if (envVar == null) {
+      envVar = System.getProperty(envVarName);
+    }
+    if (envVar != null) {
+      envVar = envVar.trim();
+    }
+    if (enableByDefault) {
+      return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);
+    } else {
+      return !Strings.isNullOrEmpty(envVar) && Boolean.parseBoolean(envVar);
+    }
+  }
+
+
 
   private GrpcUtil() {}
 }

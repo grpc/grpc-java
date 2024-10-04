@@ -220,6 +220,17 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     }
 
     @Override
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+    public void setOnReadyThreshold(final int numBytes) {
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          SerializingServerCall.super.setOnReadyThreshold(numBytes);
+        }
+      });
+    }
+
+    @Override
     public void setCompression(final String compressor) {
       serializingExecutor.execute(new Runnable() {
         @Override

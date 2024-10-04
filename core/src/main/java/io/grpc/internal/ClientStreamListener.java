@@ -53,11 +53,12 @@ public interface ClientStreamListener extends StreamListener {
    */
   enum RpcProgress {
     /**
-     * The RPC is processed by the server normally.
+     * The RPC may have been processed by the server.
      */
     PROCESSED,
     /**
-     * The stream on the wire is created but not processed by the server's application logic.
+     * Some part of the RPC may have been sent, but the server has guaranteed it didn't process any
+     * part of the RPC.
      */
     REFUSED,
     /**

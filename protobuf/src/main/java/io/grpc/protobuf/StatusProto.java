@@ -103,6 +103,25 @@ public final class StatusProto {
     return toStatus(statusProto).asException(toMetadata(statusProto, metadata));
   }
 
+  /**
+   * Convert a {@link com.google.rpc.Status} instance to a {@link StatusException} with additional
+   * metadata and the root exception thrown. The exception isn't propagated over the wire.
+   *
+   * <p>The returned {@link StatusException} will wrap a {@link Status} whose code and description
+   * are set from the code and message in {@code statusProto}. {@code statusProto} will be
+   * serialized and added to {@code metadata}. {@code metadata} will be set as the metadata of the
+   * returned {@link StatusException}. The {@link Throwable} is the exception that is set as the
+   * {@code cause} of the returned {@link StatusException}.
+   *
+   * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
+   *     gRPC status code.
+   * @since 1.3.0
+   */
+  public static StatusException toStatusException(
+      com.google.rpc.Status statusProto, Metadata metadata, Throwable cause) {
+    return toStatus(statusProto).withCause(cause).asException(toMetadata(statusProto, metadata));
+  }
+
   private static Status toStatus(com.google.rpc.Status statusProto) {
     Status status = Status.fromCodeValue(statusProto.getCode());
     checkArgument(status.getCode().value() == statusProto.getCode(), "invalid status code");

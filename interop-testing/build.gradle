@@ -9,19 +9,14 @@ plugins {
 
 description = "gRPC: Integration Testing"
 
-configurations {
-    alpnagent
-}
-
 dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
             project(':grpc-census'),
-            project(':grpc-core'),
-            project(':grpc-googleapis'),
+            project(':grpc-opentelemetry'),
+            project(':grpc-gcp-csm-observability'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
-            project(':grpc-rls'),
             project(':grpc-services'),
             project(':grpc-testing'),
             project(':grpc-protobuf-lite'),
@@ -30,6 +25,7 @@ dependencies {
             libraries.truth,
             libraries.opencensus.contrib.grpc.metrics,
             libraries.google.auth.oauth2Http,
+            libraries.opentelemetry.sdk.extension.autoconfigure,
             libraries.guava.jre // Fix checkUpperBoundDeps using -android
     api project(':grpc-api'),
             project(':grpc-stub'),
@@ -46,6 +42,8 @@ dependencies {
     runtimeOnly libraries.opencensus.impl,
             libraries.netty.tcnative,
             libraries.netty.tcnative.classes,
+            libraries.opentelemetry.exporter.prometheus, // For xds interop client
+            project(':grpc-googleapis'),
             project(':grpc-grpclb'),
             project(':grpc-rls')
     testImplementation testFixtures(project(':grpc-api')),
@@ -54,7 +52,6 @@ dependencies {
             project(':grpc-core'),
             libraries.mockito.core,
             libraries.okhttp
-    alpnagent libraries.jetty.alpn.agent
 
     signature libraries.signature.java
     signature libraries.signature.android
@@ -68,10 +65,6 @@ tasks.named("compileJava").configure {
     // This isn't a library; it can use beta APIs
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
 }
-tasks.named("test").configure {
-    // For the automated tests, use Jetty ALPN.
-    jvmArgs "-javaagent:" + configurations.alpnagent.asPath
-}
 
 // For the generated scripts, use Netty tcnative (i.e. OpenSSL).
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
@@ -79,15 +72,8 @@ tasks.named("test").configure {
 def test_client = tasks.register("test_client", CreateStartScripts) {
     mainClass = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
-    defaultJvmOpts = [
-        "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
-    ]
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
-    doLast {
-        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\'"\$APP_HOME"\'/lib/')
-        windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
-    }
 }
 
 def test_server = tasks.register("test_server", CreateStartScripts) {
@@ -175,11 +161,9 @@ application {
         from(xds_test_client)
         from(xds_test_server)
         from(xds_federation_test_client)
-        fileMode = 0755
-    }
-
-    applicationDistribution.into("lib") {
-        from(configurations.alpnagent)
+        filePermissions {
+            unix(0755)
+        }
     }
 }
 

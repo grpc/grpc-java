@@ -932,7 +932,7 @@ public class ServerImplTest {
         } catch (Exception ex) {
           throw new AssertionError(ex);
         }
-        // If deadlock is possible with this setup, this sychronization completes the loop because
+        // If deadlock is possible with this setup, this synchronization completes the loop because
         // the serverShutdown needs a lock that Server is holding while calling this method.
         synchronized (lock) {
         }
@@ -972,7 +972,7 @@ public class ServerImplTest {
         } catch (Exception ex) {
           throw new AssertionError(ex);
         }
-        // If deadlock is possible with this setup, this sychronization completes the loop
+        // If deadlock is possible with this setup, this synchronization completes the loop
         // because the transportTerminated needs a lock that Server is holding while calling this
         // method.
         synchronized (lock) {
@@ -1298,7 +1298,7 @@ public class ServerImplTest {
     assertEquals(1, executor.runDueTasks());
     verify(callHandler).startCall(ArgumentMatchers.<ServerCall<String, Integer>>any(),
         ArgumentMatchers.<Metadata>any());
-    // This call will be handled by the fallbackRegistry because it's not registred in the internal
+    // This call will be handled by the fallbackRegistry because it's not registered in the internal
     // registry.
     transportListener.streamCreated(stream, "Service1/Method2", requestHeaders);
     assertEquals(1, executor.runDueTasks());

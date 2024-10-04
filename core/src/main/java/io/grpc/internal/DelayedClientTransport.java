@@ -69,28 +69,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
   @GuardedBy("lock")
   private Collection<PendingStream> pendingStreams = new LinkedHashSet<>();
 
-  /**
-   * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
-   * terminated.
-   */
-  @GuardedBy("lock")
-  private Status shutdownStatus;
-
-  /**
-   * The last picker that {@link #reprocess} has used. May be set to null when the channel has moved
-   * to idle.
-   */
-  @GuardedBy("lock")
-  @Nullable
-  private SubchannelPicker lastPicker;
-
-  @GuardedBy("lock")
-  private long lastPickerVersion;
+  /** Immutable state needed for picking. 'lock' must be held for writing. */
+  private volatile PickerState pickerState = new PickerState(null, null);
 
   /**
    * Creates a new delayed transport.
    *
-   * @param defaultAppExecutor pending streams will create real streams and run bufferred operations
+   * @param defaultAppExecutor pending streams will create real streams and run buffered operations
    *        in an application executor, which will be this executor, unless there is on provided in
    *        {@link CallOptions}.
    * @param syncContext all listener callbacks of the delayed transport will be run from this
@@ -137,34 +122,32 @@ final class DelayedClientTransport implements ManagedClientTransport {
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
       ClientStreamTracer[] tracers) {
     try {
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
-      SubchannelPicker picker = null;
-      long pickerVersion = -1;
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(
+          method, headers, callOptions, new PickDetailsConsumerImpl(tracers));
+      PickerState state = pickerState;
       while (true) {
-        synchronized (lock) {
-          if (shutdownStatus != null) {
-            return new FailingClientStream(shutdownStatus, tracers);
-          }
-          if (lastPicker == null) {
-            return createPendingStream(args, tracers);
-          }
-          // Check for second time through the loop, and whether anything changed
-          if (picker != null && pickerVersion == lastPickerVersion) {
-            return createPendingStream(args, tracers);
-          }
-          picker = lastPicker;
-          pickerVersion = lastPickerVersion;
+        if (state.shutdownStatus != null) {
+          return new FailingClientStream(state.shutdownStatus, tracers);
         }
-        PickResult pickResult = picker.pickSubchannel(args);
-        ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
-            callOptions.isWaitForReady());
-        if (transport != null) {
-          return transport.newStream(
-              args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
-              tracers);
+        if (state.lastPicker != null) {
+          PickResult pickResult = state.lastPicker.pickSubchannel(args);
+          ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
+              callOptions.isWaitForReady());
+          if (transport != null) {
+            return transport.newStream(
+                args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
+                tracers);
+          }
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
-        // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
+        // race with reprocess()), we will buffer the RPC.  Otherwise, will try with the new picker.
+        synchronized (lock) {
+          PickerState newerState = pickerState;
+          if (state == newerState) {
+            return createPendingStream(args, tracers);
+          }
+          state = newerState;
+        }
       }
     } finally {
       syncContext.drain();
@@ -209,10 +192,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
   @Override
   public final void shutdown(final Status status) {
     synchronized (lock) {
-      if (shutdownStatus != null) {
+      if (pickerState.shutdownStatus != null) {
         return;
       }
-      shutdownStatus = status;
+      pickerState = pickerState.withShutdownStatus(status);
       syncContext.executeLater(new Runnable() {
           @Override
           public void run() {
@@ -287,8 +270,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
   final void reprocess(@Nullable SubchannelPicker picker) {
     ArrayList<PendingStream> toProcess;
     synchronized (lock) {
-      lastPicker = picker;
-      lastPickerVersion++;
+      pickerState = pickerState.withPicker(picker);
       if (picker == null || !hasPendingStreams()) {
         return;
       }
@@ -337,7 +319,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         // (which would shutdown the transports and LoadBalancer) because the gap should be shorter
         // than IDLE_MODE_DEFAULT_TIMEOUT_MILLIS (1 second).
         syncContext.executeLater(reportTransportNotInUse);
-        if (shutdownStatus != null && reportTransportTerminated != null) {
+        if (pickerState.shutdownStatus != null && reportTransportTerminated != null) {
           syncContext.executeLater(reportTransportTerminated);
           reportTransportTerminated = null;
         }
@@ -383,7 +365,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
           boolean justRemovedAnElement = pendingStreams.remove(this);
           if (!hasPendingStreams() && justRemovedAnElement) {
             syncContext.executeLater(reportTransportNotInUse);
-            if (shutdownStatus != null) {
+            if (pickerState.shutdownStatus != null) {
               syncContext.executeLater(reportTransportTerminated);
               reportTransportTerminated = null;
             }
@@ -406,6 +388,34 @@ final class DelayedClientTransport implements ManagedClientTransport {
         insight.append("wait_for_ready");
       }
       super.appendTimeoutInsight(insight);
+    }
+  }
+
+  static final class PickerState {
+    /**
+     * The last picker that {@link #reprocess} has used. May be set to null when the channel has
+     * moved to idle.
+     */
+    @Nullable
+    final SubchannelPicker lastPicker;
+    /**
+     * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
+     * terminated.
+     */
+    @Nullable
+    final Status shutdownStatus;
+
+    private PickerState(SubchannelPicker lastPicker, Status shutdownStatus) {
+      this.lastPicker = lastPicker;
+      this.shutdownStatus = shutdownStatus;
+    }
+
+    public PickerState withPicker(SubchannelPicker newPicker) {
+      return new PickerState(newPicker, this.shutdownStatus);
+    }
+
+    public PickerState withShutdownStatus(Status newShutdownStatus) {
+      return new PickerState(this.lastPicker, newShutdownStatus);
     }
   }
 }

@@ -1,3 +1,5 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 java_library(
     name = "auth",
     srcs = glob([
@@ -6,9 +8,8 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api",
-        "@com_google_auth_google_auth_library_credentials//jar",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
+        artifact("com.google.auth:google-auth-library-credentials"),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )

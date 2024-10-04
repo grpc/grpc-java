@@ -27,14 +27,12 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -42,18 +40,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * A {@link LoadBalancer} that provides round-robin load-balancing over the {@link
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
-@Internal
-public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
+final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private final AtomicInteger sequence = new AtomicInteger(new Random().nextInt());
-  protected SubchannelPicker currentPicker = new EmptyPicker();
+  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
   public RoundRobinLoadBalancer(Helper helper) {
     super(helper);
-  }
-
-  @Override
-  protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-    throw new UnsupportedOperationException(); // local updateOverallBalancingState doesn't use this
   }
 
   /**
@@ -76,7 +68,7 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       }
 
       if (isConnecting) {
-        updateBalancingState(CONNECTING, new EmptyPicker());
+        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
       } else {
         updateBalancingState(TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
       }
@@ -93,7 +85,7 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     }
   }
 
-  protected SubchannelPicker createReadyPicker(Collection<ChildLbState> children) {
+  private SubchannelPicker createReadyPicker(Collection<ChildLbState> children) {
     List<SubchannelPicker> pickerList = new ArrayList<>();
     for (ChildLbState child : children) {
       SubchannelPicker picker = child.getCurrentPicker();
@@ -101,6 +93,24 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
     }
 
     return new ReadyPicker(pickerList, sequence);
+  }
+
+  @Override
+  protected ChildLbState createChildLbState(Object key) {
+    return new ChildLbState(key, pickFirstLbProvider) {
+      @Override
+      protected ChildLbStateHelper createChildHelper() {
+        return new ChildLbStateHelper() {
+          @Override
+          public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+            super.updateBalancingState(newState, newPicker);
+            if (!resolvingAddresses && newState == IDLE) {
+              getLb().requestConnection();
+            }
+          }
+        };
+      }
+    };
   }
 
   @VisibleForTesting
@@ -167,24 +177,6 @@ public class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
           && index == other.index
           && subchannelPickers.size() == other.subchannelPickers.size()
           && new HashSet<>(subchannelPickers).containsAll(other.subchannelPickers);
-    }
-  }
-
-  @VisibleForTesting
-  static final class EmptyPicker extends SubchannelPicker {
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withNoResult();
-    }
-
-    @Override
-    public int hashCode() {
-      return getClass().hashCode();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      return o instanceof EmptyPicker;
     }
   }
 }

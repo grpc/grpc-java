@@ -21,7 +21,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.61.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.68.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -207,7 +207,8 @@ subprojects {
             options {
                 encoding = 'UTF-8'
                 use = true
-                links 'https://docs.oracle.com/javase/8/docs/api/'
+                linksOffline 'https://docs.oracle.com/javase/8/docs/api/',
+		    "${rootProject.projectDir}/gradle/javadoc/docs.oracle.com-javase-8-docs-api/"
                 source = "8"
             }
         }
@@ -253,16 +254,23 @@ subprojects {
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
 
-            // TODO(https://github.com/grpc/grpc-java/issues/10372): remove when fixed.
-            if (JavaVersion.current().isJava11Compatible()) {
-              options.errorprone.check("StringCaseLocaleUsage", CheckSeverity.OFF)
-            }
+            // This check is in libs.errorprone.corejava8 but has been removed
+            // in later versions. It isn't smart enough to realize the field is
+            // actually immutable. And it also doesn't complain about arrays
+            // that are actually mutable.
+            options.errorprone.check("MutableConstantField", CheckSeverity.OFF)
         }
         tasks.named("compileTestJava").configure {
             // LinkedList doesn't hurt much in tests and has lots of usages
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
             options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
+
+            // This check is in libs.errorprone.corejava8 but has been removed
+            // in later versions. It isn't smart enough to realize the field is
+            // actually immutable. And it also doesn't complain about arrays
+            // that are actually mutable.
+            options.errorprone.check("MutableConstantField", CheckSeverity.OFF)
         }
 
         plugins.withId("ru.vyarus.animalsniffer") {
@@ -466,7 +474,13 @@ def isAcceptableVersion(ModuleComponentIdentifier candidate) {
         return true
     if (group == 'io.netty' && version.contains('Final'))
         return true
+    if (group == 'io.undertow' && version.contains('Final'))
+        return true
     if (module == 'android-api-level-19')
+        return true
+    if (module == 'opentelemetry-exporter-prometheus')
+        return true
+    if (module == 'opentelemetry-gcp-resources')
         return true
     return version ==~ /^[0-9]+(\.[0-9]+)+$/
 }

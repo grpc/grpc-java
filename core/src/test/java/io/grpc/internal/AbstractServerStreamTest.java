@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -369,6 +370,15 @@ public class AbstractServerStreamTest {
     assertEquals(
         Status.Code.INTERNAL, metadataCaptor.getValue().get(InternalStatus.CODE_KEY).getCode());
     assertEquals("bad", metadataCaptor.getValue().get(InternalStatus.MESSAGE_KEY));
+  }
+
+  @Test
+  public void changeOnReadyThreshold() {
+    stream.setListener(new ServerStreamListenerBase());
+    stream.transportState().onStreamAllocated();
+    stream.setOnReadyThreshold(Integer.MAX_VALUE);
+    stream.onSendingBytes(Integer.MAX_VALUE - 1);
+    assertTrue(stream.isReady());
   }
 
   private static class ServerStreamListenerBase implements ServerStreamListener {

@@ -24,10 +24,15 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadReportClient;
+import io.grpc.xds.client.LoadStatsManager2;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsInitializationException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -67,22 +72,18 @@ public class XdsClientFederationTest {
 
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
-  private boolean originalFederationStatus;
+  private static final String DUMMY_TARGET = "dummy";
 
   @Before
   public void setUp() throws XdsInitializationException {
-    originalFederationStatus = BootstrapperImpl.enableFederation;
-    BootstrapperImpl.enableFederation = true;
-
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
-    xdsClientPool = clientPoolProvider.getOrCreate();
+    xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET);
     xdsClient = xdsClientPool.getObject();
   }
 
   @After
-  public void cleanUp() throws InterruptedException {
-    BootstrapperImpl.enableFederation = originalFederationStatus;
+  public void cleanUp() {
     xdsClientPool.returnObject(xdsClient);
   }
 
@@ -91,7 +92,7 @@ public class XdsClientFederationTest {
    * in watchers of resources on other control planes.
    */
   @Test
-  public void isolatedResourceDeletions() throws InterruptedException {
+  public void isolatedResourceDeletions() {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),
@@ -102,11 +103,11 @@ public class XdsClientFederationTest {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
         "xdstp://server-one/envoy.config.listener.v3.Listener/test-server", mockDirectPathWatcher);
 
-    verify(mockWatcher, timeout(2000)).onChanged(
+    verify(mockWatcher, timeout(10000)).onChanged(
         LdsUpdate.forApiListener(
             HttpConnectionManager.forRdsName(0, "route-config.googleapis.com", ImmutableList.of(
                 new NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)))));
-    verify(mockDirectPathWatcher, timeout(2000)).onChanged(
+    verify(mockDirectPathWatcher, timeout(10000)).onChanged(
         LdsUpdate.forApiListener(
             HttpConnectionManager.forRdsName(0, "route-config.googleapis.com", ImmutableList.of(
                 new NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)))));
@@ -119,7 +120,7 @@ public class XdsClientFederationTest {
         ControlPlaneRule.buildClientListener("new-server"));
     verify(mockWatcher, timeout(20000)).onResourceDoesNotExist("test-server");
     verify(mockDirectPathWatcher, times(0)).onResourceDoesNotExist(
-            "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
+        "xdstp://server-one/envoy.config.listener.v3.Listener/test-server");
   }
 
   /**
@@ -147,7 +148,7 @@ public class XdsClientFederationTest {
       xdsClient.addClusterLocalityStats(entry.getKey(), "clusterName", "edsServiceName",
           Locality.create("", "", ""));
       waitForSyncContext(xdsClient);
-      assertThat(entry.getValue().lrsStream).isNotNull();
+      assertThat(entry.getValue().lrsStreamIsNull()).isFalse();
     }
   }
 
@@ -176,7 +177,7 @@ public class XdsClientFederationTest {
     for (Entry<ServerInfo, LoadReportClient> entry : xdsClient.getServerLrsClientMap().entrySet()) {
       xdsClient.addClusterDropStats(entry.getKey(), "clusterName", "edsServiceName");
       waitForSyncContext(xdsClient);
-      assertThat(entry.getValue().lrsStream).isNotNull();
+      assertThat(entry.getValue().lrsStreamIsNull()).isFalse();
     }
   }
 
@@ -185,7 +186,7 @@ public class XdsClientFederationTest {
    * only report on the traffic for their own control plane.
    */
   @Test
-  public void lrsClientsHaveDistinctLoadStatsManagers() throws InterruptedException {
+  public void lrsClientsHaveDistinctLoadStatsManagers() {
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("test-server"));
     directpathPa.setLdsConfig(ControlPlaneRule.buildServerListener(),

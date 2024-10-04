@@ -38,6 +38,7 @@ import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.FilterConfig;
@@ -48,9 +49,9 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
@@ -67,6 +68,9 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
+  @VisibleForTesting
+  static boolean enableRouteLookup = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
+
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
   private static final String TYPE_URL_FILTER_CONFIG =
@@ -79,13 +83,13 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
   private static final XdsRouteConfigureResource instance = new XdsRouteConfigureResource();
 
-  public static XdsRouteConfigureResource getInstance() {
+  static XdsRouteConfigureResource getInstance() {
     return instance;
   }
 
   @Override
   @Nullable
-  String extractResourceName(Message unpackedResource) {
+  protected String extractResourceName(Message unpackedResource) {
     if (!(unpackedResource instanceof RouteConfiguration)) {
       return null;
     }
@@ -93,33 +97,38 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   }
 
   @Override
-  String typeName() {
+  public String typeName() {
     return "RDS";
   }
 
   @Override
-  String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_RDS;
   }
 
   @Override
-  boolean isFullStateOfTheWorld() {
+  public boolean shouldRetrieveResourceKeysForArgs() {
     return false;
   }
 
   @Override
-  Class<RouteConfiguration> unpackedClassName() {
+  protected boolean isFullStateOfTheWorld() {
+    return false;
+  }
+
+  @Override
+  protected Class<RouteConfiguration> unpackedClassName() {
     return RouteConfiguration.class;
   }
 
   @Override
-  RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage)
+  protected RdsUpdate doParse(XdsResourceType.Args args, Message unpackedMessage)
       throws ResourceInvalidException {
     if (!(unpackedMessage instanceof RouteConfiguration)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
-    return processRouteConfiguration((RouteConfiguration) unpackedMessage,
-        args.filterRegistry);
+    return processRouteConfiguration(
+        (RouteConfiguration) unpackedMessage, FilterRegistry.getDefaultRegistry());
   }
 
   private static RdsUpdate processRouteConfiguration(

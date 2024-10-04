@@ -16,12 +16,12 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.okhttp.Headers.CONTENT_TYPE_HEADER;
 import static io.grpc.okhttp.Headers.HTTP_SCHEME_HEADER;
 import static io.grpc.okhttp.Headers.METHOD_HEADER;
 import static io.grpc.okhttp.Headers.TE_HEADER;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.mockito.AdditionalAnswers.answerVoid;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -1262,6 +1262,35 @@ public class OkHttpServerTransportTest {
     }
     verify(clientFramesRead, never()).goAway(anyInt(), eq(ErrorCode.ENHANCE_YOUR_CALM),
         eq(ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII)));
+  }
+
+  @Test
+  public void maxConcurrentCallsPerConnection_failsWithRst() throws Exception {
+    int maxConcurrentCallsPerConnection = 1;
+    serverBuilder.maxConcurrentCallsPerConnection(maxConcurrentCallsPerConnection);
+    initTransport();
+    handshake();
+
+    ArgumentCaptor<Settings> settingsCaptor = ArgumentCaptor.forClass(Settings.class);
+    verify(clientFramesRead).settings(eq(false), settingsCaptor.capture());
+    final Settings settings = settingsCaptor.getValue();
+    assertThat(OkHttpSettingsUtil.get(settings, OkHttpSettingsUtil.MAX_CONCURRENT_STREAMS))
+        .isEqualTo(maxConcurrentCallsPerConnection);
+
+    final List<Header> headers = Arrays.asList(
+        HTTP_SCHEME_HEADER,
+        METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "example.com:80"),
+        new Header(Header.TARGET_PATH, "/com.example/SimpleService/doit"),
+        CONTENT_TYPE_HEADER,
+        TE_HEADER);
+
+    clientFrameWriter.headers(1, headers);
+    clientFrameWriter.headers(3, headers);
+    clientFrameWriter.flush();
+
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).rstStream(3, ErrorCode.REFUSED_STREAM);
   }
 
   private void initTransport() throws Exception {

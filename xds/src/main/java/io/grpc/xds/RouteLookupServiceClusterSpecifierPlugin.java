@@ -66,7 +66,7 @@ final class RouteLookupServiceClusterSpecifierPlugin implements ClusterSpecifier
       } catch (InvalidProtocolBufferException e) {
         return ConfigOrError.fromError("Invalid proto: " + e);
       }
-      String jsonString = MessagePrinter.print(configProto);
+      String jsonString = MessagePrinter.INSTANCE.print(configProto);
       try {
         Map<String, ?> jsonMap = (Map<String, ?>) JsonParser.parse(jsonString);
         Map<String, ?> config = JsonUtil.getObject(jsonMap, "routeLookupConfig");

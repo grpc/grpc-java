@@ -26,6 +26,7 @@ import com.google.common.base.Function;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
@@ -45,6 +46,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -76,6 +78,7 @@ public final class BinderSecurityTest {
             MethodDescriptor.newBuilder(marshaller, marshaller)
                 .setFullMethodName(name)
                 .setType(MethodDescriptor.MethodType.UNARY)
+                .setSampledToLocalTracing(true)
                 .build();
         ServerCallHandler<Empty, Empty> callHandler =
             ServerCalls.asyncUnaryCall(
@@ -107,15 +110,14 @@ public final class BinderSecurityTest {
   private void createChannel(ServerSecurityPolicy serverPolicy, SecurityPolicy channelPolicy)
       throws Exception {
     AndroidComponentAddress addr = HostServices.allocateService(appContext);
-    HostServices.configureService(addr,
+    HostServices.configureService(
+        addr,
         HostServices.serviceParamsBuilder()
-          .setServerFactory((service, receiver) -> buildServer(addr, receiver, serverPolicy))
-          .build());
+            .setServerFactory((service, receiver) -> buildServer(addr, receiver, serverPolicy))
+            .build());
 
     channel =
-        BinderChannelBuilder.forAddress(addr, appContext)
-            .securityPolicy(channelPolicy)
-            .build();
+        BinderChannelBuilder.forAddress(addr, appContext).securityPolicy(channelPolicy).build();
   }
 
   private Server buildServer(
@@ -139,12 +141,16 @@ public final class BinderSecurityTest {
         .isNotNull();
   }
 
-  private void assertCallFailure(MethodDescriptor<Empty, Empty> method, Status status) {
+  @CanIgnoreReturnValue
+  private StatusRuntimeException assertCallFailure(
+      MethodDescriptor<Empty, Empty> method, Status status) {
     try {
       ClientCalls.blockingUnaryCall(channel, method, CallOptions.DEFAULT, null);
-      fail();
+      fail("Expected call to " + method.getFullMethodName() + " to fail but it succeeded.");
+      throw new AssertionError(); // impossible
     } catch (StatusRuntimeException sre) {
       assertThat(sre.getStatus().getCode()).isEqualTo(status.getCode());
+      return sre;
     }
   }
 
@@ -170,6 +176,76 @@ public final class BinderSecurityTest {
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
       assertCallFailure(method, Status.PERMISSION_DENIED);
     }
+  }
+
+  @Test
+  public void testFailedFuturesPropagateOriginalException() throws Exception {
+    String errorMessage = "something went wrong";
+    IllegalStateException originalException = new IllegalStateException(errorMessage);
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(
+                "foo",
+                new AsyncSecurityPolicy() {
+                  @Override
+                  public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                    return Futures.immediateFailedFuture(originalException);
+                  }
+                })
+            .build(),
+        SecurityPolicies.internalOnly());
+    MethodDescriptor<Empty, Empty> method = methods.get("foo/method0");
+
+    StatusRuntimeException sre = assertCallFailure(method, Status.INTERNAL);
+    assertThat(sre.getStatus().getDescription()).contains(errorMessage);
+  }
+
+  @Test
+  public void testFailedFuturesAreNotCachedPermanently() throws Exception {
+    AtomicReference<Boolean> firstAttempt = new AtomicReference<>(true);
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(
+                "foo",
+                new AsyncSecurityPolicy() {
+                  @Override
+                  public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                    if (firstAttempt.getAndSet(false)) {
+                      return Futures.immediateFailedFuture(new IllegalStateException());
+                    }
+                    return Futures.immediateFuture(Status.OK);
+                  }
+                })
+            .build(),
+        SecurityPolicies.internalOnly());
+    MethodDescriptor<Empty, Empty> method = methods.get("foo/method0");
+
+    assertCallFailure(method, Status.INTERNAL);
+    assertCallSuccess(method);
+  }
+
+  @Test
+  public void testCancelledFuturesAreNotCachedPermanently() throws Exception {
+    AtomicReference<Boolean> firstAttempt = new AtomicReference<>(true);
+    createChannel(
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(
+                "foo",
+                new AsyncSecurityPolicy() {
+                  @Override
+                  public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                    if (firstAttempt.getAndSet(false)) {
+                      return Futures.immediateCancelledFuture();
+                    }
+                    return Futures.immediateFuture(Status.OK);
+                  }
+                })
+            .build(),
+        SecurityPolicies.internalOnly());
+    MethodDescriptor<Empty, Empty> method = methods.get("foo/method0");
+
+    assertCallFailure(method, Status.INTERNAL);
+    assertCallSuccess(method);
   }
 
   @Test
@@ -203,11 +279,11 @@ public final class BinderSecurityTest {
   @Test
   public void testPerServicePolicyAsync() throws Exception {
     createChannel(
-            ServerSecurityPolicy.newBuilder()
-                    .servicePolicy("foo", asyncPolicy((uid) -> Futures.immediateFuture(true)))
-                    .servicePolicy("bar", asyncPolicy((uid) -> Futures.immediateFuture(false)))
-                    .build(),
-            SecurityPolicies.internalOnly());
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy("foo", asyncPolicy((uid) -> Futures.immediateFuture(true)))
+            .servicePolicy("bar", asyncPolicy((uid) -> Futures.immediateFuture(false)))
+            .build(),
+        SecurityPolicies.internalOnly());
 
     assertThat(methods).isNotEmpty();
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
@@ -254,11 +330,10 @@ public final class BinderSecurityTest {
     return new AsyncSecurityPolicy() {
       @Override
       public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-        return Futures
-            .transform(
-                func.apply(uid),
-                allowed -> allowed ? Status.OK : Status.PERMISSION_DENIED,
-                MoreExecutors.directExecutor());
+        return Futures.transform(
+            func.apply(uid),
+            allowed -> allowed ? Status.OK : Status.PERMISSION_DENIED,
+            MoreExecutors.directExecutor());
       }
     };
   }
@@ -268,9 +343,7 @@ public final class BinderSecurityTest {
 
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-        ServerCall<ReqT, RespT> call,
-        Metadata headers,
-        ServerCallHandler<ReqT, RespT> next) {
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       numInterceptedCalls += 1;
       return next.startCall(call, headers);
     }

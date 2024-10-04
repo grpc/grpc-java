@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
+import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -50,11 +50,11 @@ import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
-import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -171,7 +171,7 @@ final class XdsServerWrapper extends Server {
 
   private void internalStart() {
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate();
+      xdsClientPool = xdsClientPoolFactory.getOrCreate("");
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
@@ -425,7 +425,8 @@ final class XdsServerWrapper extends Server {
         return;
       }
       StatusException statusException = Status.UNAVAILABLE.withDescription(
-              "Listener " + resourceName + " unavailable").asException();
+          String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
+              xdsClient.getBootstrapInfo().node().getId())).asException();
       handleConfigNotFound(statusException);
     }
 
@@ -434,9 +435,12 @@ final class XdsServerWrapper extends Server {
       if (stopped) {
         return;
       }
-      logger.log(Level.FINE, "Error from XdsClient", error);
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorWithNodeId = error.withDescription(
+          description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
+      logger.log(Level.FINE, "Error from XdsClient", errorWithNodeId);
       if (!isServing) {
-        listener.onNotServing(error.asException());
+        listener.onNotServing(errorWithNodeId.asException());
       }
     }
 
@@ -664,8 +668,11 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
+            String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+            Status errorWithNodeId = error.withDescription(
+                    description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
             logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
-                    new Object[]{resourceName, error});
+                    new Object[]{resourceName, errorWithNodeId});
             maybeUpdateSelector();
           }
         });

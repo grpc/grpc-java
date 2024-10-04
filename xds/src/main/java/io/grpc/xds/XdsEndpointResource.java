@@ -20,16 +20,20 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Message;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.XdsClient.ResourceUpdate;
-import io.grpc.xds.XdsClientImpl.ResourceInvalidException;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient.ResourceUpdate;
+import io.grpc.xds.client.XdsResourceType;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,15 +50,18 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
+  public static final String GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS =
+      "GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS";
+
   private static final XdsEndpointResource instance = new XdsEndpointResource();
 
-  public static XdsEndpointResource getInstance() {
+  static XdsEndpointResource getInstance() {
     return instance;
   }
 
   @Override
   @Nullable
-  String extractResourceName(Message unpackedResource) {
+  protected String extractResourceName(Message unpackedResource) {
     if (!(unpackedResource instanceof ClusterLoadAssignment)) {
       return null;
     }
@@ -62,32 +69,40 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   @Override
-  String typeName() {
+  public String typeName() {
     return "EDS";
   }
 
   @Override
-  String typeUrl() {
+  public String typeUrl() {
     return ADS_TYPE_URL_EDS;
   }
 
   @Override
-  boolean isFullStateOfTheWorld() {
+  public boolean shouldRetrieveResourceKeysForArgs() {
+    return true;
+  }
+
+  @Override
+  protected boolean isFullStateOfTheWorld() {
     return false;
   }
 
   @Override
-  Class<ClusterLoadAssignment> unpackedClassName() {
+  protected Class<ClusterLoadAssignment> unpackedClassName() {
     return ClusterLoadAssignment.class;
   }
 
   @Override
-  EdsUpdate doParse(Args args, Message unpackedMessage)
-      throws ResourceInvalidException {
+  protected EdsUpdate doParse(Args args, Message unpackedMessage) throws ResourceInvalidException {
     if (!(unpackedMessage instanceof ClusterLoadAssignment)) {
       throw new ResourceInvalidException("Invalid message type: " + unpackedMessage.getClass());
     }
     return processClusterLoadAssignment((ClusterLoadAssignment) unpackedMessage);
+  }
+
+  private static boolean isEnabledXdsDualStack() {
+    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, false);
   }
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
@@ -185,20 +200,29 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       if (!endpoint.hasEndpoint() || !endpoint.getEndpoint().hasAddress()) {
         return StructOrError.fromError("LbEndpoint with no endpoint/address");
       }
-      io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress =
-          endpoint.getEndpoint().getAddress().getSocketAddress();
-      InetSocketAddress addr =
-          new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
-      boolean isHealthy =
-          endpoint.getHealthStatus() == io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY
-              || endpoint.getHealthStatus()
-              == io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN;
+      List<java.net.SocketAddress> addresses = new ArrayList<>();
+      addresses.add(getInetSocketAddress(endpoint.getEndpoint().getAddress()));
+
+      if (isEnabledXdsDualStack()) {
+        for (Endpoint.AdditionalAddress additionalAddress
+            : endpoint.getEndpoint().getAdditionalAddressesList()) {
+          addresses.add(getInetSocketAddress(additionalAddress.getAddress()));
+        }
+      }
+      boolean isHealthy = (endpoint.getHealthStatus() == HealthStatus.HEALTHY)
+              || (endpoint.getHealthStatus() == HealthStatus.UNKNOWN);
       endpoints.add(Endpoints.LbEndpoint.create(
-          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
+          new EquivalentAddressGroup(addresses),
           endpoint.getLoadBalancingWeight().getValue(), isHealthy));
     }
     return StructOrError.fromStruct(Endpoints.LocalityLbEndpoints.create(
         endpoints, proto.getLoadBalancingWeight().getValue(), proto.getPriority()));
+  }
+
+  private static InetSocketAddress getInetSocketAddress(Address address) {
+    io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress = address.getSocketAddress();
+
+    return new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
   }
 
   static final class EdsUpdate implements ResourceUpdate {

@@ -17,6 +17,7 @@
 package io.grpc.binder.internal;
 
 import android.os.Binder;
+import android.os.IBinder;
 import android.os.Parcel;
 import io.grpc.Internal;
 import java.util.logging.Level;
@@ -42,6 +43,21 @@ public final class LeakSafeOneWayBinder extends Binder {
 
   @Internal
   public interface TransactionHandler {
+    /**
+     * Delivers a binder transaction to this handler.
+     *
+     * <p>Implementations need not be thread-safe. Each invocation "happens-before" the next in the
+     * same order that transactions were sent ("oneway" semantics). However implementations must not
+     * be thread-hostile as different calls can come in on different threads.
+     *
+     * <p>{@code parcel} is only valid for the duration of this call. Ownership is retained by the
+     * caller.
+     *
+     * @param code the transaction code originally passed to {@link IBinder#transact}
+     * @param code a copy of the parcel originally passed to {@link IBinder#transact}.
+     * @return the value to return from {@link Binder#onTransact}. NB: "oneway" semantics mean this
+     *     result will not delivered to the caller of {@link IBinder#transact}
+     */
     boolean handleTransaction(int code, Parcel data);
   }
 
@@ -52,7 +68,12 @@ public final class LeakSafeOneWayBinder extends Binder {
   }
 
   public void detach() {
-    handler = null;
+    setHandler(null);
+  }
+
+  /** Replaces the current {@link TransactionHandler} with `handler`. */
+  public void setHandler(@Nullable TransactionHandler handler) {
+    this.handler = handler;
   }
 
   @Override
@@ -60,6 +81,10 @@ public final class LeakSafeOneWayBinder extends Binder {
     TransactionHandler handler = this.handler;
     if (handler != null) {
       try {
+        if ((flags & IBinder.FLAG_ONEWAY) == 0) {
+          logger.log(Level.WARNING, "ignoring non-oneway transaction. flags=" + flags);
+          return false;
+        }
         return handler.handleTransaction(code, parcel);
       } catch (RuntimeException re) {
         logger.log(Level.WARNING, "failure sending transaction " + code, re);

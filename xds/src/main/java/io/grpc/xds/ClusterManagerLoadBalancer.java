@@ -21,15 +21,17 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -55,6 +57,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   protected final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final XdsLogger logger;
+  private ResolvedAddresses lastResolvedAddresses;
 
   ClusterManagerLoadBalancer(Helper helper) {
     super(helper);
@@ -67,58 +70,73 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
-      Object childConfig) {
-    return resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
+  protected ChildLbState createChildLbState(Object key) {
+    return new ClusterManagerLbState(key, GracefulSwitchLoadBalancerFactory.INSTANCE);
   }
 
   @Override
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
+  protected Map<Object, ResolvedAddresses> createChildAddressesMap(
+      ResolvedAddresses resolvedAddresses) {
+    lastResolvedAddresses = resolvedAddresses;
+
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
-    Map<Object, ChildLbState> newChildPolicies = new HashMap<>();
-    if (config != null) {
-      for (Entry<String, PolicySelection> entry : config.childPolicies.entrySet()) {
-        ChildLbState child = getChildLbState(entry.getKey());
-        if (child == null) {
-          child = new ClusterManagerLbState(entry.getKey(),
-              entry.getValue().getProvider(), entry.getValue().getConfig(), getInitialPicker());
+    Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
+
+    // Reactivate children with config; deactivate children without config
+    for (ChildLbState rawState : getChildLbStates()) {
+      ClusterManagerLbState state = (ClusterManagerLbState) rawState;
+      if (config.childPolicies.containsKey(state.getKey())) {
+        // Active child
+        if (state.deletionTimer != null) {
+          state.reactivateChild();
         }
-        newChildPolicies.put(entry.getKey(), child);
+      } else {
+        // Inactive child
+        if (state.deletionTimer == null) {
+          state.deactivateChild();
+        }
+        if (state.deletionTimer.isPending()) {
+          childAddresses.put(state.getKey(), null); // Preserve child, without config update
+        }
       }
+    }
+
+    for (Map.Entry<String, Object> childPolicy : config.childPolicies.entrySet()) {
+      ResolvedAddresses addresses = resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(childPolicy.getValue())
+          .build();
+      childAddresses.put(childPolicy.getKey(), addresses);
     }
     logger.log(
         XdsLogLevel.INFO,
-        "Received cluster_manager lb config: child names={0}", newChildPolicies.keySet());
-    return newChildPolicies;
+        "Received cluster_manager lb config: child names={0}", config.childPolicies.keySet());
+    return childAddresses;
   }
 
   /**
-   * This is like the parent except that it doesn't shutdown the removed children since we want that
-   * to be done by the timer.
+   * Using the state of all children will calculate the current connectivity state,
+   * update currentConnectivityState, generate a picker and then call
+   * {@link Helper#updateBalancingState(ConnectivityState, SubchannelPicker)}.
    */
   @Override
-  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    try {
-      resolvingAddresses = true;
-
-      // process resolvedAddresses to update children
-      AcceptResolvedAddressRetVal acceptRetVal =
-          acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
+  protected void updateOverallBalancingState() {
+    ConnectivityState overallState = null;
+    final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
+    for (ChildLbState childLbState : getChildLbStates()) {
+      if (((ClusterManagerLbState) childLbState).deletionTimer != null) {
+        continue;
       }
+      childPickers.put(childLbState.getKey(), childLbState.getCurrentPicker());
+      overallState = aggregateState(overallState, childLbState.getCurrentState());
+    }
 
-      // Update the picker
-      updateOverallBalancingState();
-
-      return acceptRetVal.status;
-    } finally {
-      resolvingAddresses = false;
+    if (overallState != null) {
+      getHelper().updateBalancingState(overallState, getSubchannelPicker(childPickers));
+      currentConnectivityState = overallState;
     }
   }
 
-  @Override
   protected SubchannelPicker getSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
     return new SubchannelPicker() {
       @Override
@@ -147,19 +165,15 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
     boolean gotoTransientFailure = true;
     for (ChildLbState state : getChildLbStates()) {
-      if (!state.isDeactivated()) {
+      if (((ClusterManagerLbState) state).deletionTimer == null) {
         gotoTransientFailure = false;
-        handleNameResolutionError(state, error);
+        state.getLb().handleNameResolutionError(error);
       }
     }
     if (gotoTransientFailure) {
-      getHelper().updateBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
+      getHelper().updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
-  }
-
-  @Override
-  protected boolean reconnectOnIdle() {
-    return false;
   }
 
   /**
@@ -172,41 +186,39 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     @Nullable
     ScheduledHandle deletionTimer;
 
-    public ClusterManagerLbState(Object key, LoadBalancerProvider policyProvider,
-        Object childConfig, SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+    public ClusterManagerLbState(Object key, LoadBalancer.Factory policyFactory) {
+      super(key, policyFactory);
+    }
+
+    @Override
+    protected ChildLbStateHelper createChildHelper() {
+      return new ClusterManagerChildHelper();
     }
 
     @Override
     protected void shutdown() {
-      if (deletionTimer != null && deletionTimer.isPending()) {
+      if (deletionTimer != null) {
         deletionTimer.cancel();
+        deletionTimer = null;
       }
       super.shutdown();
     }
 
-    @Override
-    protected void reactivate(LoadBalancerProvider policyProvider) {
-      if (deletionTimer != null && deletionTimer.isPending()) {
-        deletionTimer.cancel();
-        logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
-      }
-
-      super.reactivate(policyProvider);
+    void reactivateChild() {
+      assert deletionTimer != null;
+      deletionTimer.cancel();
+      deletionTimer = null;
+      logger.log(XdsLogLevel.DEBUG, "Child balancer {0} reactivated", getKey());
     }
 
-    @Override
-    protected void deactivate() {
-      if (isDeactivated()) {
-        return;
-      }
+    void deactivateChild() {
+      assert deletionTimer == null;
 
       class DeletionTask implements Runnable {
 
         @Override
         public void run() {
-          shutdown();
-          removeChild(getKey());
+          acceptResolvedAddresses(lastResolvedAddresses);
         }
       }
 
@@ -216,9 +228,36 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
               DELAYED_CHILD_DELETION_TIME_MINUTES,
               TimeUnit.MINUTES,
               timeService);
-      setDeactivated();
       logger.log(XdsLogLevel.DEBUG, "Child balancer {0} deactivated", getKey());
     }
 
+    private class ClusterManagerChildHelper extends ChildLbStateHelper {
+      @Override
+      public void updateBalancingState(final ConnectivityState newState,
+                                       final SubchannelPicker newPicker) {
+        if (getCurrentState() == ConnectivityState.SHUTDOWN) {
+          return;
+        }
+
+        // Subchannel picker and state are saved, but will only be propagated to the channel
+        // when the child instance exits deactivated state.
+        setCurrentState(newState);
+        setCurrentPicker(newPicker);
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
+        if (deletionTimer == null && !resolvingAddresses) {
+          updateOverallBalancingState();
+        }
+      }
+    }
+  }
+
+  static final class GracefulSwitchLoadBalancerFactory extends LoadBalancer.Factory {
+    static final LoadBalancer.Factory INSTANCE = new GracefulSwitchLoadBalancerFactory();
+
+    @Override
+    public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+      return new GracefulSwitchLoadBalancer(helper);
+    }
   }
 }

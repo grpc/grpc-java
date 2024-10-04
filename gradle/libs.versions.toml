@@ -1,52 +1,59 @@
 [versions]
-# Compatibility problem with internal version getting onto 1.5.3.
-# https://github.com/grpc/grpc-java/pull/9118
-googleauth = "1.4.0"
-netty = '4.1.100.Final'
+netty = '4.1.110.Final'
 # Keep the following references of tcnative version in sync whenever it's updated:
 #   SECURITY.md
-nettytcnative = '2.0.61.Final'
+nettytcnative = '2.0.65.Final'
 opencensus = "0.31.1"
-protobuf = "3.25.1"
+# Not upgrading to 4.x as it is not yet ABI compatible.
+# https://github.com/protocolbuffers/protobuf/issues/17247
+protobuf = "3.25.5"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"
-androidx-annotation = "androidx.annotation:annotation:1.7.0"
-androidx-core = "androidx.core:core:1.12.0"
-androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.6.2"
-androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.6.2"
-androidx-test-core = "androidx.test:core:1.5.0"
-androidx-test-ext-junit = "androidx.test.ext:junit:1.1.5"
-androidx-test-rules = "androidx.test:rules:1.5.0"
-animalsniffer = "org.codehaus.mojo:animal-sniffer:1.23"
-animalsniffer-annotations = "org.codehaus.mojo:animal-sniffer-annotations:1.23"
-auto-value = "com.google.auto.value:auto-value:1.10.4"
-auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.10.4"
-checkstyle = "com.puppycrawl.tools:checkstyle:10.12.5"
+androidx-annotation = "androidx.annotation:annotation:1.8.0"
+androidx-core = "androidx.core:core:1.13.1"
+androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.8.3"
+androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.8.3"
+androidx-test-core = "androidx.test:core:1.6.1"
+androidx-test-ext-junit = "androidx.test.ext:junit:1.2.1"
+androidx-test-rules = "androidx.test:rules:1.6.1"
+animalsniffer = "org.codehaus.mojo:animal-sniffer:1.24"
+animalsniffer-annotations = "org.codehaus.mojo:animal-sniffer-annotations:1.24"
+assertj-core = "org.assertj:assertj-core:3.26.0"
+auto-value = "com.google.auto.value:auto-value:1.11.0"
+auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.11.0"
+checkstyle = "com.puppycrawl.tools:checkstyle:10.17.0"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
-cronet-api = "org.chromium.net:cronet-api:108.5359.79"
-cronet-embedded = "org.chromium.net:cronet-embedded:108.5359.79"
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.23.0"
-errorprone-core = "com.google.errorprone:error_prone_core:2.23.0"
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.29.0"
-google-auth-credentials = { module = "com.google.auth:google-auth-library-credentials", version.ref = "googleauth" }
-google-auth-oauth2Http = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleauth" }
+cronet-api = "org.chromium.net:cronet-api:119.6045.31"
+cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.28.0"
+errorprone-core = "com.google.errorprone:error_prone_core:2.28.0"
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.41.0"
+google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.23.0"
+google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.23.0"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
-google-cloud-logging = "com.google.cloud:google-cloud-logging:3.15.14"
-gson = "com.google.code.gson:gson:2.10.1"
-guava = "com.google.guava:guava:32.1.3-android"
+google-cloud-logging = "com.google.cloud:google-cloud-logging:3.19.0"
+gson = "com.google.code.gson:gson:2.11.0"
+guava = "com.google.guava:guava:33.2.1-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
-guava-testlib = "com.google.guava:guava-testlib:32.1.3-android"
+guava-testlib = "com.google.guava:guava-testlib:33.2.1-android"
 # JRE version is needed for projects where its a transitive dependency, f.e. gcp-observability.
 # May be different from the -android version.
-guava-jre = "com.google.guava:guava:32.1.3-jre"
-hdrhistogram = "org.hdrhistogram:HdrHistogram:2.1.12"
+guava-jre = "com.google.guava:guava:33.2.1-jre"
+hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
+jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:5.0.0"
 javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
-j2objc-annotations = " com.google.j2objc:j2objc-annotations:2.8"
-jetty-alpn-agent = "org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10"
+javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
+jetty-client = "org.eclipse.jetty:jetty-client:10.0.20"
+jetty-http2-server = "org.eclipse.jetty.http2:http2-server:11.0.22"
+jetty-http2-server10 = "org.eclipse.jetty.http2:http2-server:10.0.20"
+jetty-servlet = "org.eclipse.jetty:jetty-servlet:11.0.22"
+jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.20"
 jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 junit = "junit:junit:4.13.2"
+# 2.17+ require Java 11+ (not mentioned in release notes)
+lincheck = "org.jetbrains.kotlinx:lincheck:2.16"
 # Update notes / 2023-07-19 sergiitk:
 #    Couldn't update to 5.4.0, updated to the last in 4.x line. Version 5.x breaks some tests.
 #    Error log: https://github.com/grpc/grpc-java/pull/10359#issuecomment-1632834435
@@ -69,19 +76,25 @@ opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-g
 opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exporter-stats-stackdriver", version.ref = "opencensus" }
 opencensus-exporter-trace-stackdriver = { module = "io.opencensus:opencensus-exporter-trace-stackdriver", version.ref = "opencensus" }
 opencensus-impl = { module = "io.opencensus:opencensus-impl", version.ref = "opencensus" }
-opencensus-proto = "io.opencensus:opencensus-proto:0.2.0"
-opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.32.0"
-opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.32.0"
-perfmark-api = "io.perfmark:perfmark-api:0.26.0"
+opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.40.0"
+opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.40.0-alpha"
+opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.36.0-alpha"
+opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.40.0"
+opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.40.0"
+perfmark-api = "io.perfmark:perfmark-api:0.27.0"
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.7"
-robolectric = "org.robolectric:robolectric:4.11.1"
+robolectric = "org.robolectric:robolectric:4.13"
 signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
-truth = "com.google.truth:truth:1.1.5"
+tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.25"
+tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.89"
+truth = "com.google.truth:truth:1.4.4"
+undertow-servlet22 = "io.undertow:undertow-servlet:2.2.32.Final"
+undertow-servlet = "io.undertow:undertow-servlet:2.3.14.Final"
 
 # Do not update: Pinned to the last version supporting Java 8.
 # See https://checkstyle.sourceforge.io/releasenotes.html#Release_10.1

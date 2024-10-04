@@ -67,7 +67,7 @@ public class MethodDescriptorTest {
 
     assertFalse(descriptor.isIdempotent());
 
-    // Create a new desriptor by setting idempotent to true
+    // Create a new descriptor by setting idempotent to true
     MethodDescriptor<String, String> newDescriptor =
         descriptor.toBuilder().setIdempotent(true).build();
     assertTrue(newDescriptor.isIdempotent());
@@ -86,7 +86,7 @@ public class MethodDescriptorTest {
         .build();
     assertFalse(descriptor.isSafe());
 
-    // Create a new desriptor by setting safe to true
+    // Create a new descriptor by setting safe to true
     MethodDescriptor<String, String> newDescriptor = descriptor.toBuilder().setSafe(true).build();
     assertTrue(newDescriptor.isSafe());
     // All other fields should staty the same

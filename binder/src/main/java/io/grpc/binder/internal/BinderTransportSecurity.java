@@ -19,7 +19,7 @@ package io.grpc.binder.internal;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.Metadata;
@@ -31,7 +31,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
-
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -41,8 +41,8 @@ import javax.annotation.Nullable;
 /**
  * Manages security for an Android Service hosted gRPC server.
  *
- * <p>Attaches authorization state to a newly-created transport, and contains a
- * ServerInterceptor which ensures calls are authorized before allowing them to proceed.
+ * <p>Attaches authorization state to a newly-created transport, and contains a ServerInterceptor
+ * which ensures calls are authorized before allowing them to proceed.
  */
 public final class BinderTransportSecurity {
 
@@ -55,11 +55,10 @@ public final class BinderTransportSecurity {
    * Install a security policy on an about-to-be created server.
    *
    * @param serverBuilder The ServerBuilder being used to create the server.
-   * @param executor The executor in which the authorization result will be handled.
    */
   @Internal
-  public static void installAuthInterceptor(ServerBuilder<?> serverBuilder, Executor executor) {
-    serverBuilder.intercept(new ServerAuthInterceptor(executor));
+  public static void installAuthInterceptor(ServerBuilder<?> serverBuilder) {
+    serverBuilder.intercept(new ServerAuthInterceptor());
   }
 
   /**
@@ -69,14 +68,18 @@ public final class BinderTransportSecurity {
    * @param builder The {@link Attributes.Builder} for the transport being created.
    * @param remoteUid The remote UID of the transport.
    * @param serverPolicyChecker The policy checker for this transport.
+   * @param executor used for calling into the application. Must outlive the transport.
    */
   @Internal
   public static void attachAuthAttrs(
-      Attributes.Builder builder, int remoteUid, ServerPolicyChecker serverPolicyChecker) {
+      Attributes.Builder builder,
+      int remoteUid,
+      ServerPolicyChecker serverPolicyChecker,
+      Executor executor) {
     builder
         .set(
             TRANSPORT_AUTHORIZATION_STATE,
-            new TransportAuthorizationState(remoteUid, serverPolicyChecker))
+            new TransportAuthorizationState(remoteUid, serverPolicyChecker, executor))
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY);
   }
 
@@ -86,33 +89,32 @@ public final class BinderTransportSecurity {
    */
   private static final class ServerAuthInterceptor implements ServerInterceptor {
 
-    private final Executor executor;
-
-    ServerAuthInterceptor(Executor executor) {
-      this.executor = executor;
-    }
-
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      TransportAuthorizationState transportAuthState =
+          call.getAttributes().get(TRANSPORT_AUTHORIZATION_STATE);
       ListenableFuture<Status> authStatusFuture =
-          call.getAttributes()
-              .get(TRANSPORT_AUTHORIZATION_STATE)
-              .checkAuthorization(call.getMethodDescriptor());
+          transportAuthState.checkAuthorization(call.getMethodDescriptor());
 
       // Most SecurityPolicy will have synchronous implementations that provide an
       // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
       // and asynchronous code if the authorization result is already present.
       if (!authStatusFuture.isDone()) {
-        return newServerCallListenerForPendingAuthResult(authStatusFuture, call, headers, next);
+        return newServerCallListenerForPendingAuthResult(
+            authStatusFuture, transportAuthState.executor, call, headers, next);
       }
 
       Status authStatus;
       try {
         authStatus = Futures.getDone(authStatusFuture);
-      } catch (ExecutionException e) {
+      } catch (ExecutionException | CancellationException e) {
         // Failed futures are treated as an internal error rather than a security rejection.
         authStatus = Status.INTERNAL.withCause(e);
+        @Nullable String message = e.getMessage();
+        if (message != null) {
+          authStatus = authStatus.withDescription(message);
+        }
       }
 
       if (authStatus.isOk()) {
@@ -124,31 +126,33 @@ public final class BinderTransportSecurity {
     }
 
     private <ReqT, RespT> ServerCall.Listener<ReqT> newServerCallListenerForPendingAuthResult(
-            ListenableFuture<Status> authStatusFuture,
-            ServerCall<ReqT, RespT> call,
-            Metadata headers,
-            ServerCallHandler<ReqT, RespT> next) {
+        ListenableFuture<Status> authStatusFuture,
+        Executor executor,
+        ServerCall<ReqT, RespT> call,
+        Metadata headers,
+        ServerCallHandler<ReqT, RespT> next) {
       PendingAuthListener<ReqT, RespT> listener = new PendingAuthListener<>();
       Futures.addCallback(
-              authStatusFuture,
-              new FutureCallback<Status>() {
-                @Override
-                public void onSuccess(Status authStatus) {
-                  if (!authStatus.isOk()) {
-                    call.close(authStatus, new Metadata());
-                    return;
-                  }
+          authStatusFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status authStatus) {
+              if (!authStatus.isOk()) {
+                call.close(authStatus, new Metadata());
+                return;
+              }
 
-                  listener.startCall(call, headers, next);
-                }
+              listener.startCall(call, headers, next);
+            }
 
-                @Override
-                public void onFailure(Throwable t) {
-                  call.close(
-                          Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
-                          new Metadata());
-                }
-              }, executor);
+            @Override
+            public void onFailure(Throwable t) {
+              call.close(
+                  Status.INTERNAL.withCause(t).withDescription("Authorization future failed"),
+                  new Metadata());
+            }
+          },
+          executor);
       return listener;
     }
   }
@@ -161,10 +165,16 @@ public final class BinderTransportSecurity {
     private final int uid;
     private final ServerPolicyChecker serverPolicyChecker;
     private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
+    private final Executor executor;
 
-    TransportAuthorizationState(int uid, ServerPolicyChecker serverPolicyChecker) {
+    /**
+     * @param executor used for calling into the application. Must outlive the transport.
+     */
+    TransportAuthorizationState(
+        int uid, ServerPolicyChecker serverPolicyChecker, Executor executor) {
       this.uid = uid;
       this.serverPolicyChecker = serverPolicyChecker;
+      this.executor = executor;
       serviceAuthorization = new ConcurrentHashMap<>(8);
     }
 
@@ -179,6 +189,8 @@ public final class BinderTransportSecurity {
       if (useCache) {
         @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
         if (authorization != null) {
+          // Authorization check exists and is a pending or successful future (even if for a
+          // failed authorization).
           return authorization;
         }
       }
@@ -193,6 +205,18 @@ public final class BinderTransportSecurity {
           serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
       if (useCache) {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
+        Futures.addCallback(
+            authorization,
+            new FutureCallback<Status>() {
+              @Override
+              public void onSuccess(Status result) {}
+
+              @Override
+              public void onFailure(Throwable t) {
+                serviceAuthorization.remove(serviceName, authorization);
+              }
+            },
+            MoreExecutors.directExecutor());
       }
       return authorization;
     }
@@ -217,16 +241,8 @@ public final class BinderTransportSecurity {
      * @param uid The Android UID to authenticate.
      * @param serviceName The name of the gRPC service being called.
      * @return a future with the result of the authorization check. A failed future represents a
-     *    failure to perform the authorization check, not that the access is denied.
+     *     failure to perform the authorization check, not that the access is denied.
      */
     ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
-  }
-
-  /**
-   * A listener invoked when the {@link io.grpc.binder.internal.BinderServer} shuts down, allowing
-   * resources to be potentially cleaned up.
-   */
-  public interface ShutdownListener {
-    void onServerShutdown();
   }
 }

@@ -40,11 +40,9 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportFrameUtil;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -55,7 +53,6 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import org.chromium.net.BidirectionalStream;
 import org.chromium.net.CronetException;
-import org.chromium.net.ExperimentalBidirectionalStream;
 import org.chromium.net.UrlResponseInfo;
 
 /**
@@ -65,9 +62,6 @@ class CronetClientStream extends AbstractClientStream {
   private static final int READ_BUFFER_CAPACITY = 4 * 1024;
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocateDirect(0);
   private static final String LOG_TAG = "grpc-java-cronet";
-
-  private static volatile boolean loadAddRequestAnnotationAttempted;
-  private static volatile Method addRequestAnnotationMethod;
 
   @Deprecated
   static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
@@ -124,7 +118,8 @@ class CronetClientStream extends AbstractClientStream {
     this.delayRequestHeader = (method.getType() == MethodDescriptor.MethodType.UNARY);
     this.annotation = callOptions.getOption(CRONET_ANNOTATION_KEY);
     this.annotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
-    this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer);
+    this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer,
+            callOptions);
 
     // Tests expect the "plain" deframer behavior, not MigratingDeframer
     // https://github.com/grpc/grpc-java/issues/7140
@@ -193,14 +188,12 @@ class CronetClientStream extends AbstractClientStream {
         builder.delayRequestHeadersUntilFirstFlush(true);
       }
       if (annotation != null || annotations != null) {
-        ExperimentalBidirectionalStream.Builder expBidiStreamBuilder =
-            (ExperimentalBidirectionalStream.Builder) builder;
         if (annotation != null) {
-          addRequestAnnotation(expBidiStreamBuilder, annotation);
+          builder.addRequestAnnotation(annotation);
         }
         if (annotations != null) {
           for (Object o : annotations) {
-            addRequestAnnotation(expBidiStreamBuilder, o);
+            builder.addRequestAnnotation(o);
           }
         }
       }
@@ -254,7 +247,7 @@ class CronetClientStream extends AbstractClientStream {
   class TransportState extends Http2ClientStreamTransportState {
     private final Object lock;
     @GuardedBy("lock")
-    private Collection<PendingData> pendingData = new ArrayList<PendingData>();
+    private final Collection<PendingData> pendingData = new ArrayList<>();
     @GuardedBy("lock")
     private boolean streamReady;
     @GuardedBy("lock")
@@ -270,8 +263,8 @@ class CronetClientStream extends AbstractClientStream {
 
     public TransportState(
         int maxMessageSize, StatsTraceContext statsTraceCtx, Object lock,
-        TransportTracer transportTracer) {
-      super(maxMessageSize, statsTraceCtx, transportTracer);
+        TransportTracer transportTracer, CallOptions options) {
+      super(maxMessageSize, statsTraceCtx, transportTracer, options);
       this.lock = Preconditions.checkNotNull(lock, "lock");
     }
 
@@ -366,35 +359,6 @@ class CronetClientStream extends AbstractClientStream {
         && !TE_HEADER.name().equalsIgnoreCase(key);
   }
 
-  private static void addRequestAnnotation(ExperimentalBidirectionalStream.Builder builder,
-      Object annotation) {
-    if (!loadAddRequestAnnotationAttempted) {
-      synchronized (CronetClientStream.class) {
-        if (!loadAddRequestAnnotationAttempted) {
-          try {
-            addRequestAnnotationMethod = ExperimentalBidirectionalStream.Builder.class
-                .getMethod("addRequestAnnotation", Object.class);
-          } catch (NoSuchMethodException e) {
-            Log.w(LOG_TAG,
-                "Failed to load method ExperimentalBidirectionalStream.Builder.addRequestAnnotation",
-                e);
-          } finally {
-            loadAddRequestAnnotationAttempted = true;
-          }
-        }
-      }
-    }
-    if (addRequestAnnotationMethod != null) {
-      try {
-        addRequestAnnotationMethod.invoke(builder, annotation);
-      } catch (InvocationTargetException e) {
-        throw new RuntimeException(e.getCause() == null ? e.getTargetException() : e.getCause());
-      } catch (IllegalAccessException e) {
-        Log.w(LOG_TAG, "Failed to add request annotation: " + annotation, e);
-      }
-    }
-  }
-
   private void setGrpcHeaders(BidirectionalStream.Builder builder) {
     // Psuedo-headers are set by cronet.
     // All non-pseudo headers must come after pseudo headers.
@@ -408,10 +372,10 @@ class CronetClientStream extends AbstractClientStream {
     // String and byte array.
     byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
     for (int i = 0; i < serializedHeaders.length; i += 2) {
-      String key = new String(serializedHeaders[i], Charset.forName("UTF-8"));
+      String key = new String(serializedHeaders[i], StandardCharsets.UTF_8);
       // TODO(ericgribkoff): log an error or throw an exception
       if (isApplicationHeader(key)) {
-        String value = new String(serializedHeaders[i + 1], Charset.forName("UTF-8"));
+        String value = new String(serializedHeaders[i + 1], StandardCharsets.UTF_8);
         builder.addHeader(key, value);
       }
     }
@@ -588,8 +552,8 @@ class CronetClientStream extends AbstractClientStream {
 
       byte[][] headerValues = new byte[headerList.size()][];
       for (int i = 0; i < headerList.size(); i += 2) {
-        headerValues[i] = headerList.get(i).getBytes(Charset.forName("UTF-8"));
-        headerValues[i + 1] = headerList.get(i + 1).getBytes(Charset.forName("UTF-8"));
+        headerValues[i] = headerList.get(i).getBytes(StandardCharsets.UTF_8);
+        headerValues[i + 1] = headerList.get(i + 1).getBytes(StandardCharsets.UTF_8);
       }
       Metadata metadata =
           InternalMetadata.newMetadata(TransportFrameUtil.toRawSerializedHeaders(headerValues));

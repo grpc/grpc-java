@@ -807,8 +807,8 @@ public class ClientCallImplTest {
 
   @Test
   public void contextDeadlineShouldBePropagatedToStream() {
-    Context context = Context.current()
-        .withDeadlineAfter(1000, TimeUnit.MILLISECONDS, deadlineCancellationExecutor);
+    Deadline deadline = Deadline.after(1000, TimeUnit.MILLISECONDS);
+    Context context = Context.current().withDeadline(deadline, deadlineCancellationExecutor);
     Context origContext = context.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
@@ -822,16 +822,13 @@ public class ClientCallImplTest {
 
     context.detach(origContext);
 
-    ArgumentCaptor<Deadline> deadlineCaptor = ArgumentCaptor.forClass(Deadline.class);
-    verify(stream).setDeadline(deadlineCaptor.capture());
-
-    assertTimeoutBetween(deadlineCaptor.getValue().timeRemaining(TimeUnit.MILLISECONDS), 600, 1000);
+    verify(stream).setDeadline(eq(deadline));
   }
 
   @Test
   public void contextDeadlineShouldOverrideLargerCallOptionsDeadline() {
-    Context context = Context.current()
-        .withDeadlineAfter(1000, TimeUnit.MILLISECONDS, deadlineCancellationExecutor);
+    Deadline deadline = Deadline.after(1000, TimeUnit.MILLISECONDS);
+    Context context = Context.current().withDeadline(deadline, deadlineCancellationExecutor);
     Context origContext = context.attach();
 
     CallOptions callOpts = baseCallOptions.withDeadlineAfter(2000, TimeUnit.MILLISECONDS);
@@ -846,19 +843,17 @@ public class ClientCallImplTest {
 
     context.detach(origContext);
 
-    ArgumentCaptor<Deadline> deadlineCaptor = ArgumentCaptor.forClass(Deadline.class);
-    verify(stream).setDeadline(deadlineCaptor.capture());
-
-    assertTimeoutBetween(deadlineCaptor.getValue().timeRemaining(TimeUnit.MILLISECONDS), 600, 1000);
+    verify(stream).setDeadline(eq(deadline));
   }
 
   @Test
   public void contextDeadlineShouldNotOverrideSmallerCallOptionsDeadline() {
     Context context = Context.current()
         .withDeadlineAfter(2000, TimeUnit.MILLISECONDS, deadlineCancellationExecutor);
+    Deadline deadline = Deadline.after(1000, TimeUnit.MILLISECONDS);
     Context origContext = context.attach();
 
-    CallOptions callOpts = baseCallOptions.withDeadlineAfter(1000, TimeUnit.MILLISECONDS)
+    CallOptions callOpts = baseCallOptions.withDeadline(deadline)
         .withOption(NAME_RESOLUTION_DELAYED, 1200000000L);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
@@ -871,10 +866,8 @@ public class ClientCallImplTest {
 
     context.detach(origContext);
 
-    ArgumentCaptor<Deadline> deadlineCaptor = ArgumentCaptor.forClass(Deadline.class);
-    verify(stream).setDeadline(deadlineCaptor.capture());
+    verify(stream).setDeadline(eq(deadline));
 
-    assertTimeoutBetween(deadlineCaptor.getValue().timeRemaining(TimeUnit.MILLISECONDS), 600, 1000);
     fakeClock.forwardNanos(TimeUnit.MILLISECONDS.toNanos(1000));
     verify(stream, timeout(1000)).cancel(statusCaptor.capture());
     String deadlineExceedDescription = statusCaptor.getValue().getDescription();
@@ -884,7 +877,8 @@ public class ClientCallImplTest {
 
   @Test
   public void callOptionsDeadlineShouldBePropagatedToStream() {
-    CallOptions callOpts = baseCallOptions.withDeadlineAfter(1000, TimeUnit.MILLISECONDS);
+    Deadline deadline = Deadline.after(1000, TimeUnit.MILLISECONDS);
+    CallOptions callOpts = baseCallOptions.withDeadline(deadline);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
@@ -894,10 +888,7 @@ public class ClientCallImplTest {
         channelCallTracer, configSelector);
     call.start(callListener, new Metadata());
 
-    ArgumentCaptor<Deadline> deadlineCaptor = ArgumentCaptor.forClass(Deadline.class);
-    verify(stream).setDeadline(deadlineCaptor.capture());
-
-    assertTimeoutBetween(deadlineCaptor.getValue().timeRemaining(TimeUnit.MILLISECONDS), 600, 1000);
+    verify(stream).setDeadline(eq(deadline));
   }
 
   @Test
@@ -935,7 +926,7 @@ public class ClientCallImplTest {
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+\\.[0-9]+s. "
+        .matches("CallOptions deadline exceeded after [0-9]+\\.[0-9]+s. "
             + "Name resolution delay 0.000000000 seconds. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
@@ -963,7 +954,24 @@ public class ClientCallImplTest {
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
-    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");
+    assertThat(statusCaptor.getValue().getDescription())
+        .matches("Context deadline exceeded after [0-9]+\\.[0-9]+s. "
+            + "Name resolution delay 0.000000000 seconds. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
+  }
+
+  @Test
+  public void cancelWithoutStart() {
+    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector);
+    // Nothing happens as a result, but it shouldn't throw
+    call.cancel("canceled", null);
   }
 
   @Test
@@ -1095,11 +1103,6 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     assertEquals(attrs, call.getAttributes());
-  }
-
-  private static void assertTimeoutBetween(long timeout, long from, long to) {
-    assertTrue("timeout: " + timeout + " ns", timeout <= to);
-    assertTrue("timeout: " + timeout + " ns", timeout >= from);
   }
 
   private static final class DelayedExecutor implements Executor {

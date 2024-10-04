@@ -34,6 +34,7 @@ dependencies {
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-census'),
+            project(":grpc-context"), // Override opencensus dependency with our newer version
             libraries.opencensus.contrib.grpc.metrics
     // Avoid gradle using project dependencies without configuration: shadow
     implementation (libraries.google.cloud.logging) {
@@ -64,8 +65,7 @@ dependencies {
             libraries.auto.value.annotations, // Use our newer version
             libraries.guava.jre, // Use our newer version
             libraries.protobuf.java.util, // Use our newer version
-            libraries.re2j, // Use our newer version
-            libraries.j2objc.annotations // Explicit dependency to keep in step with version used by guava
+            libraries.re2j // Use our newer version
 
     testImplementation testFixtures(project(':grpc-api')),
             project(':grpc-testing'),

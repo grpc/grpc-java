@@ -20,10 +20,10 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertTrue;
 
 import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.alts.ComputeEngineChannelCredentials;
-import io.grpc.netty.NettyChannelBuilder;
 import java.util.ArrayList;
 import java.util.logging.Logger;
 
@@ -289,7 +289,7 @@ public final class XdsFederationTestClient {
         default:
           throw new IllegalArgumentException("Unknown custom credentials: " + credentialsType);
       }
-      return NettyChannelBuilder.forTarget(serverUri, channelCredentials)
+      return Grpc.newChannelBuilder(serverUri, channelCredentials)
           .keepAliveTime(3600, SECONDS)
           .keepAliveTimeout(20, SECONDS);
     }

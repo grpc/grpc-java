@@ -16,7 +16,9 @@
 
 package io.grpc.cronet;
 
+import android.net.Network;
 import io.grpc.Internal;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Internal {@link CronetChannelBuilder} accessor. This is intended for usage internal to the gRPC
@@ -47,7 +49,7 @@ public final class InternalCronetChannelBuilder {
    * Sets specific UID to use when accounting socket traffic caused by this channel. See {@link
    * android.net.TrafficStats} for more information. Designed for use when performing an operation
    * on behalf of another application. Caller must hold {@link
-   * android.Manifest.permission#MODIFY_NETWORK_ACCOUNTING} permission. By default traffic is
+   * android.Manifest.permission#UPDATE_DEVICE_STATS} permission. By default traffic is
    * attributed to UID of caller.
    *
    * <p><b>NOTE:</b>Setting a UID disallows sharing of sockets with channels with other UIDs, which
@@ -57,5 +59,10 @@ public final class InternalCronetChannelBuilder {
    */
   public static void setTrafficStatsUid(CronetChannelBuilder builder, int uid) {
     builder.setTrafficStatsUid(uid);
+  }
+
+  /** Sets the network {@link android.net.Network} to use when relying traffic by this channel. */
+  public static void bindToNetwork(CronetChannelBuilder builder, @Nullable Network network) {
+    builder.bindToNetwork(network);
   }
 }

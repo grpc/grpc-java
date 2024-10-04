@@ -96,4 +96,15 @@ public interface ServerStream extends Stream {
    * The HTTP/2 stream id, or {@code -1} if not supported.
    */
   int streamId();
+
+  /**
+   * A hint to the stream that specifies how many bytes must be queued before
+   * {@link #isReady()} will return false. A stream may ignore this property if
+   * unsupported. This may only be set during stream initialization before
+   * any messages are set.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  void setOnReadyThreshold(int numBytes);
 }

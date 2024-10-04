@@ -16,6 +16,8 @@
 
 package io.grpc.stub;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import io.grpc.ExperimentalApi;
 
 /**
@@ -63,6 +65,21 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    * @param onCancelHandler to call when client has cancelled the call.
    */
   public abstract void setOnCancelHandler(Runnable onCancelHandler);
+
+
+  /**
+   * A hint to the call that specifies how many bytes must be queued before
+   * {@link #isReady()} will return false. A call may ignore this property if
+   * unsupported. This may only be set during stream initialization before
+   * any messages are set.
+   *
+   * @param numBytes The number of bytes that must be queued. Must be a
+   *                 positive integer.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public void setOnReadyThreshold(int numBytes) {
+    checkArgument(numBytes > 0, "numBytes must be positive: %s", numBytes);
+  }
 
   /**
    * Sets the compression algorithm to use for the call. May only be called before sending any

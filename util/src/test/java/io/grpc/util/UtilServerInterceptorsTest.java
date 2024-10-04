@@ -43,7 +43,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class UtilServerInterceptorsTest {
   private static class VoidCallListener extends ServerCall.Listener<Void> {
-    public void onCall(ServerCall<Void, Void> call, Metadata headers) { }
+    public void onCall(ServerCall<Void, Void> unused, Metadata unused2) { }
   }
 
   private MethodDescriptor<Void, Void> flowMethod = TestMethodDescriptors.voidMethod();

@@ -45,8 +45,7 @@ public final class BlockInputStreamTest {
 
   @Test
   public void testSingleBlock() throws Exception {
-    BlockInputStream bis =
-        new BlockInputStream(new byte[][] {getBytes(10, 1)}, 10);
+    BlockInputStream bis = new BlockInputStream(new byte[][] {getBytes(10, 1)}, 10);
     assertThat(bis.read(buff, 0, 20)).isEqualTo(10);
     assertBytes(buff, 0, 10, 1);
   }
@@ -95,8 +94,7 @@ public final class BlockInputStreamTest {
 
   @Test
   public void testMultipleBlocksEmptyFinalBlock() throws Exception {
-    BlockInputStream bis =
-        new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(0, 0)}, 10);
+    BlockInputStream bis = new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(0, 0)}, 10);
 
     assertThat(bis.read(buff, 0, 20)).isEqualTo(10);
     assertBytes(buff, 0, 10, 1);
@@ -106,8 +104,7 @@ public final class BlockInputStreamTest {
 
   @Test
   public void testMultipleBlocksEmptyFinalBlock_drain() throws Exception {
-    BlockInputStream bis =
-        new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(0, 0)}, 10);
+    BlockInputStream bis = new BlockInputStream(new byte[][] {getBytes(10, 1), getBytes(0, 0)}, 10);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     bis.drainTo(baos);
     byte[] data = baos.toByteArray();

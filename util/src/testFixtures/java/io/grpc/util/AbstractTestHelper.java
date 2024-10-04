@@ -17,7 +17,11 @@
 package io.grpc.util;
 
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.Maps;
 import io.grpc.Attributes;
@@ -31,10 +35,17 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
+import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 /**
  * A real class that can be used as a delegate of a mock Helper to provide more real representation
@@ -55,8 +66,25 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   protected final Map<Subchannel, Subchannel> realToMockSubChannelMap = new HashMap<>();
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
       Maps.newLinkedHashMap();
+  private final FakeClock fakeClock;
+  private final SynchronizationContext syncContext;
 
   public abstract Map<List<EquivalentAddressGroup>, Subchannel> getSubchannelMap();
+
+  public AbstractTestHelper() {
+    this(new FakeClock(), new SynchronizationContext(new Thread.UncaughtExceptionHandler() {
+      @Override
+      public void uncaughtException(Thread t, Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }));
+  }
+
+  public AbstractTestHelper(FakeClock fakeClock, SynchronizationContext syncContext) {
+    super();
+    this.fakeClock = fakeClock;
+    this.syncContext = syncContext;
+  }
 
   public Map<Subchannel, Subchannel> getMockToRealSubChannelMap() {
     return mockToRealSubChannelMap;
@@ -72,6 +100,18 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
   public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
     return subchannelStateListeners;
+  }
+
+  public static final FakeClock.TaskFilter NOT_START_NEXT_CONNECTION =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return !command.toString().contains("StartNextConnection");
+        }
+      };
+
+  public static int getNumFilteredPendingTasks(FakeClock fakeClock) {
+    return fakeClock.getPendingTasks(NOT_START_NEXT_CONNECTION).size();
   }
 
   public void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
@@ -124,8 +164,45 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   }
 
   @Override
+  public SynchronizationContext getSynchronizationContext() {
+    return syncContext;
+  }
+
+  @Override
+  public ScheduledExecutorService getScheduledExecutorService() {
+    return fakeClock.getScheduledExecutorService();
+  }
+
+  @Override
   public String toString() {
     return "Test Helper";
+  }
+
+  public static void refreshInvokedAndUpdateBS(InOrder inOrder, ConnectivityState state,
+                                                Helper helper,
+                                               ArgumentCaptor<SubchannelPicker> pickerCaptor) {
+    // Old PF and new PF reverse calling order of updateBlaancingState and refreshNameResolution
+    if (PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
+
+    inOrder.verify(helper).refreshNameResolution();
+
+    if (!PickFirstLoadBalancerProvider.isEnabledNewPickFirst()) {
+      inOrder.verify(helper).updateBalancingState(eq(state), pickerCaptor.capture());
+    }
+  }
+
+  public static void verifyNoMoreMeaningfulInteractions(Helper helper) {
+    verify(helper, atLeast(0)).getSynchronizationContext();
+    verify(helper, atLeast(0)).getScheduledExecutorService();
+    verifyNoMoreInteractions(helper);
+  }
+
+  public static void verifyNoMoreMeaningfulInteractions(Helper helper, InOrder inOrder) {
+    inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
+    inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
+    inOrder.verifyNoMoreInteractions();
   }
 
   protected class TestSubchannel extends ForwardingSubchannel {
@@ -196,6 +273,34 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     @Override
     public String toString() {
       return "Mock Subchannel" + args.toString();
+    }
+  }
+
+  public static final class FakeSocketAddress extends SocketAddress {
+    private static final long serialVersionUID = 0L;
+    final String name;
+
+    FakeSocketAddress(String name) {
+      this.name = name;
+    }
+
+    @Override
+    public String toString() {
+      return "FakeSocketAddress-" + name;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof FakeSocketAddress)) {
+        return false;
+      }
+      FakeSocketAddress that = (FakeSocketAddress) o;
+      return this.name.equals(that.name);
+    }
+
+    @Override
+    public int hashCode() {
+      return name.hashCode();
     }
   }
 }

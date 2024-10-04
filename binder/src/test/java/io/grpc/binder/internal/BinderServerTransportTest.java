@@ -22,12 +22,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.robolectric.Shadows.shadowOf;
 import static org.robolectric.annotation.LooperMode.Mode.PAUSED;
 
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Parcel;
 import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.testing.TestingExecutors;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -56,8 +57,7 @@ public final class BinderServerTransportTest {
 
   @Rule public MockitoRule mocks = MockitoJUnit.rule();
 
-  private final ScheduledExecutorService executorService =
-      TestingExecutors.sameThreadScheduledExecutor();
+  private final ScheduledExecutorService executorService = new MainThreadScheduledExecutorService();
   private final TestTransportListener transportListener = new TestTransportListener();
 
   @Mock IBinder mockBinder;
@@ -71,6 +71,7 @@ public final class BinderServerTransportTest {
             new FixedObjectPool<>(executorService),
             Attributes.EMPTY,
             ImmutableList.of(),
+            OneWayBinderProxy.IDENTITY_DECORATOR,
             mockBinder);
   }
 
@@ -82,6 +83,7 @@ public final class BinderServerTransportTest {
 
     // Now shut it down.
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
+    shadowOf(Looper.getMainLooper()).idle();
 
     assertThat(transportListener.terminated).isTrue();
   }

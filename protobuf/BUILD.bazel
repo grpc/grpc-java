@@ -1,3 +1,5 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
 java_library(
     name = "protobuf",
     srcs = glob([
@@ -7,10 +9,9 @@ java_library(
     deps = [
         "//api",
         "//protobuf-lite",
-        "@com_google_api_grpc_proto_google_common_protos//jar",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
         "@com_google_protobuf//:protobuf_java",
+        artifact("com.google.api.grpc:proto-google-common-protos"),
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
     ],
 )

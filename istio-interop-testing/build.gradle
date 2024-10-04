@@ -9,10 +9,6 @@ plugins {
 
 description = "gRPC: Istio Interop testing"
 
-configurations {
-    alpnagent
-}
-
 dependencies {
     implementation  project(':grpc-core'),
             project(':grpc-netty'),
@@ -31,7 +27,6 @@ dependencies {
             libraries.mockito.core,
             libraries.junit,
             libraries.truth
-    alpnagent libraries.jetty.alpn.agent
 
     signature libraries.signature.java
 }

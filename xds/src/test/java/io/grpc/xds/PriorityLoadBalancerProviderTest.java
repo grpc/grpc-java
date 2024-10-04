@@ -21,7 +21,7 @@ import static org.mockito.Mockito.mock;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import java.util.List;
@@ -45,7 +45,7 @@ public class PriorityLoadBalancerProviderTest {
         ImmutableMap.of(
             "p0",
             new PriorityChildConfig(
-                new PolicySelection(mock(LoadBalancerProvider.class), null), true));
+                newChildConfig(mock(LoadBalancerProvider.class), null), true));
     List<String> priorities = ImmutableList.of();
 
     thrown.expect(IllegalArgumentException.class);
@@ -59,10 +59,14 @@ public class PriorityLoadBalancerProviderTest {
         ImmutableMap.of(
             "p1",
             new PriorityChildConfig(
-                new PolicySelection(mock(LoadBalancerProvider.class), null), true));
+                newChildConfig(mock(LoadBalancerProvider.class), null), true));
     List<String> priorities = ImmutableList.of("p0", "p1");
 
     thrown.expect(IllegalArgumentException.class);
     new PriorityLbConfig(childConfigs, priorities);
+  }
+
+  private Object newChildConfig(LoadBalancerProvider provider, Object config) {
+    return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
   }
 }
