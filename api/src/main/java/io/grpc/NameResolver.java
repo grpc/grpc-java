@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Objects;
 import com.google.errorprone.annotations.InlineMe;
 import java.lang.annotation.Documented;
@@ -675,11 +676,19 @@ public abstract class NameResolver {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("addresses", addressesOrError)
-          .add("attributes", attributes)
-          .add("serviceConfig", serviceConfig)
-          .toString();
+      ToStringHelper stringHelper = MoreObjects.toStringHelper(this);
+      if (addressesOrError.hasValue()) {
+        stringHelper.add("addresses", addressesOrError.getValue());
+      } else {
+        stringHelper.add("address resolution error", addressesOrError.getStatus());
+      }
+      stringHelper.add("attributes", attributes);
+      if (serviceConfig.getConfig() != null) {
+        stringHelper.add("serviceConfig", serviceConfig);
+      } else {
+        stringHelper.add("serviceConfig error", serviceConfig.getError());
+      }
+      return stringHelper.toString();
     }
 
     /**

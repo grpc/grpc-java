@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
@@ -156,6 +157,7 @@ public class DnsNameResolverTest {
   private String networkaddressCacheTtlPropertyValue;
   @Mock
   private RecordFetcher recordFetcher;
+  @Mock private ProxyDetector mockProxyDetector;
 
   private RetryingNameResolver newResolver(String name, int defaultPort) {
     return newResolver(
@@ -574,6 +576,39 @@ public class DnsNameResolverTest {
 
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
+  }
+
+  @Test
+  public void resolve_addressResolutionError() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    when(mockProxyDetector.proxyFor(any(SocketAddress.class))).thenThrow(new IOException());
+    RetryingNameResolver resolver = newResolver(
+        "addr.fake:1234", 443, mockProxyDetector, Stopwatch.createUnstarted());
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(new AddressResolver() {
+      @Override
+      public List<InetAddress> resolveAddress(String host) throws Exception {
+        return Collections.emptyList();
+      }
+    });
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(anyString()))
+        .thenReturn(Collections.<String>emptyList());
+
+    dnsResolver.setResourceResolver(mockResourceResolver);
+
+    resolver.start(mockListener);
+    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+
+    ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
+    verify(mockListener).onResult2(ac.capture());
+    verifyNoMoreInteractions(mockListener);
+    assertThat(ac.getValue().getAddressesOrError().getStatus().getCode()).isEqualTo(
+        Status.UNAVAILABLE.getCode());
+    assertThat(ac.getValue().getAddressesOrError().getStatus().getDescription()).isEqualTo(
+        "Unable to resolve host addr.fake");
+    assertThat(ac.getValue().getAddressesOrError().getStatus().getCause())
+        .isInstanceOf(IOException.class);
   }
 
   // Load balancer rejects the empty addresses.
