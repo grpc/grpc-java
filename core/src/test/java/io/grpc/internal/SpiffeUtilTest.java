@@ -28,6 +28,7 @@ import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
 import java.io.File;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Paths;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
@@ -282,8 +283,8 @@ public class SpiffeUtilTest {
 
     @Test
     public void loadTrustBundleFromFileSuccessTest() throws Exception {
-      SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(getClass().getClassLoader()
-          .getResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_FILE).getPath());
+      SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(Paths.get(ClassLoader
+          .getSystemResource(TEST_DIRECTORY_PREFIX + SPIFFE_TRUST_BUNDLE_FILE).toURI()).toString());
       assertEquals(2, tb.getSequenceNumbers().size());
       assertEquals(12035488L, (long) tb.getSequenceNumbers().get("example.com"));
       assertEquals(-1L, (long) tb.getSequenceNumbers().get("test.example.com"));
@@ -351,6 +352,9 @@ public class SpiffeUtilTest {
       log.log(Level.SEVERE, "fsTest");
       log.log(Level.SEVERE, getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
           + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath());
+      String path = Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).toURI()).toString();
+      log.log(Level.SEVERE, path);
       log.log(Level.SEVERE, SpiffeUtilTest.class.getClassLoader().getResource(TEST_DIRECTORY_PREFIX
           + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath());
       log.log(Level.SEVERE, SpiffeUtilTest.class.getClassLoader().getResource(TEST_DIRECTORY_PREFIX
@@ -358,8 +362,7 @@ public class SpiffeUtilTest {
       log.log(Level.SEVERE, new File("src/test/resources").getAbsolutePath());
       log.log(Level.SEVERE, new File("src/test/resources/io/grpc/internal/spiffebundle.json")
           .getAbsolutePath());
-      log.log(Level.SEVERE, new File("non-exist")
-          .getAbsolutePath());
+      log.log(Level.SEVERE, new File("non-exist").getAbsolutePath());
     }
 
     @Test
