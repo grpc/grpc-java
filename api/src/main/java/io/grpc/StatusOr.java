@@ -61,7 +61,7 @@ public class StatusOr<T> {
 
   /** Returns the status. If there is a value (which can be null), returns OK. */
   public Status getStatus() {
-    return status == null? Status.OK : status;
+    return status == null ? Status.OK : status;
   }
 
   @Override

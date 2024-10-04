@@ -728,7 +728,7 @@ public abstract class NameResolver {
        */
       @Deprecated
       public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
-        this.addresses = StatusOr.fromValue(addresses);
+        setAddressesOrError(StatusOr.fromValue(addresses));
         return this;
       }
 
@@ -738,7 +738,7 @@ public abstract class NameResolver {
        * @param addresses Resolved addresses or an error in resolving addresses
        */
       public Builder setAddressesOrError(StatusOr<List<EquivalentAddressGroup>> addresses) {
-        this.addresses = addresses;
+        this.addresses = checkNotNull(addresses, "StatusOr addresses cannot be null.");
         return this;
       }
 

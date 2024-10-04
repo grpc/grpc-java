@@ -1704,7 +1704,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       StatusOr<List<EquivalentAddressGroup>> serversOrError =
           resolutionResult.getAddressesOrError();
-      if (serversOrError != null && serversOrError.hasValue()) {
+      if (serversOrError.hasValue()) {
         channelLogger.log(
             ChannelLogLevel.DEBUG,
             "Resolved address: {0}, config={1}",
