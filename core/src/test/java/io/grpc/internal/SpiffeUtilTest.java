@@ -26,14 +26,11 @@ import io.grpc.internal.SpiffeUtil.SpiffeBundle;
 import io.grpc.internal.SpiffeUtil.SpiffeId;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
-import java.io.File;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Paths;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
@@ -45,8 +42,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Enclosed.class)
 public class SpiffeUtilTest {
-
-  private static final Logger log = Logger.getLogger(SpiffeUtilTest.class.getName());
 
   @RunWith(Parameterized.class)
   public static class ParseSuccessTest {
@@ -302,67 +297,49 @@ public class SpiffeUtilTest {
     public void loadTrustBundleFromFileFailureTest() throws Exception {
       // Check the exception if JSON root element is different from 'trust_domains'
       NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+                  + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).toURI()).toString()));
       assertEquals("Mandatory trust_domains element is missing", npe.getMessage());
       // Check the exception if JSON file doesn't contain an object
       IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_MALFORMED).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_MALFORMED).toURI()).toString()));
       assertTrue(iae.getMessage().contains("SPIFFE Trust Bundle should be a JSON object."));
       // Check the exception if JSON contains duplicates
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_DUPLICATES).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_DUPLICATES).toURI()).toString()));
       assertEquals("Duplicate key found: google.com", iae.getMessage());
       // Check the exception if 'x5c' value cannot be parsed
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT).toURI()).toString()));
       assertEquals("Certificate can't be parsed." + DOMAIN_ERROR_MESSAGE,
           iae.getMessage());
       // Check the exception if 'kty' value differs from 'RSA'
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_WRONG_KTY).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_WRONG_KTY).toURI()).toString()));
       assertEquals("'kty' parameter must be 'RSA' but 'null' found." + DOMAIN_ERROR_MESSAGE,
           iae.getMessage());
       // Check the exception if 'kid' has a value
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_WRONG_KID).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_WRONG_KID).toURI()).toString()));
       assertEquals("'kid' parameter must not be set but value 'some_value' found."
           + DOMAIN_ERROR_MESSAGE, iae.getMessage());
       // Check the exception if 'use' value differs from 'x509-svid'
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_WRONG_USE).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_WRONG_USE).toURI()).toString()));
       assertEquals("'use' parameter must be 'x509-svid' but 'i_am_not_x509-svid' found."
           + DOMAIN_ERROR_MESSAGE, iae.getMessage());
       // Check the exception if multiple certs are provided for 'x5c'
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-              + SPIFFE_TRUST_BUNDLE_WRONG_MULTI_CERTs).getPath()));
+          .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
+              + SPIFFE_TRUST_BUNDLE_WRONG_MULTI_CERTs).toURI()).toString()));
       assertEquals("Exactly 1 certificate is expected, but 2 found." + DOMAIN_ERROR_MESSAGE,
           iae.getMessage());
-    }
-
-    @Test
-    public void fsTest() throws Exception {
-      log.log(Level.SEVERE, "fsTest");
-      log.log(Level.SEVERE, getClass().getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath());
-      String path = Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
-          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).toURI()).toString();
-      log.log(Level.SEVERE, path);
-      log.log(Level.SEVERE, SpiffeUtilTest.class.getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getPath());
-      log.log(Level.SEVERE, SpiffeUtilTest.class.getClassLoader().getResource(TEST_DIRECTORY_PREFIX
-          + SPIFFE_TRUST_BUNDLE_WRONG_ROOT).getFile());
-      log.log(Level.SEVERE, new File("src/test/resources").getAbsolutePath());
-      log.log(Level.SEVERE, new File("src/test/resources/io/grpc/internal/spiffebundle.json")
-          .getAbsolutePath());
-      log.log(Level.SEVERE, new File("non-exist").getAbsolutePath());
     }
 
     @Test
