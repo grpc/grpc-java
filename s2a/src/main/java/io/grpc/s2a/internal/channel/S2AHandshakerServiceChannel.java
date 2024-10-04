@@ -19,13 +19,9 @@ package io.grpc.s2a.internal.channel;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import com.google.common.annotations.VisibleForTesting;
-import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
-import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
-import io.grpc.MethodDescriptor;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import java.time.Duration;
@@ -55,6 +51,8 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public final class S2AHandshakerServiceChannel {
   private static final Duration CHANNEL_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
+  private static final Logger logger =
+          Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
 
   /**
    * Returns a {@link SharedResourceHolder.Resource} instance for managing channels to an S2A server
@@ -86,75 +84,35 @@ public final class S2AHandshakerServiceChannel {
     }
 
     /**
-     * Creates a {@code HandshakerServiceChannel} instance to the service running at {@code
+     * Creates a {@code ManagedChannel} instance to the service running at {@code
      * targetAddress}.
      */
     @Override
     public Channel create() {
-      ManagedChannel channel =
-          NettyChannelBuilder.forTarget(targetAddress, channelCredentials)
+      return NettyChannelBuilder.forTarget(targetAddress, channelCredentials)
               .directExecutor()
+              .idleTimeout(5, SECONDS)
               .build();
-      return HandshakerServiceChannel.create(channel);
     }
 
-    /** Destroys a {@code HandshakerServiceChannel} instance. */
+    /** Destroys a {@code ManagedChannel} instance. */
     @Override
     public void close(Channel instanceChannel) {
       checkNotNull(instanceChannel);
-      HandshakerServiceChannel channel = (HandshakerServiceChannel) instanceChannel;
-      channel.close();
+      ManagedChannel channel = (ManagedChannel) instanceChannel;
+      channel.shutdownNow();
+      try {
+        channel.awaitTermination(CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        logger.log(Level.WARNING, "Channel to S2A was not shutdown.");
+      }
+
     }
 
     @Override
     public String toString() {
       return "grpc-s2a-channel";
-    }
-  }
-
-  /**
-   * Manages a channel using a {@link ManagedChannel} instance.
-   */
-  @VisibleForTesting
-  static class HandshakerServiceChannel extends Channel {
-    private static final Logger logger =
-          Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
-    private final ManagedChannel delegate;
-
-    static HandshakerServiceChannel create(ManagedChannel delegate) {
-      checkNotNull(delegate);
-      return new HandshakerServiceChannel(delegate);
-    }
-
-    private HandshakerServiceChannel(ManagedChannel delegate) {
-      this.delegate = delegate;
-    }
-
-    /**
-     * Returns the address of the service to which the {@code delegate} channel connects, which is
-     * typically of the form {@code host:port}.
-     */
-    @Override
-    public String authority() {
-      return delegate.authority();
-    }
-
-    /** Creates a {@link ClientCall} that invokes the operations in {@link MethodDescriptor}. */
-    @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
-        MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions options) {
-      return delegate.newCall(methodDescriptor, options);
-    }
-
-    @SuppressWarnings("FutureReturnValueIgnored")
-    public void close() {
-      delegate.shutdownNow();
-      try {
-        delegate.awaitTermination(CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        logger.log(Level.WARNING, "Channel to S2A was not shutdown.");
-      }
     }
   }
 

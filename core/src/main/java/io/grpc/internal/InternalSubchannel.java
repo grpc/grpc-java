@@ -45,6 +45,7 @@ import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
+import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -77,6 +78,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
+  private final boolean reconnectDisabled;
 
   private final List<ClientTransportFilter> transportFilters;
 
@@ -159,13 +161,15 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
   private volatile Attributes connectedAddressAttributes;
 
-  InternalSubchannel(List<EquivalentAddressGroup> addressGroups, String authority, String userAgent,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
-      Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
-      InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
-      InternalLogId logId, ChannelLogger channelLogger,
-      List<ClientTransportFilter> transportFilters) {
+  InternalSubchannel(LoadBalancer.CreateSubchannelArgs args, String authority, String userAgent,
+                     BackoffPolicy.Provider backoffPolicyProvider,
+                     ClientTransportFactory transportFactory,
+                     ScheduledExecutorService scheduledExecutor,
+                     Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext,
+                     Callback callback, InternalChannelz channelz, CallTracer callsTracer,
+                     ChannelTracer channelTracer, InternalLogId logId,
+                     ChannelLogger channelLogger, List<ClientTransportFilter> transportFilters) {
+    List<EquivalentAddressGroup> addressGroups = args.getAddresses();
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
@@ -187,6 +191,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.logId = Preconditions.checkNotNull(logId, "logId");
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.transportFilters = transportFilters;
+    this.reconnectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
   }
 
   ChannelLogger getChannelLogger() {
@@ -289,6 +294,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     }
 
     gotoState(ConnectivityStateInfo.forTransientFailure(status));
+
+    if (reconnectDisabled) {
+      return;
+    }
+
     if (reconnectPolicy == null) {
       reconnectPolicy = backoffPolicyProvider.get();
     }
@@ -337,7 +347,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     if (state.getState() != newState.getState()) {
       Preconditions.checkState(state.getState() != SHUTDOWN,
           "Cannot transition out of SHUTDOWN to " + newState);
-      state = newState;
+      if (reconnectDisabled && newState.getState() == TRANSIENT_FAILURE) {
+        state = ConnectivityStateInfo.forNonError(IDLE);
+      } else {
+        state = newState;
+      }
       callback.onStateChange(InternalSubchannel.this, newState);
     }
   }
