@@ -59,25 +59,24 @@ public class StatusOr<T> {
     return value;
   }
 
-  /** Returns the status. If there is a value, returns OK. */
+  /** Returns the status. If there is a value (which can be null), returns OK. */
   public Status getStatus() {
-    return value != null ? Status.OK : status;
+    return status == null? Status.OK : status;
   }
 
   @Override
-  @SuppressWarnings({"ReferenceEquality", "unchecked"})
   public boolean equals(Object other) {
     if (!(other instanceof StatusOr)) {
       return false;
     }
-    StatusOr<T> otherStatus = (StatusOr<T>) other;
+    StatusOr<?> otherStatus = (StatusOr<?>) other;
     if (hasValue() != otherStatus.hasValue()) {
       return false;
     }
     if (hasValue()) {
       return Objects.equal(value, otherStatus.value);
     }
-    return status == otherStatus.status;
+    return Objects.equal(status, otherStatus.status);
   }
 
   @Override
