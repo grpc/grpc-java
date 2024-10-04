@@ -1704,21 +1704,21 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       StatusOr<List<EquivalentAddressGroup>> serversOrError =
           resolutionResult.getAddressesOrError();
-      if (serversOrError.hasValue()) {
-        channelLogger.log(
-            ChannelLogLevel.DEBUG,
-            "Resolved address: {0}, config={1}",
-            serversOrError,
-            resolutionResult.getAttributes());
-
-        if (lastResolutionState != ResolutionState.SUCCESS) {
-          channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}",
-              serversOrError.getValue());
-          lastResolutionState = ResolutionState.SUCCESS;
-        }
-      } else if (serversOrError != null && !serversOrError.hasValue()) {
+      if (!serversOrError.hasValue()) {
         handleErrorInSyncContext(serversOrError.getStatus());
         return serversOrError.getStatus();
+      }
+      List<EquivalentAddressGroup> servers = serversOrError.getValue();
+      channelLogger.log(
+          ChannelLogLevel.DEBUG,
+          "Resolved address: {0}, config={1}",
+          servers,
+          resolutionResult.getAttributes());
+
+      if (lastResolutionState != ResolutionState.SUCCESS) {
+        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}",
+            servers);
+        lastResolutionState = ResolutionState.SUCCESS;
       }
       ConfigOrError configOrError = resolutionResult.getServiceConfig();
       InternalConfigSelector resolvedConfigSelector =
@@ -1821,13 +1821,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         Attributes attributes = attrBuilder.build();
 
-        ResolvedAddresses.Builder resolvedAddresses = ResolvedAddresses.newBuilder();
-        if (serversOrError != null && serversOrError.hasValue()) {
-          resolvedAddresses.setAddresses(serversOrError.getValue());
-        } else {
-          resolvedAddresses.setAddresses(new ArrayList<>());
-        }
-        resolvedAddresses = resolvedAddresses.setAttributes(attributes)
+        ResolvedAddresses.Builder resolvedAddresses = ResolvedAddresses.newBuilder()
+            .setAddresses(serversOrError.getValue())
+            .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig());
         Status addressAcceptanceStatus = helper.lb.tryAcceptResolvedAddresses(
             resolvedAddresses.build());
