@@ -36,6 +36,6 @@ public final class InternalSharedXdsClientPoolProvider {
 
   public static ObjectPool<XdsClient> getOrCreate(String target)
       throws XdsInitializationException {
-    return SharedXdsClientPoolProvider.getDefaultProvider().getOrCreate();
+    return SharedXdsClientPoolProvider.getDefaultProvider().getOrCreate(target);
   }
 }

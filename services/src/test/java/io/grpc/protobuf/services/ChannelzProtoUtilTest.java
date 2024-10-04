@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
@@ -82,6 +81,7 @@ import io.netty.channel.unix.DomainSocketAddress;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.util.Arrays;
 import java.util.Collections;
@@ -437,8 +437,8 @@ public final class ChannelzProtoUtilTest {
   public void socketSecurityTls() throws Exception {
     Certificate local = mock(Certificate.class);
     Certificate remote = mock(Certificate.class);
-    when(local.getEncoded()).thenReturn("localcert".getBytes(Charsets.UTF_8));
-    when(remote.getEncoded()).thenReturn("remotecert".getBytes(Charsets.UTF_8));
+    when(local.getEncoded()).thenReturn("localcert".getBytes(StandardCharsets.UTF_8));
+    when(remote.getEncoded()).thenReturn("remotecert".getBytes(StandardCharsets.UTF_8));
 
     socket.security = new InternalChannelz.Security(
         new InternalChannelz.Tls("TLS_NULL_WITH_NULL_NULL", local, remote));
@@ -446,8 +446,8 @@ public final class ChannelzProtoUtilTest {
         Security.newBuilder().setTls(
             Tls.newBuilder()
             .setStandardName("TLS_NULL_WITH_NULL_NULL")
-            .setLocalCertificate(ByteString.copyFrom("localcert", Charsets.UTF_8))
-            .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
+            .setLocalCertificate(ByteString.copyFrom("localcert", StandardCharsets.UTF_8))
+            .setRemoteCertificate(ByteString.copyFrom("remotecert", StandardCharsets.UTF_8)))
         .build(),
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
@@ -457,7 +457,7 @@ public final class ChannelzProtoUtilTest {
         Security.newBuilder().setTls(
             Tls.newBuilder()
             .setStandardName("TLS_NULL_WITH_NULL_NULL")
-            .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
+            .setRemoteCertificate(ByteString.copyFrom("remotecert", StandardCharsets.UTF_8)))
         .build(),
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
@@ -467,7 +467,7 @@ public final class ChannelzProtoUtilTest {
         Security.newBuilder().setTls(
             Tls.newBuilder()
                 .setStandardName("TLS_NULL_WITH_NULL_NULL")
-                .setLocalCertificate(ByteString.copyFrom("localcert", Charsets.UTF_8)))
+                .setLocalCertificate(ByteString.copyFrom("localcert", StandardCharsets.UTF_8)))
             .build(),
             ChannelzProtoUtil.toSocket(socket).getSecurity());
   }

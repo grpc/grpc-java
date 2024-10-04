@@ -1,0 +1,14 @@
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+O = int2O
+OU = int2OU
+CN = int2CN
+
+[v3_req]
+keyUsage = critical, keyCertSign, cRLSign
+extendedKeyUsage = critical, clientAuth, serverAuth
+basicConstraints = critical, CA:true, pathlen: 2

@@ -957,7 +957,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // Must run in SynchronizationContext.
     void onConfigError() {
       if (configSelector.get() == INITIAL_PENDING_SELECTOR) {
-        updateConfigSelector(null);
+        // Apply Default Service Config if initial name resolution fails.
+        if (defaultServiceConfig != null) {
+          updateConfigSelector(defaultServiceConfig.getDefaultConfigSelector());
+          lastServiceConfig = defaultServiceConfig;
+          channelLogger.log(ChannelLogLevel.ERROR,
+              "Initial Name Resolution error, using default service config");
+        } else {
+          updateConfigSelector(null);
+        }
       }
     }
 
@@ -1476,7 +1484,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroup,
+          CreateSubchannelArgs.newBuilder().setAddresses(addressGroup).build(),
           authority, userAgent, backoffPolicyProvider, oobTransportFactory,
           oobTransportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
           // All callback methods are run from syncContext
@@ -1919,7 +1927,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          args.getAddresses(),
+          args,
           authority(),
           userAgent,
           backoffPolicyProvider,
@@ -2054,6 +2062,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
         addrs = stripOverrideAuthorityAttributes(addrs);
       }
       subchannel.updateAddresses(addrs);
+    }
+
+    @Override
+    public Attributes getConnectedAddressAttributes() {
+      return subchannel.getConnectedAddressAttributes();
     }
 
     private List<EquivalentAddressGroup> stripOverrideAuthorityAttributes(

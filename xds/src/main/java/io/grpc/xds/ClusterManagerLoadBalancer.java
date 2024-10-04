@@ -23,11 +23,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
-import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
 import io.grpc.xds.client.XdsLogger;
@@ -70,64 +70,48 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ResolvedAddresses getChildAddresses(Object key, ResolvedAddresses resolvedAddresses,
-      Object childConfig) {
-    return resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build();
+  protected ChildLbState createChildLbState(Object key) {
+    return new ClusterManagerLbState(key, GracefulSwitchLoadBalancerFactory.INSTANCE);
   }
 
   @Override
-  protected Map<Object, ChildLbState> createChildLbMap(ResolvedAddresses resolvedAddresses) {
+  protected Map<Object, ResolvedAddresses> createChildAddressesMap(
+      ResolvedAddresses resolvedAddresses) {
+    lastResolvedAddresses = resolvedAddresses;
+
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
-    Map<Object, ChildLbState> newChildPolicies = new HashMap<>();
-    if (config != null) {
-      for (Entry<String, PolicySelection> entry : config.childPolicies.entrySet()) {
-        ChildLbState child = getChildLbState(entry.getKey());
-        if (child == null) {
-          child = new ClusterManagerLbState(entry.getKey(),
-              entry.getValue().getProvider(), entry.getValue().getConfig(), getInitialPicker());
+    Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
+
+    // Reactivate children with config; deactivate children without config
+    for (ChildLbState rawState : getChildLbStates()) {
+      ClusterManagerLbState state = (ClusterManagerLbState) rawState;
+      if (config.childPolicies.containsKey(state.getKey())) {
+        // Active child
+        if (state.deletionTimer != null) {
+          state.reactivateChild();
         }
-        newChildPolicies.put(entry.getKey(), child);
+      } else {
+        // Inactive child
+        if (state.deletionTimer == null) {
+          state.deactivateChild();
+        }
+        if (state.deletionTimer.isPending()) {
+          childAddresses.put(state.getKey(), null); // Preserve child, without config update
+        }
       }
+    }
+
+    for (Map.Entry<String, Object> childPolicy : config.childPolicies.entrySet()) {
+      ResolvedAddresses addresses = resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(childPolicy.getValue())
+          .build();
+      childAddresses.put(childPolicy.getKey(), addresses);
     }
     logger.log(
         XdsLogLevel.INFO,
-        "Received cluster_manager lb config: child names={0}", newChildPolicies.keySet());
-    return newChildPolicies;
-  }
-
-  /**
-   * This is like the parent except that it doesn't shutdown the removed children since we want that
-   * to be done by the timer.
-   */
-  @Override
-  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (lastResolvedAddresses != null) {
-      // Handle deactivated children
-      ClusterManagerConfig config = (ClusterManagerConfig)
-          resolvedAddresses.getLoadBalancingPolicyConfig();
-      ClusterManagerConfig lastConfig = (ClusterManagerConfig)
-          lastResolvedAddresses.getLoadBalancingPolicyConfig();
-      Map<String, PolicySelection> adjChildPolicies = new HashMap<>(config.childPolicies);
-      for (Entry<String, PolicySelection> entry : lastConfig.childPolicies.entrySet()) {
-        ClusterManagerLbState state = (ClusterManagerLbState) getChildLbState(entry.getKey());
-        if (adjChildPolicies.containsKey(entry.getKey())) {
-          if (state.deletionTimer != null) {
-            state.reactivateChild();
-          }
-        } else if (state != null) {
-          adjChildPolicies.put(entry.getKey(), entry.getValue());
-          if (state.deletionTimer == null) {
-            state.deactivateChild();
-          }
-        }
-      }
-      config = new ClusterManagerConfig(adjChildPolicies);
-      resolvedAddresses =
-          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build();
-    }
-    lastResolvedAddresses = resolvedAddresses;
-    return super.acceptResolvedAddresses(resolvedAddresses);
+        "Received cluster_manager lb config: child names={0}", config.childPolicies.keySet());
+    return childAddresses;
   }
 
   /**
@@ -183,11 +167,12 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     for (ChildLbState state : getChildLbStates()) {
       if (((ClusterManagerLbState) state).deletionTimer == null) {
         gotoTransientFailure = false;
-        handleNameResolutionError(state, error);
+        state.getLb().handleNameResolutionError(error);
       }
     }
     if (gotoTransientFailure) {
-      getHelper().updateBalancingState(TRANSIENT_FAILURE, getErrorPicker(error));
+      getHelper().updateBalancingState(
+          TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     }
   }
 
@@ -201,9 +186,8 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
     @Nullable
     ScheduledHandle deletionTimer;
 
-    public ClusterManagerLbState(Object key, LoadBalancerProvider policyProvider,
-        Object childConfig, SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+    public ClusterManagerLbState(Object key, LoadBalancer.Factory policyFactory) {
+      super(key, policyFactory);
     }
 
     @Override
@@ -234,14 +218,6 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
 
         @Override
         public void run() {
-          ClusterManagerConfig config = (ClusterManagerConfig)
-              lastResolvedAddresses.getLoadBalancingPolicyConfig();
-          Map<String, PolicySelection> childPolicies = new HashMap<>(config.childPolicies);
-          PolicySelection removed = childPolicies.remove(getKey());
-          assert removed != null;
-          config = new ClusterManagerConfig(childPolicies);
-          lastResolvedAddresses =
-              lastResolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build();
           acceptResolvedAddresses(lastResolvedAddresses);
         }
       }
@@ -259,9 +235,7 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
       @Override
       public void updateBalancingState(final ConnectivityState newState,
                                        final SubchannelPicker newPicker) {
-        // If we are already in the process of resolving addresses, the overall balancing state
-        // will be updated at the end of it, and we don't need to trigger that update here.
-        if (getChildLbState(getKey()) == null) {
+        if (getCurrentState() == ConnectivityState.SHUTDOWN) {
           return;
         }
 
@@ -269,10 +243,21 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
         // when the child instance exits deactivated state.
         setCurrentState(newState);
         setCurrentPicker(newPicker);
+        // If we are already in the process of resolving addresses, the overall balancing state
+        // will be updated at the end of it, and we don't need to trigger that update here.
         if (deletionTimer == null && !resolvingAddresses) {
           updateOverallBalancingState();
         }
       }
+    }
+  }
+
+  static final class GracefulSwitchLoadBalancerFactory extends LoadBalancer.Factory {
+    static final LoadBalancer.Factory INSTANCE = new GracefulSwitchLoadBalancerFactory();
+
+    @Override
+    public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+      return new GracefulSwitchLoadBalancer(helper);
     }
   }
 }

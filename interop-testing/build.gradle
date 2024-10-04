@@ -13,12 +13,10 @@ dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
             project(':grpc-census'),
-            project(':grpc-core'),
+            project(':grpc-opentelemetry'),
             project(':grpc-gcp-csm-observability'),
-            project(':grpc-googleapis'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
-            project(':grpc-rls'),
             project(':grpc-services'),
             project(':grpc-testing'),
             project(':grpc-protobuf-lite'),
@@ -45,6 +43,7 @@ dependencies {
             libraries.netty.tcnative,
             libraries.netty.tcnative.classes,
             libraries.opentelemetry.exporter.prometheus, // For xds interop client
+            project(':grpc-googleapis'),
             project(':grpc-grpclb'),
             project(':grpc-rls')
     testImplementation testFixtures(project(':grpc-api')),

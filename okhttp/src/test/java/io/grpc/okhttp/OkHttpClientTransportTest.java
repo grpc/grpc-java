@@ -16,7 +16,6 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
@@ -25,6 +24,7 @@ import static io.grpc.okhttp.Headers.CONTENT_TYPE_HEADER;
 import static io.grpc.okhttp.Headers.HTTP_SCHEME_HEADER;
 import static io.grpc.okhttp.Headers.METHOD_HEADER;
 import static io.grpc.okhttp.Headers.TE_HEADER;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -245,6 +245,28 @@ public class OkHttpClientTransportTest {
     String s = clientTransport.toString();
     assertTrue("Unexpected: " + s, s.contains("OkHttpClientTransport"));
     assertTrue("Unexpected: " + s, s.contains(address.toString()));
+  }
+
+  @Test
+  public void testTransportExecutorWithTooFewThreads() throws Exception {
+    ExecutorService fixedPoolExecutor = Executors.newFixedThreadPool(1);
+    channelBuilder.transportExecutor(fixedPoolExecutor);
+    InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
+    clientTransport = new OkHttpClientTransport(
+        channelBuilder.buildTransportFactory(),
+        address,
+        "hostname",
+        null,
+        EAG_ATTRS,
+        NO_PROXY,
+        tooManyPingsRunnable);
+    clientTransport.start(transportListener);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture());
+    Status capturedStatus = statusCaptor.getValue();
+    assertEquals("Timed out waiting for second handshake thread. "
+        + "The transport executor pool may have run out of threads",
+        capturedStatus.getDescription());
   }
 
   /**

@@ -66,7 +66,6 @@ import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
-import io.grpc.xds.RingHashLoadBalancer.RingHashChildLbState;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
@@ -151,7 +150,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
+                            && !PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
     verify(subchannel, times(expectedTimes)).requestConnection();
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
     verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
@@ -177,8 +177,7 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
-    RingHashChildLbState childLbState =
-        (RingHashChildLbState) loadBalancer.getChildLbStates().iterator().next();
+    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
     assertThat(subchannels.get(Collections.singletonList(childLbState.getEag()))).isNull();
 
     // Picking subchannel triggers connection.
@@ -186,7 +185,8 @@ public class RingHashLoadBalancerTest {
     pickerCaptor.getValue().pickSubchannel(args);
     Subchannel subchannel = subchannels.get(Collections.singletonList(childLbState.getEag()));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()
+                            || !PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 2 : 1;
     inOrder.verify(subchannel, times(expectedTimes)).requestConnection();
     deliverSubchannelState(subchannel, CSI_READY);
     inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
@@ -422,7 +422,7 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Create subchannel for the first address
-    ((RingHashChildLbState) loadBalancer.getChildLbStateEag(servers.get(0))).getCurrentPicker()
+    loadBalancer.getChildLbStateEag(servers.get(0)).getCurrentPicker()
         .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
     verifyConnection(1);
 
@@ -445,8 +445,10 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();  // buffer request
-    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
     // verify kicked off connection to server2
+    int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()
+                            || !PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 2 : 1;
+
     verify(getSubChannel(servers.get(1)), times(expectedTimes)).requestConnection();
     assertThat(subchannels.size()).isEqualTo(2);  // no excessive connection
 

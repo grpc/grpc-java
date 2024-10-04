@@ -20,9 +20,12 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
+import android.net.Network;
+import android.os.Build;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
@@ -105,6 +108,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
   private int trafficStatsTag;
   private boolean trafficStatsUidSet;
   private int trafficStatsUid;
+  private Network network;
 
   private CronetChannelBuilder(String host, int port, CronetEngine cronetEngine) {
     final class CronetChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
@@ -190,6 +194,13 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
     return this;
   }
 
+  /** Sets the network ID to use for this channel traffic. */
+  @CanIgnoreReturnValue
+  CronetChannelBuilder bindToNetwork(@Nullable Network network) {
+    this.network = network;
+    return this;
+  }
+
   /**
    * Provides a custom scheduled executor service.
    *
@@ -210,7 +221,12 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
   ClientTransportFactory buildTransportFactory() {
     return new CronetTransportFactory(
         new TaggingStreamFactory(
-            cronetEngine, trafficStatsTagSet, trafficStatsTag, trafficStatsUidSet, trafficStatsUid),
+            cronetEngine,
+            trafficStatsTagSet,
+            trafficStatsTag,
+            trafficStatsUidSet,
+            trafficStatsUid,
+            network),
         MoreExecutors.directExecutor(),
         scheduledExecutorService,
         maxMessageSize,
@@ -294,18 +310,21 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
     private final int trafficStatsTag;
     private final boolean trafficStatsUidSet;
     private final int trafficStatsUid;
+    private final Network network;
 
     TaggingStreamFactory(
         CronetEngine cronetEngine,
         boolean trafficStatsTagSet,
         int trafficStatsTag,
         boolean trafficStatsUidSet,
-        int trafficStatsUid) {
+        int trafficStatsUid,
+        Network network) {
       this.cronetEngine = cronetEngine;
       this.trafficStatsTagSet = trafficStatsTagSet;
       this.trafficStatsTag = trafficStatsTag;
       this.trafficStatsUidSet = trafficStatsUidSet;
       this.trafficStatsUid = trafficStatsUid;
+      this.network = network;
     }
 
     @Override
@@ -319,6 +338,11 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
       }
       if (trafficStatsUidSet) {
         builder.setTrafficStatsUid(trafficStatsUid);
+      }
+      if (network != null) {
+        if (Build.VERSION.SDK_INT >= 23) {
+          builder.bindToNetwork(network.getNetworkHandle());
+        }
       }
       return builder;
     }
