@@ -77,7 +77,7 @@ include ":grpc-istio-interop-testing"
 include ":grpc-inprocess"
 include ":grpc-util"
 include ":grpc-opentelemetry"
-include ":grpc-opentelemetry-context-storage-override"
+include ":grpc-context-override-opentelemetry"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
