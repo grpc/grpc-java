@@ -63,7 +63,11 @@ final class ProtoUtil {
       }
       if (versionNumber >= minTlsVersion.getNumber()
           && versionNumber <= maxTlsVersion.getNumber()) {
-        tlsVersions.add(convertTlsProtocolVersion(tlsVersion));
+        try {
+          tlsVersions.add(convertTlsProtocolVersion(tlsVersion));
+        } catch (IllegalArgumentException e) {
+          continue;
+        }
       }
     }
     return tlsVersions.build();

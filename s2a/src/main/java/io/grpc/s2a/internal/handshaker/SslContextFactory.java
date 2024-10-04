@@ -139,15 +139,12 @@ final class SslContextFactory {
           UnrecoverableKeyException {
     sslContextBuilder.keyManager(createKeylessManager(clientTlsConfiguration));
     ImmutableSet<String> tlsVersions;
-    try {
-      tlsVersions =
-          ProtoUtil.buildTlsProtocolVersionSet(
-              clientTlsConfiguration.getMinTlsVersion(), clientTlsConfiguration.getMaxTlsVersion());
-    } catch (IllegalArgumentException e) {
-      throw new IOException("Received invalid TLS version information from S2A.", e);
-    }
+    tlsVersions =
+        ProtoUtil.buildTlsProtocolVersionSet(
+            clientTlsConfiguration.getMinTlsVersion(), clientTlsConfiguration.getMaxTlsVersion());
     if (tlsVersions.isEmpty()) {
-      throw new S2AConnectionException("Set of TLS versions received from S2A server is empty.");
+      throw new S2AConnectionException("Set of TLS versions received from S2A server is"
+        + " empty or not supported.");
     }
     sslContextBuilder.protocols(tlsVersions);
   }
