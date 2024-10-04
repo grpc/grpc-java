@@ -59,7 +59,8 @@ import javax.annotation.Nullable;
  */
 final class ControlPlaneClient {
 
-  public static final String CLOSED_BY_SERVER = "Closed by server";
+  public static final String CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE =
+      "Closed by server after receiving a response";
   private final SynchronizationContext syncContext;
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -400,10 +401,14 @@ final class ControlPlaneClient {
         // close streams for various reasons during normal operation, such as load balancing or
         // underlying connection hitting its max connection age limit  (see gRFC A9).
         if (!status.isOk()) {
-          newStatus = Status.OK.withDescription(CLOSED_BY_SERVER);
-          logger.log( XdsLogLevel.INFO, "ADS stream closed with error {0}: {1}. However, a "
+          newStatus = Status.UNAVAILABLE.withDescription(
+              CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE);
+          logger.log( XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
               + "response was received, so this will not be treated as an error. Cause: {2}.",
               status.getCode(), status.getDescription(), status.getCause());
+        } else {
+          logger.log(XdsLogLevel.DEBUG,
+              "ADS stream closed by server after responses received status {0}: {1}. Cause: {2}");
         }
       } else {
         // If the ADS stream is closed without ever having received a response from the server, then
@@ -414,13 +419,14 @@ final class ControlPlaneClient {
         }
       }
 
-      if (!newStatus.isOk()) {
+      if (!newStatus.isOk() && !(newStatus.getDescription() != null
+          && newStatus.getDescription().contains(CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE))) {
         logger.log(
             XdsLogLevel.ERROR, "ADS stream failed with status {0}: {1}. Cause: {2}",
-            status.getCode(), status.getDescription(), status.getCause());
+            newStatus.getCode(), newStatus.getDescription(), newStatus.getCause());
       }
       closed = true;
-      xdsResponseHandler.handleStreamClosed(status);
+      xdsResponseHandler.handleStreamClosed(newStatus);
       cleanUp();
 
       logger.log(XdsLogLevel.INFO, "Retry ADS stream in {0} ns", delayNanos);

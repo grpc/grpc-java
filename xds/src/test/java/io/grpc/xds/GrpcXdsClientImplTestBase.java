@@ -3332,6 +3332,28 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  public void streamClosedWithNoResponse() {
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+        rdsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    // Management server closes the RPC stream before sending any response.
+    call.sendCompleted();
+    verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
+        .onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
+        "ADS stream failed due to connectivity error");
+    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
+        "ADS stream failed due to connectivity error");
+    ScheduledTask retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(10L);
+
+    verifyNoMoreInteractions(ldsResourceWatcher, rdsResourceWatcher);
+  }
+
+  @Test
   public void streamClosedAndRetryWithBackoff() {
     InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
@@ -3408,10 +3430,10 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendError(Status.DEADLINE_EXCEEDED.asException());
     verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
-    verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
+    verify(cdsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
+    verify(edsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -3430,9 +3452,9 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher, times(4)).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher, times(3)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(edsResourceWatcher, times(4)).onError(errorCaptor.capture());
+    verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
 
     // Retry after backoff.
@@ -3516,10 +3538,8 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(edsResourceTimeout.isCancelled()).isTrue();
     verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(edsResourceWatcher).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+    verify(cdsResourceWatcher, never()).onError(errorCaptor.capture());
+    verify(edsResourceWatcher, never()).onError(errorCaptor.capture());
 
     fakeClock.forwardNanos(10L);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);

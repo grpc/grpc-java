@@ -19,6 +19,7 @@ package io.grpc.xds.client;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
+import static io.grpc.xds.client.ControlPlaneClient.CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE;
 import static io.grpc.xds.client.XdsResourceType.ParsedResource;
 import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
 
@@ -141,8 +142,11 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   @Override
   public void handleStreamClosed(Status error) {
     syncContext.throwIfNotInThisSynchronizationContext();
-    if (!error.isOk()) {
-      cleanUpResourceTimers();
+    cleanUpResourceTimers();
+    // Resource subscribers are not notified when the server closes the stream after a
+    // response is received.
+    if (!error.isOk() && !(error.getDescription() != null
+        && error.getDescription().contains(CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE))) {
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
