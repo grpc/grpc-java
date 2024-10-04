@@ -35,9 +35,11 @@ public abstract class RlqsFilterConfig implements FilterConfig {
 
   public abstract String domain();
 
+  // TODO(sergiitk): make not nullable, introduce RlqsFilterConfigOverride
   @Nullable
   public abstract GrpcService rlqsService();
 
+  // TODO(sergiitk): make not nullable, introduce RlqsFilterConfigOverride
   @Nullable
   public abstract Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers();
 
