@@ -114,7 +114,7 @@ project(':grpc-istio-interop-testing').projectDir = "$rootDir/istio-interop-test
 project(':grpc-inprocess').projectDir = "$rootDir/inprocess" as File
 project(':grpc-util').projectDir = "$rootDir/util" as File
 project(':grpc-opentelemetry').projectDir = "$rootDir/opentelemetry" as File
-project(':grpc-opentelemetry-context-storage-override').projectDir = "$rootDir/contextstorage" as File
+project(':grpc-context-override-opentelemetry').projectDir = "$rootDir/contextstorage" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'
