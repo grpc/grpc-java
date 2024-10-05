@@ -53,7 +53,7 @@ public final class SpiffeUtil {
   private static final Integer URI_SAN_TYPE = 6;
   private static final String USE_PARAMETER_VALUE = "x509-svid";
   private static final String KTY_PARAMETER_VALUE = "RSA";
-  private static final String CERTIFICATE_PREFIX = "-----BEGIN CERTIFICATE-----";
+  private static final String CERTIFICATE_PREFIX = "-----BEGIN CERTIFICATE-----\n";
   private static final String CERTIFICATE_SUFFIX = "-----END CERTIFICATE-----";
   private static final String PREFIX = "spiffe://";
 
@@ -171,7 +171,7 @@ public final class SpiffeUtil {
     Map<String, Long> sequenceNumbers = new HashMap<>();
     for (String trustDomainName : trustDomainsNode.keySet()) {
       Map<String, ?> domainNode = JsonUtil.getObject(trustDomainsNode, trustDomainName);
-      if (domainNode == null || domainNode.size() == 0) {
+      if (domainNode.size() == 0) {
         trustBundleMap.put(trustDomainName, Collections.emptyList());
         continue;
       }
@@ -199,9 +199,8 @@ public final class SpiffeUtil {
     @SuppressWarnings("unchecked")
     Map<String, ?> root = (Map<String, ?>)jsonObject;
     Map<String, ?> trustDomainsNode = JsonUtil.getObject(root, "trust_domains");
-    checkArgument(checkNotNull(trustDomainsNode,
-            "Mandatory trust_domains element is missing").size() > 0,
-        "Mandatory trust_domains element is missing");
+    checkNotNull(trustDomainsNode, "Mandatory trust_domains element is missing");
+    checkArgument(trustDomainsNode.size() > 0, "Mandatory trust_domains element is missing");
     return trustDomainsNode;
   }
 
@@ -212,11 +211,9 @@ public final class SpiffeUtil {
               + "found. Certificate loading for trust domain '%s' failed.", KTY_PARAMETER_VALUE,
           kty, trustDomainName));
     }
-    String kid = JsonUtil.getString(jwkNode, "kid");
-    if (kid != null && !kid.equals("")) {
-      throw new IllegalArgumentException(String.format("'kid' parameter must not be set but value "
-              + "'%s' found. Certificate loading for trust domain '%s' failed.", kid,
-          trustDomainName));
+    if (jwkNode.containsKey("kid")) {
+      throw new IllegalArgumentException(String.format("'kid' parameter must not be set. "
+              + "Certificate loading for trust domain '%s' failed.", trustDomainName));
     }
     String use = JsonUtil.getString(jwkNode, "use");
     if (use == null || !use.equals(USE_PARAMETER_VALUE)) {
@@ -240,8 +237,8 @@ public final class SpiffeUtil {
             + "%s found. Certificate loading for trust domain '%s' failed.", rawCerts.size(),
             trustDomainName));
       }
-      InputStream stream = new ByteArrayInputStream((CERTIFICATE_PREFIX + System.lineSeparator()
-          + rawCerts.get(0) + System.lineSeparator() + CERTIFICATE_SUFFIX)
+      InputStream stream = new ByteArrayInputStream((CERTIFICATE_PREFIX + rawCerts.get(0) + "\n"
+          + CERTIFICATE_SUFFIX)
           .getBytes(StandardCharsets.UTF_8));
       try {
         Collection<? extends Certificate> certs = CertificateFactory.getInstance("X509")

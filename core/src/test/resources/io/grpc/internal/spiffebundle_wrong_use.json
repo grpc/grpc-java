@@ -6,7 +6,6 @@
         {
           "kty": "RSA",
           "use": "i_am_not_x509-svid",
-          "kid": "",
           "x5c": "VALUE_DOESN'T_MATTER"
         }
       ]

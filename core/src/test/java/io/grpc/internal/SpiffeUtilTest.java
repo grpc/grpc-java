@@ -326,7 +326,7 @@ public class SpiffeUtilTest {
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
           .loadTrustBundleFromFile(Paths.get(ClassLoader.getSystemResource(TEST_DIRECTORY_PREFIX
               + SPIFFE_TRUST_BUNDLE_WRONG_KID).toURI()).toString()));
-      assertEquals("'kid' parameter must not be set but value 'some_value' found."
+      assertEquals("'kid' parameter must not be set."
           + DOMAIN_ERROR_MESSAGE, iae.getMessage());
       // Check the exception if 'use' value differs from 'x509-svid'
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
