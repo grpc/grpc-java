@@ -29,6 +29,7 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
@@ -179,6 +180,26 @@ public final class S2AProtocolNegotiatorFactory {
     }
   }
 
+  private static final class S2AStubCleanupNegotiationHandler extends ProtocolNegotiationHandler {
+    private final S2AStub s2aStub;
+
+    private S2AStubCleanupNegotiationHandler(
+        ChannelHandler next,
+        ChannelLogger logger,
+        S2AStub s2aStub) {
+      super(next, logger);
+      this.s2aStub = s2aStub;
+    }
+
+    @Override
+    protected void protocolNegotiationEventTriggered(ChannelHandlerContext ctx) {
+      s2aStub.close();
+      fireProtocolNegotiationEvent(ctx);
+      ctx.pipeline().remove(this);
+    }
+  
+  }
+
   private static final class S2AProtocolNegotiationHandler extends ProtocolNegotiationHandler {
     private final Channel channel;
     private final Optional<S2AIdentity> localIdentity;
@@ -233,6 +254,9 @@ public final class S2AProtocolNegotiatorFactory {
                           SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR))
                       .newHandler(grpcHandler);
 
+              ctx.pipeline().addAfter(ctx.name(), /* name= */ null,
+                  new S2AStubCleanupNegotiationHandler(handler,
+                    grpcHandler.getNegotiationLogger(), s2aStub));
               // Remove the bufferReads handler and delegate the rest of the handshake to the TLS
               // handler.
               ctx.pipeline().addAfter(ctx.name(), /* name= */ null, handler);
