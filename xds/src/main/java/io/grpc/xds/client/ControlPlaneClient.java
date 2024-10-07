@@ -415,7 +415,7 @@ final class ControlPlaneClient {
         // the XdsClient should consider that a connectivity error (see gRFC A57).
         if (status.isOk()) {
           newStatus = Status.UNAVAILABLE.withDescription(
-              "ADS stream failed due to connectivity error");
+              "ADS stream failed, because connection was closed before receiving a response.");
         }
       }
 
