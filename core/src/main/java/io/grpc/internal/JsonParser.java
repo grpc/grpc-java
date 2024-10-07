@@ -42,7 +42,8 @@ public final class JsonParser {
 
   /**
    * Parses a json string, returning either a {@code Map<String, ?>}, {@code List<?>},
-   * {@code String}, {@code Double}, {@code Boolean}, or {@code null}.
+   * {@code String}, {@code Double}, {@code Boolean}, or {@code null}. Fails if duplicate names
+   * found.
    */
   public static Object parse(String raw) throws IOException {
     JsonReader jr = new JsonReader(new StringReader(raw));
@@ -93,7 +94,7 @@ public final class JsonParser {
     return Collections.unmodifiableMap(obj);
   }
 
-  private static List<?> parseJsonArray(JsonReader jr, Boolean... params) throws IOException {
+  private static List<?> parseJsonArray(JsonReader jr) throws IOException {
     jr.beginArray();
     List<Object> array = new ArrayList<>();
     while (jr.hasNext()) {
