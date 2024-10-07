@@ -17,20 +17,43 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+import com.google.common.base.Objects;
+import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.NameResolver.Listener2;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.net.SocketAddress;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Unit tests for the inner classes in {@link NameResolver}. */
 @RunWith(JUnit4.class)
 public class NameResolverTest {
+  private static final List<EquivalentAddressGroup> ADDRESSES =
+      Collections.singletonList(
+          new EquivalentAddressGroup(new FakeSocketAddress("fake-address-1"), Attributes.EMPTY));
+  private static final Attributes.Key<String> YOLO_KEY = Attributes.Key.create("yolo");
+  private static Attributes ATTRIBUTES = Attributes.newBuilder()
+      .set(YOLO_KEY, "To be, or not to be?").build();
+  private static ConfigOrError CONFIG = ConfigOrError.fromConfig("foo");
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   private final int defaultPort = 293;
   private final ProxyDetector proxyDetector = mock(ProxyDetector.class);
   private final SynchronizationContext syncContext =
@@ -41,6 +64,7 @@ public class NameResolverTest {
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
   private final Executor executor = Executors.newSingleThreadExecutor();
   private final String overrideAuthority = "grpc.io";
+  @Mock NameResolver.Listener mockListener;
 
   @Test
   public void args() {
@@ -79,5 +103,91 @@ public class NameResolverTest {
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
         .build();
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void startOnOldListener_wrapperListener2UsedToStart() {
+    final Listener2[] listener2 = new Listener2[1];
+    NameResolver nameResolver = new NameResolver() {
+      @Override
+      public String getServiceAuthority() {
+        return null;
+      }
+
+      @Override
+      public void shutdown() {}
+
+      @Override
+      public void start(Listener2 listener2Arg) {
+        listener2[0] = listener2Arg;
+      }
+    };
+    nameResolver.start(mockListener);
+
+    listener2[0].onResult(ResolutionResult.newBuilder().setAddresses(ADDRESSES)
+        .setAttributes(ATTRIBUTES).build());
+    verify(mockListener).onAddresses(eq(ADDRESSES), eq(ATTRIBUTES));
+    listener2[0].onError(Status.CANCELLED);
+    verify(mockListener).onError(Status.CANCELLED);
+  }
+
+  @Test
+  @SuppressWarnings({"deprecation", "InlineMeInliner"})
+  public void listener2AddressesToListener2ResolutionResultConversion() {
+    final ResolutionResult[] resolutionResult = new ResolutionResult[1];
+    NameResolver.Listener2 listener2 = new Listener2() {
+      @Override
+      public void onResult(ResolutionResult resolutionResultArg) {
+        resolutionResult[0] = resolutionResultArg;
+      }
+
+      @Override
+      public void onError(Status error) {}
+    };
+
+    listener2.onAddresses(ADDRESSES, ATTRIBUTES);
+
+    assertThat(resolutionResult[0].getAddressesOrError().getValue()).isEqualTo(ADDRESSES);
+    assertThat(resolutionResult[0].getAttributes()).isEqualTo(ATTRIBUTES);
+  }
+
+  @Test
+  public void resolutionResult_toString_addressesAttributesAndConfig() {
+    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
+        .setAddressesOrError(StatusOr.fromValue(ADDRESSES))
+        .setAttributes(ATTRIBUTES)
+        .setServiceConfig(CONFIG)
+        .build();
+
+    assertThat(resolutionResult.toString()).isEqualTo(
+        "ResolutionResult{addressesOrError=StatusOr{value="
+            + "[[[FakeSocketAddress-fake-address-1]/{}]]}, attributes={yolo=To be, or not to be?}, "
+            + "serviceConfigOrError=ConfigOrError{config=foo}}");
+  }
+
+  @Test
+  public void resolutionResult_hashCode() {
+    ResolutionResult resolutionResult = ResolutionResult.newBuilder()
+        .setAddressesOrError(StatusOr.fromValue(ADDRESSES))
+        .setAttributes(ATTRIBUTES)
+        .setServiceConfig(CONFIG)
+        .build();
+
+    assertThat(resolutionResult.hashCode()).isEqualTo(
+        Objects.hashCode(StatusOr.fromValue(ADDRESSES), ATTRIBUTES, CONFIG));
+  }
+
+  private static class FakeSocketAddress extends SocketAddress {
+    final String name;
+
+    FakeSocketAddress(String name) {
+      this.name = name;
+    }
+
+    @Override
+    public String toString() {
+      return "FakeSocketAddress-" + name;
+    }
   }
 }
