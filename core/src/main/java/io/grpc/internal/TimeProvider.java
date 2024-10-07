@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -29,7 +30,10 @@ public interface TimeProvider {
   TimeProvider SYSTEM_TIME_PROVIDER = new TimeProvider() {
     @Override
     public long currentTimeNanos() {
-      return TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
+      Instant instant = Instant.now();
+      int nanos = instant.getNano();
+      long epochSeconds = instant.getEpochSecond();
+      return nanos + epochSeconds;
     }
   };
 }
