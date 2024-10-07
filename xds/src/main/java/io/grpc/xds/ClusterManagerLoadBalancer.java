@@ -77,55 +77,41 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
   @Override
   protected Map<Object, ResolvedAddresses> createChildAddressesMap(
       ResolvedAddresses resolvedAddresses) {
+    lastResolvedAddresses = resolvedAddresses;
+
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
     Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
-    if (config != null) {
-      for (Map.Entry<String, Object> childPolicy : config.childPolicies.entrySet()) {
-        ResolvedAddresses addresses = resolvedAddresses.toBuilder()
-            .setLoadBalancingPolicyConfig(childPolicy.getValue())
-            .build();
-        childAddresses.put(childPolicy.getKey(), addresses);
+
+    // Reactivate children with config; deactivate children without config
+    for (ChildLbState rawState : getChildLbStates()) {
+      ClusterManagerLbState state = (ClusterManagerLbState) rawState;
+      if (config.childPolicies.containsKey(state.getKey())) {
+        // Active child
+        if (state.deletionTimer != null) {
+          state.reactivateChild();
+        }
+      } else {
+        // Inactive child
+        if (state.deletionTimer == null) {
+          state.deactivateChild();
+        }
+        if (state.deletionTimer.isPending()) {
+          childAddresses.put(state.getKey(), null); // Preserve child, without config update
+        }
       }
+    }
+
+    for (Map.Entry<String, Object> childPolicy : config.childPolicies.entrySet()) {
+      ResolvedAddresses addresses = resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(childPolicy.getValue())
+          .build();
+      childAddresses.put(childPolicy.getKey(), addresses);
     }
     logger.log(
         XdsLogLevel.INFO,
-        "Received cluster_manager lb config: child names={0}", childAddresses.keySet());
+        "Received cluster_manager lb config: child names={0}", config.childPolicies.keySet());
     return childAddresses;
-  }
-
-  /**
-   * This is like the parent except that it doesn't shutdown the removed children since we want that
-   * to be done by the timer.
-   */
-  @Override
-  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (lastResolvedAddresses != null) {
-      // Handle deactivated children
-      ClusterManagerConfig config = (ClusterManagerConfig)
-          resolvedAddresses.getLoadBalancingPolicyConfig();
-      ClusterManagerConfig lastConfig = (ClusterManagerConfig)
-          lastResolvedAddresses.getLoadBalancingPolicyConfig();
-      Map<String, Object> adjChildPolicies = new HashMap<>(config.childPolicies);
-      for (Entry<String, Object> entry : lastConfig.childPolicies.entrySet()) {
-        ClusterManagerLbState state = (ClusterManagerLbState) getChildLbState(entry.getKey());
-        if (adjChildPolicies.containsKey(entry.getKey())) {
-          if (state.deletionTimer != null) {
-            state.reactivateChild();
-          }
-        } else if (state != null) {
-          adjChildPolicies.put(entry.getKey(), entry.getValue());
-          if (state.deletionTimer == null) {
-            state.deactivateChild();
-          }
-        }
-      }
-      config = new ClusterManagerConfig(adjChildPolicies);
-      resolvedAddresses =
-          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build();
-    }
-    lastResolvedAddresses = resolvedAddresses;
-    return super.acceptResolvedAddresses(resolvedAddresses);
   }
 
   /**
@@ -232,14 +218,6 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
 
         @Override
         public void run() {
-          ClusterManagerConfig config = (ClusterManagerConfig)
-              lastResolvedAddresses.getLoadBalancingPolicyConfig();
-          Map<String, Object> childPolicies = new HashMap<>(config.childPolicies);
-          Object removed = childPolicies.remove(getKey());
-          assert removed != null;
-          config = new ClusterManagerConfig(childPolicies);
-          lastResolvedAddresses =
-              lastResolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build();
           acceptResolvedAddresses(lastResolvedAddresses);
         }
       }
