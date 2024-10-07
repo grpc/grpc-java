@@ -128,6 +128,6 @@ public class JsonParserTest {
   public void duplicate() throws IOException {
     thrown.expect(IllegalArgumentException.class);
 
-    JsonParser.parseNoDuplicates("{\"hi\": 2, \"hi\": 3}");
+    JsonParser.parse("{\"hi\": 2, \"hi\": 3}");
   }
 }

@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.gson.stream.JsonReader;
@@ -46,7 +47,7 @@ public final class JsonParser {
   public static Object parse(String raw) throws IOException {
     JsonReader jr = new JsonReader(new StringReader(raw));
     try {
-      return parseRecursive(jr, false);
+      return parseRecursive(jr);
     } finally {
       try {
         jr.close();
@@ -56,32 +57,14 @@ public final class JsonParser {
     }
   }
 
-  /**
-   * Parses a json string, returning either a {@code Map<String, ?>}, {@code List<?>},
-   * {@code String}, {@code Double}, {@code Boolean}, or {@code null}. Fails if duplicate names
-   * found.
-   */
-  public static Object parseNoDuplicates(String raw) throws IOException {
-    JsonReader jr = new JsonReader(new StringReader(raw));
-    try {
-      return parseRecursive(jr, true);
-    } finally {
-      try {
-        jr.close();
-      } catch (IOException e) {
-        logger.log(Level.WARNING, "Failed to close", e);
-      }
-    }
-  }
-
-  private static Object parseRecursive(JsonReader jr, Boolean... failOnDuplicates)
+  private static Object parseRecursive(JsonReader jr)
       throws IOException {
     checkState(jr.hasNext(), "unexpected end of JSON");
     switch (jr.peek()) {
       case BEGIN_ARRAY:
-        return parseJsonArray(jr, failOnDuplicates);
+        return parseJsonArray(jr);
       case BEGIN_OBJECT:
-        return parseJsonObject(jr, failOnDuplicates);
+        return parseJsonObject(jr);
       case STRING:
         return jr.nextString();
       case NUMBER:
@@ -95,16 +78,14 @@ public final class JsonParser {
     }
   }
 
-  private static Map<String, ?> parseJsonObject(JsonReader jr, Boolean... failOnDuplicates)
+  private static Map<String, ?> parseJsonObject(JsonReader jr)
       throws IOException {
     jr.beginObject();
     Map<String, Object> obj = new LinkedHashMap<>();
     while (jr.hasNext()) {
       String name = jr.nextName();
-      if (failOnDuplicates.length > 0 && failOnDuplicates[0] && obj.containsKey(name)) {
-        throw new IllegalArgumentException("Duplicate key found: " + name);
-      }
-      Object value = parseRecursive(jr, failOnDuplicates);
+      checkArgument(!obj.containsKey(name), "Duplicate key found: " + name);
+      Object value = parseRecursive(jr);
       obj.put(name, value);
     }
     checkState(jr.peek() == JsonToken.END_OBJECT, "Bad token: " + jr.getPath());
@@ -116,7 +97,7 @@ public final class JsonParser {
     jr.beginArray();
     List<Object> array = new ArrayList<>();
     while (jr.hasNext()) {
-      Object value = parseRecursive(jr, params);
+      Object value = parseRecursive(jr);
       array.add(value);
     }
     checkState(jr.peek() == JsonToken.END_ARRAY, "Bad token: " + jr.getPath());
