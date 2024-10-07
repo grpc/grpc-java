@@ -142,6 +142,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
+      int softLimitHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
@@ -171,6 +172,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
+        softLimitHeaderListSize,
         stopwatchFactory,
         tooManyPingsRunnable,
         transportTracer,
@@ -190,6 +192,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
+      int softLimitHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
@@ -202,6 +205,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Preconditions.checkNotNull(lifecycleManager, "lifecycleManager");
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
+    Preconditions.checkArgument(softLimitHeaderListSize > 0, "softLimitHeaderListSize must be positive");
     Preconditions.checkNotNull(stopwatchFactory, "stopwatchFactory");
     Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     Preconditions.checkNotNull(eagAttributes, "eagAttributes");
@@ -247,7 +251,9 @@ class NettyClientHandler extends AbstractNettyHandler {
         authority,
         autoFlowControl,
         pingCounter,
-        ticker);
+        ticker,
+        maxHeaderListSize,
+        softLimitHeaderListSize);
   }
 
   private NettyClientHandler(
@@ -264,9 +270,20 @@ class NettyClientHandler extends AbstractNettyHandler {
       String authority,
       boolean autoFlowControl,
       PingLimiter pingLimiter,
-      Ticker ticker) {
-    super(/* channelUnused= */ null, decoder, encoder, settings,
-        negotiationLogger, autoFlowControl, pingLimiter, ticker);
+      Ticker ticker,
+      int maxHeaderListSize,
+      int softLimitHeaderListSize) {
+    super(
+        /* channelUnused= */ null,
+        decoder,
+        encoder,
+        settings,
+        negotiationLogger,
+        autoFlowControl,
+        pingLimiter,
+        ticker,
+        maxHeaderListSize,
+        softLimitHeaderListSize);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;
@@ -380,6 +397,27 @@ class NettyClientHandler extends AbstractNettyHandler {
     if (streamId != Http2CodecUtil.HTTP_UPGRADE_STREAM_ID) {
       NettyClientStream.TransportState stream = clientStream(requireHttp2Stream(streamId));
       PerfMark.event("NettyClientHandler.onHeadersRead", stream.tag());
+      // check metadata size vs soft limit
+      int h2HeadersSize = Utils.getH2HeadersSize(headers);
+      boolean shouldFail =
+          Utils.shouldRejectOnMetadataSizeSoftLimitExceeded(h2HeadersSize, softLimitHeaderListSize, maxHeaderListSize);
+      if (shouldFail && endStream) {
+        throw Status.RESOURCE_EXHAUSTED
+            .withDescription(
+                String.format(
+                    "Server Status + Trailers of size %d exceeded Metadata size soft limit: %d",
+                    h2HeadersSize,
+                    softLimitHeaderListSize))
+            .asRuntimeException();
+      } else if (shouldFail) {
+        throw Status.RESOURCE_EXHAUSTED
+            .withDescription(
+                String.format(
+                    "Server Headers of size %d exceeded Metadata size soft limit: %d",
+                    h2HeadersSize,
+                    softLimitHeaderListSize))
+            .asRuntimeException();
+      }
       stream.transportHeadersReceived(headers, endStream);
     }
 
