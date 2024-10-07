@@ -493,7 +493,8 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   public NettyServerBuilder maxInboundMetadataSize(int bytes) {
     checkArgument(bytes > 0, "maxInboundMetadataSize must be positive: %s", bytes);
     this.maxHeaderListSize = bytes;
-    // Clear the soft limit setting, by setting soft limit to maxInboundMetadataSize. The maxInboundMetadataSize will take precedence be applied before soft limit check.
+    // Clear the soft limit setting, by setting soft limit to maxInboundMetadataSize. The
+    // maxInboundMetadataSize will take precedence be applied before soft limit check.
     this.softLimitHeaderListSize = bytes;
     return this;
   }
@@ -512,7 +513,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
    * SETTINGS_MAX_HEADER_LIST_SIZE</a>. It sums the bytes from each entry's key and value, plus 32
    * bytes of overhead per entry.
    *
-   * Note: gRPC has approximately 600B internal Metadata.
+   * <P>Note: gRPC has approximately 600B internal Metadata.
    *
    * @param soft the soft size limit of received metadata
    * @param max the hard size limit of received metadata

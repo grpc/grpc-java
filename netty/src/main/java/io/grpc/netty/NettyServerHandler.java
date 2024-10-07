@@ -237,7 +237,8 @@ class NettyServerHandler extends AbstractNettyHandler {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
         maxHeaderListSize);
     Preconditions.checkArgument(
-        softLimitHeaderListSize > 0, "softLimitHeaderListSize must be positive: %s", softLimitHeaderListSize);
+        softLimitHeaderListSize > 0, "softLimitHeaderListSize must be positive: %s",
+        softLimitHeaderListSize);
     Preconditions.checkArgument(maxMessageSize > 0, "maxMessageSize must be positive: %s",
         maxMessageSize);
 

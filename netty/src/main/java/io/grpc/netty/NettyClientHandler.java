@@ -205,7 +205,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     Preconditions.checkNotNull(lifecycleManager, "lifecycleManager");
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
-    Preconditions.checkArgument(softLimitHeaderListSize > 0, "softLimitHeaderListSize must be positive");
+    Preconditions.checkArgument(softLimitHeaderListSize > 0,
+        "softLimitHeaderListSize must be positive");
     Preconditions.checkNotNull(stopwatchFactory, "stopwatchFactory");
     Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     Preconditions.checkNotNull(eagAttributes, "eagAttributes");
@@ -400,7 +401,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       // check metadata size vs soft limit
       int h2HeadersSize = Utils.getH2HeadersSize(headers);
       boolean shouldFail =
-          Utils.shouldRejectOnMetadataSizeSoftLimitExceeded(h2HeadersSize, softLimitHeaderListSize, maxHeaderListSize);
+          Utils.shouldRejectOnMetadataSizeSoftLimitExceeded(
+              h2HeadersSize, softLimitHeaderListSize, maxHeaderListSize);
       if (shouldFail && endStream) {
         throw Status.RESOURCE_EXHAUSTED
             .withDescription(

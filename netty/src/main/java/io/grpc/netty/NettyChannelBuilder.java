@@ -452,7 +452,8 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   public NettyChannelBuilder maxInboundMetadataSize(int bytes) {
     checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
     this.maxHeaderListSize = bytes;
-    // Clear the soft limit setting, by setting soft limit to maxInboundMetadataSize. The maxInboundMetadataSize will take precedence be applied before soft limit check.
+    // Clear the soft limit setting, by setting soft limit to maxInboundMetadataSize. The
+    // maxInboundMetadataSize will take precedence be applied before soft limit check.
     this.softLimitHeaderListSize = bytes;
     return this;
   }
@@ -471,7 +472,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
    * SETTINGS_MAX_HEADER_LIST_SIZE</a>. It sums the bytes from each entry's key and value, plus 32
    * bytes of overhead per entry.
    *
-   * Note: gRPC has approximately 600B internal Metadata.
+   * <P>Note: gRPC has approximately 600B internal Metadata.
    *
    * @param soft the soft size limit of received metadata
    * @param max the hard size limit of received metadata
