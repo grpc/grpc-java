@@ -3342,15 +3342,30 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
         .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
-        "ADS stream failed due to connectivity error");
+        "ADS stream failed, because connection was closed before receiving a response.");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
-        "ADS stream failed due to connectivity error");
-    ScheduledTask retryTask =
-        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
-    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(10L);
+        "ADS stream failed, because connection was closed before receiving a response.");
+  }
 
-    verifyNoMoreInteractions(ldsResourceWatcher, rdsResourceWatcher);
+  @Test
+  public void streamClosedAfterSendingResponses() {
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+        rdsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    ScheduledTask ldsResourceTimeout =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    ScheduledTask rdsResourceTimeout =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
+    assertThat(ldsResourceTimeout.isCancelled()).isTrue();
+    call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
+    assertThat(rdsResourceTimeout.isCancelled()).isTrue();
+    // Management server closes the RPC stream after sending responses.
+    call.sendCompleted();
+    verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
   }
 
   @Test

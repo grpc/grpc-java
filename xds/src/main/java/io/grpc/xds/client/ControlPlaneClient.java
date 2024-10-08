@@ -408,7 +408,7 @@ final class ControlPlaneClient {
               status.getCode(), status.getDescription(), status.getCause());
         } else {
           logger.log(XdsLogLevel.DEBUG,
-              "ADS stream closed by server after responses received status {0}: {1}. Cause: {2}");
+              "ADS stream closed by server after responses received.");
         }
       } else {
         // If the ADS stream is closed without ever having received a response from the server, then
@@ -417,14 +417,11 @@ final class ControlPlaneClient {
           newStatus = Status.UNAVAILABLE.withDescription(
               "ADS stream failed, because connection was closed before receiving a response.");
         }
-      }
-
-      if (!newStatus.isOk() && !(newStatus.getDescription() != null
-          && newStatus.getDescription().contains(CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE))) {
         logger.log(
             XdsLogLevel.ERROR, "ADS stream failed with status {0}: {1}. Cause: {2}",
             newStatus.getCode(), newStatus.getDescription(), newStatus.getCause());
       }
+
       closed = true;
       xdsResponseHandler.handleStreamClosed(newStatus);
       cleanUp();
