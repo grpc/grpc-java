@@ -27,7 +27,8 @@ final class ProtoUtil {
    *
    * @param tlsVersion the {@link TLSVersion} object to be converted.
    * @return a {@link String} representation of the TLS version.
-   * @throws AssertionError if the {@code tlsVersion} is not one of the supported TLS versions.
+   * @throws IllegalArgumentException if the {@code tlsVersion} is not one of
+   *     the supported TLS versions.
    */
   @VisibleForTesting
   static String convertTlsProtocolVersion(TLSVersion tlsVersion) {
@@ -41,7 +42,7 @@ final class ProtoUtil {
       case TLS_VERSION_1_0:
         return "TLSv1";
       default:
-        throw new AssertionError(
+        throw new IllegalArgumentException(
             String.format("TLS version %d is not supported.", tlsVersion.getNumber()));
     }
   }
@@ -62,7 +63,11 @@ final class ProtoUtil {
       }
       if (versionNumber >= minTlsVersion.getNumber()
           && versionNumber <= maxTlsVersion.getNumber()) {
-        tlsVersions.add(convertTlsProtocolVersion(tlsVersion));
+        try {
+          tlsVersions.add(convertTlsProtocolVersion(tlsVersion));
+        } catch (IllegalArgumentException e) {
+          continue;
+        }
       }
     }
     return tlsVersions.build();

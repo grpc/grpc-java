@@ -142,7 +142,7 @@ public final class SslContextFactoryTest {
 
     assertThat(expected)
         .hasMessageThat()
-        .contains("Set of TLS versions received from S2A server is empty.");
+        .contains("Set of TLS versions received from S2A server is empty or not supported.");
   }
 
   @Test
