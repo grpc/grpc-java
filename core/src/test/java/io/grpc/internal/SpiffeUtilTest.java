@@ -170,7 +170,8 @@ public class SpiffeUtilTest {
           SpiffeUtil.parse(longTrustDomain.toString()));
       assertEquals("Trust Domain maximum length is 255 characters", iae.getMessage());
 
-      StringBuilder longSpiffe = new StringBuilder(String.format("spiffe://mydomain%scom/", "%21"));
+      @SuppressWarnings("OrphanedFormatString")
+      StringBuilder longSpiffe = new StringBuilder("spiffe://mydomain%21com/");
       for (int i = 0; i < 405; i++) {
         longSpiffe.append("qwert");
       }
