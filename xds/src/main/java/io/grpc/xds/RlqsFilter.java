@@ -152,24 +152,6 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       @Override
       public <ReqT, RespT> Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-        // Notes:
-        // map domain() -> an incarnation of bucket matchers, f.e. new RlqsEngine(domain, matchers).
-        // shared resource holder, acquire every rpc
-        // Store RLQS Client or channel in the config as a reference - FilterConfig config ref
-        // when parse.
-        //   - atomic maybe
-        //   - allocate channel on demand / ref counting
-        //   - and interface to notify service interceptor on shutdown
-        //   - destroy channel when ref count 0
-        // potentially many RLQS Clients sharing a channel to grpc RLQS service -
-        //   TODO(sergiitk): [QUESTION] look up how cache is looked up
-        // now we create filters every RPC. will be change in RBAC.
-        //    we need to avoid recreating filter when config doesn't change
-        //    m: trigger close() after we create new instances
-        //    RBAC filter recreate? - has to be fixed for RBAC
-        // AI: follow up with Eric on how cache is shared, this changes if we need to cache
-        //     interceptor
-        // AI: discuss the lifetime of RLQS channel and the cache - needs wider per-lang discussion.
         RlqsRateLimitResult result = rlqsEngine.rateLimit(HttpMatchInput.create(headers, call));
         if (result.isAllowed()) {
           return next.startCall(call, headers);
