@@ -62,8 +62,6 @@ final class InProcessServer implements InternalServer {
    */
   private ScheduledExecutorService scheduler;
 
-  private final long assumedMessageSize;
-
   InProcessServer(
       InProcessServerBuilder builder,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
@@ -72,7 +70,6 @@ final class InProcessServer implements InternalServer {
     this.maxInboundMetadataSize = builder.maxInboundMetadataSize;
     this.streamTracerFactories =
         Collections.unmodifiableList(checkNotNull(streamTracerFactories, "streamTracerFactories"));
-    this.assumedMessageSize = builder.assumedMessageSize;
   }
 
   @Override
@@ -161,9 +158,5 @@ final class InProcessServer implements InternalServer {
 
   List<ServerStreamTracer.Factory> getStreamTracerFactories() {
     return streamTracerFactories;
-  }
-
-  long getAssumedMessageSize() {
-    return assumedMessageSize;
   }
 }

@@ -111,7 +111,6 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
   private final ServerImplBuilder serverImplBuilder;
   final SocketAddress listenAddress;
   int maxInboundMetadataSize = Integer.MAX_VALUE;
-  long assumedMessageSize = -1;
   ObjectPool<ScheduledExecutorService> schedulerPool =
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
@@ -210,20 +209,5 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
 
   void setStatsEnabled(boolean value) {
     this.serverImplBuilder.setStatsEnabled(value);
-  }
-
-  /**
-   * Assumes RPC messages are the specified size. This avoids serializing
-   * messages for metrics and retry memory tracking. This can dramatically
-   * improve performance when accurate message sizes are not needed and if
-   * nothing else needs the serialized message.
-   * @param assumedMessageSize length of InProcess transport's messageSize.
-   * @return this
-   * @throws IllegalArgumentException if assumedMessageSize is non-positive
-   */
-  public InProcessServerBuilder assumedMessageSize(long assumedMessageSize) {
-    Preconditions.checkArgument(assumedMessageSize >= 0, "assumedMessageSize must be >= 0");
-    this.assumedMessageSize = assumedMessageSize;
-    return this;
   }
 }

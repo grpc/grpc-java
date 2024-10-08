@@ -83,15 +83,6 @@ public class InProcessTransportTest extends AbstractTransportTest {
     return new InProcessServer(builder, streamTracerFactories);
   }
 
-  protected InternalServer newServerWithAssumedMessageSize(
-      List<ServerStreamTracer.Factory> streamTracerFactories) {
-    InProcessServerBuilder builder = InProcessServerBuilder
-        .forName(TRANSPORT_NAME)
-        .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE)
-        .assumedMessageSize(TEST_MESSAGE_LENGTH);
-    return new InProcessServer(builder, streamTracerFactories);
-  }
-
   @Override
   protected String testAuthority(InternalServer server) {
     return AUTHORITY;
@@ -197,7 +188,10 @@ public class InProcessTransportTest extends AbstractTransportTest {
 
   @Test
   public void basicStreamInProcess() throws Exception {
-    server = newServerWithAssumedMessageSize(Arrays.asList(serverStreamTracerFactory));
+    InProcessServerBuilder builder = InProcessServerBuilder
+        .forName(TRANSPORT_NAME)
+        .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
+    server = new InProcessServer(builder, Arrays.asList(serverStreamTracerFactory));
     server.start(serverListener);
     client = newClientTransportWithAssumedMessageSize(server);
     startTransport(client, mockClientTransportListener);
