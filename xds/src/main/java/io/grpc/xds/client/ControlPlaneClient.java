@@ -401,7 +401,7 @@ final class ControlPlaneClient {
         // close streams for various reasons during normal operation, such as load balancing or
         // underlying connection hitting its max connection age limit  (see gRFC A9).
         if (!status.isOk()) {
-          newStatus = Status.UNAVAILABLE.withDescription(
+          newStatus = Status.OK.withDescription(
               CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE);
           logger.log( XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
               + "response was received, so this will not be treated as an error. Cause: {2}.",
