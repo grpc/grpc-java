@@ -5,7 +5,7 @@ load("@rules_jvm_external//:defs.bzl", "artifact")
 java_library(
     name = "s2a_channel_pool",
     srcs = glob([
-        "src/main/java/io/grpc/s2a/channel/*.java",
+        "src/main/java/io/grpc/s2a/internal/channel/*.java",
     ]),
     deps = [
         "//api",
@@ -23,7 +23,7 @@ java_library(
 
 java_library(
     name = "s2a_identity",
-    srcs = ["src/main/java/io/grpc/s2a/handshaker/S2AIdentity.java"],
+    srcs = ["src/main/java/io/grpc/s2a/internal/handshaker/S2AIdentity.java"],
     deps = [
         ":common_java_proto",
         artifact("com.google.errorprone:error_prone_annotations"),
@@ -32,33 +32,13 @@ java_library(
 )
 
 java_library(
-    name = "token_fetcher",
-    srcs = ["src/main/java/io/grpc/s2a/handshaker/tokenmanager/TokenFetcher.java"],
+    name = "token_manager",
+    srcs = glob([
+        "src/main/java/io/grpc/s2a/internal/handshaker/tokenmanager/*.java",
+    ]),
     deps = [
         ":s2a_identity",
-    ],
-)
-
-java_library(
-    name = "access_token_manager",
-    srcs = [
-        "src/main/java/io/grpc/s2a/handshaker/tokenmanager/AccessTokenManager.java",
-    ],
-    deps = [
-        ":s2a_identity",
-        ":token_fetcher",
         artifact("com.google.code.findbugs:jsr305"),
-    ],
-)
-
-java_library(
-    name = "single_token_fetcher",
-    srcs = [
-        "src/main/java/io/grpc/s2a/handshaker/tokenmanager/SingleTokenFetcher.java",
-    ],
-    deps = [
-        ":s2a_identity",
-        ":token_fetcher",
         artifact("com.google.guava:guava"),
     ],
 )
@@ -66,24 +46,23 @@ java_library(
 java_library(
     name = "s2a_handshaker",
     srcs = [
-        "src/main/java/io/grpc/s2a/handshaker/ConnectionClosedException.java",
-        "src/main/java/io/grpc/s2a/handshaker/GetAuthenticationMechanisms.java",
-        "src/main/java/io/grpc/s2a/handshaker/ProtoUtil.java",
-        "src/main/java/io/grpc/s2a/handshaker/S2AConnectionException.java",
-        "src/main/java/io/grpc/s2a/handshaker/S2APrivateKeyMethod.java",
-        "src/main/java/io/grpc/s2a/handshaker/S2AProtocolNegotiatorFactory.java",
-        "src/main/java/io/grpc/s2a/handshaker/S2AStub.java",
-        "src/main/java/io/grpc/s2a/handshaker/S2ATrustManager.java",
-        "src/main/java/io/grpc/s2a/handshaker/SslContextFactory.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/ConnectionClosedException.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/GetAuthenticationMechanisms.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/ProtoUtil.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2AConnectionException.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2APrivateKeyMethod.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2AProtocolNegotiatorFactory.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2AStub.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2ATrustManager.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/SslContextFactory.java",
     ],
     deps = [
-        ":access_token_manager",
+        ":token_manager",
         ":common_java_proto",
         ":s2a_channel_pool",
         ":s2a_identity",
         ":s2a_java_proto",
         ":s2a_java_grpc_proto",
-        ":single_token_fetcher",
         "//api",
         "//core:internal",
         "//netty",

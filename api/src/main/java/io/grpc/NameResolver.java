@@ -20,13 +20,13 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Objects;
 import com.google.errorprone.annotations.InlineMe;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -95,7 +95,8 @@ public abstract class NameResolver {
 
           @Override
           public void onResult(ResolutionResult resolutionResult) {
-            listener.onAddresses(resolutionResult.getAddresses(), resolutionResult.getAttributes());
+            listener.onAddresses(resolutionResult.getAddressesOrError().getValue(),
+                resolutionResult.getAttributes());
           }
       });
     }
@@ -218,19 +219,21 @@ public abstract class NameResolver {
     @Override
     @Deprecated
     @InlineMe(
-        replacement = "this.onResult(ResolutionResult.newBuilder().setAddresses(servers)"
-            + ".setAttributes(attributes).build())",
-        imports = "io.grpc.NameResolver.ResolutionResult")
+        replacement = "this.onResult2(ResolutionResult.newBuilder().setAddressesOrError("
+            + "StatusOr.fromValue(servers)).setAttributes(attributes).build())",
+        imports = {"io.grpc.NameResolver.ResolutionResult", "io.grpc.StatusOr"})
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
       // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
-      onResult(
-          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+      onResult2(
+          ResolutionResult.newBuilder().setAddressesOrError(
+              StatusOr.fromValue(servers)).setAttributes(attributes).build());
     }
 
     /**
      * Handles updates on resolved addresses and attributes.  If
-     * {@link ResolutionResult#getAddresses()} is empty, {@link #onError(Status)} will be called.
+     * {@link ResolutionResult#getAddressesOrError()} is empty, {@link #onError(Status)} will be
+     * called.
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
@@ -584,17 +587,17 @@ public abstract class NameResolver {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public static final class ResolutionResult {
-    private final List<EquivalentAddressGroup> addresses;
+    private final StatusOr<List<EquivalentAddressGroup>> addressesOrError;
     @ResolutionResultAttr
     private final Attributes attributes;
     @Nullable
     private final ConfigOrError serviceConfig;
 
     ResolutionResult(
-        List<EquivalentAddressGroup> addresses,
+        StatusOr<List<EquivalentAddressGroup>> addressesOrError,
         @ResolutionResultAttr Attributes attributes,
         ConfigOrError serviceConfig) {
-      this.addresses = Collections.unmodifiableList(new ArrayList<>(addresses));
+      this.addressesOrError = addressesOrError;
       this.attributes = checkNotNull(attributes, "attributes");
       this.serviceConfig = serviceConfig;
     }
@@ -615,7 +618,7 @@ public abstract class NameResolver {
      */
     public Builder toBuilder() {
       return newBuilder()
-          .setAddresses(addresses)
+          .setAddressesOrError(addressesOrError)
           .setAttributes(attributes)
           .setServiceConfig(serviceConfig);
     }
@@ -624,9 +627,20 @@ public abstract class NameResolver {
      * Gets the addresses resolved by name resolution.
      *
      * @since 1.21.0
+     * @deprecated Will be superseded by getAddressesOrError
      */
+    @Deprecated
     public List<EquivalentAddressGroup> getAddresses() {
-      return addresses;
+      return addressesOrError.getValue();
+    }
+
+    /**
+     * Gets the addresses resolved by name resolution or the error in doing so.
+     *
+     * @since 1.65.0
+     */
+    public StatusOr<List<EquivalentAddressGroup>> getAddressesOrError() {
+      return addressesOrError;
     }
 
     /**
@@ -652,11 +666,11 @@ public abstract class NameResolver {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("addresses", addresses)
-          .add("attributes", attributes)
-          .add("serviceConfig", serviceConfig)
-          .toString();
+      ToStringHelper stringHelper = MoreObjects.toStringHelper(this);
+      stringHelper.add("addressesOrError", addressesOrError.toString());
+      stringHelper.add("attributes", attributes);
+      stringHelper.add("serviceConfigOrError", serviceConfig);
+      return stringHelper.toString();
     }
 
     /**
@@ -668,7 +682,7 @@ public abstract class NameResolver {
         return false;
       }
       ResolutionResult that = (ResolutionResult) obj;
-      return Objects.equal(this.addresses, that.addresses)
+      return Objects.equal(this.addressesOrError, that.addressesOrError)
           && Objects.equal(this.attributes, that.attributes)
           && Objects.equal(this.serviceConfig, that.serviceConfig);
     }
@@ -678,7 +692,7 @@ public abstract class NameResolver {
      */
     @Override
     public int hashCode() {
-      return Objects.hashCode(addresses, attributes, serviceConfig);
+      return Objects.hashCode(addressesOrError, attributes, serviceConfig);
     }
 
     /**
@@ -688,7 +702,8 @@ public abstract class NameResolver {
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     public static final class Builder {
-      private List<EquivalentAddressGroup> addresses = Collections.emptyList();
+      private StatusOr<List<EquivalentAddressGroup>> addresses =
+          StatusOr.fromValue(Collections.emptyList());
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
       private ConfigOrError serviceConfig;
@@ -700,9 +715,21 @@ public abstract class NameResolver {
        * Sets the addresses resolved by name resolution.  This field is required.
        *
        * @since 1.21.0
+       * @deprecated Will be superseded by setAddressesOrError
        */
+      @Deprecated
       public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
-        this.addresses = addresses;
+        setAddressesOrError(StatusOr.fromValue(addresses));
+        return this;
+      }
+
+      /**
+       * Sets the addresses resolved by name resolution or the error in doing so. This field is
+       * required.
+       * @param addresses Resolved addresses or an error in resolving addresses
+       */
+      public Builder setAddressesOrError(StatusOr<List<EquivalentAddressGroup>> addresses) {
+        this.addresses = checkNotNull(addresses, "StatusOr addresses cannot be null.");
         return this;
       }
 

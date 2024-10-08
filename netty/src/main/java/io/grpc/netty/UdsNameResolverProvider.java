@@ -34,7 +34,7 @@ public final class UdsNameResolverProvider extends NameResolverProvider {
   @Override
   public UdsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
-      return new UdsNameResolver(targetUri.getAuthority(), getTargetPathFromUri(targetUri));
+      return new UdsNameResolver(targetUri.getAuthority(), getTargetPathFromUri(targetUri), args);
     } else {
       return null;
     }

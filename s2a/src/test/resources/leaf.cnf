@@ -4,9 +4,9 @@ req_extensions = v3_req
 prompt = no
 
 [req_distinguished_name]
-O = o
-OU = ou
-CN = cn
+O = leafO
+OU = leafOU
+CN = leafCN
 
 [v3_req]
 keyUsage = critical, digitalSignature

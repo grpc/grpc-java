@@ -81,6 +81,7 @@ import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
@@ -1483,7 +1484,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroup,
+          CreateSubchannelArgs.newBuilder().setAddresses(addressGroup).build(),
           authority, userAgent, backoffPolicyProvider, oobTransportFactory,
           oobTransportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
           // All callback methods are run from syncContext
@@ -1701,7 +1702,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return Status.OK;
       }
 
-      List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
+      StatusOr<List<EquivalentAddressGroup>> serversOrError =
+          resolutionResult.getAddressesOrError();
+      if (!serversOrError.hasValue()) {
+        handleErrorInSyncContext(serversOrError.getStatus());
+        return serversOrError.getStatus();
+      }
+      List<EquivalentAddressGroup> servers = serversOrError.getValue();
       channelLogger.log(
           ChannelLogLevel.DEBUG,
           "Resolved address: {0}, config={1}",
@@ -1709,10 +1716,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
           resolutionResult.getAttributes());
 
       if (lastResolutionState != ResolutionState.SUCCESS) {
-        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
+        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}",
+            servers);
         lastResolutionState = ResolutionState.SUCCESS;
       }
-
       ConfigOrError configOrError = resolutionResult.getServiceConfig();
       InternalConfigSelector resolvedConfigSelector =
           resolutionResult.getAttributes().get(InternalConfigSelector.KEY);
@@ -1788,7 +1795,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
 
         try {
-          // TODO(creamsoup): when `servers` is empty and lastResolutionStateCopy == SUCCESS
+          // TODO(creamsoup): when `serversOrError` is empty and lastResolutionStateCopy == SUCCESS
           //  and lbNeedAddress, it shouldn't call the handleServiceConfigUpdate. But,
           //  lbNeedAddress is not deterministic
           serviceConfigUpdated = true;
@@ -1814,12 +1821,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         Attributes attributes = attrBuilder.build();
 
-        return helper.lb.tryAcceptResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(servers)
-                .setAttributes(attributes)
-                .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig())
-                .build());
+        ResolvedAddresses.Builder resolvedAddresses = ResolvedAddresses.newBuilder()
+            .setAddresses(serversOrError.getValue())
+            .setAttributes(attributes)
+            .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig());
+        Status addressAcceptanceStatus = helper.lb.tryAcceptResolvedAddresses(
+            resolvedAddresses.build());
+        return addressAcceptanceStatus;
       }
       return Status.OK;
     }
@@ -1915,7 +1923,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          args.getAddresses(),
+          args,
           authority(),
           userAgent,
           backoffPolicyProvider,
