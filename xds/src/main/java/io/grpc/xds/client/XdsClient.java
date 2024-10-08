@@ -299,14 +299,6 @@ public abstract class XdsClient {
   }
 
   /**
-   * For all subscriber's for the specified server, if the resource hasn't yet been
-   * resolved then start a timer for it.
-   */
-  protected void startSubscriberTimersIfNeeded(ServerInfo serverInfo) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
    * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
    * they are at the moment of the call.
    *
@@ -407,26 +399,38 @@ public abstract class XdsClient {
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
-    void handleStreamClosed(Status error);
+    void handleStreamClosed(Status error, boolean inRetry, ControlPlaneClient cpcThatClosed);
 
-    /** Called when the ADS stream has been recreated. */
-    // Must be synchronized.
+    /** Called when the ADS stream has established communication with the xds server.
+     * Is expected do manage the ControlPlanClients and cache updates associated with
+     * Moving to or from a fallback server.
+     *
+     * <p>Must be synchronized.
+     */
     void handleStreamRestarted(ServerInfo serverInfo);
   }
 
   public interface ResourceStore {
+
     /**
-     * Returns the collection of resources currently subscribing to or {@code null} if not
-     * subscribing to any resources for the given type.
+     * Returns the collection of resources currently subscribing to with the specified authority
+     * or {@code null} if not subscribing to any resources for this authority for the given type.
      *
      * <p>Note an empty collection indicates subscribing to resources of the given type with
      * wildcard mode.
+     *
+     * @param serverInfo the xds server to get the resources from
+     * @param type       the type of the resources that should be retrieved
      */
-    // Must be synchronized.
     @Nullable
-    Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                                              XdsResourceType<? extends ResourceUpdate> type);
+    Collection<String> getSubscribedResources(
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type);
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
+
+    boolean hasSubscribers(XdsResourceType<? extends ResourceUpdate> type, String authority);
+
+    void assignOwner(XdsResourceType<?> resourceType, Collection<String> resources,
+                     ServerInfo serverInfo);
   }
 }
