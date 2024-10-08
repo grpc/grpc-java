@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Time source representing the current system time in nanos. Used to inject a fake clock
