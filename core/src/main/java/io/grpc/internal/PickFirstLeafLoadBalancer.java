@@ -64,14 +64,24 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
-  private ScheduledHandle scheduleConnectionTask;
+  private ScheduledHandle scheduleConnectionTask = null;
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
-  private final boolean enableHappyEyeballs =
-      PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  private final boolean enableHappyEyeballs = !isSerializingRetries()
+      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  private boolean notAPetiolePolicy = true; // means not under a petiole policy
+  private final BackoffPolicy.Provider bkoffPolProvider = new ExponentialBackoffPolicy.Provider();
+  private BackoffPolicy reconnectPolicy;
+  @Nullable
+  private ScheduledHandle reconnectTask = null;
+  private final boolean serializingRetries = isSerializingRetries();
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+  }
+
+  static boolean isSerializingRetries() {
+    return GrpcUtil.getFlag("GRPC_SERIALIZE_RETRIES", false);
   }
 
   @Override
@@ -79,6 +89,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (rawConnectivityState == SHUTDOWN) {
       return Status.FAILED_PRECONDITION.withDescription("Already shut down");
     }
+
+    // Cache whether or not this is a petiole policy, which is based off of an address attribute
+    Boolean isPetiolePolicy = resolvedAddresses.getAttributes().get(IS_PETIOLE_POLICY);
+    this.notAPetiolePolicy = isPetiolePolicy == null || !isPetiolePolicy;
 
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
 
@@ -220,9 +234,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return;
     }
 
-    if (newState == IDLE) {
+    if (newState == IDLE && subchannelData.state == READY) {
       helper.refreshNameResolution();
     }
+
     // If we are transitioning from a TRANSIENT_FAILURE to CONNECTING or IDLE we ignore this state
     // transition and still keep the LB in TRANSIENT_FAILURE state. This is referred to as "sticky
     // transient failure". Only a subchannel state change to READY will get the LB out of
@@ -272,6 +287,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
           if (addressIndex.increment()) {
             cancelScheduleTask();
             requestConnection(); // is recursive so might hit the end of the addresses
+          } else {
+            scheduleBackoff();
           }
         }
 
@@ -299,11 +316,45 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+   * Only called after all addresses attempted and failed (TRANSIENT_FAILURE).
+   */
+  private void scheduleBackoff() {
+    if (!serializingRetries) {
+      return;
+    }
+
+    class EndOfCurrentBackoff implements Runnable {
+      @Override
+      public void run() {
+        reconnectTask = null;
+        addressIndex.reset();
+        requestConnection();
+      }
+    }
+
+    // Just allow the previous one to trigger when ready if we're already in backoff
+    if (reconnectTask != null) {
+      return;
+    }
+
+    if (reconnectPolicy == null) {
+      reconnectPolicy = bkoffPolProvider.get();
+    }
+    long delayNanos = reconnectPolicy.nextBackoffNanos();
+    reconnectTask = helper.getSynchronizationContext().schedule(
+        new EndOfCurrentBackoff(),
+        delayNanos,
+        TimeUnit.NANOSECONDS,
+        helper.getScheduledExecutorService());
+  }
+
   private void updateHealthCheckedState(SubchannelData subchannelData) {
     if (subchannelData.state != READY) {
       return;
     }
-    if (subchannelData.getHealthState() == READY) {
+
+    if (notAPetiolePolicy || subchannelData.getHealthState() == READY) {
       updateBalancingState(READY,
           new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel)));
     } else if (subchannelData.getHealthState() == TRANSIENT_FAILURE) {
@@ -331,6 +382,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     rawConnectivityState = SHUTDOWN;
     concludedState = SHUTDOWN;
     cancelScheduleTask();
+    if (reconnectTask != null) {
+      reconnectTask.cancel();
+      reconnectTask = null;
+    }
+    reconnectPolicy = null;
 
     for (SubchannelData subchannelData : subchannels.values()) {
       subchannelData.getSubchannel().shutdown();
@@ -344,6 +400,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   * that all other subchannels must be shutdown.
   */
   private void shutdownRemaining(SubchannelData activeSubchannelData) {
+    if (reconnectTask != null) {
+      reconnectTask.cancel();
+      reconnectTask = null;
+    }
+    reconnectPolicy = null;
+
     cancelScheduleTask();
     for (SubchannelData subchannelData : subchannels.values()) {
       if (!subchannelData.getSubchannel().equals(activeSubchannelData.subchannel)) {
@@ -385,8 +447,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         scheduleNextConnection();
         break;
       case TRANSIENT_FAILURE:
-        addressIndex.increment();
-        requestConnection();
+        if (!serializingRetries) {
+          addressIndex.increment();
+          requestConnection();
+        } else {
+          if (!addressIndex.isValid()) {
+            scheduleBackoff();
+          } else {
+            subchannelData.subchannel.requestConnection();
+            subchannelData.updateState(CONNECTING);
+          }
+        }
         break;
       default:
         // Wait for current subchannel to change state
@@ -432,9 +503,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     HealthListener hcListener = new HealthListener();
     final Subchannel subchannel = helper.createSubchannel(
         CreateSubchannelArgs.newBuilder()
-        .setAddresses(Lists.newArrayList(
-            new EquivalentAddressGroup(addr, attrs)))
-        .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
+            .setAddresses(Lists.newArrayList(
+                new EquivalentAddressGroup(addr, attrs)))
+            .addOption(HEALTH_CONSUMER_LISTENER_ARG_KEY, hcListener)
+            .addOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY, serializingRetries)
             .build());
     if (subchannel == null) {
       log.warning("Was not able to create subchannel for " + addr);
@@ -444,7 +516,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     hcListener.subchannelData = subchannelData;
     subchannels.put(addr, subchannelData);
     Attributes scAttrs = subchannel.getAttributes();
-    if (scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
+    if (notAPetiolePolicy || scAttrs.get(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY) == null) {
       subchannelData.healthStateInfo = ConnectivityStateInfo.forNonError(READY);
     }
     subchannel.start(stateInfo -> processSubchannelState(subchannelData, stateInfo));
@@ -452,7 +524,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   private boolean isPassComplete() {
-    if (addressIndex.isValid() || subchannels.size() < addressIndex.size()) {
+    if (subchannels.size() < addressIndex.size()) {
       return false;
     }
     for (SubchannelData sc : subchannels.values()) {
@@ -468,6 +540,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
     @Override
     public void onSubchannelState(ConnectivityStateInfo newState) {
+      if (notAPetiolePolicy) {
+        log.log(Level.WARNING,
+            "Ignoring health status {0} for subchannel {1} as this is not under a petiole policy",
+            new Object[]{newState, subchannelData.subchannel});
+        return;
+      }
+
       log.log(Level.FINE, "Received health status {0} for subchannel {1}",
           new Object[]{newState, subchannelData.subchannel});
       subchannelData.healthStateInfo = newState;
@@ -631,6 +710,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     public int size() {
       return size;
     }
+  }
+
+  @VisibleForTesting
+  int getGroupIndex() {
+    return addressIndex.groupIndex;
+  }
+
+  @VisibleForTesting
+  boolean isIndexValid() {
+    return addressIndex.isValid();
   }
 
   private static final class SubchannelData {

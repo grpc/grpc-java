@@ -14,8 +14,10 @@ dependencies {
             libraries.opentelemetry.api,
             libraries.auto.value.annotations
 
-    testImplementation testFixtures(project(':grpc-core')),
-            project(':grpc-testing'),
+    testImplementation project(':grpc-testing'),
+            project(':grpc-inprocess'),
+            testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
             libraries.opentelemetry.sdk.testing,
             libraries.assertj.core // opentelemetry.sdk.testing uses compileOnly for assertj
 

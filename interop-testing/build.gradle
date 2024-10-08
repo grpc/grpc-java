@@ -13,6 +13,7 @@ dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
             project(':grpc-census'),
+            project(':grpc-opentelemetry'),
             project(':grpc-gcp-csm-observability'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),

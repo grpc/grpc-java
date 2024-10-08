@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
@@ -152,12 +153,11 @@ public class DnsNameResolverTest {
   private NameResolver.Listener2 mockListener;
   @Captor
   private ArgumentCaptor<ResolutionResult> resultCaptor;
-  @Captor
-  private ArgumentCaptor<Status> errorCaptor;
   @Nullable
   private String networkaddressCacheTtlPropertyValue;
   @Mock
   private RecordFetcher recordFetcher;
+  @Mock private ProxyDetector mockProxyDetector;
 
   private RetryingNameResolver newResolver(String name, int defaultPort) {
     return newResolver(
@@ -570,12 +570,45 @@ public class DnsNameResolverTest {
     ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
     verify(mockListener).onResult2(ac.capture());
     verifyNoMoreInteractions(mockListener);
-    assertThat(ac.getValue().getAddresses()).isEmpty();
+    assertThat(ac.getValue().getAddressesOrError().getValue()).isEmpty();
     assertThat(ac.getValue().getServiceConfig()).isNull();
     verify(mockResourceResolver, never()).resolveSrv(anyString());
 
     assertEquals(0, fakeClock.numPendingTasks());
     assertEquals(0, fakeExecutor.numPendingTasks());
+  }
+
+  @Test
+  public void resolve_addressResolutionError() throws Exception {
+    DnsNameResolver.enableTxt = true;
+    when(mockProxyDetector.proxyFor(any(SocketAddress.class))).thenThrow(new IOException());
+    RetryingNameResolver resolver = newResolver(
+        "addr.fake:1234", 443, mockProxyDetector, Stopwatch.createUnstarted());
+    DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
+    dnsResolver.setAddressResolver(new AddressResolver() {
+      @Override
+      public List<InetAddress> resolveAddress(String host) throws Exception {
+        return Collections.emptyList();
+      }
+    });
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(anyString()))
+        .thenReturn(Collections.<String>emptyList());
+
+    dnsResolver.setResourceResolver(mockResourceResolver);
+
+    resolver.start(mockListener);
+    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+
+    ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
+    verify(mockListener).onResult2(ac.capture());
+    verifyNoMoreInteractions(mockListener);
+    assertThat(ac.getValue().getAddressesOrError().getStatus().getCode()).isEqualTo(
+        Status.UNAVAILABLE.getCode());
+    assertThat(ac.getValue().getAddressesOrError().getStatus().getDescription()).isEqualTo(
+        "Unable to resolve host addr.fake");
+    assertThat(ac.getValue().getAddressesOrError().getStatus().getCause())
+        .isInstanceOf(IOException.class);
   }
 
   // Load balancer rejects the empty addresses.
@@ -604,7 +637,7 @@ public class DnsNameResolverTest {
     ArgumentCaptor<ResolutionResult> ac = ArgumentCaptor.forClass(ResolutionResult.class);
     verify(mockListener).onResult2(ac.capture());
     verifyNoMoreInteractions(mockListener);
-    assertThat(ac.getValue().getAddresses()).isEmpty();
+    assertThat(ac.getValue().getAddressesOrError().getValue()).isEmpty();
     assertThat(ac.getValue().getServiceConfig()).isNull();
     verify(mockResourceResolver, never()).resolveSrv(anyString());
 
@@ -632,7 +665,7 @@ public class DnsNameResolverTest {
     ResolutionResult result = resultCaptor.getValue();
     InetSocketAddress resolvedBackendAddr =
         (InetSocketAddress) Iterables.getOnlyElement(
-            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+            Iterables.getOnlyElement(result.getAddressesOrError().getValue()).getAddresses());
     assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
     verify(mockAddressResolver).resolveAddress(name);
     assertThat(result.getServiceConfig()).isNull();
@@ -647,6 +680,7 @@ public class DnsNameResolverTest {
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
         .thenThrow(new IOException("no addr"));
+    when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.UNAVAILABLE);
     String name = "foo.googleapis.com";
 
     RetryingNameResolver resolver = newResolver(name, 81);
@@ -655,8 +689,8 @@ public class DnsNameResolverTest {
     dnsResolver.setResourceResolver(null);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onError(errorCaptor.capture());
-    Status errorStatus = errorCaptor.getValue();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    Status errorStatus = resultCaptor.getValue().getAddressesOrError().getStatus();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
 
@@ -704,7 +738,7 @@ public class DnsNameResolverTest {
     ResolutionResult result = resultCaptor.getValue();
     InetSocketAddress resolvedBackendAddr =
         (InetSocketAddress) Iterables.getOnlyElement(
-            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+            Iterables.getOnlyElement(result.getAddressesOrError().getValue()).getAddresses());
     assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
     assertThat(result.getServiceConfig().getConfig()).isNotNull();
     verify(mockAddressResolver).resolveAddress(name);
@@ -720,6 +754,7 @@ public class DnsNameResolverTest {
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
         .thenThrow(new IOException("no addr"));
+    when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.UNAVAILABLE);
     String name = "foo.googleapis.com";
 
     ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
@@ -729,8 +764,8 @@ public class DnsNameResolverTest {
     dnsResolver.setResourceResolver(mockResourceResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockListener).onError(errorCaptor.capture());
-    Status errorStatus = errorCaptor.getValue();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    Status errorStatus = resultCaptor.getValue().getAddressesOrError().getStatus();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
     verify(mockResourceResolver, never()).resolveTxt(anyString());
@@ -762,7 +797,7 @@ public class DnsNameResolverTest {
     ResolutionResult result = resultCaptor.getValue();
     InetSocketAddress resolvedBackendAddr =
         (InetSocketAddress) Iterables.getOnlyElement(
-            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+            Iterables.getOnlyElement(result.getAddressesOrError().getValue()).getAddresses());
     assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
     verify(mockAddressResolver).resolveAddress(name);
     assertThat(result.getServiceConfig()).isNull();
@@ -794,7 +829,7 @@ public class DnsNameResolverTest {
     ResolutionResult result = resultCaptor.getValue();
     InetSocketAddress resolvedBackendAddr =
         (InetSocketAddress) Iterables.getOnlyElement(
-            Iterables.getOnlyElement(result.getAddresses()).getAddresses());
+            Iterables.getOnlyElement(result.getAddressesOrError().getValue()).getAddresses());
     assertThat(resolvedBackendAddr.getAddress()).isEqualTo(backendAddr);
     verify(mockAddressResolver).resolveAddress(name);
     assertThat(result.getServiceConfig()).isNotNull();
@@ -859,7 +894,7 @@ public class DnsNameResolverTest {
     assertEquals(1, fakeExecutor.runDueTasks());
 
     verify(mockListener).onResult2(resultCaptor.capture());
-    List<EquivalentAddressGroup> result = resultCaptor.getValue().getAddresses();
+    List<EquivalentAddressGroup> result = resultCaptor.getValue().getAddressesOrError().getValue();
     assertThat(result).hasSize(1);
     EquivalentAddressGroup eag = result.get(0);
     assertThat(eag.getAddresses()).hasSize(1);
@@ -1299,9 +1334,9 @@ public class DnsNameResolverTest {
 
   private static void assertAnswerMatches(
       List<InetAddress> addrs, int port, ResolutionResult resolutionResult) {
-    assertThat(resolutionResult.getAddresses()).hasSize(addrs.size());
+    assertThat(resolutionResult.getAddressesOrError().getValue()).hasSize(addrs.size());
     for (int i = 0; i < addrs.size(); i++) {
-      EquivalentAddressGroup addrGroup = resolutionResult.getAddresses().get(i);
+      EquivalentAddressGroup addrGroup = resolutionResult.getAddressesOrError().getValue().get(i);
       InetSocketAddress socketAddr =
           (InetSocketAddress) Iterables.getOnlyElement(addrGroup.getAddresses());
       assertEquals("Addr " + i, port, socketAddr.getPort());

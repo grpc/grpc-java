@@ -737,7 +737,7 @@ public class XdsNameResolverTest {
                 ImmutableMap.of())));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
+    assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster2),
         (Map<String, ?>) result.getServiceConfig().getConfig());
@@ -1071,7 +1071,7 @@ public class XdsNameResolverTest {
                 ImmutableMap.of())));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
+    assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
@@ -1100,7 +1100,7 @@ public class XdsNameResolverTest {
                 ImmutableMap.of())));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
+    assertThat(result.getAddressesOrError().getValue()).isEmpty();
     @SuppressWarnings("unchecked")
     Map<String, ?> resultServiceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
     List<Map<String, ?>> rawLbConfigs =
@@ -1181,7 +1181,7 @@ public class XdsNameResolverTest {
   private void assertEmptyResolutionResult(String resource) {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
+    assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     Result configResult = configSelector.selectConfig(
@@ -1260,7 +1260,7 @@ public class XdsNameResolverTest {
                 ImmutableMap.of())));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
-    assertThat(result.getAddresses()).isEmpty();
+    assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();

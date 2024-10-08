@@ -43,6 +43,7 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -520,7 +521,8 @@ public class XdsSecurityClientServerTest {
       }
 
       void resolved() {
-        ResolutionResult.Builder builder = ResolutionResult.newBuilder().setAddresses(servers);
+        ResolutionResult.Builder builder = ResolutionResult.newBuilder()
+            .setAddressesOrError(StatusOr.fromValue(servers));
         listener.onResult(builder.build());
       }
 
