@@ -32,6 +32,7 @@ public interface TimeProvider {
       Instant instant = Instant.now();
       int nanos = instant.getNano();
       long epochSeconds = instant.getEpochSecond();
+      // combining seconds and nanos part and returning the timestamp in nanoseconds
       return Long.parseLong("" + epochSeconds + nanos);
     }
   };
