@@ -18,6 +18,7 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.InternalTimeUtils.convert;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
@@ -197,8 +198,7 @@ public final class SynchronizationContext implements Executor {
   public final ScheduledHandle scheduleWithFixedDelay(
       final Runnable task, Duration initialDelay, Duration delay,
       ScheduledExecutorService timerService) {
-    return scheduleWithFixedDelay(task, TimeUnit.NANOSECONDS.convert(initialDelay.getSeconds(),
-        TimeUnit.SECONDS), TimeUnit.NANOSECONDS.convert(delay.getSeconds(), TimeUnit.SECONDS),
+    return scheduleWithFixedDelay(task, convert(initialDelay), convert(delay),
         TimeUnit.NANOSECONDS, timerService);
   }
 
