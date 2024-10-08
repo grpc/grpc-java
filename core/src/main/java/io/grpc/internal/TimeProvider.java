@@ -33,7 +33,7 @@ public interface TimeProvider {
       Instant instant = Instant.now();
       int nanos = instant.getNano();
       long epochSeconds = instant.getEpochSecond();
-      return nanos + epochSeconds;
+      return Long.parseLong("" + epochSeconds + nanos);
     }
   };
 }
