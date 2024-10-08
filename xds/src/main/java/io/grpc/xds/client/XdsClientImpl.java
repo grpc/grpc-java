@@ -142,8 +142,6 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   public void handleStreamClosed(Status error) {
     syncContext.throwIfNotInThisSynchronizationContext();
     cleanUpResourceTimers();
-    // Resource subscribers are not notified when the server closes the stream after a
-    // response is received.
     if (!error.isOk()) {
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {

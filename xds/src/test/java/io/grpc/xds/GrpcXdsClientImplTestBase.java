@@ -3342,10 +3342,10 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
         .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
-        "ADS stream failed, because connection was closed before receiving a response.");
+        "ADS stream closed with OK before receiving a response");
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
-        "ADS stream failed, because connection was closed before receiving a response.");
+        "ADS stream closed with OK before receiving a response");
   }
 
   @Test

@@ -59,8 +59,6 @@ import javax.annotation.Nullable;
  */
 final class ControlPlaneClient {
 
-  public static final String CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE =
-      "Closed by server after receiving a response";
   private final SynchronizationContext syncContext;
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -401,21 +399,20 @@ final class ControlPlaneClient {
         // close streams for various reasons during normal operation, such as load balancing or
         // underlying connection hitting its max connection age limit  (see gRFC A9).
         if (!status.isOk()) {
-          newStatus = Status.OK.withDescription(
-              CLOSED_BY_SERVER_AFTER_RECEIVING_A_RESPONSE);
+          newStatus = Status.OK;
           logger.log( XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
-              + "response was received, so this will not be treated as an error. Cause: {2}.",
+              + "response was received, so this will not be treated as an error. Cause: {2}",
               status.getCode(), status.getDescription(), status.getCause());
         } else {
           logger.log(XdsLogLevel.DEBUG,
-              "ADS stream closed by server after responses received.");
+              "ADS stream closed by server after a response was received");
         }
       } else {
         // If the ADS stream is closed without ever having received a response from the server, then
         // the XdsClient should consider that a connectivity error (see gRFC A57).
         if (status.isOk()) {
           newStatus = Status.UNAVAILABLE.withDescription(
-              "ADS stream failed, because connection was closed before receiving a response.");
+              "ADS stream closed with OK before receiving a response");
         }
         logger.log(
             XdsLogLevel.ERROR, "ADS stream failed with status {0}: {1}. Cause: {2}",
