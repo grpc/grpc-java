@@ -2592,9 +2592,7 @@ public class RetriableStreamTest {
               .closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), REFUSED, new Metadata());
         } finally {
           transport2Lock.unlock();
-          if (transport1Lock.tryLock()) {
-            transport1Lock.unlock();
-          }
+          transport1Lock.unlock();
         }
       }
     }, "Thread-transport2");
