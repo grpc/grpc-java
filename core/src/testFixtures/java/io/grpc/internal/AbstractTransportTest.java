@@ -136,10 +136,6 @@ public abstract class AbstractTransportTest {
    */
   protected abstract String testAuthority(InternalServer server);
 
-  /**
-   * Returns true (which is default) if the transport reports message sizes to StreamTracers.
-   */
-
   protected final Attributes eagAttrs() {
     return EAG_ATTRS;
   }

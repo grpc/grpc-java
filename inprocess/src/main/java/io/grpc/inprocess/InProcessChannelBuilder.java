@@ -229,7 +229,7 @@ public final class InProcessChannelBuilder extends
    * nothing else needs the serialized message.
    * @param assumedMessageSize length of InProcess transport's messageSize.
    * @return this
-   * @throws IllegalArgumentException if assumedMessageSize is non-positive
+   * @throws IllegalArgumentException if assumedMessageSize is negative.
    */
   public InProcessChannelBuilder assumedMessageSize(long assumedMessageSize) {
     checkArgument(assumedMessageSize >= 0, "assumedMessageSize must be >= 0");
