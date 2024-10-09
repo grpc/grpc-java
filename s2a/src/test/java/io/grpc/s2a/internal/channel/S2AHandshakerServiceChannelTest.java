@@ -30,7 +30,6 @@ import io.grpc.ServerCredentials;
 import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
-import io.grpc.benchmarks.Utils;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -123,7 +122,7 @@ public final class S2AHandshakerServiceChannelTest {
             InsecureChannelCredentials.create());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
-            "localhost:" + Utils.pickUnusedPort(), InsecureChannelCredentials.create());
+            "localhost:" + plaintextServer.getPort() + 1, InsecureChannelCredentials.create());
     assertThat(resourceTwo).isNotEqualTo(resource);
   }
 
@@ -135,7 +134,7 @@ public final class S2AHandshakerServiceChannelTest {
             "localhost:" + mtlsServer.getPort(), getTlsChannelCredentials());
     Resource<Channel> resourceTwo =
         S2AHandshakerServiceChannel.getChannelResource(
-            "localhost:" + Utils.pickUnusedPort(), getTlsChannelCredentials());
+            "localhost:" + mtlsServer.getPort() + 1, getTlsChannelCredentials());
     assertThat(resourceTwo).isNotEqualTo(resource);
   }
 
@@ -229,13 +228,13 @@ public final class S2AHandshakerServiceChannelTest {
             .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
             .build();
     return grpcCleanup.register(
-        NettyServerBuilder.forPort(Utils.pickUnusedPort(), creds).addService(service).build());
+        NettyServerBuilder.forPort(0, creds).addService(service).build());
   }
 
   private static Server createPlaintextServer() {
     SimpleServiceImpl service = new SimpleServiceImpl();
     return grpcCleanup.register(
-        ServerBuilder.forPort(Utils.pickUnusedPort()).addService(service).build());
+        ServerBuilder.forPort(0).addService(service).build());
   }
 
   private static ChannelCredentials getTlsChannelCredentials() throws Exception {
