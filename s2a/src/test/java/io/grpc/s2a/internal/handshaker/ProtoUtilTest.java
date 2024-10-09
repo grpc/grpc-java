@@ -46,9 +46,9 @@ public final class ProtoUtilTest {
 
   @Test
   public void convertTlsProtocolVersion_withUnknownTlsVersion_fails() {
-    AssertionError expected =
+    IllegalArgumentException expected =
         assertThrows(
-            AssertionError.class,
+            IllegalArgumentException.class,
             () -> ProtoUtil.convertTlsProtocolVersion(TLSVersion.TLS_VERSION_UNSPECIFIED));
     expect.that(expected).hasMessageThat().isEqualTo("TLS version 0 is not supported.");
   }
@@ -79,12 +79,10 @@ public final class ProtoUtilTest {
 
   @Test
   public void buildTlsProtocolVersionSet_failure() {
-    AssertionError expected =
-        assertThrows(
-            AssertionError.class,
-            () ->
-                ProtoUtil.buildTlsProtocolVersionSet(
-                    TLSVersion.TLS_VERSION_UNSPECIFIED, TLSVersion.TLS_VERSION_1_3));
-    expect.that(expected).hasMessageThat().isEqualTo("TLS version 0 is not supported.");
+    expect
+        .that(
+            ProtoUtil.buildTlsProtocolVersionSet(
+                    TLSVersion.TLS_VERSION_UNSPECIFIED, TLSVersion.TLS_VERSION_1_3))
+        .isEqualTo(ImmutableSet.of("TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"));
   }
 }

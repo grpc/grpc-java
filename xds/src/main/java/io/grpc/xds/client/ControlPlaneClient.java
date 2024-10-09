@@ -16,7 +16,6 @@
 
 package io.grpc.xds.client;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -60,7 +59,6 @@ import javax.annotation.Nullable;
  */
 final class ControlPlaneClient {
 
-  public static final String CLOSED_BY_SERVER = "Closed by server";
   private final SynchronizationContext syncContext;
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -358,11 +356,7 @@ final class ControlPlaneClient {
     @Override
     public void onStatusReceived(final Status status) {
       syncContext.execute(() -> {
-        if (status.isOk()) {
-          handleRpcStreamClosed(Status.UNAVAILABLE.withDescription(CLOSED_BY_SERVER));
-        } else {
-          handleRpcStreamClosed(status);
-        }
+        handleRpcStreamClosed(status);
       });
     }
 
@@ -381,7 +375,7 @@ final class ControlPlaneClient {
       processingTracker.onComplete();
     }
 
-    private void handleRpcStreamClosed(Status error) {
+    private void handleRpcStreamClosed(Status status) {
       if (closed) {
         return;
       }
@@ -399,15 +393,34 @@ final class ControlPlaneClient {
       rpcRetryTimer = syncContext.schedule(
           new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
 
-      checkArgument(!error.isOk(), "unexpected OK status");
-      String errorMsg = error.getDescription() != null
-          && error.getDescription().equals(CLOSED_BY_SERVER)
-              ? "ADS stream closed with status {0}: {1}. Cause: {2}"
-              : "ADS stream failed with status {0}: {1}. Cause: {2}";
-      logger.log(
-          XdsLogLevel.ERROR, errorMsg, error.getCode(), error.getDescription(), error.getCause());
+      Status newStatus = status;
+      if (responseReceived) {
+        // A closed ADS stream after a successful response is not considered an error. Servers may
+        // close streams for various reasons during normal operation, such as load balancing or
+        // underlying connection hitting its max connection age limit  (see gRFC A9).
+        if (!status.isOk()) {
+          newStatus = Status.OK;
+          logger.log( XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
+              + "response was received, so this will not be treated as an error. Cause: {2}",
+              status.getCode(), status.getDescription(), status.getCause());
+        } else {
+          logger.log(XdsLogLevel.DEBUG,
+              "ADS stream closed by server after a response was received");
+        }
+      } else {
+        // If the ADS stream is closed without ever having received a response from the server, then
+        // the XdsClient should consider that a connectivity error (see gRFC A57).
+        if (status.isOk()) {
+          newStatus = Status.UNAVAILABLE.withDescription(
+              "ADS stream closed with OK before receiving a response");
+        }
+        logger.log(
+            XdsLogLevel.ERROR, "ADS stream failed with status {0}: {1}. Cause: {2}",
+            newStatus.getCode(), newStatus.getDescription(), newStatus.getCause());
+      }
+
       closed = true;
-      xdsResponseHandler.handleStreamClosed(error);
+      xdsResponseHandler.handleStreamClosed(newStatus);
       cleanUp();
 
       logger.log(XdsLogLevel.INFO, "Retry ADS stream in {0} ns", delayNanos);
