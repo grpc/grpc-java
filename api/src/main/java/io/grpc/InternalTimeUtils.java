@@ -20,7 +20,7 @@ import java.time.Duration;
 
 @Internal
 public final class InternalTimeUtils {
-  static long convert(Duration duration) {
+  public static long convert(Duration duration) {
     try {
       return duration.toNanos();
     } catch (ArithmeticException tooBig) {
