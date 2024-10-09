@@ -34,8 +34,8 @@ public class InternalTimeUtilsTest {
 
   @Test
   public void testConvertNegativeDuration() {
-    Duration duration = Duration.ofSeconds(-5);
-    long expected = -5 * 1_000_000_000L;
+    Duration duration = Duration.ofSeconds(-3);
+    long expected = -3 * 1_000_000_000L;
 
     assertEquals(expected, convert(duration));
   }
