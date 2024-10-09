@@ -24,7 +24,8 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
+import com.google.common.base.Objects;
+import com.google.common.collect.Maps;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -37,12 +38,9 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -55,7 +53,8 @@ import javax.annotation.Nullable;
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
-  private final Map<Object, ChildLbState> childLbStates = new LinkedHashMap<>();
+  // Modify by replacing the list to release memory when no longer used.
+  private List<ChildLbState> childLbStates = new ArrayList<>(0);
   private final Helper helper;
   // Set to true if currently in the process of handling resolved addresses.
   protected boolean resolvingAddresses;
@@ -79,11 +78,13 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   /**
    * Override to utilize parsing of the policy configuration or alternative helper/lb generation.
-   * Override this if keys are not Endpoints or if child policies have configuration.
+   * Override this if keys are not Endpoints or if child policies have configuration. Null map
+   * values preserve the child without delivering the child an update.
    */
   protected Map<Object, ResolvedAddresses> createChildAddressesMap(
       ResolvedAddresses resolvedAddresses) {
-    Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
+    Map<Object, ResolvedAddresses> childAddresses =
+        Maps.newLinkedHashMapWithExpectedSize(resolvedAddresses.getAddresses().size());
     for (EquivalentAddressGroup eag : resolvedAddresses.getAddresses()) {
       ResolvedAddresses addresses = resolvedAddresses.toBuilder()
           .setAddresses(Collections.singletonList(eag))
@@ -143,7 +144,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     logger.log(Level.FINE, "Shutdown");
-    for (ChildLbState state : childLbStates.values()) {
+    for (ChildLbState state : childLbStates) {
       state.shutdown();
     }
     childLbStates.clear();
@@ -168,37 +169,37 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       return new AcceptResolvedAddrRetVal(unavailableStatus, null);
     }
 
-    updateChildrenWithResolvedAddresses(newChildAddresses);
-
-    return new AcceptResolvedAddrRetVal(Status.OK, getRemovedChildren(newChildAddresses.keySet()));
+    List<ChildLbState> removed = updateChildrenWithResolvedAddresses(newChildAddresses);
+    return new AcceptResolvedAddrRetVal(Status.OK, removed);
   }
 
-  private void updateChildrenWithResolvedAddresses(
+  /** Returns removed children. */
+  private List<ChildLbState> updateChildrenWithResolvedAddresses(
       Map<Object, ResolvedAddresses> newChildAddresses) {
+    // Create a map with the old values
+    Map<Object, ChildLbState> oldStatesMap =
+        Maps.newLinkedHashMapWithExpectedSize(childLbStates.size());
+    for (ChildLbState state : childLbStates) {
+      oldStatesMap.put(state.getKey(), state);
+    }
+
+    // Move ChildLbStates from the map to a new list (preserving the new map's order)
+    List<ChildLbState> newChildLbStates = new ArrayList<>(newChildAddresses.size());
     for (Map.Entry<Object, ResolvedAddresses> entry : newChildAddresses.entrySet()) {
-      ChildLbState childLbState = childLbStates.get(entry.getKey());
+      ChildLbState childLbState = oldStatesMap.remove(entry.getKey());
       if (childLbState == null) {
         childLbState = createChildLbState(entry.getKey());
-        childLbStates.put(entry.getKey(), childLbState);
       }
-      childLbState.setResolvedAddresses(entry.getValue()); // update child
-      childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
+      newChildLbStates.add(childLbState);
+      if (entry.getValue() != null) {
+        childLbState.setResolvedAddresses(entry.getValue()); // update child
+        childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
+      }
     }
-  }
 
-  /**
-   * Identifies which children have been removed (are not part of the newChildKeys).
-   */
-  private List<ChildLbState> getRemovedChildren(Set<Object> newChildKeys) {
-    List<ChildLbState> removedChildren = new ArrayList<>();
-    // Do removals
-    for (Object key : ImmutableList.copyOf(childLbStates.keySet())) {
-      if (!newChildKeys.contains(key)) {
-        ChildLbState childLbState = childLbStates.remove(key);
-        removedChildren.add(childLbState);
-      }
-    }
-    return removedChildren;
+    childLbStates = newChildLbStates;
+    // Remaining entries in map are orphaned
+    return new ArrayList<>(oldStatesMap.values());
   }
 
   protected final void shutdownRemoved(List<ChildLbState> removedChildren) {
@@ -233,18 +234,17 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   public final Collection<ChildLbState> getChildLbStates() {
-    return childLbStates.values();
+    return childLbStates;
   }
 
   @VisibleForTesting
   public final ChildLbState getChildLbState(Object key) {
-    if (key == null) {
-      return null;
+    for (ChildLbState state : childLbStates) {
+      if (Objects.equal(state.getKey(), key)) {
+        return state;
+      }
     }
-    if (key instanceof EquivalentAddressGroup) {
-      key = new Endpoint((EquivalentAddressGroup) key);
-    }
-    return childLbStates.get(key);
+    return null;
   }
 
   @VisibleForTesting

@@ -25,11 +25,14 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
+import static io.grpc.LoadBalancer.IS_PETIOLE_POLICY;
 import static io.grpc.internal.PickFirstLeafLoadBalancer.CONNECTION_DELAY_INTERVAL_MS;
+import static io.grpc.internal.PickFirstLeafLoadBalancer.isSerializingRetries;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -72,7 +75,6 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -91,14 +93,22 @@ import org.mockito.junit.MockitoRule;
 public class PickFirstLeafLoadBalancerTest {
   public static final Status CONNECTION_ERROR =
       Status.UNAVAILABLE.withDescription("Simulated connection error");
+  public static final String GRPC_SERIALIZE_RETRIES = "GRPC_SERIALIZE_RETRIES";
 
-  @Parameterized.Parameters(name = "{0}")
-  public static List<Boolean> enableHappyEyeballs() {
-    return Arrays.asList(true, false);
+  @Parameterized.Parameters(name = "{0}-{1}")
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][] {
+        {false, false},
+        {false, true},
+        {true, false}});
   }
 
-  @Parameterized.Parameter
+  @Parameterized.Parameter(value = 0)
+  public boolean serializeRetries;
+
+  @Parameterized.Parameter(value = 1)
   public boolean enableHappyEyeballs;
+
   private PickFirstLeafLoadBalancer loadBalancer;
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
   private static final Attributes.Key<String> FOO = Attributes.Key.create("foo");
@@ -136,13 +146,22 @@ public class PickFirstLeafLoadBalancerTest {
   private PickSubchannelArgs mockArgs;
 
   private String originalHappyEyeballsEnabledValue;
+  private String originalSerializeRetriesValue;
+
+  private long backoffMillis;
 
   @Before
   public void setUp() {
+    assumeTrue(!serializeRetries || !enableHappyEyeballs); // they are not compatible
+
+    backoffMillis = TimeUnit.SECONDS.toMillis(1);
+    originalSerializeRetriesValue = System.getProperty(GRPC_SERIALIZE_RETRIES);
+    System.setProperty(GRPC_SERIALIZE_RETRIES, Boolean.toString(serializeRetries));
+
     originalHappyEyeballsEnabledValue =
         System.getProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS);
     System.setProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS,
-        enableHappyEyeballs ? "true" : "false");
+        Boolean.toString(enableHappyEyeballs));
 
     for (int i = 1; i <= 5; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
@@ -175,6 +194,11 @@ public class PickFirstLeafLoadBalancerTest {
 
   @After
   public void tearDown() {
+    if (originalSerializeRetriesValue == null) {
+      System.clearProperty(GRPC_SERIALIZE_RETRIES);
+    } else {
+      System.setProperty(GRPC_SERIALIZE_RETRIES, originalSerializeRetriesValue);
+    }
     if (originalHappyEyeballsEnabledValue == null) {
       System.clearProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS);
     } else {
@@ -390,14 +414,43 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void healthCheck_nonPetiolePolicy() {
+    when(mockSubchannel1.getAttributes()).thenReturn(
+        Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
+
+    // Initialize with one server loadbalancer and both health and state listeners
+    List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0));
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(oneServer)
+        .setAttributes(Attributes.EMPTY).build());
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1);
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(mockHelper).createSubchannel(createArgsCaptor.capture());
+    SubchannelStateListener healthListener = createArgsCaptor.getValue()
+        .getOption(HEALTH_CONSUMER_LISTENER_ARG_KEY);
+    inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
+
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), any()); // health listener ignored
+
+    healthListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.INTERNAL));
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any(SubchannelPicker.class));
+  }
+
+  @Test
   public void healthCheckFlow() {
     when(mockSubchannel1.getAttributes()).thenReturn(
         Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
     when(mockSubchannel2.getAttributes()).thenReturn(
         Attributes.newBuilder().set(HAS_HEALTH_PRODUCER_LISTENER_KEY, true).build());
+
     List<EquivalentAddressGroup> oneServer = Lists.newArrayList(servers.get(0), servers.get(1));
     loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(oneServer)
-        .setAttributes(Attributes.EMPTY).build());
+        .setAttributes(Attributes.newBuilder().set(IS_PETIOLE_POLICY, true).build()).build());
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2);
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
@@ -413,13 +466,13 @@ public class PickFirstLeafLoadBalancerTest {
     // subchannel2 | IDLE      | IDLE
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     healthListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
-    inOrder.verify(mockHelper, times(0)).updateBalancingState(any(), any());
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
 
     // subchannel  |  state    |   health
     // subchannel1 | READY     | CONNECTING
     // subchannel2 | IDLE      | IDLE
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(mockHelper, times(0)).updateBalancingState(any(), any());
+    inOrder.verify(mockHelper, never()).updateBalancingState(any(), any());
 
     // subchannel  |  state    |   health
     // subchannel1 | READY     | READY
@@ -468,6 +521,9 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs)
         .getSubchannel()).isSameInstanceAs(mockSubchannel1);
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verifyNoMoreInteractions(mockHelper);
 
     healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     verifyNoMoreInteractions(mockHelper);
@@ -490,20 +546,7 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     stateListeners[0] = stateListenerCaptor.getValue();
 
-    if (enableHappyEyeballs) {
-      forwardTimeByConnectionDelay();
-      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
-      stateListeners[1] = stateListenerCaptor.getValue();
-      forwardTimeByConnectionDelay();
-      inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
-      stateListeners[2] = stateListenerCaptor.getValue();
-      forwardTimeByConnectionDelay();
-      inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
-      stateListeners[3] = stateListenerCaptor.getValue();
-    }
-
-    reset(mockHelper);
-
+    stateListeners[0].onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     stateListeners[0].onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
@@ -513,11 +556,23 @@ public class PickFirstLeafLoadBalancerTest {
     stateListeners[0].onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
 
     Status error = Status.UNAVAILABLE.withDescription("boom!");
+    reset(mockHelper);
 
     if (enableHappyEyeballs) {
-      for (SubchannelStateListener listener : stateListeners) {
-        listener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
-      }
+      stateListeners[0].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
+      stateListeners[1] = stateListenerCaptor.getValue();
+      stateListeners[1].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
+      stateListeners[2] = stateListenerCaptor.getValue();
+      stateListeners[2].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+      forwardTimeByConnectionDelay();
+      inOrder.verify(mockSubchannel4).start(stateListenerCaptor.capture());
+      stateListeners[3] = stateListenerCaptor.getValue();
+      stateListeners[3].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+      forwardTimeByConnectionDelay();
     } else {
       stateListeners[0].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
       for (int i = 1; i < stateListeners.length; i++) {
@@ -559,6 +614,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
   }
@@ -589,6 +646,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
@@ -621,6 +680,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     // Transition from TRANSIENT_ERROR to CONNECTING should also be ignored.
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
@@ -1488,6 +1549,8 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void updateAddresses_intersecting_transient_failure() {
+    assumeTrue(!isSerializingRetries());
+
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4); // captor: captures
@@ -1752,6 +1815,8 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void updateAddresses_identical_transient_failure() {
+    assumeTrue(!isSerializingRetries());
+
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2,
         mockSubchannel3, mockSubchannel4);
     // Creating first set of endpoints/addresses
@@ -2265,7 +2330,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void happy_eyeballs_trigger_connection_delay() {
-    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1,
         mockSubchannel2, mockSubchannel3, mockSubchannel4);
@@ -2310,7 +2375,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void happy_eyeballs_connection_results_happen_after_get_to_end() {
-    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
     Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
@@ -2363,7 +2428,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void happy_eyeballs_pick_pushes_index_over_end() {
-    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
 
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3,
         mockSubchannel2n2, mockSubchannel3n2);
@@ -2441,7 +2506,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   @Test
   public void happy_eyeballs_fail_then_trigger_connection_delay() {
-    Assume.assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
+    assumeTrue(enableHappyEyeballs); // This test is only for happy eyeballs
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
     assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
@@ -2518,6 +2583,44 @@ public class PickFirstLeafLoadBalancerTest {
     forwardTimeByConnectionDelay(servers.size());
 
     loadBalancer.requestConnection(); // should be handled without throwing exception
+  }
+
+  @Test
+  public void serialized_retries_two_passes() {
+    assumeTrue(serializeRetries); // This test is only for serialized retries
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
+    Status error = Status.UNAUTHENTICATED.withDescription("simulated failure");
+
+    List<EquivalentAddressGroup> addrs =
+        Lists.newArrayList(servers.get(0), servers.get(1), servers.get(2));
+    Subchannel[] subchannels = new Subchannel[]{mockSubchannel1, mockSubchannel2, mockSubchannel3};
+    SubchannelStateListener[] listeners = new SubchannelStateListener[subchannels.length];
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(addrs).build());
+    forwardTimeByConnectionDelay(2);
+    for (int i = 0; i < subchannels.length; i++) {
+      inOrder.verify(subchannels[i]).start(stateListenerCaptor.capture());
+      inOrder.verify(subchannels[i]).requestConnection();
+      listeners[i] = stateListenerCaptor.getValue();
+      listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    }
+    assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
+    assertFalse("Index should be at end", loadBalancer.isIndexValid());
+
+    forwardTimeByBackoffDelay(); // should trigger retry
+    for (int i = 0; i < subchannels.length; i++) {
+      inOrder.verify(subchannels[i]).requestConnection();
+      listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error)); // cascade
+    }
+    inOrder.verify(subchannels[0], never()).requestConnection(); // should wait for backoff delay
+
+    forwardTimeByBackoffDelay(); // should trigger retry again
+    for (int i = 0; i < subchannels.length; i++) {
+      inOrder.verify(subchannels[i]).requestConnection();
+      assertEquals(i, loadBalancer.getGroupIndex());
+      listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error)); // cascade
+    }
   }
 
   @Test
@@ -2657,6 +2760,11 @@ public class PickFirstLeafLoadBalancerTest {
     for (int i = 0; i < times; i++) {
       forwardTimeByConnectionDelay();
     }
+  }
+
+  private void forwardTimeByBackoffDelay() {
+    backoffMillis = (long) (backoffMillis * 1.8); // backoff factor default is 1.6 with Jitter .2
+    fakeClock.forwardTime(backoffMillis, TimeUnit.MILLISECONDS);
   }
 
   private void acceptXSubchannels(int num) {
