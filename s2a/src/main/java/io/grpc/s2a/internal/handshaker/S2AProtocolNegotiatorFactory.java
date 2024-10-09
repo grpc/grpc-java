@@ -254,12 +254,12 @@ public final class S2AProtocolNegotiatorFactory {
                           SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR))
                       .newHandler(grpcHandler);
 
-              ctx.pipeline().addAfter(ctx.name(), /* name= */ null,
+              // Delegate the rest of the handshake to the TLS handler. and remove the 
+              // bufferReads handler.
+              ctx.pipeline().addAfter(ctx.name(), "tlsHandler", handler);
+              ctx.pipeline().addAfter("tlsHandler", "cleanupHandler",
                   new S2AStubCleanupNegotiationHandler(handler,
                     grpcHandler.getNegotiationLogger(), s2aStub));
-              // Remove the bufferReads handler and delegate the rest of the handshake to the TLS
-              // handler.
-              ctx.pipeline().addAfter(ctx.name(), /* name= */ null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
             }
