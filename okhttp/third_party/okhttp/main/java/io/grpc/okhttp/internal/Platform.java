@@ -283,7 +283,7 @@ public class Platform {
 
   /**
    * Select the first recognized security provider according to the preference order returned by
-   * {@link Security#getProviders}. If a recognized provider is not found then warn but continue.
+   * {@link Security#getProviders}.
    */
   private static Provider getAndroidSecurityProvider() {
     Provider[] providers = Security.getProviders();
@@ -295,7 +295,6 @@ public class Platform {
         }
       }
     }
-    logger.log(Level.WARNING, "Unable to find Conscrypt");
     return null;
   }
 

@@ -14,4 +14,4 @@ emailAddress                    = Email Address
 subjectAltName = @alt_names
 
 [alt_names]
-IP.1 = ::
+IP.1 = ::1

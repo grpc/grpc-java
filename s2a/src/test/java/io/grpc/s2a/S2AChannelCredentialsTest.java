@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import io.grpc.ChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import java.io.File;
 import org.junit.Test;
@@ -30,40 +31,51 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class S2AChannelCredentialsTest {
   @Test
-  public void createBuilder_nullArgument_throwsException() throws Exception {
-    assertThrows(IllegalArgumentException.class, () -> S2AChannelCredentials.createBuilder(null));
+  public void newBuilder_nullAddress_throwsException() throws Exception {
+    assertThrows(IllegalArgumentException.class, () -> S2AChannelCredentials.newBuilder(null,
+        InsecureChannelCredentials.create()));
   }
 
   @Test
-  public void createBuilder_emptyAddress_throwsException() throws Exception {
-    assertThrows(IllegalArgumentException.class, () -> S2AChannelCredentials.createBuilder(""));
+  public void newBuilder_emptyAddress_throwsException() throws Exception {
+    assertThrows(IllegalArgumentException.class, () -> S2AChannelCredentials.newBuilder("",
+        InsecureChannelCredentials.create()));
+  }
+
+  @Test
+  public void newBuilder_nullChannelCreds_throwsException() throws Exception {
+    assertThrows(NullPointerException.class, () -> S2AChannelCredentials
+        .newBuilder("s2a_address", null));
   }
 
   @Test
   public void setLocalSpiffeId_nullArgument_throwsException() throws Exception {
     assertThrows(
         NullPointerException.class,
-        () -> S2AChannelCredentials.createBuilder("s2a_address").setLocalSpiffeId(null));
+        () -> S2AChannelCredentials.newBuilder("s2a_address",
+            InsecureChannelCredentials.create()).setLocalSpiffeId(null));
   }
 
   @Test
   public void setLocalHostname_nullArgument_throwsException() throws Exception {
     assertThrows(
         NullPointerException.class,
-        () -> S2AChannelCredentials.createBuilder("s2a_address").setLocalHostname(null));
+        () -> S2AChannelCredentials.newBuilder("s2a_address",
+            InsecureChannelCredentials.create()).setLocalHostname(null));
   }
 
   @Test
   public void setLocalUid_nullArgument_throwsException() throws Exception {
     assertThrows(
         NullPointerException.class,
-        () -> S2AChannelCredentials.createBuilder("s2a_address").setLocalUid(null));
+        () -> S2AChannelCredentials.newBuilder("s2a_address",
+            InsecureChannelCredentials.create()).setLocalUid(null));
   }
 
   @Test
   public void build_withLocalSpiffeId_succeeds() throws Exception {
     assertThat(
-            S2AChannelCredentials.createBuilder("s2a_address")
+            S2AChannelCredentials.newBuilder("s2a_address", InsecureChannelCredentials.create())
                 .setLocalSpiffeId("spiffe://test")
                 .build())
         .isNotNull();
@@ -72,7 +84,7 @@ public final class S2AChannelCredentialsTest {
   @Test
   public void build_withLocalHostname_succeeds() throws Exception {
     assertThat(
-            S2AChannelCredentials.createBuilder("s2a_address")
+            S2AChannelCredentials.newBuilder("s2a_address", InsecureChannelCredentials.create())
                 .setLocalHostname("local_hostname")
                 .build())
         .isNotNull();
@@ -80,33 +92,47 @@ public final class S2AChannelCredentialsTest {
 
   @Test
   public void build_withLocalUid_succeeds() throws Exception {
-    assertThat(S2AChannelCredentials.createBuilder("s2a_address").setLocalUid("local_uid").build())
+    assertThat(S2AChannelCredentials.newBuilder("s2a_address",
+        InsecureChannelCredentials.create()).setLocalUid("local_uid").build())
         .isNotNull();
   }
 
   @Test
   public void build_withNoLocalIdentity_succeeds() throws Exception {
-    assertThat(S2AChannelCredentials.createBuilder("s2a_address").build())
+    assertThat(S2AChannelCredentials.newBuilder("s2a_address",
+        InsecureChannelCredentials.create()).build())
         .isNotNull();
   }
-  
+
   @Test
-  public void build_withTlsChannelCredentials_succeeds() throws Exception {
+  public void build_withUseMtlsToS2ANoLocalIdentity_success() throws Exception {
+    ChannelCredentials s2aChannelCredentials = getTlsChannelCredentials();
     assertThat(
-            S2AChannelCredentials.createBuilder("s2a_address")
-                .setLocalSpiffeId("spiffe://test")
-                .setS2AChannelCredentials(getTlsChannelCredentials())
+            S2AChannelCredentials.newBuilder("s2a_address", s2aChannelCredentials)
+                .build())
+        .isNotNull();
+  }
+
+  @Test
+  public void build_withUseMtlsToS2AWithLocalUid_success() throws Exception {
+    ChannelCredentials s2aChannelCredentials = getTlsChannelCredentials();
+    assertThat(
+            S2AChannelCredentials.newBuilder("s2a_address", s2aChannelCredentials)
+                .setLocalUid("local_uid")
                 .build())
         .isNotNull();
   }
 
   private static ChannelCredentials getTlsChannelCredentials() throws Exception {
-    File clientCert = new File("src/test/resources/client_cert.pem");
-    File clientKey = new File("src/test/resources/client_key.pem");
-    File rootCert = new File("src/test/resources/root_cert.pem");
+    String privateKeyPath = "src/test/resources/client_key.pem";
+    String certChainPath = "src/test/resources/client_cert.pem";
+    String trustBundlePath = "src/test/resources/root_cert.pem";
+    File privateKeyFile = new File(privateKeyPath);
+    File certChainFile = new File(certChainPath);
+    File trustBundleFile = new File(trustBundlePath);
     return TlsChannelCredentials.newBuilder()
-        .keyManager(clientCert, clientKey)
-        .trustManager(rootCert)
-        .build();
+      .keyManager(certChainFile, privateKeyFile)
+      .trustManager(trustBundleFile)
+      .build();
   }
 }

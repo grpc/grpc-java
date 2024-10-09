@@ -84,6 +84,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
@@ -115,6 +116,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.StringMarshaller;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
@@ -123,6 +125,7 @@ import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
@@ -1054,7 +1057,7 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(mockLoadBalancer);
   }
 
-  @Test
+  @Test  
   public void noMoreCallbackAfterLoadBalancerShutdown_configError() throws InterruptedException {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
@@ -1093,7 +1096,10 @@ public class ManagedChannelImplTest {
     verify(stateListener2).onSubchannelState(stateInfoCaptor.capture());
     assertSame(CONNECTING, stateInfoCaptor.getValue().getState());
 
-    resolver.listener.onError(resolutionError);
+    channel.syncContext.execute(() ->
+        resolver.listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(resolutionError)).build()));
     verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
 
     verifyNoMoreInteractions(mockLoadBalancer);
@@ -1115,16 +1121,62 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(stateListener1, stateListener2);
 
     // No more callback should be delivered to LoadBalancer after it's shut down
-    resolver.listener.onResult(
-        ResolutionResult.newBuilder()
-            .setAddresses(new ArrayList<>())
-            .setServiceConfig(
-                ConfigOrError.fromError(Status.UNAVAILABLE.withDescription("Resolution failed")))
-            .build());
-    Thread.sleep(1100);
+    channel.syncContext.execute(() ->
+        resolver.listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(resolutionError)).build()));
     assertThat(timer.getPendingTasks()).isEmpty();
     resolver.resolved();
     verifyNoMoreInteractions(mockLoadBalancer);
+  }
+
+  @Test
+  public void addressResolutionError_noPriorNameResolution_usesDefaultServiceConfig()
+      throws Exception {
+    Map<String, Object> rawServiceConfig =
+        parseConfig("{\"methodConfig\":[{"
+            + "\"name\":[{\"service\":\"service\"}],"
+            + "\"waitForReady\":true}]}");
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, null);
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setResolvedAtStart(false)
+            .build();
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    Map<String, Object> defaultServiceConfig =
+        parseConfig("{\"methodConfig\":[{"
+            + "\"name\":[{\"service\":\"service\"}],"
+            + "\"waitForReady\":true}]}");
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
+    Status resolutionError = Status.UNAVAILABLE.withDescription("Resolution failed");
+    channelBuilder.maxTraceEvents(10);
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
+
+    resolver.listener.onError(resolutionError);
+
+    InternalConfigSelector configSelector = channel.getConfigSelector();
+    ManagedChannelServiceConfig config =
+        (ManagedChannelServiceConfig) configSelector.selectConfig(null).getConfig();
+    MethodInfo methodConfig = config.getMethodConfig(method);
+    assertThat(methodConfig.waitForReady).isTrue();
+    timer.forwardNanos(1234);
+    assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
+        .setDescription("Initial Name Resolution error, using default service config")
+        .setSeverity(Severity.CT_ERROR)
+        .setTimestampNanos(0)
+        .build());
+
+    // Check that "lastServiceConfig" variable has been set above: a config resolution with the same
+    // config simply gets ignored and not gets reassigned.
+    resolver.resolved();
+    timer.forwardNanos(1234);
+    assertThat(getStats(channel).channelTrace.events.stream().filter(
+        event -> event.description.equals("Service config changed")).count()).isEqualTo(0);
   }
 
   @Test
@@ -3235,11 +3287,19 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult2(
+            ResolutionResult.newBuilder()
+              .setAddressesOrError(
+                  StatusOr.fromStatus(Status.INTERNAL)).build()));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
+    channel.syncContext.execute(() ->
+        nameResolverFactory.resolvers.get(0).listener.onResult2(
+            ResolutionResult.newBuilder()
+                .setAddressesOrError(
+                    StatusOr.fromStatus(Status.INTERNAL)).build()));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
@@ -4595,7 +4655,7 @@ public class ManagedChannelImplTest {
     int size = getStats(channel).channelTrace.events.size();
     assertThat(getStats(channel).channelTrace.events.get(size - 1))
         .isNotEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Using default service config")
+            .setDescription("timer.forwardNanos(1234);")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -4868,7 +4928,10 @@ public class ManagedChannelImplTest {
 
       void resolved() {
         if (error != null) {
-          listener.onError(error);
+          syncContext.execute(() ->
+              listener.onResult2(
+                  ResolutionResult.newBuilder()
+                      .setAddressesOrError(StatusOr.fromStatus(error)).build()));
           return;
         }
         ResolutionResult.Builder builder =

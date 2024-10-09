@@ -406,7 +406,8 @@ public class MessageDeframer implements Closeable, Deframer {
     // There is no reliable way to get the uncompressed size per message when it's compressed,
     // because the uncompressed bytes are provided through an InputStream whose total size is
     // unknown until all bytes are read, and we don't know when it happens.
-    statsTraceCtx.inboundMessageRead(currentMessageSeqNo, inboundBodyWireSize, -1);
+    statsTraceCtx.inboundMessageRead(currentMessageSeqNo, inboundBodyWireSize,
+        (compressedFlag || fullStreamDecompressor != null) ? -1 : inboundBodyWireSize);
     inboundBodyWireSize = 0;
     InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
     nextFrame.touch();

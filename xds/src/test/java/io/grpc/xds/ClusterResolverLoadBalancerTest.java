@@ -52,6 +52,7 @@ import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
@@ -1306,7 +1307,8 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     private void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
-      listener.onResult(ResolutionResult.newBuilder().setAddresses(addresses).build());
+      listener.onResult(ResolutionResult.newBuilder()
+          .setAddressesOrError(StatusOr.fromValue(addresses)).build());
     }
 
     private void deliverError(Status error) {
