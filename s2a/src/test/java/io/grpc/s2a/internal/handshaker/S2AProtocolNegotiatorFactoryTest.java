@@ -122,7 +122,7 @@ public class S2AProtocolNegotiatorFactoryTest {
   @Test
   public void createProtocolNegotiatorFactory_getsDefaultPort_succeeds() throws Exception {
     InternalProtocolNegotiator.ClientFactory clientFactory =
-        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool);
+        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool, null);
 
     assertThat(clientFactory.getDefaultPort()).isEqualTo(S2AProtocolNegotiatorFactory.DEFAULT_PORT);
   }
@@ -146,7 +146,7 @@ public class S2AProtocolNegotiatorFactoryTest {
   public void createProtocolNegotiatorFactory_buildsAnS2AProtocolNegotiatorOnClientSide_succeeds()
       throws Exception {
     InternalProtocolNegotiator.ClientFactory clientFactory =
-        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool);
+        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool, null);
 
     ProtocolNegotiator clientNegotiator = clientFactory.newNegotiator();
 
@@ -158,7 +158,7 @@ public class S2AProtocolNegotiatorFactoryTest {
   public void closeProtocolNegotiator_verifyProtocolNegotiatorIsClosedOnClientSide()
       throws Exception {
     InternalProtocolNegotiator.ClientFactory clientFactory =
-        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool);
+        S2AProtocolNegotiatorFactory.createClientFactory(LOCAL_IDENTITY, channelPool, null);
     ProtocolNegotiator clientNegotiator = clientFactory.newNegotiator();
 
     clientNegotiator.close();
@@ -170,7 +170,7 @@ public class S2AProtocolNegotiatorFactoryTest {
   public void createChannelHandler_addHandlerToMockContext() throws Exception {
     ProtocolNegotiator clientNegotiator =
         S2AProtocolNegotiatorFactory.S2AProtocolNegotiator.createForClient(
-            channelPool, LOCAL_IDENTITY);
+            channelPool, LOCAL_IDENTITY, null);
 
     ChannelHandler channelHandler = clientNegotiator.newHandler(fakeConnectionHandler);
 
