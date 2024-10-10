@@ -99,7 +99,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private Attributes serverStreamAttributes;
   private ManagedClientTransport.Listener clientTransportListener;
   // The size is assumed from the sender's side.
-  private long assumedMessageSize = -1;
+  private final long assumedMessageSize;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -140,8 +140,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       };
 
   private InProcessTransport(SocketAddress address, int maxInboundMetadataSize, String authority,
-      String userAgent, Attributes eagAttrs,
-      Optional<ServerListener> optionalServerListener, boolean includeCauseWithStatus) {
+      String userAgent, Attributes eagAttrs, Optional<ServerListener> optionalServerListener,
+      boolean includeCauseWithStatus, long assumedMessageSize) {
     this.address = address;
     this.clientMaxInboundMetadataSize = maxInboundMetadataSize;
     this.authority = authority;
@@ -156,30 +156,23 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     this.optionalServerListener = optionalServerListener;
     logId = InternalLogId.allocate(getClass(), address.toString());
     this.includeCauseWithStatus = includeCauseWithStatus;
+    this.assumedMessageSize = assumedMessageSize;
   }
 
   public InProcessTransport(
       SocketAddress address, int maxInboundMetadataSize, String authority, String userAgent,
-      Attributes eagAttrs, boolean includeCauseWithStatus) {
+      Attributes eagAttrs, boolean includeCauseWithStatus, long assumedMessageSize) {
     this(address, maxInboundMetadataSize, authority, userAgent, eagAttrs,
-        Optional.<ServerListener>absent(), includeCauseWithStatus);
-  }
-
-  public InProcessTransport(
-          SocketAddress address, int maxInboundMetadataSize, String authority, String userAgent,
-          Attributes eagAttrs, boolean includeCauseWithStatus, long assumedMessageSize) {
-    this(address, maxInboundMetadataSize, authority, userAgent, eagAttrs,
-            Optional.<ServerListener>absent(), includeCauseWithStatus);
-    this.assumedMessageSize = assumedMessageSize;
+        Optional.<ServerListener>absent(), includeCauseWithStatus, assumedMessageSize);
   }
 
   InProcessTransport(
       String name, int maxInboundMetadataSize, String authority, String userAgent,
       Attributes eagAttrs, ObjectPool<ScheduledExecutorService> serverSchedulerPool,
       List<ServerStreamTracer.Factory> serverStreamTracerFactories,
-      ServerListener serverListener, boolean includeCauseWithStatus) {
+      ServerListener serverListener, boolean includeCauseWithStatus, long assumedMessageSize) {
     this(new InProcessSocketAddress(name), maxInboundMetadataSize, authority, userAgent, eagAttrs,
-        Optional.of(serverListener), includeCauseWithStatus);
+        Optional.of(serverListener), includeCauseWithStatus, assumedMessageSize);
     this.serverMaxInboundMetadataSize = maxInboundMetadataSize;
     this.serverSchedulerPool = serverSchedulerPool;
     this.serverStreamTracerFactories = serverStreamTracerFactories;

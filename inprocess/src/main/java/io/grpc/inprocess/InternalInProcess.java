@@ -62,6 +62,6 @@ public final class InternalInProcess {
         serverSchedulerPool,
         serverStreamTracerFactories,
         serverListener,
-        includeCauseWithStatus);
+        includeCauseWithStatus, -1);
   }
 }
