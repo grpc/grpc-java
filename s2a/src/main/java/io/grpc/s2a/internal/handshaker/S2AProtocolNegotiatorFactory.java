@@ -257,11 +257,11 @@ public final class S2AProtocolNegotiatorFactory {
               // Delegate the rest of the handshake to the TLS handler. and remove the 
               // bufferReads handler.
               ctx.pipeline().addAfter(ctx.name(), "tlsHandler", handler);
-              ctx.pipeline().addAfter("tlsHandler", "cleanupHandler",
-                  new S2AStubCleanupNegotiationHandler(handler,
-                    grpcHandler.getNegotiationLogger(), s2aStub));
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
+              ctx.pipeline().addLast(
+                  new S2AStubCleanupNegotiationHandler(null,
+                    null, s2aStub));
             }
 
             @Override
