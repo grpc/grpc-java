@@ -35,9 +35,9 @@ public class TimeProviderTest {
     Instant instantNow = Instant.now();
     long expectedTimeNanos = instantNow.getEpochSecond() * 1_000_000_000L + instantNow.getNano();
 
-    // Validate the time returned is close to the expected value within a tolerance.
-    long toleranceOfTenMilliSecond = 10_000_000L; // 10 millisecond tolerance in nanoseconds
+    // Validate the time returned is close to the expected value within a tolerance
+    // (i,e 10 millisecond tolerance in nanoseconds).
     assertTrue("The current time in nanoseconds should be close to the expected time.",
-        Math.abs(actualTimeNanos - expectedTimeNanos) < toleranceOfTenMilliSecond);
+        Math.abs(actualTimeNanos - expectedTimeNanos) < 10_000_000L);
   }
 }
