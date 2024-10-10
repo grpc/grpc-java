@@ -289,7 +289,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         }
       }
     } catch (ClassNotFoundException ignored) {
-
+      // JVM did not load AbstractEpollChannel, so the current channel will not be of epoll type, so there is no need to set TCP_USER_TIMEOUT
     }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
