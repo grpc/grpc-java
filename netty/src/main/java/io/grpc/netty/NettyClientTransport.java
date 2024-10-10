@@ -281,15 +281,17 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel = regFuture.channel();
     // For non-epoll based channel, the option will be ignored.
     try {
-      boolean isEpollChannel = Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel);
-      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED && isEpollChannel) {
+      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED &&
+              Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel)) {
         ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
         if (tcpUserTimeout != null) {
-          channel.config().setOption(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
+          int tcpUserTimeoutMs = (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos);
+          channel.config().setOption(tcpUserTimeout, tcpUserTimeoutMs);
         }
       }
     } catch (ClassNotFoundException ignored) {
-      // JVM did not load AbstractEpollChannel, so the current channel will not be of epoll type, so there is no need to set TCP_USER_TIMEOUT
+      // JVM did not load AbstractEpollChannel, so the current channel will not be of epoll type,
+      // so there is no need to set TCP_USER_TIMEOUT
     }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
