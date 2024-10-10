@@ -33,7 +33,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 /** Reads and writes messages to and from the S2A. */
 @NotThreadSafe
-class S2AStub implements AutoCloseable {
+public class S2AStub implements AutoCloseable {
   private static final Logger logger = Logger.getLogger(S2AStub.class.getName());
   private static final long HANDSHAKE_RPC_DEADLINE_SECS = 20;
   private final StreamObserver<SessionResp> reader = new Reader();
@@ -42,6 +42,7 @@ class S2AStub implements AutoCloseable {
   private StreamObserver<SessionReq> writer;
   private boolean doneReading = false;
   private boolean doneWriting = false;
+  private boolean isClosed = false;
 
   static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
     checkNotNull(serviceStub);
@@ -136,6 +137,11 @@ class S2AStub implements AutoCloseable {
     if (writer != null) {
       writer.onCompleted();
     }
+    isClosed = true;
+  }
+
+  public boolean isClosed() {
+    return isClosed;
   }
 
   /** Create a new writer if the writer is null. */
