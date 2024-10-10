@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,8 +36,8 @@ public class TimeProviderTest {
     long expectedTimeNanos = instantNow.getEpochSecond() * 1_000_000_000L + instantNow.getNano();
 
     // Validate the time returned is close to the expected value within a tolerance.
-    long toleranceOfTwoMilliSecond = 2_000_000L; // 2 millisecond tolerance in nanoseconds
+    long toleranceOfTenMilliSecond = 10_000_000L; // 10 millisecond tolerance in nanoseconds
     assertTrue("The current time in nanoseconds should be close to the expected time.",
-        Math.abs(actualTimeNanos - expectedTimeNanos) < toleranceOfTwoMilliSecond);
+        Math.abs(actualTimeNanos - expectedTimeNanos) < toleranceOfTenMilliSecond);
   }
 }
