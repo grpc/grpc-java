@@ -281,8 +281,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     channel = regFuture.channel();
     // For non-epoll based channel, the option will be ignored.
     try {
-      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED &&
-              Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel)) {
+      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED
+              && Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel)) {
         ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
         if (tcpUserTimeout != null) {
           int tcpUserTimeoutMs = (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos);
