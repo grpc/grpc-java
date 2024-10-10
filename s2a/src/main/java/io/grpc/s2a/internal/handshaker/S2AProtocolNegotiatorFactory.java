@@ -195,7 +195,6 @@ public final class S2AProtocolNegotiatorFactory {
     protected void protocolNegotiationEventTriggered(ChannelHandlerContext ctx) {
       s2aStub.close();
       fireProtocolNegotiationEvent(ctx);
-      ctx.pipeline().remove(this);
     }
   
   }
