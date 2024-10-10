@@ -54,7 +54,6 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.AbstractEpollStreamChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.Future;
@@ -281,11 +280,16 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
     channel = regFuture.channel();
     // For non-epoll based channel, the option will be ignored.
-    if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED && channel instanceof AbstractEpollStreamChannel) {
-      ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
-      if (tcpUserTimeout != null) {
-        channel.config().setOption(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
+    try {
+      boolean isEpollChannel = Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel);
+      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED && isEpollChannel) {
+        ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
+        if (tcpUserTimeout != null) {
+          channel.config().setOption(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
+        }
       }
+    } catch (ClassNotFoundException ignored) {
+
     }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
