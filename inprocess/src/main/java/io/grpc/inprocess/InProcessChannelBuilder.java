@@ -94,6 +94,7 @@ public final class InProcessChannelBuilder extends
   private ScheduledExecutorService scheduledExecutorService;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
   private boolean transportIncludeStatusCause = false;
+  private long assumedMessageSize = -1;
 
   private InProcessChannelBuilder(@Nullable SocketAddress directAddress, @Nullable String target) {
 
@@ -117,10 +118,6 @@ public final class InProcessChannelBuilder extends
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
     managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
-
-    // By default, In-process transport should not be retriable as that leaks memory.  Since
-    // there is no wire, bytes aren't calculated so buffer limit isn't respected
-    managedChannelImplBuilder.disableRetry();
   }
 
   @Internal
@@ -225,9 +222,24 @@ public final class InProcessChannelBuilder extends
     return this;
   }
 
+  /**
+   * Assumes RPC messages are the specified size. This avoids serializing
+   * messages for metrics and retry memory tracking. This can dramatically
+   * improve performance when accurate message sizes are not needed and if
+   * nothing else needs the serialized message.
+   * @param assumedMessageSize length of InProcess transport's messageSize.
+   * @return this
+   * @throws IllegalArgumentException if assumedMessageSize is negative.
+   */
+  public InProcessChannelBuilder assumedMessageSize(long assumedMessageSize) {
+    checkArgument(assumedMessageSize >= 0, "assumedMessageSize must be >= 0");
+    this.assumedMessageSize = assumedMessageSize;
+    return this;
+  }
+
   ClientTransportFactory buildTransportFactory() {
-    return new InProcessClientTransportFactory(
-        scheduledExecutorService, maxInboundMetadataSize, transportIncludeStatusCause);
+    return new InProcessClientTransportFactory(scheduledExecutorService,
+            maxInboundMetadataSize, transportIncludeStatusCause, assumedMessageSize);
   }
 
   void setStatsEnabled(boolean value) {
@@ -243,15 +255,17 @@ public final class InProcessChannelBuilder extends
     private final int maxInboundMetadataSize;
     private boolean closed;
     private final boolean includeCauseWithStatus;
+    private long assumedMessageSize;
 
     private InProcessClientTransportFactory(
         @Nullable ScheduledExecutorService scheduledExecutorService,
-        int maxInboundMetadataSize, boolean includeCauseWithStatus) {
+        int maxInboundMetadataSize, boolean includeCauseWithStatus, long assumedMessageSize) {
       useSharedTimer = scheduledExecutorService == null;
       timerService = useSharedTimer
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : scheduledExecutorService;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
       this.includeCauseWithStatus = includeCauseWithStatus;
+      this.assumedMessageSize = assumedMessageSize;
     }
 
     @Override
@@ -263,7 +277,7 @@ public final class InProcessChannelBuilder extends
       // TODO(carl-mastrangelo): Pass channelLogger in.
       return new InProcessTransport(
           addr, maxInboundMetadataSize, options.getAuthority(), options.getUserAgent(),
-          options.getEagAttributes(), includeCauseWithStatus);
+          options.getEagAttributes(), includeCauseWithStatus, assumedMessageSize);
     }
 
     @Override
