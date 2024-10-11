@@ -367,6 +367,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
+        if (state.getState() == SHUTDOWN) {
+          return;
+        }
         ManagedClientTransport savedTransport = null;
         SocketAddress previousAddress = addressIndex.getCurrentAddress();
         addressIndex.updateGroups(newImmutableAddressGroups);
