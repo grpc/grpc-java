@@ -52,6 +52,6 @@ public final class AnonymousInProcessTransportTest extends InProcessTransportTes
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(
         address, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-        testAuthority(server), USER_AGENT, eagAttrs(), false);
+        testAuthority(server), USER_AGENT, eagAttrs(), false, -1);
   }
 }
