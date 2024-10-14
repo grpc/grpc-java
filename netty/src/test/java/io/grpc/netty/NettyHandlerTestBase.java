@@ -243,7 +243,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   }
 
   protected final byte[] contentAsArray() {
-    return "\000\000\000\000\015hello world".getBytes(UTF_8);
+    return "hello world".getBytes(UTF_8);
   }
 
   protected final Http2FrameWriter verifyWrite() {
