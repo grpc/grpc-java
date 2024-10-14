@@ -18,6 +18,7 @@ cc_binary(
 
 java_library(
     name = "java_grpc_library_deps__do_not_reference",
+    neverlink = True,
     exports = [
         "//api",
         "//protobuf",
@@ -31,6 +32,7 @@ java_library(
 
 java_library(
     name = "java_lite_grpc_library_deps__do_not_reference",
+    neverlink = True,
     exports = [
         "//api",
         "//protobuf-lite",

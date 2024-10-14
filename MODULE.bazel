@@ -77,7 +77,10 @@ use_repo(
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 
+MAVEN_REPO = "grpc_java_maven"
+
 maven.install(
+    name = MAVEN_REPO,
     artifacts = IO_GRPC_GRPC_JAVA_ARTIFACTS,
     repositories = [
         "https://repo.maven.apache.org/maven2/",
@@ -85,7 +88,7 @@ maven.install(
     strict_visibility = True,
 )
 
-use_repo(maven, "maven")
+use_repo(maven, maven = MAVEN_REPO)
 
 maven.override(
     coordinates = "com.google.protobuf:protobuf-java",

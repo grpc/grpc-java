@@ -17,13 +17,56 @@ switched_rules.use_languages(java = True)
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 
-use_repo(maven, "maven")
+MAVEN_REPO = "grpc_java_examples_maven"
+
+use_repo(maven, maven = MAVEN_REPO)
+
+
+IO_GRPC_GRPC_JAVA_ARTIFACTS = [
+    "com.google.android:annotations:4.1.1.4",
+    "com.google.api.grpc:proto-google-common-protos:2.29.0",
+    "com.google.auth:google-auth-library-credentials:1.23.0",
+    "com.google.auth:google-auth-library-oauth2-http:1.23.0",
+    "com.google.auto.value:auto-value-annotations:1.11.0",
+    "com.google.auto.value:auto-value:1.11.0",
+    "com.google.code.findbugs:jsr305:3.0.2",
+    "com.google.code.gson:gson:2.11.0",
+    "com.google.errorprone:error_prone_annotations:2.28.0",
+    "com.google.guava:failureaccess:1.0.1",
+    "com.google.guava:guava:33.2.1-android",
+    "com.google.re2j:re2j:1.7",
+    "com.google.truth:truth:1.4.2",
+    "com.squareup.okhttp:okhttp:2.7.5",
+    "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
+    "io.netty:netty-buffer:4.1.110.Final",
+    "io.netty:netty-codec-http2:4.1.110.Final",
+    "io.netty:netty-codec-http:4.1.110.Final",
+    "io.netty:netty-codec-socks:4.1.110.Final",
+    "io.netty:netty-codec:4.1.110.Final",
+    "io.netty:netty-common:4.1.110.Final",
+    "io.netty:netty-handler-proxy:4.1.110.Final",
+    "io.netty:netty-handler:4.1.110.Final",
+    "io.netty:netty-resolver:4.1.110.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.65.Final",
+    "io.netty:netty-tcnative-classes:2.0.65.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.110.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.110.Final",
+    "io.netty:netty-transport:4.1.110.Final",
+    "io.opencensus:opencensus-api:0.31.0",
+    "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
+    "io.perfmark:perfmark-api:0.27.0",
+    "junit:junit:4.13.2",
+    "org.apache.tomcat:annotations-api:6.0.53",
+    "org.checkerframework:checker-qual:3.12.0",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.24",
+]
 
 maven.install(
+    name = MAVEN_REPO,
     artifacts = [
         "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24",
         "com.google.api.grpc:proto-google-cloud-pubsub-v1:0.1.24",
-    ],
+    ] + IO_GRPC_GRPC_JAVA_ARTIFACTS,
     repositories = ["https://repo.maven.apache.org/maven2/"],
     strict_visibility = True,
 )
