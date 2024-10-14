@@ -21,7 +21,7 @@ package grpc.gcp.s2a;
 
 option java_multiple_files = true;
 option java_outer_classname = "CommonProto";
-option java_package = "io.grpc.s2a.handshaker";
+option java_package = "io.grpc.s2a.internal.handshaker";
 
 // The TLS 1.0-1.2 ciphersuites that the application can negotiate when using
 // S2A.

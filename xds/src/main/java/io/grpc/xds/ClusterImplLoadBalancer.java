@@ -164,6 +164,13 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  public void requestConnection() {
+    if (childSwitchLb != null) {
+      childSwitchLb.requestConnection();
+    }
+  }
+
+  @Override
   public void shutdown() {
     if (dropStats != null) {
       dropStats.release();

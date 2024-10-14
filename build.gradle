@@ -500,3 +500,4 @@ configurations {
 }
 
 tasks.register('checkForUpdates', CheckForUpdatesTask, project.configurations.checkForUpdates, "libs")
+

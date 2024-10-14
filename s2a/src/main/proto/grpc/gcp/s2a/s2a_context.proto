@@ -23,7 +23,7 @@ import "grpc/gcp/s2a/common.proto";
 
 option java_multiple_files = true;
 option java_outer_classname = "S2AContextProto";
-option java_package = "io.grpc.s2a.handshaker";
+option java_package = "io.grpc.s2a.internal.handshaker";
 
 message S2AContext {
   // The SPIFFE ID from the peer leaf certificate, if present.
