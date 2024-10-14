@@ -72,14 +72,12 @@ import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
-import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Error;
@@ -122,24 +120,17 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-
   private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
-
-
   @Mock
   private ServerStreamListener streamListener;
-
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
-
   private final ServerTransportListener transportListener =
       mock(ServerTransportListener.class, delegatesTo(new ServerTransportListenerImpl()));
   private final TestServerStreamTracer streamTracer = new TestServerStreamTracer();
-
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
-
-  static Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
+  final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
 
   private int maxConcurrentStreams = Integer.MAX_VALUE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
@@ -152,8 +143,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
   private int maxRstCount = MAX_RST_COUNT_DISABLED;
   private long maxRstPeriodNanos;
-
-  static NettyServerStream.TransportState streamTransportState;
 
   private class ServerTransportListenerImpl implements ServerTransportListener {
 
@@ -194,40 +183,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .messagesAvailable(any(StreamListener.MessageProducer.class));
   }
 
-  private static class TransportStateImpl extends NettyServerStream.TransportState {
-    public TransportStateImpl(
-        NettyServerHandler handler,
-        EventLoop eventLoop,
-        int maxMessageSize,
-        Http2Stream http2Stream,
-        StatsTraceContext statsTraceCtx,
-        TransportTracer transportTracer) {
-      super(
-          handler,
-          eventLoop,
-          http2Stream,
-          maxMessageSize,
-          statsTraceCtx,
-          transportTracer,
-          "methodName");
-    }
-  }
-
   @Override
   protected void manualSetUp() throws Exception {
     assertNull("manualSetUp should not run more than once", handler());
 
     initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
-
-    streamTransportState = new TransportStateImpl(
-        handler(),
-        channel().eventLoop(),
-        DEFAULT_MAX_MESSAGE_SIZE,
-        connection().connectionStream(),
-        StatsTraceContext.NOOP,
-        transportTracer);
-    streamTransportState.setListener(mock(ServerStreamListener.class));
-    System.out.println("manualSetUp->streamTransportState=" + streamTransportState);
 
     // replace the keepAliveManager with spyKeepAliveManager
     spyKeepAliveManager =
