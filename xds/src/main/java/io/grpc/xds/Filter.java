@@ -38,6 +38,10 @@ interface Filter {
    */
   String[] typeUrls();
 
+  default boolean isEnabled() {
+    return true;
+  }
+
   /**
    * Parses the top-level filter config from raw proto message. The message may be either a {@link
    * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
