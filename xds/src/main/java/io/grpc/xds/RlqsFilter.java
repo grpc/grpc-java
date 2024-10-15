@@ -32,6 +32,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.internal.datatype.GrpcService;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
@@ -50,7 +51,7 @@ import javax.annotation.Nullable;
 // TODO(sergiitk): introduce a layer between the filter and interceptor.
 // lds has filter names and the names are unique - even for server instances.
 final class RlqsFilter implements Filter, ServerInterceptorBuilder {
-  // private static final Logger logger = Logger.getLogger(RlqsFilter.class.getName());
+  static final boolean enabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ENABLE_RLQS", false);
 
   static final RlqsFilter INSTANCE = new RlqsFilter();
 
@@ -64,6 +65,11 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   @Override
   public String[] typeUrls() {
     return new String[]{TYPE_URL, TYPE_URL_OVERRIDE_CONFIG};
+  }
+
+  @Override
+  public boolean isEnabled() {
+    return enabled;
   }
 
   @Override

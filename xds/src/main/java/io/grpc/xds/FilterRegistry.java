@@ -51,6 +51,9 @@ final class FilterRegistry {
   @VisibleForTesting
   FilterRegistry register(Filter... filters) {
     for (Filter filter : filters) {
+      if (!filter.isEnabled()) {
+        continue;
+      }
       for (String typeUrl : filter.typeUrls()) {
         supportedFilters.put(typeUrl, filter);
       }

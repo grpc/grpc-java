@@ -1119,6 +1119,8 @@ public class XdsServerWrapperTest {
     Filter filter = mock(Filter.class, withSettings()
         .extraInterfaces(ServerInterceptorBuilder.class));
     when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
+    when(filter.isEnabled()).thenCallRealMethod();
+    assertThat(filter.isEnabled()).isTrue();
     filterRegistry.register(filter);
     FilterConfig f0 = mock(FilterConfig.class);
     FilterConfig f0Override = mock(FilterConfig.class);
@@ -1192,6 +1194,8 @@ public class XdsServerWrapperTest {
     Filter filter = mock(Filter.class, withSettings()
         .extraInterfaces(ServerInterceptorBuilder.class));
     when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
+    when(filter.isEnabled()).thenCallRealMethod();
+    assertThat(filter.isEnabled()).isTrue();
     filterRegistry.register(filter);
     FilterConfig f0 = mock(FilterConfig.class);
     FilterConfig f0Override = mock(FilterConfig.class);
