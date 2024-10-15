@@ -411,9 +411,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
                   ManagedClientTransport transport = shutdownDueToUpdateTransport;
                   shutdownDueToUpdateTask = null;
                   shutdownDueToUpdateTransport = null;
-                  transport.shutdown(
-                      Status.UNAVAILABLE.withDescription(
-                          "InternalSubchannel closed transport due to address change"));
+                  if (transport != null) {
+                    transport.shutdown(
+                        Status.UNAVAILABLE.withDescription(
+                            "InternalSubchannel closed transport due to address change"));
+                  }
                 }
               },
               ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS,
