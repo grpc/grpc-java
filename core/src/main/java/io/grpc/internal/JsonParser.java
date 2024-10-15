@@ -58,8 +58,7 @@ public final class JsonParser {
     }
   }
 
-  private static Object parseRecursive(JsonReader jr)
-      throws IOException {
+  private static Object parseRecursive(JsonReader jr) throws IOException {
     checkState(jr.hasNext(), "unexpected end of JSON");
     switch (jr.peek()) {
       case BEGIN_ARRAY:
@@ -79,13 +78,12 @@ public final class JsonParser {
     }
   }
 
-  private static Map<String, ?> parseJsonObject(JsonReader jr)
-      throws IOException {
+  private static Map<String, ?> parseJsonObject(JsonReader jr) throws IOException {
     jr.beginObject();
     Map<String, Object> obj = new LinkedHashMap<>();
     while (jr.hasNext()) {
       String name = jr.nextName();
-      checkArgument(!obj.containsKey(name), "Duplicate key found: " + name);
+      checkArgument(!obj.containsKey(name), "Duplicate key found: %s", name);
       Object value = parseRecursive(jr);
       obj.put(name, value);
     }

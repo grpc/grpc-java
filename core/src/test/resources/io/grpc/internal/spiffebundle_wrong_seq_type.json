@@ -1,0 +1,12 @@
+{
+  "trust_domains": {
+    "google.com": {
+      "sequence_number": 123.5,
+      "keys": [
+        {
+          "x5c": "VALUE_DOESN'T_MATTER"
+        }
+      ]
+    }
+  }
+}
