@@ -27,6 +27,7 @@ import com.google.protobuf.Message;
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaBucketSettings;
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaFilterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride;
+import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
@@ -34,6 +35,8 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.datatype.GrpcService;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
@@ -53,6 +56,10 @@ import javax.annotation.Nullable;
 final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   static final boolean enabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ENABLE_RLQS", false);
 
+  // TODO(sergiitk): [IMPL] remove
+  // Do do not fail on parsing errors, only log requests.
+  static final boolean dryRun = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_RLQS_DRY_RUN", false);
+
   static final RlqsFilter INSTANCE = new RlqsFilter();
 
   static final String TYPE_URL = "type.googleapis.com/"
@@ -61,6 +68,15 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       + "envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride";
 
   private final AtomicReference<RlqsCache> rlqsCache = new AtomicReference<>();
+
+  private final InternalLogId logId;
+  private final XdsLogger logger;
+
+  public RlqsFilter() {
+    logId = InternalLogId.allocate("rlqs-filter", null);
+    logger = XdsLogger.withLogId(logId);
+    logger.log(XdsLogLevel.INFO, "Created RLQS Filter with logId=" + logId);
+  }
 
   @Override
   public String[] typeUrls() {
@@ -158,7 +174,15 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       @Override
       public <ReqT, RespT> Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-        RlqsRateLimitResult result = rlqsEngine.rateLimit(HttpMatchInput.create(headers, call));
+        HttpMatchInput httpMatchInput = HttpMatchInput.create(headers, call);
+
+        // TODO(sergiitk): [IMPL] Remove
+        if (dryRun) {
+          logger.log(XdsLogLevel.INFO, "RLQS DRY RUN: request <<" + httpMatchInput + ">>");
+          return next.startCall(call, headers);
+        }
+
+        RlqsRateLimitResult result = rlqsEngine.rateLimit(httpMatchInput);
         if (result.isAllowed()) {
           return next.startCall(call, headers);
         }
@@ -170,7 +194,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   }
 
   @VisibleForTesting
-  static RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
+  RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
       throws ResourceInvalidException, InvalidProtocolBufferException {
     RlqsFilterConfig.Builder builder = RlqsFilterConfig.builder();
     if (rlqsFilterProto.getDomain().isEmpty()) {
@@ -178,6 +202,12 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
     }
     builder.domain(rlqsFilterProto.getDomain())
         .rlqsService(GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer()));
+
+    // TODO(sergiitk): [IMPL] Remove
+    if (dryRun) {
+      logger.log(XdsLogLevel.INFO, "RLQS DRY RUN: skipping matchers");
+      return builder.build();
+    }
 
     // TODO(sergiitk): [IMPL] actually parse, move to RlqsBucketSettings.fromProto()
     RateLimitQuotaBucketSettings fallbackBucketSettingsProto = unpackAny(
