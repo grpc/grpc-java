@@ -156,7 +156,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private ExceptionHandlingFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
-  private final Object lock = new Object();
+  final Object lock = new Object();
   private final InternalLogId logId;
   @GuardedBy("lock")
   private int nextStreamId;
