@@ -1994,14 +1994,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
         }
 
-        delayedShutdownTask = syncContext.schedule(
-            new LogExceptionRunnable(new ShutdownSubchannel()),
-            SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS,
-            transportFactory.getScheduledExecutorService());
-        return;
+        ScheduledExecutorService scheduledExecutorService =
+            transportFactory.getScheduledExecutorService();
+        if (!scheduledExecutorService.isShutdown()) {
+          delayedShutdownTask = syncContext.schedule(
+              new LogExceptionRunnable(new ShutdownSubchannel()),
+              SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS,
+              scheduledExecutorService);
+          return;
+        } // else will fall down to direct subchannel.shutdown()
       }
-      // When terminating == true, no more real streams will be created. It's safe and also
-      // desirable to shutdown timely.
+      // When terminating == true or scheduler is already shutdown, no more real streams will be
+      // created. It's safe and also desirable to shutdown timely.
       subchannel.shutdown(SHUTDOWN_STATUS);
     }
 
