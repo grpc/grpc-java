@@ -151,16 +151,16 @@ public final class SynchronizationContext implements Executor {
       final Runnable task, long delay, TimeUnit unit, ScheduledExecutorService timerService) {
     final ManagedRunnable runnable = new ManagedRunnable(task);
     ScheduledFuture<?> future = timerService.schedule(new Runnable() {
-      @Override
-      public void run() {
-        execute(runnable);
-      }
+        @Override
+        public void run() {
+          execute(runnable);
+        }
 
-      @Override
-      public String toString() {
-        return task.toString() + "(scheduled in SynchronizationContext)";
-      }
-    }, delay, unit);
+        @Override
+        public String toString() {
+          return task.toString() + "(scheduled in SynchronizationContext)";
+        }
+      }, delay, unit);
     return new ScheduledHandle(runnable, future);
   }
 
@@ -201,6 +201,7 @@ public final class SynchronizationContext implements Executor {
     return scheduleWithFixedDelay(task, convert(initialDelay), convert(delay),
         TimeUnit.NANOSECONDS, timerService);
   }
+
 
   private static class ManagedRunnable implements Runnable {
     final Runnable task;
