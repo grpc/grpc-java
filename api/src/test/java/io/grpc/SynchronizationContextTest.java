@@ -73,7 +73,7 @@ public class SynchronizationContextTest {
 
   @Mock
   private Runnable task3;
-
+  
   @After public void tearDown() {
     assertThat(uncaughtErrors).isEmpty();
   }
