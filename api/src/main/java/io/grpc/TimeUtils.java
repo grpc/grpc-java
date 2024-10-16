@@ -18,8 +18,7 @@ package io.grpc;
 
 import java.time.Duration;
 
-@Internal
-public final class InternalTimeUtils {
+public final class TimeUtils {
   public static long convert(Duration duration) {
     try {
       return duration.toNanos();

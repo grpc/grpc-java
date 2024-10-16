@@ -17,7 +17,7 @@
 package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.InternalTimeUtils.convert;
+import static io.grpc.TimeUtils.convert;
 
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;

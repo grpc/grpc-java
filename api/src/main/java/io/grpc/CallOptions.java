@@ -17,7 +17,7 @@
 package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.grpc.InternalTimeUtils.convert;
+import static io.grpc.TimeUtils.convert;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;

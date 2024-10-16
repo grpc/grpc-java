@@ -18,7 +18,7 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.InternalTimeUtils.convert;
+import static io.grpc.TimeUtils.convert;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
