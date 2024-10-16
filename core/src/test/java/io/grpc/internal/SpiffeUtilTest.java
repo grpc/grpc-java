@@ -30,7 +30,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
@@ -270,7 +269,7 @@ public class SpiffeUtilTest {
       tempSpiffeTrustBundleWrongSeq = copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_SEQ);
     }
 
-    private String copyFileToTmp(String fileName) throws Exception{
+    private String copyFileToTmp(String fileName) throws Exception {
       InputStream resourceStream = SpiffeUtilTest.class.getClassLoader()
           .getResourceAsStream(TEST_DIRECTORY_PREFIX + fileName);
       Path tempFilePath = tempFolder.newFile(fileName).toPath();
