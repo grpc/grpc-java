@@ -383,10 +383,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
               pendingTransport.shutdown(
                   Status.UNAVAILABLE.withDescription(
                       "InternalSubchannel closed pending transport due to address change"));
+              pendingTransport = null;
+              addressIndex.reset();
+              startNewTransport();
             }
-            pendingTransport = null;
-            addressIndex.reset();
-            startNewTransport();
           }
         }
         if (savedTransport != null) {
