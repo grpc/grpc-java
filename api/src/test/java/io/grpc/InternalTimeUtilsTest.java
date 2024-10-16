@@ -27,13 +27,12 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class InternalTimeUtilsTest {
 
-  private InternalTimeUtils internalTimeUtils = new InternalTimeUtils();
   @Test
   public void testConvertNormalDuration() {
     Duration duration = Duration.ofSeconds(10);
     long expected = 10 * 1_000_000_000L;
 
-    assertEquals(expected, internalTimeUtils.convert(duration));
+    assertEquals(expected, InternalTimeUtils.convert(duration));
   }
 
   @Test
@@ -41,20 +40,20 @@ public class InternalTimeUtilsTest {
     Duration duration = Duration.ofSeconds(-3);
     long expected = -3 * 1_000_000_000L;
 
-    assertEquals(expected, internalTimeUtils.convert(duration));
+    assertEquals(expected, InternalTimeUtils.convert(duration));
   }
 
   @Test
   public void testConvertTooLargeDuration() {
     Duration duration = Duration.ofSeconds(Long.MAX_VALUE / 1_000_000_000L + 1);
 
-    assertEquals(Long.MAX_VALUE, internalTimeUtils.convert(duration));
+    assertEquals(Long.MAX_VALUE, InternalTimeUtils.convert(duration));
   }
 
   @Test
   public void testConvertTooLargeNegativeDuration() {
     Duration duration = Duration.ofSeconds(Long.MIN_VALUE / 1_000_000_000L - 1);
 
-    assertEquals(Long.MIN_VALUE, internalTimeUtils.convert(duration));
+    assertEquals(Long.MIN_VALUE, InternalTimeUtils.convert(duration));
   }
 }
