@@ -16,7 +16,6 @@
 
 package io.grpc.gcp.csm.observability;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
 import com.google.protobuf.Struct;
@@ -29,12 +28,9 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
-import io.grpc.internal.JsonParser;
-import io.grpc.internal.JsonUtil;
 import io.grpc.opentelemetry.InternalOpenTelemetryPlugin;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.xds.ClusterImplLoadBalancerProvider;
-import io.grpc.xds.InternalGrpcBootstrapperImpl;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
@@ -43,8 +39,6 @@ import io.opentelemetry.sdk.autoconfigure.ResourceConfiguration;
 import java.net.URI;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * OpenTelemetryPlugin implementing metadata-based workload property exchange for both client and
@@ -52,7 +46,6 @@ import java.util.logging.Logger;
  * and remote details to metrics.
  */
 final class MetadataExchanger implements InternalOpenTelemetryPlugin {
-  private static final Logger logger = Logger.getLogger(MetadataExchanger.class.getName());
 
   private static final AttributeKey<String> CLOUD_PLATFORM =
       AttributeKey.stringKey("cloud.platform");
@@ -89,11 +82,10 @@ final class MetadataExchanger implements InternalOpenTelemetryPlugin {
   public MetadataExchanger() {
     this(
         addOtelResourceAttributes(new GCPResourceProvider().getAttributes()),
-        System::getenv,
-        InternalGrpcBootstrapperImpl::getJsonContent);
+        System::getenv);
   }
 
-  MetadataExchanger(Attributes platformAttributes, Lookup env, Supplier<String> xdsBootstrap) {
+  MetadataExchanger(Attributes platformAttributes, Lookup env) {
     String type = platformAttributes.get(CLOUD_PLATFORM);
     String canonicalService = env.get("CSM_CANONICAL_SERVICE_NAME");
     Struct.Builder struct = Struct.newBuilder();
@@ -121,7 +113,7 @@ final class MetadataExchanger implements InternalOpenTelemetryPlugin {
     localMetadata = BaseEncoding.base64().encode(struct.build().toByteArray());
 
     localAttributes = Attributes.builder()
-        .put("csm.mesh_id", nullIsUnknown(getMeshId(xdsBootstrap)))
+        .put("csm.mesh_id", nullIsUnknown(env.get("CSM_MESH_ID")))
         .put("csm.workload_canonical_service", nullIsUnknown(canonicalService))
         .build();
   }
@@ -160,29 +152,6 @@ final class MetadataExchanger implements InternalOpenTelemetryPlugin {
     AttributesBuilder builder = platformAttributes.toBuilder();
     builder.putAll(envAttributes);
     return builder.build();
-  }
-
-  @VisibleForTesting
-  static String getMeshId(Supplier<String> xdsBootstrap) {
-    try {
-      @SuppressWarnings("unchecked")
-      Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(xdsBootstrap.get());
-      Map<String, ?> node = JsonUtil.getObject(rawBootstrap, "node");
-      String id = JsonUtil.getString(node, "id");
-      Preconditions.checkNotNull(id, "id");
-      String[] parts = id.split("/", 6);
-      if (!(parts.length == 6
-          && parts[0].equals("projects")
-          && parts[2].equals("networks")
-          && parts[3].startsWith("mesh:")
-          && parts[4].equals("nodes"))) {
-        throw new Exception("node id didn't match mesh format: " + id);
-      }
-      return parts[3].substring("mesh:".length());
-    } catch (Exception e) {
-      logger.log(Level.INFO, "Failed to determine mesh ID for CSM", e);
-      return null;
-    }
   }
 
   private void addLabels(AttributesBuilder to, Struct struct) {

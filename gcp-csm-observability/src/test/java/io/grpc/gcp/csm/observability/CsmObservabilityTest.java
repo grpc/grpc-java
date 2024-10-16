@@ -77,17 +77,14 @@ public final class CsmObservabilityTest {
 
   @Test
   public void unknownDataExchange() throws Exception {
-    String xdsBootstrap = "";
     MetadataExchanger clientExchanger = new MetadataExchanger(
         Attributes.builder().build(),
-        ImmutableMap.<String, String>of()::get,
-        () -> xdsBootstrap);
+        ImmutableMap.<String, String>of()::get);
     CsmObservability.Builder clientCsmBuilder = new CsmObservability.Builder(clientExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
     MetadataExchanger serverExchanger = new MetadataExchanger(
         Attributes.builder().build(),
-        ImmutableMap.<String, String>of()::get,
-        () -> xdsBootstrap);
+        ImmutableMap.<String, String>of()::get);
     CsmObservability.Builder serverCsmBuilder = new CsmObservability.Builder(serverExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
 
@@ -140,11 +137,9 @@ public final class CsmObservabilityTest {
 
   @Test
   public void nonCsmServer() throws Exception {
-    String xdsBootstrap = "";
     MetadataExchanger clientExchanger = new MetadataExchanger(
         Attributes.builder().build(),
-        ImmutableMap.<String, String>of()::get,
-        () -> xdsBootstrap);
+        ImmutableMap.<String, String>of()::get);
     CsmObservability.Builder clientCsmBuilder = new CsmObservability.Builder(clientExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
 
@@ -205,19 +200,16 @@ public final class CsmObservabilityTest {
 
   @Test
   public void nonCsmClient() throws Exception {
-    String xdsBootstrap = "";
     MetadataExchanger clientExchanger = new MetadataExchanger(
         Attributes.builder()
             .put(stringKey("cloud.platform"), "gcp_kubernetes_engine")
             .build(),
-        ImmutableMap.<String, String>of()::get,
-        () -> xdsBootstrap);
+        ImmutableMap.<String, String>of()::get);
     CsmObservability.Builder clientCsmBuilder = new CsmObservability.Builder(clientExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
     MetadataExchanger serverExchanger = new MetadataExchanger(
         Attributes.builder().build(),
-        ImmutableMap.<String, String>of()::get,
-        () -> xdsBootstrap);
+        ImmutableMap.<String, String>of()::get);
     CsmObservability.Builder serverCsmBuilder = new CsmObservability.Builder(serverExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
 
@@ -262,11 +254,6 @@ public final class CsmObservabilityTest {
 
   @Test
   public void k8sExchange() throws Exception {
-    // Purposefully use a different project ID in the bootstrap than the resource, as the mesh could
-    // be in a different project than the running account.
-    String clientBootstrap = "{\"node\": {"
-        + "\"id\": \"projects/12/networks/mesh:mymesh/nodes/a6420022-cbc5-4e10-808c-507e3fc95f2e\""
-        + "}}";
     MetadataExchanger clientExchanger = new MetadataExchanger(
         Attributes.builder()
             .put(stringKey("cloud.platform"), "gcp_kubernetes_engine")
@@ -277,13 +264,10 @@ public final class CsmObservabilityTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "canon-service-is-a-client",
-            "CSM_WORKLOAD_NAME", "best-client")::get,
-        () -> clientBootstrap);
+            "CSM_WORKLOAD_NAME", "best-client",
+            "CSM_MESH_ID", "mymesh")::get);
     CsmObservability.Builder clientCsmBuilder = new CsmObservability.Builder(clientExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
-    String serverBootstrap = "{\"node\": {"
-        + "\"id\": \"projects/34/networks/mesh:meshhh/nodes/4969ef19-24b6-44c0-baf3-86d188ff5967\""
-        + "}}";
     MetadataExchanger serverExchanger = new MetadataExchanger(
         Attributes.builder()
             .put(stringKey("cloud.platform"), "gcp_kubernetes_engine")
@@ -295,8 +279,8 @@ public final class CsmObservabilityTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "server-has-a-single-name",
-            "CSM_WORKLOAD_NAME", "fast-server")::get,
-        () -> serverBootstrap);
+            "CSM_WORKLOAD_NAME", "fast-server",
+            "CSM_MESH_ID", "meshhh")::get);
     CsmObservability.Builder serverCsmBuilder = new CsmObservability.Builder(serverExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
 
@@ -366,11 +350,6 @@ public final class CsmObservabilityTest {
 
   @Test
   public void gceExchange() throws Exception {
-    // Purposefully use a different project ID in the bootstrap than the resource, as the mesh could
-    // be in a different project than the running account.
-    String clientBootstrap = "{\"node\": {"
-        + "\"id\": \"projects/12/networks/mesh:mymesh/nodes/a6420022-cbc5-4e10-808c-507e3fc95f2e\""
-        + "}}";
     MetadataExchanger clientExchanger = new MetadataExchanger(
         Attributes.builder()
             .put(stringKey("cloud.platform"), "gcp_compute_engine")
@@ -379,13 +358,10 @@ public final class CsmObservabilityTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "canon-service-is-a-client",
-            "CSM_WORKLOAD_NAME", "best-client")::get,
-        () -> clientBootstrap);
+            "CSM_WORKLOAD_NAME", "best-client",
+            "CSM_MESH_ID", "mymesh")::get);
     CsmObservability.Builder clientCsmBuilder = new CsmObservability.Builder(clientExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
-    String serverBootstrap = "{\"node\": {"
-        + "\"id\": \"projects/34/networks/mesh:meshhh/nodes/4969ef19-24b6-44c0-baf3-86d188ff5967\""
-        + "}}";
     MetadataExchanger serverExchanger = new MetadataExchanger(
         Attributes.builder()
             .put(stringKey("cloud.platform"), "gcp_compute_engine")
@@ -395,8 +371,8 @@ public final class CsmObservabilityTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "server-has-a-single-name",
-            "CSM_WORKLOAD_NAME", "fast-server")::get,
-        () -> serverBootstrap);
+            "CSM_WORKLOAD_NAME", "fast-server",
+            "CSM_MESH_ID", "meshhh")::get);
     CsmObservability.Builder serverCsmBuilder = new CsmObservability.Builder(serverExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
 
@@ -456,9 +432,6 @@ public final class CsmObservabilityTest {
 
   @Test
   public void trailersOnly() throws Exception {
-    String clientBootstrap = "{\"node\": {"
-        + "\"id\": \"projects/12/networks/mesh:mymesh/nodes/a6420022-cbc5-4e10-808c-507e3fc95f2e\""
-        + "}}";
     MetadataExchanger clientExchanger = new MetadataExchanger(
         Attributes.builder()
             .put(stringKey("cloud.platform"), "gcp_compute_engine")
@@ -467,13 +440,11 @@ public final class CsmObservabilityTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "canon-service-is-a-client",
-            "CSM_WORKLOAD_NAME", "best-client")::get,
-        () -> clientBootstrap);
+            "CSM_WORKLOAD_NAME", "best-client",
+            "CSM_MESH_ID", "mymesh")::get);
     CsmObservability.Builder clientCsmBuilder = new CsmObservability.Builder(clientExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
-    String serverBootstrap = "{\"node\": {"
-        + "\"id\": \"projects/34/networks/mesh:meshhh/nodes/4969ef19-24b6-44c0-baf3-86d188ff5967\""
-        + "}}";
+
     MetadataExchanger serverExchanger = new MetadataExchanger(
         Attributes.builder()
             .put(stringKey("cloud.platform"), "gcp_compute_engine")
@@ -483,8 +454,8 @@ public final class CsmObservabilityTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "server-has-a-single-name",
-            "CSM_WORKLOAD_NAME", "fast-server")::get,
-        () -> serverBootstrap);
+            "CSM_WORKLOAD_NAME", "fast-server",
+            "CSM_MESH_ID", "meshhh")::get);
     CsmObservability.Builder serverCsmBuilder = new CsmObservability.Builder(serverExchanger)
         .sdk(openTelemetryTesting.getOpenTelemetry());
 
