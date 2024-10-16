@@ -188,7 +188,7 @@ class OkHttpClientStream extends AbstractClientStream {
   class TransportState extends Http2ClientStreamTransportState
       implements OutboundFlowController.Stream {
     private final int initialWindowSize;
-    private final Object lock;
+    final Object lock;
     @GuardedBy("lock")
     private List<Header> requestHeaders;
     @GuardedBy("lock")
