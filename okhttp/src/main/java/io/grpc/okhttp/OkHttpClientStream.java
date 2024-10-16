@@ -147,7 +147,7 @@ class OkHttpClientStream extends AbstractClientStream {
           useGet = true;
           defaultPath += "?" + BaseEncoding.base64().encode(payload);
         }
-        synchronized(OkHttpClientStream.this.state.lock) {
+        synchronized (OkHttpClientStream.this.state.lock) {
           state.streamReady(metadata, defaultPath);
         }
       }
@@ -178,7 +178,7 @@ class OkHttpClientStream extends AbstractClientStream {
     @Override
     public void cancel(Status reason) {
       try (TaskCloseable ignore = PerfMark.traceTask("OkHttpClientStream$Sink.cancel")) {
-        synchronized(OkHttpClientStream.this.state.lock) {
+        synchronized (OkHttpClientStream.this.state.lock) {
           state.cancel(reason, true, null);
         }
       }
@@ -239,7 +239,7 @@ class OkHttpClientStream extends AbstractClientStream {
     //@SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     public void start(int streamId) {
-      synchronized(OkHttpClientStream.this.state.lock) {
+      synchronized (OkHttpClientStream.this.state.lock) {
         checkState(id == ABSENT_ID, "the stream has been started with id %s", streamId);
         id = streamId;
         outboundFlowState = outboundFlow.createState(this, streamId);
@@ -356,15 +356,15 @@ class OkHttpClientStream extends AbstractClientStream {
     //@SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void cancel(Status reason, boolean stopDelivery, Metadata trailers) {
-      synchronized(transport.lock) {
+      synchronized (transport.lock) {
         if (cancelSent) {
           return;
         }
         cancelSent = true;
         if (canStart) {
           // stream is pending.
-          // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
-          // 'this.lock'
+          // TODO(b/145386688): This access should be guarded by 'this.transport.lock'
+          // instead found: 'this.lock'
           transport.removePendingStream(OkHttpClientStream.this);
           // release holding data, so they can be GCed or returned to pool earlier.
           requestHeaders = null;
