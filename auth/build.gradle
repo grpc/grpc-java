@@ -16,7 +16,8 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api'),
-            libraries.google.auth.credentials
+            libraries.google.auth.credentials,
+            libraries.google.auth.oauth2Http
     implementation libraries.guava
     testImplementation project(':grpc-testing'),
             project(':grpc-core'),
