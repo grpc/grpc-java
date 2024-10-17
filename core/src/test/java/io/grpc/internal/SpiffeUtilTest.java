@@ -34,7 +34,6 @@ import java.nio.file.StandardCopyOption;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
