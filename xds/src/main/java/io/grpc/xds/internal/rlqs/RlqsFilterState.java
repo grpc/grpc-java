@@ -33,7 +33,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-public class RlqsEngine {
+public class RlqsFilterState {
   private final XdsLogger logger;
 
   private final RlqsClient rlqsClient;
@@ -43,7 +43,7 @@ public class RlqsEngine {
   private final ScheduledExecutorService scheduler;
   private final ConcurrentMap<Long, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
 
-  public RlqsEngine(
+  public RlqsFilterState(
       RemoteServerInfo rlqsServer, String domain,
       Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers, long configHash,
       ScheduledExecutorService scheduler) {
@@ -54,7 +54,7 @@ public class RlqsEngine {
     String prettyHash = "0x" + Long.toHexString(configHash);
     logger = XdsLogger.withLogId(InternalLogId.allocate(this.getClass(), prettyHash));
     logger.log(XdsLogLevel.DEBUG,
-        "Initialized RlqsEngine for hash={0}, domain={1}", prettyHash, domain);
+        "Initialized RlqsFilterState for hash={0}, domain={1}", prettyHash, domain);
 
     bucketCache = new RlqsBucketCache();
     rlqsClient = new RlqsClient(rlqsServer, domain, this::onBucketsUpdate, prettyHash);
@@ -130,8 +130,8 @@ public class RlqsEngine {
 
   public void shutdown() {
     // TODO(sergiitk): [IMPL] Timers shutdown
-    // TODO(sergiitk): [IMPL] RlqsEngine shutdown
-    logger.log(XdsLogLevel.DEBUG, "Shutting down RlqsEngine with hash {0}", configHash);
+    // TODO(sergiitk): [IMPL] RlqsFilterState shutdown
+    logger.log(XdsLogLevel.DEBUG, "Shutting down RlqsFilterState with hash {0}", configHash);
     rlqsClient.shutdown();
   }
 }
