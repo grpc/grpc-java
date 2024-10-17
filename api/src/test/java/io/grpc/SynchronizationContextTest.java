@@ -73,7 +73,7 @@ public class SynchronizationContextTest {
 
   @Mock
   private Runnable task3;
-  
+
   @After public void tearDown() {
     assertThat(uncaughtErrors).isEmpty();
   }
@@ -106,36 +106,36 @@ public class SynchronizationContextTest {
     final AtomicReference<Thread> task2Thread = new AtomicReference<>();
 
     doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) {
-        task1Thread.set(Thread.currentThread());
-        task1Running.countDown();
-        try {
-          assertTrue(task1Proceed.await(5, TimeUnit.SECONDS));
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          task1Thread.set(Thread.currentThread());
+          task1Running.countDown();
+          try {
+            assertTrue(task1Proceed.await(5, TimeUnit.SECONDS));
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+          return null;
         }
-        return null;
-      }
-    }).when(task1).run();
+      }).when(task1).run();
 
     doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) {
-        task2Thread.set(Thread.currentThread());
-        return null;
-      }
-    }).when(task2).run();
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          task2Thread.set(Thread.currentThread());
+          return null;
+        }
+      }).when(task2).run();
 
     Thread sideThread = new Thread() {
-      @Override
-      public void run() {
-        syncContext.executeLater(task1);
-        task1Added.countDown();
-        syncContext.drain();
-        sideThreadDone.countDown();
-      }
-    };
+        @Override
+        public void run() {
+          syncContext.executeLater(task1);
+          task1Added.countDown();
+          syncContext.drain();
+          sideThreadDone.countDown();
+        }
+      };
     sideThread.start();
 
     assertTrue(task1Added.await(5, TimeUnit.SECONDS));
@@ -163,26 +163,26 @@ public class SynchronizationContextTest {
     final CountDownLatch task1Proceed = new CountDownLatch(1);
 
     doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) {
-        task1Running.countDown();
-        syncContext.throwIfNotInThisSynchronizationContext();
-        try {
-          assertTrue(task1Proceed.await(5, TimeUnit.SECONDS));
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          task1Running.countDown();
+          syncContext.throwIfNotInThisSynchronizationContext();
+          try {
+            assertTrue(task1Proceed.await(5, TimeUnit.SECONDS));
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+          taskSuccess.set(true);
+          return null;
         }
-        taskSuccess.set(true);
-        return null;
-      }
-    }).when(task1).run();
+      }).when(task1).run();
 
     Thread sideThread = new Thread() {
-      @Override
-      public void run() {
-        syncContext.execute(task1);
-      }
-    };
+        @Override
+        public void run() {
+          syncContext.execute(task1);
+        }
+      };
     sideThread.start();
 
     assertThat(task1Running.await(5, TimeUnit.SECONDS)).isTrue();
@@ -216,11 +216,11 @@ public class SynchronizationContextTest {
     InOrder inOrder = inOrder(task1, task2, task3);
     final RuntimeException e = new RuntimeException("Simulated");
     doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) {
-        throw e;
-      }
-    }).when(task2).run();
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          throw e;
+        }
+      }).when(task2).run();
     syncContext.executeLater(task1);
     syncContext.executeLater(task2);
     syncContext.executeLater(task3);
@@ -307,28 +307,28 @@ public class SynchronizationContextTest {
     final CountDownLatch sideThreadDone = new CountDownLatch(1);
 
     doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) {
-        task1Running.countDown();
-        try {
-          ScheduledHandle task2Handle;
-          assertThat(task2Handle = task2HandleQueue.poll(5, TimeUnit.SECONDS)).isNotNull();
-          task2Handle.cancel();
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          task1Running.countDown();
+          try {
+            ScheduledHandle task2Handle;
+            assertThat(task2Handle = task2HandleQueue.poll(5, TimeUnit.SECONDS)).isNotNull();
+            task2Handle.cancel();
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+          task1Done.set(true);
+          return null;
         }
-        task1Done.set(true);
-        return null;
-      }
-    }).when(task1).run();
+      }).when(task1).run();
 
     Thread sideThread = new Thread() {
-      @Override
-      public void run() {
-        syncContext.execute(task1);
-        sideThreadDone.countDown();
-      }
-    };
+        @Override
+        public void run() {
+          syncContext.execute(task1);
+          sideThreadDone.countDown();
+        }
+      };
 
     ScheduledHandle handle = syncContext.schedule(task2, 10, TimeUnit.NANOSECONDS, executorService);
     // This will execute and block in task1
