@@ -25,6 +25,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.UserHandle;
+import android.os.UserManager;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.io.ByteStreams;
@@ -50,6 +52,7 @@ import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.FakeNameResolverProvider;
+import io.grpc.internal.testing.FakeNameResolverProvider.FakeNameResolver;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.ServerCalls;
@@ -59,6 +62,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -249,6 +253,26 @@ public final class BinderChannelSmokeTest {
                 appContext)
             .build();
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
+  }
+
+  @Test
+  public void testTargetUserChannelAttribute() throws Exception {
+    UserManager userManager = appContext.getSystemService(UserManager.class);
+    List<UserHandle> userProfiles = userManager.getUserProfiles();
+    UserHandle someUser = userProfiles.get(0); // Guaranteed to be non-empty.
+
+    channel =
+        BinderChannelBuilder.forTarget(SERVER_TARGET_URI, appContext).bindAsUser(someUser).build();
+    assertThat(doCall("Hello").get()).isNotNull();
+
+    FakeNameResolver fakeNameResolver =
+        fakeNameResolverProvider.pollNextResolverCreated(5, SECONDS);
+    assertThat(
+            fakeNameResolver
+                .getArgs()
+                .getChannelAttributes()
+                .get(ApiConstants.CHANNEL_ATTR_TARGET_USER))
+        .isEqualTo(someUser);
   }
 
   @Test

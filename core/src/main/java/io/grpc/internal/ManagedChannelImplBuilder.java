@@ -35,6 +35,7 @@ import io.grpc.ClientTransportFilter;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Grpc.ChannelAttr;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.ManagedChannel;
@@ -197,6 +198,8 @@ public final class ManagedChannelImplBuilder
 
   @Nullable
   ProxyDetector proxyDetector;
+
+  @ChannelAttr Attributes channelAttributes = Attributes.EMPTY;
 
   private boolean authorityCheckerDisabled;
   private boolean statsEnabled = true;
@@ -662,6 +665,14 @@ public final class ManagedChannelImplBuilder
    */
   public void setTracingEnabled(boolean value) {
     tracingEnabled = value;
+  }
+
+  /**
+   * Makes the specified Attributes available to downstream plugins such as resolvers and load
+   * balancers.
+   */
+  public void setChannelAttributes(@ChannelAttr Attributes channelAttributes) {
+    this.channelAttributes = channelAttributes;
   }
 
   /**

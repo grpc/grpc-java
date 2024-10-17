@@ -26,12 +26,16 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
 
 /** A name resolver to always resolve the given URI into the given address. */
 public final class FakeNameResolverProvider extends NameResolverProvider {
 
   private final URI targetUri;
   private final SocketAddress address;
+  private final BlockingDeque<FakeNameResolver> resolversCreated = new LinkedBlockingDeque<>();
 
   public FakeNameResolverProvider(String targetUri, SocketAddress address) {
     this.targetUri = URI.create(targetUri);
@@ -41,7 +45,9 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
   @Override
   public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (targetUri.equals(this.targetUri)) {
-      return new FakeNameResolver(address);
+      FakeNameResolver result = new FakeNameResolver(address, args);
+      resolversCreated.add(result);
+      return result;
     }
     return null;
   }
@@ -66,15 +72,26 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
     return Collections.singleton(address.getClass());
   }
 
+  /**
+   * Returns the next FakeNameResolver created by this provider, or null if none were created before
+   * the timeout lapsed.
+   */
+  public FakeNameResolver pollNextResolverCreated(long timeout, TimeUnit unit)
+      throws InterruptedException {
+    return resolversCreated.poll(timeout, unit);
+  }
+
   /** A single name resolver. */
-  private static final class FakeNameResolver extends NameResolver {
+  public static final class FakeNameResolver extends NameResolver {
     private static final String AUTHORITY = "fake-authority";
 
     private final SocketAddress address;
+    private final Args args;
     private volatile boolean shutdown;
 
-    private FakeNameResolver(SocketAddress address) {
+    private FakeNameResolver(SocketAddress address, Args args) {
       this.address = address;
+      this.args = args;
     }
 
     @Override
@@ -98,6 +115,10 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
     @Override
     public void shutdown() {
       shutdown = true;
+    }
+
+    public Args getArgs() {
+      return this.args;
     }
   }
 }

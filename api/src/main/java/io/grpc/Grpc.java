@@ -66,6 +66,15 @@ public final class Grpc {
   public @interface TransportAttr {}
 
   /**
+   * Annotation for Channel attributes. It follows the annotation semantics defined by {@link
+   * Attributes}.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/00000000")
+  @Retention(RetentionPolicy.SOURCE)
+  @Documented
+  public @interface ChannelAttr {}
+
+  /**
    * Creates a channel builder with a target string and credentials. The target can be either a
    * valid {@link NameResolver}-compliant URI, or an authority string.
    *
