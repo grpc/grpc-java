@@ -44,7 +44,7 @@ import io.grpc.xds.internal.matchers.MatcherList;
 import io.grpc.xds.internal.matchers.OnMatch;
 import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
 import io.grpc.xds.internal.rlqs.RlqsCache;
-import io.grpc.xds.internal.rlqs.RlqsEngine;
+import io.grpc.xds.internal.rlqs.RlqsFilterState;
 import io.grpc.xds.internal.rlqs.RlqsRateLimitResult;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -168,7 +168,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
       return null;
     }
 
-    final RlqsEngine rlqsEngine = rlqsCache.getOrCreateRlqsEngine(config);
+    final RlqsFilterState rlqsFilterState = rlqsCache.getOrCreateFilterState(config);
 
     return new ServerInterceptor() {
       @Override
@@ -182,7 +182,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
           return next.startCall(call, headers);
         }
 
-        RlqsRateLimitResult result = rlqsEngine.rateLimit(httpMatchInput);
+        RlqsRateLimitResult result = rlqsFilterState.rateLimit(httpMatchInput);
         if (result.isAllowed()) {
           return next.startCall(call, headers);
         }

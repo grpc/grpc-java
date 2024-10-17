@@ -18,37 +18,42 @@ package io.grpc.xds.internal.rlqs;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.collect.Sets;
+import com.google.common.base.Throwables;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.InternalLogId;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.RlqsFilterConfig;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public final class RlqsCache {
-  private static final Logger logger = Logger.getLogger(RlqsCache.class.getName());
-
   // TODO(sergiitk): [QUESTION] always in sync context?
   private volatile boolean shutdown = false;
-  private final SynchronizationContext syncContext = new SynchronizationContext((thread, error) -> {
-    String message = "Uncaught exception in RlqsCache SynchronizationContext. Panic!";
-    logger.log(Level.FINE, message, error);
-    throw new RlqsPoolSynchronizationException(message, error);
-  });
 
-  private final ConcurrentHashMap<Long, RlqsEngine> enginePool = new ConcurrentHashMap<>();
-  Set<String> enginesToShutdown = Sets.newConcurrentHashSet();
+  private final XdsLogger logger;
+  private final SynchronizationContext syncContext;
+
+  private final ConcurrentMap<Long, RlqsFilterState> filterStateCache = new ConcurrentHashMap<>();
   private final ScheduledExecutorService scheduler;
 
 
   private RlqsCache(ScheduledExecutorService scheduler) {
     this.scheduler = checkNotNull(scheduler, "scheduler");
+    // TODO(sergiitk): should be filter name?
+    logger = XdsLogger.withLogId(InternalLogId.allocate(this.getClass(), null));
+
+    syncContext = new SynchronizationContext((thread, error) -> {
+      String message = "Uncaught exception in RlqsCache SynchronizationContext. Panic!";
+      logger.log(XdsLogLevel.DEBUG,
+          message + " {0} \nTrace:\n {1}", error, Throwables.getStackTraceAsString(error));
+      throw new RlqsCacheSynchronizationException(message, error);
+    });
   }
 
   /** Creates an instance. */
@@ -64,29 +69,30 @@ public final class RlqsCache {
     }
     syncContext.execute(() -> {
       shutdown = true;
-      logger.log(Level.FINER, "Shutting down RlqsCache");
-      enginesToShutdown.clear();
-      for (long configHash : enginePool.keySet()) {
-        enginePool.get(configHash).shutdown();
+      logger.log(XdsLogLevel.DEBUG, "Shutting down RlqsCache");
+      for (long configHash : filterStateCache.keySet()) {
+        filterStateCache.get(configHash).shutdown();
       }
-      enginePool.clear();
+      filterStateCache.clear();
       shutdown = false;
     });
   }
 
-  public void shutdownRlqsEngine(RlqsFilterConfig oldConfig) {
+  public void shutdownFilterState(RlqsFilterConfig oldConfig) {
     // TODO(sergiitk): shutdown one
+    // make it async.
   }
 
-  public RlqsEngine getOrCreateRlqsEngine(final RlqsFilterConfig config) {
-    long configHash = hashRlqsFilterConfig(config);
-    return enginePool.computeIfAbsent(configHash, k -> newRlqsEngine(k, config));
+  public RlqsFilterState getOrCreateFilterState(final RlqsFilterConfig config) {
+    // TODO(sergiitk): handle being shut down.
+    long configHash = hashFilterConfig(config);
+    return filterStateCache.computeIfAbsent(configHash, k -> newFilterState(k, config));
   }
 
-  private RlqsEngine newRlqsEngine(long configHash, RlqsFilterConfig config) {
+  private RlqsFilterState newFilterState(long configHash, RlqsFilterConfig config) {
     // TODO(sergiitk): [IMPL] get channel creds from the bootstrap.
     ChannelCredentials creds = InsecureChannelCredentials.create();
-    return new RlqsEngine(
+    return new RlqsFilterState(
         RemoteServerInfo.create(config.rlqsService().targetUri(), creds),
         config.domain(),
         config.bucketMatchers(),
@@ -94,7 +100,7 @@ public final class RlqsCache {
         scheduler);
   }
 
-  private long hashRlqsFilterConfig(RlqsFilterConfig config) {
+  private long hashFilterConfig(RlqsFilterConfig config) {
     // TODO(sergiitk): [QUESTION] better name? - ask Eric.
     // TODO(sergiitk): [DESIGN] the key should be hashed (domain + buckets) merged config?
     // TODO(sergiitk): [IMPL] Hash buckets
@@ -111,13 +117,11 @@ public final class RlqsCache {
   /**
    * Throws when fail to bootstrap or initialize the XdsClient.
    */
-  public static final class RlqsPoolSynchronizationException extends RuntimeException {
+  public static final class RlqsCacheSynchronizationException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
-    public RlqsPoolSynchronizationException(String message, Throwable cause) {
+    public RlqsCacheSynchronizationException(String message, Throwable cause) {
       super(message, cause);
     }
   }
-
-
 }
