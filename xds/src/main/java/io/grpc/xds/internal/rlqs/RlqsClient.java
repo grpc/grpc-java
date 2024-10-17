@@ -25,20 +25,26 @@ import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaServiceGrpc
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaUsageReports;
 import io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaUsageReports.BucketQuotaUsage;
 import io.grpc.Grpc;
+import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.rlqs.RlqsBucket.RlqsBucketUsage;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 public final class RlqsClient {
-  private static final Logger logger = Logger.getLogger(RlqsClient.class.getName());
+  // TODO(sergiitk): [IMPL] remove
+  // Do do not fail on parsing errors, only log requests.
+  static final boolean dryRun = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_RLQS_DRY_RUN", false);
+
+  private final XdsLogger logger;
 
   private final RemoteServerInfo serverInfo;
   private final Consumer<List<RlqsUpdateBucketAction>> bucketsUpdateCallback;
@@ -46,10 +52,14 @@ public final class RlqsClient {
 
   RlqsClient(
       RemoteServerInfo serverInfo, String domain,
-      Consumer<List<RlqsUpdateBucketAction>> bucketsUpdateCallback) {
+      Consumer<List<RlqsUpdateBucketAction>> bucketsUpdateCallback, String prettyHash) {
     // TODO(sergiitk): [post] check not null.
     this.serverInfo = serverInfo;
     this.bucketsUpdateCallback = bucketsUpdateCallback;
+
+    logger = XdsLogger.withLogId(
+        InternalLogId.allocate(this.getClass(), "<" + prettyHash + "> " + serverInfo.target()));
+
     this.rlqsStream = new RlqsStream(serverInfo, domain);
   }
 
@@ -62,7 +72,7 @@ public final class RlqsClient {
   }
 
   public void shutdown() {
-    logger.log(Level.FINER, "Shutting down RlqsClient to {0}", serverInfo.target());
+    logger.log(XdsLogLevel.DEBUG, "Shutting down RlqsClient to {0}", serverInfo.target());
     // TODO(sergiitk): [IMPL] RlqsClient shutdown
   }
 
@@ -72,18 +82,26 @@ public final class RlqsClient {
 
   private class RlqsStream {
     private final AtomicBoolean isFirstReport = new AtomicBoolean(true);
-    private final ManagedChannel channel;
     private final String domain;
+    @Nullable
     private final ClientCallStreamObserver<RateLimitQuotaUsageReports> clientCallStream;
 
     RlqsStream(RemoteServerInfo serverInfo, String domain) {
       this.domain = domain;
-      channel = Grpc.newChannelBuilder(serverInfo.target(), serverInfo.channelCredentials())
-          .keepAliveTime(10, TimeUnit.SECONDS)
-          .keepAliveWithoutCalls(true)
-          .build();
-      // keepalive?
+
+      if (dryRun) {
+        clientCallStream = null;
+        logger.log(XdsLogLevel.DEBUG, "Dry run, not connecting to " + serverInfo.target());
+        return;
+      }
+
       // TODO(sergiitk): [IMPL] Manage State changes?
+      ManagedChannel channel =
+          Grpc.newChannelBuilder(serverInfo.target(), serverInfo.channelCredentials()).build();
+      // keepalive?
+      //   .keepAliveTime(10, TimeUnit.SECONDS)
+      //   .keepAliveWithoutCalls(true)
+
       RateLimitQuotaServiceStub stub = RateLimitQuotaServiceGrpc.newStub(channel);
       clientCallStream = (ClientCallStreamObserver<RateLimitQuotaUsageReports>)
           stub.streamRateLimitQuotas(new RlqsStreamObserver());
@@ -107,6 +125,10 @@ public final class RlqsClient {
       for (RlqsBucket.RlqsBucketUsage bucketUsage : usageReports) {
         report.addBucketQuotaUsages(toUsageReport(bucketUsage));
       }
+      if (clientCallStream == null) {
+        logger.log(XdsLogLevel.DEBUG, "Dry run, skipping bucket usage report: " + report.build());
+        return;
+      }
       clientCallStream.onNext(report.build());
     }
 
@@ -128,12 +150,12 @@ public final class RlqsClient {
 
       @Override
       public void onError(Throwable t) {
-
+        logger.log(XdsLogLevel.DEBUG, "Got error in RlqsStreamObserver: " + t.toString());
       }
 
       @Override
       public void onCompleted() {
-
+        logger.log(XdsLogLevel.DEBUG, "RlqsStreamObserver completed");
       }
     }
   }

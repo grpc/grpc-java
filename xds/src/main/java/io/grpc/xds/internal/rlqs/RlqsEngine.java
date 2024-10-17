@@ -17,7 +17,10 @@
 package io.grpc.xds.internal.rlqs;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.InternalLogId;
 import io.grpc.xds.client.Bootstrapper.RemoteServerInfo;
+import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.datatype.RateLimitStrategy;
 import io.grpc.xds.internal.matchers.HttpMatchInput;
 import io.grpc.xds.internal.matchers.Matcher;
@@ -29,11 +32,9 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class RlqsEngine {
-  private static final Logger logger = Logger.getLogger(RlqsEngine.class.getName());
+  private final XdsLogger logger;
 
   private final RlqsClient rlqsClient;
   private final Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers;
@@ -49,8 +50,14 @@ public class RlqsEngine {
     this.bucketMatchers = bucketMatchers;
     this.configHash = configHash;
     this.scheduler = scheduler;
+
+    String prettyHash = "0x" + Long.toHexString(configHash);
+    logger = XdsLogger.withLogId(InternalLogId.allocate(this.getClass(), prettyHash));
+    logger.log(XdsLogLevel.DEBUG,
+        "Initialized RlqsEngine for hash={0}, domain={1}", prettyHash, domain);
+
     bucketCache = new RlqsBucketCache();
-    rlqsClient = new RlqsClient(rlqsServer, domain, this::onBucketsUpdate);
+    rlqsClient = new RlqsClient(rlqsServer, domain, this::onBucketsUpdate, prettyHash);
   }
 
   public RlqsRateLimitResult rateLimit(HttpMatchInput input) {
@@ -95,7 +102,8 @@ public class RlqsEngine {
           1, TimeUnit.MICROSECONDS);
     } catch (RejectedExecutionException e) {
       // Shouldn't happen.
-      logger.finer("Couldn't schedule immediate report for bucket " + newBucket.getBucketId());
+      logger.log(XdsLogLevel.WARNING,
+          "Couldn't schedule immediate report for bucket " + newBucket.getBucketId());
     }
   }
 
@@ -123,7 +131,7 @@ public class RlqsEngine {
   public void shutdown() {
     // TODO(sergiitk): [IMPL] Timers shutdown
     // TODO(sergiitk): [IMPL] RlqsEngine shutdown
-    logger.log(Level.FINER, "Shutting down RlqsEngine with hash {0}", configHash);
+    logger.log(XdsLogLevel.DEBUG, "Shutting down RlqsEngine with hash {0}", configHash);
     rlqsClient.shutdown();
   }
 }

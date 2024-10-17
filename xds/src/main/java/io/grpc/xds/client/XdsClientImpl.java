@@ -45,6 +45,7 @@ import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -76,8 +77,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         public void uncaughtException(Thread t, Throwable e) {
           logger.log(
               XdsLogLevel.ERROR,
-              "Uncaught exception in XdsClient SynchronizationContext. Panic!",
-              e);
+              "Uncaught exception in XdsClient SynchronizationContext. Panic!  "
+              + e + "\nTrace:\n"
+              + Arrays.toString(e.getStackTrace()).replace(',', '\n'));
           // TODO: better error handling.
           throw new AssertionError(e);
         }
