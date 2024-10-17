@@ -28,6 +28,8 @@ import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaFilterConfig;
+import io.envoyproxy.envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
@@ -58,6 +60,9 @@ final class MessagePrinter implements MessagePrettyPrinter {
               .add(RBAC.getDescriptor())
               .add(RBACPerRoute.getDescriptor())
               .add(Router.getDescriptor())
+              // RLQS
+              .add(RateLimitQuotaFilterConfig.getDescriptor())
+              .add(RateLimitQuotaOverride.getDescriptor())
               // UpstreamTlsContext and DownstreamTlsContext in v3 are not transitively imported
               // by top-level resource types.
               .add(UpstreamTlsContext.getDescriptor())
