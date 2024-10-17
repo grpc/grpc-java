@@ -338,7 +338,8 @@ public class CertProviderClientSslContextProviderTest {
   }
 
   @Test
-  public void testProviderForClient_rootInstanceNull_expectError() throws Exception {
+  public void testProviderForClient_rootInstanceNull_and_notUsingSystemRootCerts_expectError()
+      throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
@@ -351,9 +352,28 @@ public class CertProviderClientSslContextProviderTest {
           /* alpnProtocols= */ null,
           /* staticCertValidationContext= */ null);
       fail("exception expected");
-    } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().contains("Client SSL requires rootCertInstance");
+    } catch (UnsupportedOperationException expected) {
+      assertThat(expected).hasMessageThat().contains("Unsupported configurations in "
+          + "UpstreamTlsContext!");
     }
+  }
+
+  @Test
+  public void testProviderForClient_rootInstanceNull_but_isUsingSystemRootCerts_valid()
+      throws Exception {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[1];
+    TestCertificateProvider.createAndRegisterProviderProvider(
+        certificateProviderRegistry, watcherCaptor, "testca", 0);
+    getSslContextProvider(
+        /* certInstanceName= */ null,
+        /* rootInstanceName= */ null,
+        CommonBootstrapperTestUtils.getTestBootstrapInfo(),
+        /* alpnProtocols= */ null,
+        CertificateValidationContext.newBuilder()
+            .setSystemRootCerts(
+                CertificateValidationContext.SystemRootCerts.newBuilder().build())
+            .build());
   }
 
   static class QueuedExecutor implements Executor {

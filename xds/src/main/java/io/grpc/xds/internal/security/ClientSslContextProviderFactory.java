@@ -16,8 +16,6 @@
 
 package io.grpc.xds.internal.security;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
@@ -44,17 +42,9 @@ final class ClientSslContextProviderFactory
   /** Creates an SslContextProvider from the given UpstreamTlsContext. */
   @Override
   public SslContextProvider create(UpstreamTlsContext upstreamTlsContext) {
-    checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-    checkNotNull(
-        upstreamTlsContext.getCommonTlsContext(),
-        "upstreamTlsContext should have CommonTlsContext");
-    if (CommonTlsContextUtil.hasCertProviderInstance(
-        upstreamTlsContext.getCommonTlsContext())) {
-      return certProviderClientSslContextProviderFactory.getProvider(
-          upstreamTlsContext,
-          bootstrapInfo.node().toEnvoyProtoNode(),
-          bootstrapInfo.certProviders());
-    }
-    throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");
+    return certProviderClientSslContextProviderFactory.getProvider(
+        upstreamTlsContext,
+        bootstrapInfo.node().toEnvoyProtoNode(),
+        bootstrapInfo.certProviders());
   }
 }
