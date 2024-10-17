@@ -1,7 +1,6 @@
 {
   "trust_domains": {
     "google.com": {
-      "sequence_number": 123,
       "keys": [
         {
           "kty": "RSA",

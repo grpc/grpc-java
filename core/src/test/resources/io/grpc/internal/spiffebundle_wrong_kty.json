@@ -1,7 +1,7 @@
 {
   "trust_domains": {
     "google.com": {
-      "sequence_number": 123,
+      "spiffe_sequence": 123,
       "keys": [
         {
           "x5c": "VALUE_DOESN'T_MATTER"

@@ -175,7 +175,7 @@ public final class SpiffeUtil {
         trustBundleMap.put(trustDomainName, Collections.emptyList());
         continue;
       }
-      Long sequenceNumber = JsonUtil.getNumberAsLong(domainNode, "sequence_number");
+      Long sequenceNumber = JsonUtil.getNumberAsLong(domainNode, "spiffe_sequence");
       sequenceNumbers.put(trustDomainName, sequenceNumber == null ? -1L : sequenceNumber);
       List<Map<String, ?>> keysNode = JsonUtil.getListOfObjects(domainNode, "keys");
       if (keysNode == null || keysNode.size() == 0) {

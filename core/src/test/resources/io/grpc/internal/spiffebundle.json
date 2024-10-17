@@ -2,7 +2,7 @@
   "trust_domains": {
     "test.google.com.au": {},
     "example.com": {
-      "sequence_number": 12035488,
+      "spiffe_sequence": 12035488,
       "keys": [
         {
           "kty": "RSA",
