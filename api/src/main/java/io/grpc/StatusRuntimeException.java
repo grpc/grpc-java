@@ -30,7 +30,7 @@ public class StatusRuntimeException extends RuntimeException {
   private final Metadata trailers;
 
   /**
-   * Constructs the exception with both a status. See also {@link Status#asRuntimeException()}.
+   * Constructs the exception with a status. See also {@link Status#asRuntimeException()}.
    *
    * @since 1.0.0
    */
