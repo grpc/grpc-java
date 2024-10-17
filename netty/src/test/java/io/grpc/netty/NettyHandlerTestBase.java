@@ -16,8 +16,8 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Charsets.UTF_8;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,7 +38,6 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
@@ -68,6 +67,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -84,7 +84,6 @@ import org.mockito.verification.VerificationMode;
 public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   protected static final int STREAM_ID = 3;
-  private ByteBuf content;
 
   private EmbeddedChannel channel;
 
@@ -106,18 +105,25 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   protected final TransportTracer transportTracer = new TransportTracer();
   protected int flowControlWindow = DEFAULT_WINDOW_SIZE;
   protected boolean autoFlowControl = false;
-
   private final FakeClock fakeClock = new FakeClock();
 
   FakeClock fakeClock() {
     return fakeClock;
   }
 
+  @After
+  public void tearDown() throws Exception {
+    if (channel() != null) {
+      channel().releaseInbound();
+      channel().releaseOutbound();
+    }
+  }
+
   /**
    * Must be called by subclasses to initialize the handler and channel.
    */
   protected final void initChannel(Http2HeadersDecoder headersDecoder) throws Exception {
-    content = Unpooled.copiedBuffer("hello world", UTF_8);
+    //ByteBuf content = Unpooled.copiedBuffer("hello world", UTF_8);
     frameWriter = mock(Http2FrameWriter.class, delegatesTo(new DefaultHttp2FrameWriter()));
     frameReader = new DefaultHttp2FrameReader(headersDecoder);
 
@@ -233,11 +239,11 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   }
 
   protected final ByteBuf content() {
-    return content;
+    return Unpooled.copiedBuffer(contentAsArray());
   }
 
   protected final byte[] contentAsArray() {
-    return ByteBufUtil.getBytes(content());
+    return "hello world".getBytes(UTF_8);
   }
 
   protected final Http2FrameWriter verifyWrite() {
@@ -252,8 +258,8 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     channel.writeInbound(obj);
   }
 
-  protected ByteBuf grpcDataFrame(int streamId, boolean endStream, byte[] content) {
-    final ByteBuf compressionFrame = Unpooled.buffer(content.length);
+  protected ByteBuf grpcFrame(byte[] message) {
+    final ByteBuf compressionFrame = Unpooled.buffer(message.length);
     MessageFramer framer = new MessageFramer(
         new MessageFramer.Sink() {
           @Override
@@ -262,25 +268,27 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
             if (frame != null) {
               ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf();
               compressionFrame.writeBytes(bytebuf);
+              bytebuf.release();
             }
           }
         },
         new NettyWritableBufferAllocator(ByteBufAllocator.DEFAULT),
         StatsTraceContext.NOOP);
-    framer.writePayload(new ByteArrayInputStream(content));
-    framer.flush();
-    ChannelHandlerContext ctx = newMockContext();
-    new DefaultHttp2FrameWriter().writeData(ctx, streamId, compressionFrame, 0, endStream,
-        newPromise());
-    return captureWrite(ctx);
+    framer.writePayload(new ByteArrayInputStream(message));
+    framer.close();
+    return compressionFrame;
+  }
+
+  protected final ByteBuf grpcDataFrame(int streamId, boolean endStream, byte[] content) {
+    return dataFrame(streamId, endStream, grpcFrame(content));
   }
 
   protected final ByteBuf dataFrame(int streamId, boolean endStream, ByteBuf content) {
-    // Need to retain the content since the frameWriter releases it.
-    content.retain();
-
     ChannelHandlerContext ctx = newMockContext();
-    new DefaultHttp2FrameWriter().writeData(ctx, streamId, content, 0, endStream, newPromise());
+    DefaultHttp2FrameWriter defaultHttp2FrameWriter = new DefaultHttp2FrameWriter();
+    defaultHttp2FrameWriter.writeData(ctx, streamId, content, 0, endStream, newPromise());
+    content.clear();
+    defaultHttp2FrameWriter.close();
     return captureWrite(ctx);
   }
 
@@ -357,6 +365,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     for (ByteBuf buf : captor.getAllValues()) {
       composite.addComponent(buf);
       composite.writerIndex(composite.writerIndex() + buf.readableBytes());
+      buf.clear();
     }
     return composite;
   }
@@ -410,6 +419,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     channelRead(dataFrame(3, false, buff.copy()));
 
     assertEquals(length * 3, handler.flowControlPing().getDataSincePing());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -425,14 +435,17 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     int wireSize = data.length + 5; // 5 is the size of the header
     ByteBuf frame = grpcDataFrame(3, false, data);
     channelRead(frame);
+    channel().releaseOutbound();
     int accumulator = wireSize;
     // 40 is arbitrary, any number large enough to trigger a window update would work
     for (int i = 0; i < 40; i++) {
       channelRead(grpcDataFrame(3, false, data));
+      channel().releaseOutbound();
       accumulator += wireSize;
     }
     long pingData = handler.flowControlPing().payload();
     channelRead(pingFrame(true, pingData));
+    channel().releaseOutbound();
 
     assertEquals(accumulator, handler.flowControlPing().getDataSincePing());
     assertEquals(2 * accumulator, localFlowController.initialWindowSize(connectionStream));
@@ -567,6 +580,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
       }
     }
     assertEquals(6, handler.flowControlPing().getPingCount());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -608,12 +622,14 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   private void readPingAck(long pingData) throws Exception {
     channelRead(pingFrame(true, pingData));
+    channel().releaseOutbound();
   }
 
   private void readXCopies(int copies, byte[] data) throws Exception {
     for (int i = 0; i < copies; i++) {
       channelRead(grpcDataFrame(STREAM_ID, false, data)); // buffer it
       stream().request(1); // consume it
+      channel().releaseOutbound();
     }
   }
 

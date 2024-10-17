@@ -43,6 +43,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -74,7 +75,6 @@ import io.grpc.internal.StreamListener;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -120,23 +120,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-
   private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
-
-
   @Mock
   private ServerStreamListener streamListener;
-
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
-
   private final ServerTransportListener transportListener =
       mock(ServerTransportListener.class, delegatesTo(new ServerTransportListenerImpl()));
   private final TestServerStreamTracer streamTracer = new TestServerStreamTracer();
-
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
-
   final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
 
   private int maxConcurrentStreams = Integer.MAX_VALUE;
@@ -207,6 +200,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
+    channel().releaseOutbound();
   }
 
   @Test
@@ -228,10 +222,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     createStream();
 
     // Send a frame and verify that it was written.
+    ByteBuf content = content();
     ChannelFuture future = enqueue(
-        new SendGrpcFrameCommand(stream.transportState(), content(), false));
+        new SendGrpcFrameCommand(stream.transportState(), content, false));
     assertTrue(future.isSuccess());
-    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), eq(content()), eq(0), eq(false),
+    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), same(content), eq(0), eq(false),
         any(ChannelPromise.class));
   }
 
@@ -266,10 +261,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Create a data frame and then trigger the handler to read it.
     ByteBuf frame = grpcDataFrame(STREAM_ID, endStream, contentAsArray());
     channelRead(frame);
+    channel().releaseOutbound();
     verify(streamListener, atLeastOnce())
         .messagesAvailable(any(StreamListener.MessageProducer.class));
     InputStream message = streamListenerMessageQueue.poll();
-    assertArrayEquals(ByteBufUtil.getBytes(content()), ByteStreams.toByteArray(message));
+    assertArrayEquals(contentAsArray(), ByteStreams.toByteArray(message));
     message.close();
     assertNull("no additional message expected", streamListenerMessageQueue.poll());
 
@@ -356,6 +352,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -378,6 +375,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -406,6 +404,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
         isA(ByteBuf.class), any(ChannelPromise.class));
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -418,6 +417,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Once https://github.com/netty/netty/issues/4316 is resolved, we should also verify that
     // any open streams are closed properly.
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -760,10 +760,12 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verify(spyKeepAliveManager).onDataReceived(); // received headers
 
     channelRead(grpcDataFrame(STREAM_ID, false, contentAsArray()));
+    channel().releaseOutbound();
 
     verify(spyKeepAliveManager, times(2)).onDataReceived();
 
     channelRead(grpcDataFrame(STREAM_ID, false, contentAsArray()));
+    channel().releaseOutbound();
 
     verify(spyKeepAliveManager, times(3)).onDataReceived();
     verify(spyKeepAliveManager, never()).onTransportTermination();
@@ -825,6 +827,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite(times(2))
         .writePing(eq(ctx()), eq(false), eq(0xDEADL), any(ChannelPromise.class));
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -840,6 +843,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardNanos(keepAliveTimeoutInNanos);
 
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -869,7 +873,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     future.get();
     for (int i = 0; i < 10; i++) {
       future = enqueue(
-          new SendGrpcFrameCommand(stream.transportState(), content().retainedSlice(), false));
+          //new SendGrpcFrameCommand(stream.transportState(), content().retainedSlice(), false));
+          new SendGrpcFrameCommand(stream.transportState(), content(), false));
       future.get();
       channel().releaseOutbound();
       channelRead(pingFrame(false /* isAck */, 1L));
@@ -938,6 +943,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             any(ByteBuf.class),
             any(ChannelPromise.class));
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -973,6 +979,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1003,6 +1010,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1047,6 +1055,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1091,6 +1100,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1109,6 +1119,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             any(ByteBuf.class),
             any(ChannelPromise.class));
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1145,6 +1156,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1176,6 +1188,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1206,6 +1219,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel not closed yet
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1244,6 +1258,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1284,6 +1299,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // channel closed
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1292,7 +1308,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
     manualSetUp();
     rapidReset(maxRstCount);
+
     assertTrue(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   @Test
@@ -1302,6 +1320,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     manualSetUp();
     assertThrows(ClosedChannelException.class, () -> rapidReset(maxRstCount + 1));
     assertFalse(channel().isOpen());
+    channel().releaseOutbound();
   }
 
   private void rapidReset(int burstSize) throws Exception {
@@ -1315,13 +1334,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     for (int period = 0; period < 3; period++) {
       for (int i = 0; i < burstSize; i++) {
         channelRead(headersFrame(streamId, headers));
+        channel().releaseOutbound();
         channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
+        channel().releaseOutbound();
         streamId += 2;
         fakeClock().forwardNanos(rpcTimeNanos);
       }
       while (channel().readOutbound() != null) {}
       fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
     }
+    channel().releaseOutbound();
   }
 
   private void createStream() throws Exception {
@@ -1346,7 +1368,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     try {
       return dataFrame(streamId, endStream, buf);
     } finally {
-      buf.release();
+      buf.clear();
     }
   }
 
