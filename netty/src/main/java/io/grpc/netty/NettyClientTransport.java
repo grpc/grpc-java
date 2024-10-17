@@ -83,6 +83,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
+  private final int softLimitHeaderListSize;
   private KeepAliveManager keepAliveManager;
   private final long keepAliveTimeNanos;
   private final long keepAliveTimeoutNanos;
@@ -106,15 +107,28 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Ticker ticker;
 
   NettyClientTransport(
-      SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
-      Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
-      int maxMessageSize, int maxHeaderListSize,
-      long keepAliveTimeNanos, long keepAliveTimeoutNanos,
-      boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
-      Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
-      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
-      boolean useGetForSafeMethods, Ticker ticker) {
+      SocketAddress address,
+      ChannelFactory<? extends Channel> channelFactory,
+      Map<ChannelOption<?>, ?> channelOptions,
+      EventLoopGroup group,
+      ProtocolNegotiator negotiator,
+      boolean autoFlowControl,
+      int flowControlWindow,
+      int maxMessageSize,
+      int maxHeaderListSize,
+      int softLimitHeaderListSize,
+      long keepAliveTimeNanos,
+      long keepAliveTimeoutNanos,
+      boolean keepAliveWithoutCalls,
+      String authority,
+      @Nullable String userAgent,
+      Runnable tooManyPingsRunnable,
+      TransportTracer transportTracer,
+      Attributes eagAttributes,
+      LocalSocketPicker localSocketPicker,
+      ChannelLogger channelLogger,
+      boolean useGetForSafeMethods,
+      Ticker ticker) {
 
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.negotiationScheme = this.negotiator.scheme();
@@ -126,6 +140,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
+    this.softLimitHeaderListSize = softLimitHeaderListSize;
     this.keepAliveTimeNanos = keepAliveTimeNanos;
     this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
     this.keepAliveWithoutCalls = keepAliveWithoutCalls;
@@ -220,18 +235,19 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
 
     handler = NettyClientHandler.newHandler(
-        lifecycleManager,
-        keepAliveManager,
-        autoFlowControl,
-        flowControlWindow,
-        maxHeaderListSize,
-        GrpcUtil.STOPWATCH_SUPPLIER,
-        tooManyPingsRunnable,
-        transportTracer,
-        eagAttributes,
-        authorityString,
-        channelLogger,
-        ticker);
+            lifecycleManager,
+            keepAliveManager,
+            autoFlowControl,
+            flowControlWindow,
+            maxHeaderListSize,
+            softLimitHeaderListSize,
+            GrpcUtil.STOPWATCH_SUPPLIER,
+            tooManyPingsRunnable,
+            transportTracer,
+            eagAttributes,
+            authorityString,
+            channelLogger,
+            ticker);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
