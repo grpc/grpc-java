@@ -54,6 +54,8 @@ import javax.annotation.Nullable;
 // TODO(sergiitk): introduce a layer between the filter and interceptor.
 // lds has filter names and the names are unique - even for server instances.
 final class RlqsFilter implements Filter, ServerInterceptorBuilder {
+  private final XdsLogger logger;
+
   static final boolean enabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ENABLE_RLQS", false);
 
   // TODO(sergiitk): [IMPL] remove
@@ -69,12 +71,11 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
   private final AtomicReference<RlqsCache> rlqsCache = new AtomicReference<>();
 
-  private final XdsLogger logger;
-
   public RlqsFilter() {
-    InternalLogId logId = InternalLogId.allocate("rlqs-filter", null);
-    logger = XdsLogger.withLogId(logId);
-    logger.log(XdsLogLevel.INFO, "Created RLQS Filter with logId=" + logId);
+    // TODO(sergiitk): one per new instance when filters are refactored.
+    logger = XdsLogger.withLogId(InternalLogId.allocate(this.getClass(), null));
+    logger.log(XdsLogLevel.DEBUG,
+        "Created RLQS Filter with enabled=" + enabled + ", dryRun=" + dryRun);
   }
 
   @Override
@@ -177,7 +178,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
         // TODO(sergiitk): [IMPL] Remove
         if (dryRun) {
-          logger.log(XdsLogLevel.INFO, "RLQS DRY RUN: request <<" + httpMatchInput + ">>");
+          // logger.log(XdsLogLevel.INFO, "RLQS DRY RUN: request <<" + httpMatchInput + ">>");
           return next.startCall(call, headers);
         }
 
@@ -204,7 +205,7 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
     // TODO(sergiitk): [IMPL] Remove
     if (dryRun) {
-      logger.log(XdsLogLevel.INFO, "RLQS DRY RUN: skipping matchers");
+      logger.log(XdsLogLevel.DEBUG, "Dry run: not parsing  matchers in the filter filter");
       return builder.build();
     }
 

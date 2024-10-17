@@ -59,6 +59,7 @@ import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -82,7 +83,9 @@ final class XdsServerWrapper extends Server {
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
-          logger.log(Level.SEVERE, "Exception!" + e);
+          logger.log(Level.SEVERE, "Exception! "
+              + e + "\nTrace:\n"
+              + Arrays.toString(e.getStackTrace()).replace(',', '\n'));
           // TODO(chengyuanzhang): implement cleanup.
         }
       });

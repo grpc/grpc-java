@@ -99,7 +99,12 @@ public final class RlqsCache {
     // TODO(sergiitk): [DESIGN] the key should be hashed (domain + buckets) merged config?
     // TODO(sergiitk): [IMPL] Hash buckets
     int k1 = Objects.hash(config.rlqsService().targetUri(), config.domain());
-    int k2 = config.bucketMatchers().hashCode();
+    int k2;
+    if (config.bucketMatchers() == null) {
+      k2 = 0x42c0ffee;
+    } else {
+      k2 = config.bucketMatchers().hashCode();
+    }
     return Long.rotateLeft(Integer.toUnsignedLong(k1), 32) + Integer.toUnsignedLong(k2);
   }
 
