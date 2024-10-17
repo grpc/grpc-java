@@ -69,11 +69,10 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
   private final AtomicReference<RlqsCache> rlqsCache = new AtomicReference<>();
 
-  private final InternalLogId logId;
   private final XdsLogger logger;
 
   public RlqsFilter() {
-    logId = InternalLogId.allocate("rlqs-filter", null);
+    InternalLogId logId = InternalLogId.allocate("rlqs-filter", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created RLQS Filter with logId=" + logId);
   }
