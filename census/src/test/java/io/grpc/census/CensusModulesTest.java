@@ -24,6 +24,10 @@ import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.RETRY_D
 import static io.grpc.census.CensusStatsModule.CallAttemptsTracerFactory.TRANSPARENT_RETRIES_PER_CALL;
 import static io.grpc.census.internal.ObservabilityCensusConstants.API_LATENCY_PER_CALL;
 import static io.grpc.census.internal.ObservabilityCensusConstants.CLIENT_TRACE_SPAN_CONTEXT_KEY;
+import static io.grpc.census.internal.ObservabilityCensusConstants.INSTRUMENTATION_SOURCE;
+import static io.grpc.census.internal.ObservabilityCensusConstants.INSTRUMENTATION_VERSION;
+import static io.grpc.census.internal.ObservabilityCensusConstants.LIBRARY_NAME;
+import static io.grpc.census.internal.ObservabilityCensusConstants.LIBRARY_VERSION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -342,10 +346,10 @@ public class CensusModulesTest {
     if (nonDefaultContext) {
       TagValue extraTag = record.tags.get(StatsTestUtils.EXTRA_TAG);
       assertEquals("extra value", extraTag.asString());
-      assertEquals(2, record.tags.size());
+      assertEquals(4, record.tags.size());
     } else {
       assertNull(record.tags.get(StatsTestUtils.EXTRA_TAG));
-      assertEquals(1, record.tags.size());
+      assertEquals(3, record.tags.size());
     }
 
     if (nonDefaultContext) {
@@ -434,7 +438,7 @@ public class CensusModulesTest {
       StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
       assertNotNull(record);
       assertNoServerContent(record);
-      assertEquals(1, record.tags.size());
+      assertEquals(3, record.tags.size());
       TagValue methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
       assertEquals(method.getFullMethodName(), methodTag.asString());
       assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
@@ -544,7 +548,7 @@ public class CensusModulesTest {
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO,  new Metadata());
 
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
-    assertEquals(1, record.tags.size());
+    assertEquals(3, record.tags.size());
     TagValue methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
@@ -588,7 +592,7 @@ public class CensusModulesTest {
     fakeClock.forwardTime(1000, MILLISECONDS);
     tracer = callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     record = statsRecorder.pollRecord();
-    assertEquals(1, record.tags.size());
+    assertEquals(3, record.tags.size());
     methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
@@ -630,7 +634,7 @@ public class CensusModulesTest {
     tracer = callAttemptsTracerFactory.newClientStreamTracer(
         STREAM_INFO.toBuilder().setIsTransparentRetry(true).build(), new Metadata());
     record = statsRecorder.pollRecord();
-    assertEquals(1, record.tags.size());
+    assertEquals(3, record.tags.size());
     methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
@@ -651,7 +655,7 @@ public class CensusModulesTest {
     tracer = callAttemptsTracerFactory.newClientStreamTracer(
         STREAM_INFO.toBuilder().setIsTransparentRetry(true).build(), new Metadata());
     record = statsRecorder.pollRecord();
-    assertEquals(1, record.tags.size());
+    assertEquals(3, record.tags.size());
     assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
     tracer.outboundHeaders();
     tracer.outboundMessage(0);
@@ -838,7 +842,7 @@ public class CensusModulesTest {
     StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
     assertNotNull(record);
     assertNoServerContent(record);
-    assertEquals(1, record.tags.size());
+    assertEquals(3, record.tags.size());
     TagValue methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
     assertEquals(method.getFullMethodName(), methodTag.asString());
     assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
@@ -941,7 +945,7 @@ public class CensusModulesTest {
       StatsTestUtils.MetricsRecord clientRecord = statsRecorder.pollRecord();
       assertNotNull(clientRecord);
       assertNoServerContent(clientRecord);
-      assertEquals(2, clientRecord.tags.size());
+      assertEquals(4, clientRecord.tags.size());
       TagValue clientMethodTag = clientRecord.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
       assertEquals(method.getFullMethodName(), clientMethodTag.asString());
       TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
@@ -966,6 +970,8 @@ public class CensusModulesTest {
             .putLocal(
                 RpcMeasureConstants.GRPC_SERVER_METHOD,
                 TagValue.create(method.getFullMethodName()))
+            .putLocal(INSTRUMENTATION_SOURCE, LIBRARY_NAME)
+            .putLocal(INSTRUMENTATION_VERSION, LIBRARY_VERSION)
             .build(),
         io.opencensus.tags.unsafe.ContextUtils.getValue(serverContext));
 
@@ -977,7 +983,7 @@ public class CensusModulesTest {
       StatsTestUtils.MetricsRecord serverRecord = statsRecorder.pollRecord();
       assertNotNull(serverRecord);
       assertNoClientContent(serverRecord);
-      assertEquals(2, serverRecord.tags.size());
+      assertEquals(4, serverRecord.tags.size());
       TagValue serverMethodTag = serverRecord.tags.get(RpcMeasureConstants.GRPC_SERVER_METHOD);
       assertEquals(method.getFullMethodName(), serverMethodTag.asString());
       TagValue serverPropagatedTag = serverRecord.tags.get(StatsTestUtils.EXTRA_TAG);
@@ -1194,7 +1200,7 @@ public class CensusModulesTest {
       StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
       assertNotNull(record);
       assertNoClientContent(record);
-      assertEquals(1, record.tags.size());
+      assertEquals(3, record.tags.size());
       TagValue methodTag = record.tags.get(RpcMeasureConstants.GRPC_SERVER_METHOD);
       assertEquals(method.getFullMethodName(), methodTag.asString());
       assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_STARTED_RPCS));
@@ -1210,6 +1216,8 @@ public class CensusModulesTest {
             .putLocal(
                 RpcMeasureConstants.GRPC_SERVER_METHOD,
                 TagValue.create(method.getFullMethodName()))
+            .putLocal(INSTRUMENTATION_SOURCE, LIBRARY_NAME)
+            .putLocal(INSTRUMENTATION_VERSION, LIBRARY_VERSION)
             .build(),
         statsCtx);
 
@@ -1563,7 +1571,8 @@ public class CensusModulesTest {
     assertDistributionData(
         localStats,
         ObservabilityCensusConstants.GRPC_CLIENT_API_LATENCY_VIEW,
-        ImmutableList.of(TagValue.create(method.getFullMethodName()), TagValue.create("OK")),
+        ImmutableList.of(TagValue.create(method.getFullMethodName()), TagValue.create("OK"),
+                         LIBRARY_NAME, LIBRARY_VERSION),
         50.0, 1, 0.0,
         ImmutableList.of(
             0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 1L,
