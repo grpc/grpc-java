@@ -16,7 +16,7 @@
 
 package io.grpc.internal;
 
-import static org.junit.Assert.assertTrue;
+import static com.google.common.truth.Truth.assertThat;
 
 import java.time.Instant;
 import org.junit.Test;
@@ -37,7 +37,6 @@ public class TimeProviderTest {
 
     // Validate the time returned is close to the expected value within a tolerance
     // (i,e 10 millisecond tolerance in nanoseconds).
-    assertTrue("The current time in nanoseconds should be close to the expected time.",
-        Math.abs(actualTimeNanos - expectedTimeNanos) < 10_000_000L);
+    assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
   }
 }
