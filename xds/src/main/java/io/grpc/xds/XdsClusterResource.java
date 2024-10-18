@@ -382,6 +382,11 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     return upstreamTlsContext;
   }
 
+  private static boolean isSystemRootCertsEnvVarSet() {
+    String useSystemRootCerts = System.getenv("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS");
+    return useSystemRootCerts != null && useSystemRootCerts.equals("true");
+  }
+
   @VisibleForTesting
   static void validateCommonTlsContext(
       CommonTlsContext commonTlsContext, Set<String> certProviderInstances, boolean server)
@@ -431,7 +436,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
     String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
     if (rootCaInstanceName == null) {
-      if (!server && !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext)) {
+      if (!server && (!isSystemRootCertsEnvVarSet()
+      || !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext))) {
         throw new ResourceInvalidException(
             "ca_certificate_provider_instance or system_root_certs is required in "
                 + "upstream-tls-context");

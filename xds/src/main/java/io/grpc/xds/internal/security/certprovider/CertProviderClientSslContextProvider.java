@@ -56,7 +56,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
       throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
     // Null rootCertInstance implies hasSystemRootCerts because of the check in
-    // {@link CertProviderClientSslContextProviderFactory}.
+    // CertProviderClientSslContextProviderFactory.
     if (rootCertInstance != null) {
       sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
