@@ -356,7 +356,7 @@ class OkHttpClientStream extends AbstractClientStream {
     //@SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void cancel(Status reason, boolean stopDelivery, Metadata trailers) {
-      synchronized (transport.lock) {
+      synchronized (OkHttpClientTransport.lock) {
         if (cancelSent) {
           return;
         }
@@ -402,7 +402,7 @@ class OkHttpClientStream extends AbstractClientStream {
     //@SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void streamReady(Metadata metadata, String path) {
-      synchronized (transport.lock) {
+      synchronized (OkHttpClientTransport.lock) {
         requestHeaders =
             Headers.createRequestHeaders(
                 metadata,

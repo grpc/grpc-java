@@ -156,7 +156,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private ExceptionHandlingFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
-  final Object lock = new Object();
+  static Object lock = new Object();
   private final InternalLogId logId;
   @GuardedBy("lock")
   private int nextStreamId;
@@ -1230,7 +1230,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     /**
      * Handle HTTP2 HEADER and CONTINUATION frames.
      */
-    @SuppressWarnings("GuardedBy")
+    //@SuppressWarnings("GuardedBy")
+    @GuardedBy("lock")
     @Override
     public void headers(boolean outFinished,
         boolean inFinished,
@@ -1253,15 +1254,19 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
                   metadataSize));
         }
       }
-      synchronized (lock) {
-        OkHttpClientStream stream = streams.get(streamId);
+      OkHttpClientStream stream;
+      synchronized (OkHttpClientTransport.lock) {
+        stream = streams.get(streamId);
         if (stream == null) {
           if (mayHaveCreatedStream(streamId)) {
             frameWriter.rstStream(streamId, ErrorCode.STREAM_CLOSED);
           } else {
             unknownStream = true;
           }
-        } else {
+        }
+      }
+      if (stream != null) {
+        synchronized (stream.transportState().lock) {
           if (failedStatus == null) {
             PerfMark.event("OkHttpClientTransport$ClientFrameHandler.headers",
                 stream.transportState().tag());
