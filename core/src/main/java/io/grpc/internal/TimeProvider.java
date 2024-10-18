@@ -16,7 +16,7 @@
 
 package io.grpc.internal;
 
-import java.util.concurrent.TimeUnit;
+import java.time.Instant;
 
 /**
  * Time source representing the current system time in nanos. Used to inject a fake clock
@@ -29,7 +29,10 @@ public interface TimeProvider {
   TimeProvider SYSTEM_TIME_PROVIDER = new TimeProvider() {
     @Override
     public long currentTimeNanos() {
-      return TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
+      Instant instant = Instant.now();
+      int nanos = instant.getNano();
+      long epochSeconds = instant.getEpochSecond();
+      return epochSeconds * 1_000_000_000L + nanos;
     }
   };
 }
