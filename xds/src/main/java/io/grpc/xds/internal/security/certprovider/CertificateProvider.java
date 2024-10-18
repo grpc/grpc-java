@@ -26,6 +26,7 @@ import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,6 +46,8 @@ public abstract class CertificateProvider implements Closeable {
 
     void updateTrustedRoots(List<X509Certificate> trustedRoots);
 
+    void updateSpiffeRoots(Map<String, List<X509Certificate>> spiffeRoots);
+
     void onError(Status errorStatus);
   }
 
@@ -53,6 +56,7 @@ public abstract class CertificateProvider implements Closeable {
     private PrivateKey privateKey;
     private List<X509Certificate> certChain;
     private List<X509Certificate> trustedRoots;
+    private Map<String, List<X509Certificate>> spiffeRoots;
 
     @VisibleForTesting
     final Set<Watcher> downstreamWatchers = new HashSet<>();
@@ -64,6 +68,9 @@ public abstract class CertificateProvider implements Closeable {
       }
       if (trustedRoots != null) {
         sendLastTrustedRootsUpdate(watcher);
+      }
+      if (spiffeRoots != null) {
+        sendLastSpiffeRootsUpdate(watcher);
       }
     }
 
@@ -83,6 +90,10 @@ public abstract class CertificateProvider implements Closeable {
       watcher.updateTrustedRoots(trustedRoots);
     }
 
+    private void sendLastSpiffeRootsUpdate(Watcher watcher) {
+      watcher.updateSpiffeRoots(spiffeRoots);
+    }
+
     @Override
     public synchronized void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
       checkNotNull(key, "key");
@@ -100,6 +111,14 @@ public abstract class CertificateProvider implements Closeable {
       this.trustedRoots = trustedRoots;
       for (Watcher watcher : downstreamWatchers) {
         sendLastTrustedRootsUpdate(watcher);
+      }
+    }
+
+    @Override
+    public void updateSpiffeRoots(Map<String, List<X509Certificate>> spiffeRoots) {
+      this.spiffeRoots = spiffeRoots;
+      for (Watcher watcher : downstreamWatchers) {
+        sendLastSpiffeRootsUpdate(watcher);
       }
     }
 

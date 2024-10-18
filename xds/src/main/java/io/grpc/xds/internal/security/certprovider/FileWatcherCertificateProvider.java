@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
+import io.grpc.internal.SpiffeUtil;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
 import java.io.ByteArrayInputStream;
@@ -30,6 +31,7 @@ import java.nio.file.attribute.FileTime;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -47,11 +49,13 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   private final Path certFile;
   private final Path keyFile;
   private final Path trustFile;
+  private final Path spiffeFile;
   private final long refreshIntervalInSeconds;
   @VisibleForTesting ScheduledFuture<?> scheduledFuture;
   private FileTime lastModifiedTimeCert;
   private FileTime lastModifiedTimeKey;
   private FileTime lastModifiedTimeRoot;
+  private FileTime lastModifiedTimeSpiffe;
   private boolean shutdown;
 
   FileWatcherCertificateProvider(
@@ -60,6 +64,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
       String certFile,
       String keyFile,
       String trustFile,
+      String spiffeFile,
       long refreshIntervalInSeconds,
       ScheduledExecutorService scheduledExecutorService,
       TimeProvider timeProvider) {
@@ -70,6 +75,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.certFile = Paths.get(checkNotNull(certFile, "certFile"));
     this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
     this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
+    this.spiffeFile = spiffeFile==null ? null : Paths.get(spiffeFile, "spiffeFile");
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
   }
 
@@ -143,6 +149,21 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
       } catch (Throwable t) {
         getWatcher().onError(Status.fromThrowable(t));
       }
+      try {
+        if (spiffeFile == null) {
+          return;
+        }
+        FileTime currentSpiffeTime = Files.getLastModifiedTime(spiffeFile);
+        if (currentSpiffeTime.equals(lastModifiedTimeSpiffe)) {
+          return;
+        }
+        SpiffeUtil.SpiffeBundle trustBundle = SpiffeUtil
+            .loadTrustBundleFromFile(spiffeFile.toString());
+        getWatcher().updateSpiffeRoots(new HashMap<>(trustBundle.getBundleMap()));
+        lastModifiedTimeSpiffe = currentSpiffeTime;
+      } catch (Throwable t) {
+        getWatcher().onError(Status.fromThrowable(t));
+      }
     } finally {
       scheduleNextRefreshCertificate(refreshIntervalInSeconds);
     }
@@ -195,6 +216,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
               String certFile,
               String keyFile,
               String trustFile,
+              String spiffeFile,
               long refreshIntervalInSeconds,
               ScheduledExecutorService scheduledExecutorService,
               TimeProvider timeProvider) {
@@ -204,6 +226,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
                 certFile,
                 keyFile,
                 trustFile,
+                spiffeFile,
                 refreshIntervalInSeconds,
                 scheduledExecutorService,
                 timeProvider);
@@ -220,6 +243,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
         String certFile,
         String keyFile,
         String trustFile,
+        String spiffeFile,
         long refreshIntervalInSeconds,
         ScheduledExecutorService scheduledExecutorService,
         TimeProvider timeProvider);

@@ -41,6 +41,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable protected PrivateKey savedKey;
   @Nullable protected List<X509Certificate> savedCertChain;
   @Nullable protected List<X509Certificate> savedTrustedRoots;
+  @Nullable protected Map<String, List<X509Certificate>> savedSpiffeRoots;
 
   protected CertProviderSslContextProvider(
       Node node,

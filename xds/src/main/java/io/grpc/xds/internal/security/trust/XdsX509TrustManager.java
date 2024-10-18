@@ -24,6 +24,7 @@ import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
+import io.grpc.internal.SpiffeUtil;
 import java.net.Socket;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
@@ -31,6 +32,7 @@ import java.security.cert.X509Certificate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
@@ -51,6 +53,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private static final int ALT_IPA_NAME = 7;
 
   private final X509ExtendedTrustManager delegate;
+  private final Map<String, X509ExtendedTrustManager> delegates;
   private final CertificateValidationContext certContext;
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
@@ -58,6 +61,14 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;
+    this.delegates = null;
+  }
+
+  XdsX509TrustManager(Map<String, X509ExtendedTrustManager> delegates) {
+    checkNotNull(delegates, "delegates");
+    this.delegates = delegates;
+    this.certContext = null;
+    this.delegate = null;
   }
 
   private static boolean verifyDnsNameInPattern(
@@ -204,7 +215,12 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
-    delegate.checkClientTrusted(chain, authType, socket);
+    if (delegates != null) {
+      String trustDomain = SpiffeUtil.extractSpiffeId(chain).get().getTrustDomain();
+      delegates.get(trustDomain).checkClientTrusted(chain, authType, socket);
+    } else {
+      delegate.checkClientTrusted(chain, authType, socket);
+    }
     verifySubjectAltNameInChain(chain);
   }
 
@@ -245,7 +261,12 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       sslParams.setEndpointIdentificationAlgorithm("");
       sslEngine.setSSLParameters(sslParams);
     }
-    delegate.checkServerTrusted(chain, authType, sslEngine);
+    if (delegates != null) {
+      String trustDomain = SpiffeUtil.extractSpiffeId(chain).get().getTrustDomain();
+      delegates.get(trustDomain).checkServerTrusted(chain, authType, sslEngine);
+    } else {
+      delegate.checkServerTrusted(chain, authType, sslEngine);
+    }
     verifySubjectAltNameInChain(chain);
   }
 
