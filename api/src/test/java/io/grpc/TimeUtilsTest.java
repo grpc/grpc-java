@@ -32,7 +32,7 @@ public class TimeUtilsTest {
     Duration duration = Duration.ofSeconds(10);
     long expected = 10 * 1_000_000_000L;
 
-    assertEquals(expected, TimeUtils.convert(duration));
+    assertEquals(expected, TimeUtils.convertToNanos(duration));
   }
 
   @Test
@@ -40,20 +40,20 @@ public class TimeUtilsTest {
     Duration duration = Duration.ofSeconds(-3);
     long expected = -3 * 1_000_000_000L;
 
-    assertEquals(expected, TimeUtils.convert(duration));
+    assertEquals(expected, TimeUtils.convertToNanos(duration));
   }
 
   @Test
   public void testConvertTooLargeDuration() {
     Duration duration = Duration.ofSeconds(Long.MAX_VALUE / 1_000_000_000L + 1);
 
-    assertEquals(Long.MAX_VALUE, TimeUtils.convert(duration));
+    assertEquals(Long.MAX_VALUE, TimeUtils.convertToNanos(duration));
   }
 
   @Test
   public void testConvertTooLargeNegativeDuration() {
     Duration duration = Duration.ofSeconds(Long.MIN_VALUE / 1_000_000_000L - 1);
 
-    assertEquals(Long.MIN_VALUE, TimeUtils.convert(duration));
+    assertEquals(Long.MIN_VALUE, TimeUtils.convertToNanos(duration));
   }
 }

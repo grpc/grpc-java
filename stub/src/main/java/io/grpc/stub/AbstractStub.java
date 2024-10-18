@@ -17,7 +17,7 @@
 package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.TimeUtils.convert;
+import static io.grpc.TimeUtils.convertToNanos;
 
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
@@ -152,7 +152,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   }
 
   public final S withDeadlineAfter(Duration duration) {
-    return withDeadlineAfter(convert(duration), TimeUnit.NANOSECONDS);
+    return withDeadlineAfter(convertToNanos(duration), TimeUnit.NANOSECONDS);
   }
 
   /**

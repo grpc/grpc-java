@@ -17,7 +17,7 @@
 package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.grpc.TimeUtils.convert;
+import static io.grpc.TimeUtils.convertToNanos;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -179,7 +179,7 @@ public final class CallOptions {
   }
 
   public CallOptions withDeadlineAfter(Duration duration) {
-    return withDeadlineAfter(convert(duration), TimeUnit.NANOSECONDS);
+    return withDeadlineAfter(convertToNanos(duration), TimeUnit.NANOSECONDS);
   }
 
   /**

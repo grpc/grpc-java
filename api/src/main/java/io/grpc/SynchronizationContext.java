@@ -18,7 +18,7 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.TimeUtils.convert;
+import static io.grpc.TimeUtils.convertToNanos;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
@@ -198,7 +198,7 @@ public final class SynchronizationContext implements Executor {
   public final ScheduledHandle scheduleWithFixedDelay(
       final Runnable task, Duration initialDelay, Duration delay,
       ScheduledExecutorService timerService) {
-    return scheduleWithFixedDelay(task, convert(initialDelay), convert(delay),
+    return scheduleWithFixedDelay(task, convertToNanos(initialDelay), convertToNanos(delay),
         TimeUnit.NANOSECONDS, timerService);
   }
 
