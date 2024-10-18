@@ -32,6 +32,7 @@ import static org.mockito.Mockito.mock;
 import com.google.common.base.Objects;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.internal.SerializingExecutor;
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -145,6 +146,14 @@ public class CallOptionsTest {
   @Test
   public void withDeadlineAfter() {
     Deadline actual = CallOptions.DEFAULT.withDeadlineAfter(1, MINUTES).getDeadline();
+    Deadline expected = Deadline.after(1, MINUTES);
+
+    assertAbout(deadline()).that(actual).isWithin(10, MILLISECONDS).of(expected);
+  }
+
+  @Test
+  public void withDeadlineAfterDuration() {
+    Deadline actual = CallOptions.DEFAULT.withDeadlineAfter(Duration.ofMinutes(1L)).getDeadline();
     Deadline expected = Deadline.after(1, MINUTES);
 
     assertAbout(deadline()).that(actual).isWithin(10, MILLISECONDS).of(expected);
