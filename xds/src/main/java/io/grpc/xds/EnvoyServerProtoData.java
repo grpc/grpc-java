@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -41,13 +43,13 @@ public final class EnvoyServerProtoData {
   }
 
   public abstract static class BaseTlsContext {
-    @Nullable protected final CommonTlsContext commonTlsContext;
+    protected final CommonTlsContext commonTlsContext;
 
-    protected BaseTlsContext(@Nullable CommonTlsContext commonTlsContext) {
-      this.commonTlsContext = commonTlsContext;
+    protected BaseTlsContext(CommonTlsContext commonTlsContext) {
+      this.commonTlsContext = checkNotNull(commonTlsContext, "commonTlsContext cannot be null.");
     }
 
-    @Nullable public CommonTlsContext getCommonTlsContext() {
+    public CommonTlsContext getCommonTlsContext() {
       return commonTlsContext;
     }
 
