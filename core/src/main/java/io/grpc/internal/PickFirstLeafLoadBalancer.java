@@ -62,7 +62,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
-  private final IndexI addressIndex = IndexI.create(ImmutableList.of());
+  private final Index addressIndex = Index.create(ImmutableList.of());
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
@@ -611,8 +611,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  interface IndexI {
-    static IndexI create(List<EquivalentAddressGroup> groups) {
+  interface Index {
+    static Index create(List<EquivalentAddressGroup> groups) {
       if (PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()) {
         return new IndexHappyEyeballs(groups);
       } else {
@@ -659,7 +659,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    * All updates should be done in a synchronization context.
    */
   @VisibleForTesting
-  private static class IndexNonHE implements IndexI {
+  private static final class IndexNonHE implements Index {
     private List<EquivalentAddressGroup> addressGroups;
     private int size;
     private int groupIndex;
@@ -772,7 +772,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static final class IndexHappyEyeballs implements IndexI {
+  private static final class IndexHappyEyeballs implements Index {
     private List<EquivalentAddressGroup> addressGroups;
     private List<InterleavedEntry> interleavedAddresses = new ArrayList<>();
     private int interleavedIndex = 0;

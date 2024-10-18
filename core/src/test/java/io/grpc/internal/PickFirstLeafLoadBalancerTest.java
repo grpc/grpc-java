@@ -2636,7 +2636,7 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr3 = new FakeSocketAddress("addr3");
     SocketAddress addr4 = new FakeSocketAddress("addr4");
     SocketAddress addr5 = new FakeSocketAddress("addr5");
-    PickFirstLeafLoadBalancer.IndexI index = PickFirstLeafLoadBalancer.IndexI.create(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1, addr2), attr1),
         new EquivalentAddressGroup(Arrays.asList(addr3), attr2),
         new EquivalentAddressGroup(Arrays.asList(addr4, addr5), attr3)));
@@ -2696,7 +2696,7 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr1 = new FakeSocketAddress("addr1");
     SocketAddress addr2 = new FakeSocketAddress("addr2");
     SocketAddress addr3 = new FakeSocketAddress("addr3");
-    PickFirstLeafLoadBalancer.IndexI index = PickFirstLeafLoadBalancer.IndexI.create(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1)),
         new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
     index.increment();
@@ -2713,7 +2713,7 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr1 = new FakeSocketAddress("addr1");
     SocketAddress addr2 = new FakeSocketAddress("addr2");
     SocketAddress addr3 = new FakeSocketAddress("addr3");
-    PickFirstLeafLoadBalancer.IndexI index = PickFirstLeafLoadBalancer.IndexI.create(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1, addr2)),
         new EquivalentAddressGroup(Arrays.asList(addr3))));
     assertThat(index.seekTo(addr3)).isTrue();
@@ -2736,7 +2736,7 @@ public class PickFirstLeafLoadBalancerTest {
     InetSocketAddress addr4_4 = new InetSocketAddress("10.1.1.4", 1234);
     InetSocketAddress addr4_6 = new InetSocketAddress("f38:1:4", 1234);
 
-    PickFirstLeafLoadBalancer.IndexI index = PickFirstLeafLoadBalancer.IndexI.create(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1_4, addr1_6)),
         new EquivalentAddressGroup(Arrays.asList(addr2_4)),
         new EquivalentAddressGroup(Arrays.asList(addr3_4)),
