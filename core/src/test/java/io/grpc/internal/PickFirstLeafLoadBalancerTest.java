@@ -32,6 +32,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -67,6 +68,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfig;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2634,7 +2636,7 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr3 = new FakeSocketAddress("addr3");
     SocketAddress addr4 = new FakeSocketAddress("addr4");
     SocketAddress addr5 = new FakeSocketAddress("addr5");
-    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1, addr2), attr1),
         new EquivalentAddressGroup(Arrays.asList(addr3), attr2),
         new EquivalentAddressGroup(Arrays.asList(addr4, addr5), attr3)));
@@ -2694,7 +2696,7 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr1 = new FakeSocketAddress("addr1");
     SocketAddress addr2 = new FakeSocketAddress("addr2");
     SocketAddress addr3 = new FakeSocketAddress("addr3");
-    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1)),
         new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
     index.increment();
@@ -2711,7 +2713,7 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr1 = new FakeSocketAddress("addr1");
     SocketAddress addr2 = new FakeSocketAddress("addr2");
     SocketAddress addr3 = new FakeSocketAddress("addr3");
-    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1, addr2)),
         new EquivalentAddressGroup(Arrays.asList(addr3))));
     assertThat(index.seekTo(addr3)).isTrue();
@@ -2723,6 +2725,73 @@ public class PickFirstLeafLoadBalancerTest {
     index.seekTo(new FakeSocketAddress("addr4"));
     // Failed seekTo doesn't change the index
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2);
+  }
+
+  @Test
+  public void index_interleaving() {
+    InetSocketAddress addr1_6 = new InetSocketAddress("f38:1:1", 1234);
+    InetSocketAddress addr1_4 = new InetSocketAddress("10.1.1.1", 1234);
+    InetSocketAddress addr2_4 = new InetSocketAddress("10.1.1.2", 1234);
+    InetSocketAddress addr3_4 = new InetSocketAddress("10.1.1.3", 1234);
+    InetSocketAddress addr4_4 = new InetSocketAddress("10.1.1.4", 1234);
+    InetSocketAddress addr4_6 = new InetSocketAddress("f38:1:4", 1234);
+
+    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
+        new EquivalentAddressGroup(Arrays.asList(addr1_4, addr1_6)),
+        new EquivalentAddressGroup(Arrays.asList(addr2_4)),
+        new EquivalentAddressGroup(Arrays.asList(addr3_4)),
+        new EquivalentAddressGroup(Arrays.asList(addr4_4, addr4_6))));
+
+    assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1_4);
+    assertThat(index.isAtBeginning()).isTrue();
+
+    index.increment();
+    assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1_6);
+    assertThat(index.isAtBeginning()).isFalse();
+    assertThat(index.isValid()).isTrue();
+    assertThat(index.getGroupIndex()).isEqualTo(0);
+
+    index.increment();
+    assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2_4);
+    assertThat(index.getGroupIndex()).isEqualTo(1);
+
+    index.increment();
+    if (enableHappyEyeballs) {
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_6);
+      assertThat(index.getGroupIndex()).isEqualTo(3);
+    } else {
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr3_4);
+      assertThat(index.getGroupIndex()).isEqualTo(2);
+    }
+
+    index.increment();
+    if (enableHappyEyeballs) {
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr3_4);
+      assertThat(index.getGroupIndex()).isEqualTo(2);
+    } else {
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_4);
+      assertThat(index.getGroupIndex()).isEqualTo(3);
+    }
+
+    // Move to last entry
+    assertThat(index.increment()).isTrue();
+    assertThat(index.isValid()).isTrue();
+    assertThat(index.getGroupIndex()).isEqualTo(3);
+
+    // Move off of the end
+    assertThat(index.increment()).isFalse();
+    assertThat(index.isValid()).isFalse();
+    assertThrows(IllegalStateException.class, index::getCurrentAddress);
+
+    // Reset
+    index.reset();
+    assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1_4);
+    assertThat(index.isAtBeginning()).isTrue();
+    assertThat(index.isValid()).isTrue();
+
+    // Seek to an address
+    assertThat(index.seekTo(addr4_4)).isTrue();
+    assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_4);
   }
 
   private static class FakeSocketAddress extends SocketAddress {
