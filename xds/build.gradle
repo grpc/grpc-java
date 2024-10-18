@@ -52,6 +52,7 @@ dependencies {
             project(':grpc-services'),
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
+            libraries.dev.cel.runtime,
             libraries.guava,
             libraries.gson,
             libraries.re2j,
@@ -70,7 +71,8 @@ dependencies {
     compileOnly libraries.netty.transport.epoll
 
     testImplementation project(':grpc-testing'),
-            project(':grpc-testing-proto')
+            project(':grpc-testing-proto'),
+            libraries.dev.cel.compiler
     testImplementation (libraries.netty.transport.epoll) {
         artifact {
             classifier = "linux-x86_64"
