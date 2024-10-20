@@ -148,6 +148,22 @@ public class XdsSecurityClientServerTest {
   }
 
   @Test
+  public void tlsClientServer_Spiffe_noClientAuthentication() throws Exception {
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    // for TLS, client only needs trustCa
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        CLIENT_KEY_FILE,
+        CLIENT_PEM_FILE, false);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
   public void requireClientAuth_noClientCert_expectException()
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =

@@ -97,7 +97,7 @@ public class FileWatcherCertificateProviderTest {
     rootFile = new File(tempFolder.getRoot(), ROOT_FILE).getAbsolutePath();
     provider =
         new FileWatcherCertificateProvider(
-            watcher, true, certFile, keyFile, rootFile, 600L, timeService, timeProvider);
+            watcher, true, certFile, keyFile, rootFile, null, 600L, timeService, timeProvider);
   }
 
   private void populateTarget(

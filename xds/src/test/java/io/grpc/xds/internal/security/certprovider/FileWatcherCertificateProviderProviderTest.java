@@ -85,6 +85,7 @@ public class FileWatcherCertificateProviderProviderTest {
             eq("/var/run/gke-spiffe/certs/certificates.pem"),
             eq("/var/run/gke-spiffe/certs/private_key.pem"),
             eq("/var/run/gke-spiffe/certs/ca_certificates.pem"),
+            null,
             eq(600L),
             eq(mockService),
             eq(timeProvider));
@@ -106,6 +107,7 @@ public class FileWatcherCertificateProviderProviderTest {
             eq("/var/run/gke-spiffe/certs/certificates2.pem"),
             eq("/var/run/gke-spiffe/certs/private_key3.pem"),
             eq("/var/run/gke-spiffe/certs/ca_certificates4.pem"),
+            null,
             eq(7890L),
             eq(mockService),
             eq(timeProvider));

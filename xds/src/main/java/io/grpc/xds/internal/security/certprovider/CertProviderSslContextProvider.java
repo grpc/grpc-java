@@ -150,9 +150,19 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     updateSslContextWhenReady();
   }
 
+  @Override
+  public final void updateSpiffeRoots(Map<String, List<X509Certificate>> spiffeRoots) {
+    savedSpiffeRoots = spiffeRoots;
+    updateSslContextWhenReady();
+  }
+
   private void updateSslContextWhenReady() {
     if (isMtls()) {
       if (savedKey != null && savedTrustedRoots != null) {
+        updateSslContext();
+        clearKeysAndCerts();
+      }
+      if (savedSpiffeRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
@@ -161,8 +171,16 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
         updateSslContext();
         clearKeysAndCerts();
       }
+      if (savedSpiffeRoots != null) {
+        updateSslContext();
+        clearKeysAndCerts();
+      }
     } else if (isServerSideTls()) {
       if (savedKey != null) {
+        updateSslContext();
+        clearKeysAndCerts();
+      }
+      if (savedSpiffeRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
