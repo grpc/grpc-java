@@ -1231,7 +1231,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
      * Handle HTTP2 HEADER and CONTINUATION frames.
      */
     //@SuppressWarnings("GuardedBy")
-    @GuardedBy("lock")
     @Override
     public void headers(boolean outFinished,
         boolean inFinished,
@@ -1274,8 +1273,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             // instead found: 'OkHttpClientTransport.this.lock'
             stream.transportState().transportHeadersReceived(headerBlock, inFinished);
           } else {
-            if (!inFinished) {
-              frameWriter.rstStream(streamId, ErrorCode.CANCEL);
+            synchronized (OkHttpClientTransport.lock) {
+              if (!inFinished) {
+                frameWriter.rstStream(streamId, ErrorCode.CANCEL);
+              }
             }
             stream.transportState().transportReportStatus(failedStatus, false, new Metadata());
           }
