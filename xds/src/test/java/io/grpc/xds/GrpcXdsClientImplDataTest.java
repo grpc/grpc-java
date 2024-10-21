@@ -2615,8 +2615,8 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void validateCommonTlsContext_combinedValidationContextSystemRootCerts_envVarNotSet_throws()
-      throws ResourceInvalidException {
+  public void
+      validateCommonTlsContext_combinedValidationContextSystemRootCerts_envVarNotSet_throws() {
     XdsClusterResource.enableSystemRootCerts = false;
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(

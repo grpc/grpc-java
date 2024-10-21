@@ -60,7 +60,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
   @VisibleForTesting
-  public static boolean enableSystemRootCerts = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
+  public static boolean enableSystemRootCerts =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
 
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
@@ -433,10 +434,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
               + "' not defined in the bootstrap file.");
     }
     String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
-    System.out.println("rootCaInstanceName=" + rootCaInstanceName + " isServer=" + server + " enableSystemRootCerts=" +enableSystemRootCerts + "CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext)=" + CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext));
     if (rootCaInstanceName == null) {
       if (!server && (!enableSystemRootCerts
-      || !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext))) {
+          || !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext))) {
         throw new ResourceInvalidException(
             "ca_certificate_provider_instance or system_root_certs is required in "
                 + "upstream-tls-context");
