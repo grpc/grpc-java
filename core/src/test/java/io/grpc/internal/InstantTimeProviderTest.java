@@ -22,9 +22,10 @@ import java.time.Instant;
 import org.junit.Test;
 
 /**
- *  Unit tests for {@link TimeProvider}.
+ * Unit tests for {@link TimeProvider}.
  */
-public class TimeProviderTest {
+public class InstantTimeProviderTest {
+
   @Test
   public void testCurrentTimeNanos() {
 
