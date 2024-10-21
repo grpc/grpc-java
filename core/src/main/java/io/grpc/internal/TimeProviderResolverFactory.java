@@ -22,7 +22,7 @@ package io.grpc.internal;
 
 final class TimeProviderResolverFactory {
 
-  private static final Class<T> INSTANT_CLASS = initInstant();
+  private static final Class<?> INSTANT_CLASS = initInstant();
 
   private static Class<?> initInstant() {
     try {
