@@ -179,12 +179,14 @@ public abstract class LoadBalancer {
    * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
    * single list if needed.
    *
-   * <p>Implementations can choose to reject the given addresses by returning {@code Status.UNAVAILABLE}.
+   * <p>Implementations can choose to reject the given addresses by returning
+   * {@code Status.UNAVAILABLE}.
    *
    * <p>Implementations should not modify the given {@code resolvedAddresses}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return {@code Status.OK} if the resolved addresses were accepted. {@code Status.UNAVAILABLE} if rejected.
+   * @return {@code Status.OK} if the resolved addresses were accepted.
+   * {@code Status.UNAVAILABLE} if rejected.
    * @since 1.49.0
    */
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
