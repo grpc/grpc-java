@@ -185,8 +185,8 @@ public abstract class LoadBalancer {
    * <p>Implementations should not modify the given {@code resolvedAddresses}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return {@code Status.OK} if the resolved addresses were accepted.
-   * {@code Status.UNAVAILABLE} if rejected.
+   * @return {@code Status.OK} if the resolved addresses were accepted. {@code Status.UNAVAILABLE}
+   * if rejected.
    *
    * @since 1.49.0
    */
