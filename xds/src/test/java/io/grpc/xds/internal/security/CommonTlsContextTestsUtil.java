@@ -48,6 +48,7 @@ public class CommonTlsContextTestsUtil {
   public static final String SERVER_0_PEM_FILE = "server0.pem";
   public static final String SERVER_0_KEY_FILE = "server0.key";
   public static final String SERVER_1_PEM_FILE = "server1.pem";
+  public static final String SERVER_1_SPIFFE_PEM_FILE = "server1_spiffe.pem";
   public static final String SERVER_1_KEY_FILE = "server1.key";
   public static final String CLIENT_PEM_FILE = "client.pem";
   public static final String CLIENT_KEY_FILE = "client.key";
