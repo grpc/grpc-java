@@ -26,6 +26,7 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_BUNDLE_FILE;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
@@ -139,8 +140,7 @@ public class XdsSecurityClientServerTest {
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, false);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -153,10 +153,9 @@ public class XdsSecurityClientServerTest {
         setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
-    // for TLS, client only needs trustCa
+    // for TLS, client only needs trustCa, so BAD certs don't matter
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, false);
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -172,8 +171,7 @@ public class XdsSecurityClientServerTest {
 
     // for TLS, client only uses trustCa
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, false);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -199,8 +197,7 @@ public class XdsSecurityClientServerTest {
     buildServerWithTlsContext(downstreamTlsContext);
 
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        BAD_CLIENT_KEY_FILE,
-        BAD_CLIENT_PEM_FILE, true);
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, null, true);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -210,8 +207,7 @@ public class XdsSecurityClientServerTest {
   @Test
   public void mtls_badClientCert_expectException() throws Exception {
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        BAD_CLIENT_KEY_FILE,
-        BAD_CLIENT_PEM_FILE, true);
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, null, true);
     try {
       performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
       fail("exception expected");
@@ -232,8 +228,7 @@ public class XdsSecurityClientServerTest {
   public void mtlsClientServer_withClientAuthentication_withXdsChannelCreds()
       throws Exception {
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, true);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, true);
     performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
   }
 
@@ -260,8 +255,7 @@ public class XdsSecurityClientServerTest {
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, false);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -279,8 +273,7 @@ public class XdsSecurityClientServerTest {
   public void mtlsClientServer_changeServerContext_expectException()
       throws Exception {
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, true);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, true);
 
     performMtlsTestAndGetListenerWatcher(upstreamTlsContext, "cert-instance-name2",
             BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
@@ -324,17 +317,17 @@ public class XdsSecurityClientServerTest {
       String cert2, String trustCa2, boolean hasRootCert, boolean requireClientCertificate) {
     bootstrapInfoForServer = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-server", SERVER_1_KEY_FILE,
-            SERVER_1_PEM_FILE, CA_PEM_FILE, certInstanceName2, privateKey2, cert2, trustCa2);
+            SERVER_1_PEM_FILE, CA_PEM_FILE, certInstanceName2, privateKey2, cert2, trustCa2, null);
     return CommonTlsContextTestsUtil.buildDownstreamTlsContext(
         "google_cloud_private_spiffe-server", hasRootCert, requireClientCertificate);
   }
 
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContext(String clientKeyFile,
-      String clientPemFile,
+      String clientPemFile, String spiffeFile,
       boolean hasIdentityCert) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, spiffeFile);
     return CommonTlsContextTestsUtil
         .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert);
   }

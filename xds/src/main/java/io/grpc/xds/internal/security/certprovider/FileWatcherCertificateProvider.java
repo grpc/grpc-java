@@ -75,7 +75,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.certFile = Paths.get(checkNotNull(certFile, "certFile"));
     this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
     this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
-    this.spiffeFile = spiffeFile==null ? null : Paths.get(spiffeFile, "spiffeFile");
+    this.spiffeFile = spiffeFile==null ? null : Paths.get(spiffeFile);
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
   }
 

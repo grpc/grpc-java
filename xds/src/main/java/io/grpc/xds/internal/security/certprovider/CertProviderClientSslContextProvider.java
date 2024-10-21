@@ -56,12 +56,18 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
   protected final SslContextBuilder getSslContextBuilder(
           CertificateValidationContext certificateValidationContextdationContext)
       throws CertStoreException {
-    SslContextBuilder sslContextBuilder =
-        GrpcSslContexts.forClient()
-            .trustManager(
-                new XdsTrustManagerFactory(
-                    savedTrustedRoots.toArray(new X509Certificate[0]),
-                    certificateValidationContextdationContext));
+    SslContextBuilder sslContextBuilder;
+    if (savedSpiffeRoots!= null) {
+      sslContextBuilder = GrpcSslContexts.forClient().trustManager(
+          new XdsTrustManagerFactory(
+              savedSpiffeRoots,
+              certificateValidationContextdationContext));
+    } else {
+      sslContextBuilder = GrpcSslContexts.forClient().trustManager(
+          new XdsTrustManagerFactory(
+              savedTrustedRoots.toArray(new X509Certificate[0]),
+              certificateValidationContextdationContext));
+    }
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }
