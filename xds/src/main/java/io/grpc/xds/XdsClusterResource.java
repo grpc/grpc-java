@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
@@ -58,6 +59,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
+  private static final boolean enableSystemRootCerts = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
 
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
@@ -382,11 +384,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     return upstreamTlsContext;
   }
 
-  private static boolean isSystemRootCertsEnvVarSet() {
-    String useSystemRootCerts = System.getenv("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS");
-    return useSystemRootCerts != null && useSystemRootCerts.equals("true");
-  }
-
   @VisibleForTesting
   static void validateCommonTlsContext(
       CommonTlsContext commonTlsContext, Set<String> certProviderInstances, boolean server)
@@ -436,7 +433,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
     String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
     if (rootCaInstanceName == null) {
-      if (!server && (!isSystemRootCertsEnvVarSet()
+      if (!server && (!enableSystemRootCerts
       || !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext))) {
         throw new ResourceInvalidException(
             "ca_certificate_provider_instance or system_root_certs is required in "

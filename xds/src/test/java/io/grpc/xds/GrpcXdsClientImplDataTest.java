@@ -2615,26 +2615,9 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void validateCommonTlsContext_combinedValidationContextSystemRootCerts()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setDefaultValidationContext(
-                    CertificateValidationContext.newBuilder()
-                        .setSystemRootCerts(
-                            CertificateValidationContext.SystemRootCerts.newBuilder().build())
-                        .build()
-                )
-                .build())
-        .build();
-    XdsClusterResource
-        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
-  }
-
-  @Test
   public void validateCommonTlsContext_validationContextSystemRootCerts()
       throws ResourceInvalidException {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", "true");
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setValidationContext(
             CertificateValidationContext.newBuilder()
@@ -2642,8 +2625,12 @@ public class GrpcXdsClientImplDataTest {
                     CertificateValidationContext.SystemRootCerts.newBuilder().build())
                 .build())
         .build();
-    XdsClusterResource
-        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+    try {
+      XdsClusterResource
+          .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS");
+    }
   }
 
   @Test
