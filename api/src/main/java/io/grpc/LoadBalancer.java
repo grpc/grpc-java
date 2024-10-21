@@ -187,6 +187,7 @@ public abstract class LoadBalancer {
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @return {@code Status.OK} if the resolved addresses were accepted.
    * {@code Status.UNAVAILABLE} if rejected.
+   *
    * @since 1.49.0
    */
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
