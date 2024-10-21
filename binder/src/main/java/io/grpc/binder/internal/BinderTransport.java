@@ -299,7 +299,7 @@ public abstract class BinderTransport
 
   @Override
   public synchronized void binderDied() {
-    shutdownInternal(Status.UNAVAILABLE.withDescription("binderDied"), true);
+    shutdownInternal(Status.UNAVAILABLE.withDescription("Peer crashed, exited or was killed (binderDied)"), true);
   }
 
   @GuardedBy("this")
