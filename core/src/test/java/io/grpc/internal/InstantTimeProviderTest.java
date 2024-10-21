@@ -30,8 +30,23 @@ import org.junit.runners.JUnit4;
 public class InstantTimeProviderTest {
 
   @Test
-  public void testInstantCurrentTimeNanos() {
+  public void testConcurrentCurrentTimeNanos() {
 
+    ConcurrentTimeProvider concurrentTimeProvider = new ConcurrentTimeProvider();
+    // Get the current time from the TimeProvider
+    long actualTimeNanos = concurrentTimeProvider.currentTimeNanos();
+
+    // Get the current time from Instant for comparison
+    Instant instantNow = Instant.now();
+    long expectedTimeNanos = instantNow.getEpochSecond() * 1_000_000_000L + instantNow.getNano();
+
+    // Validate the time returned is close to the expected value within a tolerance
+    // (i,e 10 millisecond tolerance in nanoseconds).
+    assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
+  }
+
+  @Test
+  public void testInstantCurrentTimeNanos() {
     try {
       InstantTimeProvider instantTimeProvider = new InstantTimeProvider(
           Class.forName("java.time.Instant"));
@@ -49,21 +64,5 @@ public class InstantTimeProviderTest {
     } catch (ClassNotFoundException e) {
       throw new RuntimeException(e);
     }
-  }
-
-  @Test
-  public void testConcurrentCurrentTimeNanos() {
-
-    ConcurrentTimeProvider concurrentTimeProvider = new ConcurrentTimeProvider();
-    // Get the current time from the TimeProvider
-    long actualTimeNanos = concurrentTimeProvider.currentTimeNanos();
-
-    // Get the current time from Instant for comparison
-    Instant instantNow = Instant.now();
-    long expectedTimeNanos = instantNow.getEpochSecond() * 1_000_000_000L + instantNow.getNano();
-
-    // Validate the time returned is close to the expected value within a tolerance
-    // (i,e 10 millisecond tolerance in nanoseconds).
-    assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
   }
 }
