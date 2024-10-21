@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import com.github.xds.type.matcher.v3.CelMatcher;
+import com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -63,6 +65,8 @@ final class MessagePrinter implements MessagePrettyPrinter {
               // RLQS
               .add(RateLimitQuotaFilterConfig.getDescriptor())
               .add(RateLimitQuotaOverride.getDescriptor())
+              .add(HttpAttributesCelMatchInput.getDescriptor())
+              .add(CelMatcher.getDescriptor())
               // UpstreamTlsContext and DownstreamTlsContext in v3 are not transitively imported
               // by top-level resource types.
               .add(UpstreamTlsContext.getDescriptor())
