@@ -20,10 +20,13 @@ import static com.google.common.truth.Truth.assertThat;
 
 import java.time.Instant;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link TimeProvider}.
+ * Unit tests for {@link InstantTimeProvider}.
  */
+@RunWith(JUnit4.class)
 public class InstantTimeProviderTest {
 
   @Test
