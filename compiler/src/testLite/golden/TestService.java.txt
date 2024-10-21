@@ -257,6 +257,36 @@ public final class TestServiceGrpc {
     return getIdempotentCallMethod;
   }
 
+  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
+      com.google.protobuf.Empty> getUnaryCallWithoutResultMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "UnaryCallWithoutResult",
+      requestType = io.grpc.testing.compiler.Test.SimpleRequest.class,
+      responseType = com.google.protobuf.Empty.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
+  public static io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
+      com.google.protobuf.Empty> getUnaryCallWithoutResultMethod() {
+    io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest, com.google.protobuf.Empty> getUnaryCallWithoutResultMethod;
+    if ((getUnaryCallWithoutResultMethod = TestServiceGrpc.getUnaryCallWithoutResultMethod) == null) {
+      synchronized (TestServiceGrpc.class) {
+        if ((getUnaryCallWithoutResultMethod = TestServiceGrpc.getUnaryCallWithoutResultMethod) == null) {
+          TestServiceGrpc.getUnaryCallWithoutResultMethod = getUnaryCallWithoutResultMethod =
+              io.grpc.MethodDescriptor.<io.grpc.testing.compiler.Test.SimpleRequest, com.google.protobuf.Empty>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnaryCallWithoutResult"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
+                  io.grpc.testing.compiler.Test.SimpleRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
+                  com.google.protobuf.Empty.getDefaultInstance()))
+              .build();
+        }
+      }
+    }
+    return getUnaryCallWithoutResultMethod;
+  }
+
   /**
    * Creates a new async stub that supports all call types for the service
    */
@@ -396,6 +426,13 @@ public final class TestServiceGrpc {
         io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
       io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getIdempotentCallMethod(), responseObserver);
     }
+
+    /**
+     */
+    default void unaryCallWithoutResult(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<com.google.protobuf.Empty> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getUnaryCallWithoutResultMethod(), responseObserver);
+    }
   }
 
   /**
@@ -527,6 +564,14 @@ public final class TestServiceGrpc {
       io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getIdempotentCallMethod(), getCallOptions()), request, responseObserver);
     }
+
+    /**
+     */
+    public void unaryCallWithoutResult(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<com.google.protobuf.Empty> responseObserver) {
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
+          getChannel().newCall(getUnaryCallWithoutResultMethod(), getCallOptions()), request, responseObserver);
+    }
   }
 
   /**
@@ -590,6 +635,14 @@ public final class TestServiceGrpc {
       return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getIdempotentCallMethod(), getCallOptions(), request);
     }
+
+    /**
+     */
+    @com.google.errorprone.annotations.CanIgnoreReturnValue
+    public com.google.protobuf.Empty unaryCallWithoutResult(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getUnaryCallWithoutResultMethod(), getCallOptions(), request);
+    }
   }
 
   /**
@@ -644,16 +697,25 @@ public final class TestServiceGrpc {
       return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getIdempotentCallMethod(), getCallOptions()), request);
     }
+
+    /**
+     */
+    public com.google.common.util.concurrent.ListenableFuture<com.google.protobuf.Empty> unaryCallWithoutResult(
+        io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
+          getChannel().newCall(getUnaryCallWithoutResultMethod(), getCallOptions()), request);
+    }
   }
 
   private static final int METHODID_UNARY_CALL = 0;
   private static final int METHODID_STREAMING_OUTPUT_CALL = 1;
   private static final int METHODID_SAFE_CALL = 2;
   private static final int METHODID_IDEMPOTENT_CALL = 3;
-  private static final int METHODID_STREAMING_INPUT_CALL = 4;
-  private static final int METHODID_FULL_BIDI_CALL = 5;
-  private static final int METHODID_HALF_BIDI_CALL = 6;
-  private static final int METHODID_IMPORT = 7;
+  private static final int METHODID_UNARY_CALL_WITHOUT_RESULT = 4;
+  private static final int METHODID_STREAMING_INPUT_CALL = 5;
+  private static final int METHODID_FULL_BIDI_CALL = 6;
+  private static final int METHODID_HALF_BIDI_CALL = 7;
+  private static final int METHODID_IMPORT = 8;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -687,6 +749,10 @@ public final class TestServiceGrpc {
         case METHODID_IDEMPOTENT_CALL:
           serviceImpl.idempotentCall((io.grpc.testing.compiler.Test.SimpleRequest) request,
               (io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse>) responseObserver);
+          break;
+        case METHODID_UNARY_CALL_WITHOUT_RESULT:
+          serviceImpl.unaryCallWithoutResult((io.grpc.testing.compiler.Test.SimpleRequest) request,
+              (io.grpc.stub.StreamObserver<com.google.protobuf.Empty>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -774,6 +840,13 @@ public final class TestServiceGrpc {
               io.grpc.testing.compiler.Test.SimpleRequest,
               io.grpc.testing.compiler.Test.SimpleResponse>(
                 service, METHODID_IDEMPOTENT_CALL)))
+        .addMethod(
+          getUnaryCallWithoutResultMethod(),
+          io.grpc.stub.ServerCalls.asyncUnaryCall(
+            new MethodHandlers<
+              io.grpc.testing.compiler.Test.SimpleRequest,
+              com.google.protobuf.Empty>(
+                service, METHODID_UNARY_CALL_WITHOUT_RESULT)))
         .build();
   }
 
@@ -794,6 +867,7 @@ public final class TestServiceGrpc {
               .addMethod(getImportMethod())
               .addMethod(getSafeCallMethod())
               .addMethod(getIdempotentCallMethod())
+              .addMethod(getUnaryCallWithoutResultMethod())
               .build();
         }
       }
