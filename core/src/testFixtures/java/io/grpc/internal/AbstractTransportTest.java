@@ -96,6 +96,9 @@ public abstract class AbstractTransportTest {
 
   private static final int TIMEOUT_MS = 5000;
 
+  protected static final String GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES =
+      "GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES";
+
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
       Attributes.Key.create("additional-attr");
 
@@ -212,6 +215,7 @@ public abstract class AbstractTransportTest {
 
   @Before
   public void setUp() {
+    System.setProperty(GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES, "true");
     server = newServer(Arrays.asList(serverStreamTracerFactory));
     when(mockClientTransportListener.filterTransport(any())).thenAnswer(i -> i.getArguments()[0]);
   }
@@ -236,6 +240,13 @@ public abstract class AbstractTransportTest {
    */
   protected void advanceClock(long offset, TimeUnit unit) {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns true if env var is set.
+   */
+  protected static boolean isEnabledSupportTracingMessageSizes() {
+    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES, false);
   }
 
   /**
@@ -850,16 +861,21 @@ public abstract class AbstractTransportTest {
     message.close();
     assertThat(clientStreamTracer1.nextOutboundEvent())
         .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
-    assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
-    assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
+    if (isEnabledSupportTracingMessageSizes()) {
+      assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
+      assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
+    }
+
     assertThat(serverStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
     assertNull("no additional message expected", serverStreamListener.messageQueue.poll());
 
     clientStream.halfClose();
     assertTrue(serverStreamListener.awaitHalfClosed(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-    assertThat(serverStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
-    assertThat(serverStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
+    if (isEnabledSupportTracingMessageSizes()) {
+      assertThat(serverStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
+      assertThat(serverStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
+    }
     assertThat(serverStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
 
@@ -890,15 +906,19 @@ public abstract class AbstractTransportTest {
     assertNotNull("message expected", message);
     assertThat(serverStreamTracer1.nextOutboundEvent())
         .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
-    assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
-    assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
+    if (isEnabledSupportTracingMessageSizes()) {
+      assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
+      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
+    }
     assertTrue(clientStreamTracer1.getInboundHeaders());
     assertThat(clientStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
     assertEquals("Hi. Who are you?", methodDescriptor.parseResponse(message));
     assertThat(clientStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
-    assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
-    assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
+    if (isEnabledSupportTracingMessageSizes()) {
+      assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
+      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
+    }
 
     message.close();
     assertNull("no additional message expected", clientStreamListener.messageQueue.poll());
@@ -1258,10 +1278,12 @@ public abstract class AbstractTransportTest {
     serverStream.close(Status.OK, new Metadata());
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertTrue(clientStreamTracer1.getInboundHeaders());
-    assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
-    assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-    assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
-    assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
+    if (isEnabledSupportTracingMessageSizes()) {
+      assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
+      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
+      assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
+      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
+    }
     assertNull(clientStreamTracer1.getInboundTrailers());
     assertSame(status, clientStreamTracer1.getStatus());
     // There is a race between client cancelling and server closing.  The final status seen by the
