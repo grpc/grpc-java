@@ -215,7 +215,6 @@ public abstract class AbstractTransportTest {
 
   @Before
   public void setUp() {
-    System.setProperty(GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES, "true");
     server = newServer(Arrays.asList(serverStreamTracerFactory));
     when(mockClientTransportListener.filterTransport(any())).thenAnswer(i -> i.getArguments()[0]);
   }

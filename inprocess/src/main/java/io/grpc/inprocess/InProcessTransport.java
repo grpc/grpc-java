@@ -82,6 +82,8 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
+  static boolean isEnabledSupportTracingMessageSizes =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES", false);
 
   private final InternalLogId logId;
   private final SocketAddress address;
@@ -358,13 +360,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     return (int) size;
   }
 
-  /**
-   * Returns true if env var is set.
-   */
-  static boolean isEnabledSupportTracingMessageSizes() {
-    return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES", false);
-  }
-
   private class InProcessStream {
     private final InProcessClientStream clientStream;
     private final InProcessServerStream serverStream;
@@ -492,7 +487,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
-        if (isEnabledSupportTracingMessageSizes()) {
+        if (isEnabledSupportTracingMessageSizes) {
           long messageLength;
           try {
             if (assumedMessageSize != -1) {
@@ -786,7 +781,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
-        if (isEnabledSupportTracingMessageSizes()) {
+        if (isEnabledSupportTracingMessageSizes) {
           long messageLength;
           try {
             if (assumedMessageSize != -1) {
