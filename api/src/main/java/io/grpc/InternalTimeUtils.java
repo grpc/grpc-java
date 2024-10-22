@@ -18,12 +18,9 @@ package io.grpc;
 
 import java.time.Duration;
 
-final class TimeUtils {
-  static long convertToNanos(Duration duration) {
-    try {
-      return duration.toNanos();
-    } catch (ArithmeticException tooBig) {
-      return duration.isNegative() ? Long.MIN_VALUE : Long.MAX_VALUE;
-    }
+@Internal
+public final class InternalTimeUtils {
+  public static long convert(Duration duration) {
+   return TimeUtils.convertToNanos(duration);
   }
 }
