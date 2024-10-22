@@ -85,7 +85,7 @@ public class FileWatcherCertificateProviderProviderTest {
             eq("/var/run/gke-spiffe/certs/certificates.pem"),
             eq("/var/run/gke-spiffe/certs/private_key.pem"),
             eq("/var/run/gke-spiffe/certs/ca_certificates.pem"),
-            null,
+            eq(null),
             eq(600L),
             eq(mockService),
             eq(timeProvider));
@@ -107,7 +107,29 @@ public class FileWatcherCertificateProviderProviderTest {
             eq("/var/run/gke-spiffe/certs/certificates2.pem"),
             eq("/var/run/gke-spiffe/certs/private_key3.pem"),
             eq("/var/run/gke-spiffe/certs/ca_certificates4.pem"),
-            null,
+            eq(null),
+            eq(7890L),
+            eq(mockService),
+            eq(timeProvider));
+  }
+
+  @Test
+  public void createProvider_spiffeConfig() throws IOException {
+    CertificateProvider.DistributorWatcher distWatcher =
+        new CertificateProvider.DistributorWatcher();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(FULL_FILE_WATCHER_WITH_SPIFFE_CONFIG);
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
+    provider.createCertificateProvider(map, distWatcher, true);
+    verify(fileWatcherCertificateProviderFactory, times(1))
+        .create(
+            eq(distWatcher),
+            eq(true),
+            eq("/var/run/gke-spiffe/certs/certificates2.pem"),
+            eq("/var/run/gke-spiffe/certs/private_key3.pem"),
+            eq("/var/run/gke-spiffe/certs/ca_certificates4.pem"),
+            eq("/var/run/gke-spiffe/certs/spiffe_bundle.json"),
             eq(7890L),
             eq(mockService),
             eq(timeProvider));
@@ -183,6 +205,15 @@ public class FileWatcherCertificateProviderProviderTest {
           + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates2.pem\","
           + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key3.pem\","
           + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates4.pem\","
+          + "        \"refresh_interval\": \"7890s\""
+          + "      }";
+
+  private static final String FULL_FILE_WATCHER_WITH_SPIFFE_CONFIG =
+      "{\n"
+          + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates2.pem\","
+          + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key3.pem\","
+          + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates4.pem\","
+          + "        \"spiffe_trust_bundle_map_file\": \"/var/run/gke-spiffe/certs/spiffe_bundle.json\","
           + "        \"refresh_interval\": \"7890s\""
           + "      }";
 

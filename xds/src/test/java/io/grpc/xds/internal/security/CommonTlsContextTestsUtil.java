@@ -54,6 +54,7 @@ public class CommonTlsContextTestsUtil {
   public static final String CLIENT_KEY_FILE = "client.key";
   public static final String CA_PEM_FILE = "ca.pem";
   public static final String SPIFFE_TRUST_BUNDLE_FILE = "spiffebundle.json";
+  public static final String SPIFFE_TRUST_BUNDLE_1_FILE = "spiffebundle1.json";
   /** Bad/untrusted server certs. */
   public static final String BAD_SERVER_PEM_FILE = "badserver.pem";
   public static final String BAD_SERVER_KEY_FILE = "badserver.key";
