@@ -62,6 +62,7 @@ import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
@@ -96,6 +97,8 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
+  static final CallOptions.Key<Boolean> AUTO_HOST_REWRITE_KEY =
+      CallOptions.Key.create("io.grpc.xds.AUTO_HOST_REWRITE_KEY");
   @VisibleForTesting
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
@@ -133,6 +136,7 @@ final class XdsNameResolver extends NameResolver {
   // Workaround for https://github.com/grpc/grpc-java/issues/8886 . This should be handled in
   // XdsClient instead of here.
   private boolean receivedConfig;
+  private boolean isTrustedXdsServer;
 
   XdsNameResolver(
       URI targetUri, String name, @Nullable String overrideAuthority,
@@ -217,6 +221,9 @@ final class XdsNameResolver extends NameResolver {
     ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState(ldsResourceName);
+    ServerInfo serverInfo = xdsClient.getServerInfo(ldsResourceName);
+    isTrustedXdsServer = serverInfo != null && serverInfo.isTrustedXdsServer();
+
     resolveState.start();
   }
 
@@ -465,14 +472,20 @@ final class XdsNameResolver extends NameResolver {
       }
       final String finalCluster = cluster;
       final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), headers);
+      Route finalSelectedRoute = selectedRoute;
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
             final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions,
             final Channel next) {
-          final CallOptions callOptionsForCluster =
+          CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
                   .withOption(RPC_HASH_KEY, hash);
+          if (isTrustedXdsServer
+              && GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", false)
+              && finalSelectedRoute.routeAction().autoHostRewrite()) {
+            callOptionsForCluster = callOptionsForCluster.withOption(AUTO_HOST_REWRITE_KEY, true);
+          }
           return new SimpleForwardingClientCall<ReqT, RespT>(
               next.newCall(method, callOptionsForCluster)) {
             @Override

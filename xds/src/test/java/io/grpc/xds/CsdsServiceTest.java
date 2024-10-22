@@ -507,6 +507,11 @@ public class CsdsServiceTest {
       return ImmutableMap.of();
     }
 
+    @Nullable
+    @Override
+    public ServerInfo getServerInfo(String resource) {
+      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create());
+    }
   }
 
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {

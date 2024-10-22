@@ -147,6 +147,7 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -208,7 +209,7 @@ public class GrpcXdsClientImplDataTest {
                 RouteMatch.create(PathMatcher.fromPath("/service/method", false),
                     Collections.<HeaderMatcher>emptyList(), null),
                 RouteAction.forCluster(
-                    "cluster-foo", Collections.<HashPolicy>emptyList(), null, null),
+                    "cluster-foo", Collections.<HashPolicy>emptyList(), null, null, false),
                 ImmutableMap.<String, FilterConfig>of()));
   }
 
@@ -519,6 +520,23 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
     assertThat(struct.getStruct().weightedClusters()).isNull();
+    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+  }
+
+  @Test
+  public void parseRouteAction_withCluster_autoHostRewriteEnabled() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setCluster("cluster-foo")
+            .setAutoHostRewrite(BoolValue.of(true))
+            .build();
+    StructOrError<RouteAction> struct =
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
+            ImmutableMap.of(), ImmutableSet.of());
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
+    assertThat(struct.getStruct().weightedClusters()).isNull();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -545,6 +563,35 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getStruct().weightedClusters()).containsExactly(
         ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
         ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
+    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+  }
+
+  @Test
+  public void parseRouteAction_withWeightedCluster_autoHostRewriteEnabled() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setWeightedClusters(
+                WeightedCluster.newBuilder()
+                    .addClusters(
+                        WeightedCluster.ClusterWeight
+                            .newBuilder()
+                            .setName("cluster-foo")
+                            .setWeight(UInt32Value.newBuilder().setValue(30)))
+                    .addClusters(WeightedCluster.ClusterWeight
+                        .newBuilder()
+                        .setName("cluster-bar")
+                        .setWeight(UInt32Value.newBuilder().setValue(70))))
+            .setAutoHostRewrite(BoolValue.of(true))
+            .build();
+    StructOrError<RouteAction> struct =
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
+            ImmutableMap.of(), ImmutableSet.of());
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct().cluster()).isNull();
+    assertThat(struct.getStruct().weightedClusters()).containsExactly(
+        ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
+        ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -875,6 +922,36 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void parseRouteAction_clusterSpecifier() {
+    XdsRouteConfigureResource.enableRouteLookup = true;
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setClusterSpecifierPlugin(CLUSTER_SPECIFIER_PLUGIN.name())
+            .build();
+    StructOrError<RouteAction> struct =
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
+            ImmutableMap.of(), ImmutableSet.of());
+    assertThat(struct).isNotNull();
+    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+  }
+
+  @Test
+  public void parseRouteAction_clusterSpecifier_autoHostRewriteEnabled() {
+    XdsRouteConfigureResource.enableRouteLookup = true;
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setClusterSpecifierPlugin(CLUSTER_SPECIFIER_PLUGIN.name())
+            .setAutoHostRewrite(BoolValue.of(true))
+            .build();
+    StructOrError<RouteAction> struct =
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
+            ImmutableMap.of(CLUSTER_SPECIFIER_PLUGIN.name(), RlsPluginConfig.create(
+                ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"))), ImmutableSet.of());
+    assertThat(struct.getStruct()).isNotNull();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
+  }
+
+  @Test
   public void parseClusterWeight() {
     io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto =
         io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight.newBuilder()
@@ -908,7 +985,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct()).isEqualTo(
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true)), 100, 1));
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true, "")), 100, 1));
   }
 
   @Test
@@ -932,7 +1009,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct()).isEqualTo(
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true)), 100, 1));
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true, "")), 100, 1));
   }
 
   @Test
@@ -956,7 +1033,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct()).isEqualTo(
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, false)), 100, 1));
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, false, "")), 100, 1));
   }
 
   @Test
@@ -1017,7 +1094,7 @@ public class GrpcXdsClientImplDataTest {
       EquivalentAddressGroup expectedEag = new EquivalentAddressGroup(socketAddressList);
       assertThat(struct.getStruct()).isEqualTo(
           LocalityLbEndpoints.create(
-              Collections.singletonList(LbEndpoint.create(expectedEag, 20, true)), 100, 1));
+              Collections.singletonList(LbEndpoint.create(expectedEag, 20, true, "")), 100, 1));
     } finally {
       if (originalDualStackProp != null) {
         System.setProperty(GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS, originalDualStackProp);

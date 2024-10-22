@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -552,6 +553,7 @@ public abstract class LoadBalancer {
     private final Status status;
     // True if the result is created by withDrop()
     private final boolean drop;
+    private String authorityOverrideHostname;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
@@ -682,6 +684,18 @@ public abstract class LoadBalancer {
       return NO_RESULT;
     }
 
+    /** Sets the hostname to use as the authority override. */
+    public void setAuthorityOverrideHostname(String authorityOverrideHostname) {
+      Preconditions.checkArgument(!Strings.isNullOrEmpty(authorityOverrideHostname),
+          "authority override host name should not be null or empty.");
+      this.authorityOverrideHostname = authorityOverrideHostname;
+    }
+
+    /** Returns the authority override hostname if any. */
+    public String getAuthorityOverrideHostname() {
+      return authorityOverrideHostname;
+    }
+
     /**
      * The Subchannel if this result was created by {@link #withSubchannel withSubchannel()}, or
      * null otherwise.
@@ -736,6 +750,7 @@ public abstract class LoadBalancer {
           .add("streamTracerFactory", streamTracerFactory)
           .add("status", status)
           .add("drop", drop)
+          .add("authority-override", authorityOverrideHostname)
           .toString();
     }
 

@@ -142,7 +142,7 @@ import org.mockito.verification.VerificationMode;
 // The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
 // necessary. Still keep it for future version usage. Remove if too much trouble to maintain.
 public abstract class GrpcXdsClientImplTestBase {
-  private static final String SERVER_URI = "trafficdirector.googleapis.com";
+  static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
@@ -340,7 +340,7 @@ public abstract class GrpcXdsClientImplTestBase {
       }
     };
 
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion());
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(), true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -595,7 +595,7 @@ public abstract class GrpcXdsClientImplTestBase {
         .containsExactly(
             Locality.create("region1", "zone1", "subzone1"),
             LocalityLbEndpoints.create(
-                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true, "hostname")), 1, 0),
             Locality.create("region3", "zone3", "subzone3"),
             LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
   }
@@ -3122,7 +3122,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "hostname")), 2, 0));
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
         TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -3291,7 +3291,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "hostname")), 2, 0));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResourceTwo);
@@ -3301,7 +3301,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "hostname")), 2, 0));
     verifyNoMoreInteractions(edsResourceWatcher);
     verifyResourceMetadataAcked(
         EDS, edsResourceTwo, clusterLoadAssignmentTwo, VERSION_2, TIME_INCREMENT * 2);
@@ -3793,7 +3793,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private  BootstrapInfo buildBootStrap(String serverUri) {
 
     ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
-        ignoreResourceDeletion());
+        ignoreResourceDeletion(), true);
 
     return Bootstrapper.BootstrapInfo.builder()
         .servers(Collections.singletonList(xdsServerInfo))

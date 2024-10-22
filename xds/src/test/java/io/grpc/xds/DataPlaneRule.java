@@ -30,6 +30,7 @@ import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
+import io.grpc.testing.protobuf.SimpleResponse.Builder;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
@@ -48,6 +49,7 @@ public class DataPlaneRule extends TestWatcher {
   private static final Logger logger = Logger.getLogger(DataPlaneRule.class.getName());
 
   private static final String SERVER_HOST_NAME = "test-server";
+  static final String ENDPOINT_HOST_NAME = "endpoint-host-name";
   private static final String SCHEME = "test-xds";
 
   private final ControlPlaneRule controlPlane;
@@ -73,7 +75,8 @@ public class DataPlaneRule extends TestWatcher {
    */
   public ManagedChannel getManagedChannel() {
     ManagedChannel channel = Grpc.newChannelBuilder(SCHEME + ":///" + SERVER_HOST_NAME,
-        InsecureChannelCredentials.create()).build();
+        InsecureChannelCredentials.create())
+        .build();
     channels.add(channel);
     return channel;
   }
@@ -97,7 +100,7 @@ public class DataPlaneRule extends TestWatcher {
     controlPlane.setCdsConfig(ControlPlaneRule.buildCluster());
     InetSocketAddress edsInetSocketAddress = (InetSocketAddress) server.getListenSockets().get(0);
     controlPlane.setEdsConfig(
-        ControlPlaneRule.buildClusterLoadAssignment(edsInetSocketAddress.getHostName(),
+        ControlPlaneRule.buildClusterLoadAssignment(edsInetSocketAddress.getHostName(), ENDPOINT_HOST_NAME,
             edsInetSocketAddress.getPort()));
   }
 
@@ -124,10 +127,12 @@ public class DataPlaneRule extends TestWatcher {
   }
 
   private void startServer(Map<String, ?> bootstrapOverride) throws Exception {
+    final String[] authority = new String[1];
     ServerInterceptor metadataInterceptor = new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
           Metadata requestHeaders, ServerCallHandler<ReqT, RespT> next) {
+        authority[0] = call.getAuthority();
         logger.fine("Received following metadata: " + requestHeaders);
 
         // Make a copy of the headers so that it can be read in a thread-safe manner when copying
@@ -155,8 +160,12 @@ public class DataPlaneRule extends TestWatcher {
           @Override
           public void unaryRpc(
               SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
+            String responseMsg = "Hi, xDS!";
+            if (authority[0] != null) {
+              responseMsg += " Authority= " + authority[0];
+            }
             SimpleResponse response =
-                SimpleResponse.newBuilder().setResponseMessage("Hi, xDS!").build();
+                SimpleResponse.newBuilder().setResponseMessage(responseMsg).build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
           }
