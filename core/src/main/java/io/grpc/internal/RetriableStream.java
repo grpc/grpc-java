@@ -86,7 +86,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final boolean isHedging;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
-  private final Object lock = new Object();
+  static final Object lock = new Object();
 
   private final ChannelBufferMeter channelBufferUsed;
   private final long perRpcBufferLimit;
@@ -151,8 +151,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Nullable // null if already committed
   @CheckReturnValue
+  @GuardedBy("lock")
   private Runnable commit(final Substream winningSubstream) {
-    synchronized (lock) {
+    synchronized (RetriableStream.lock) {
       if (state.winningSubstream != null) {
         return null;
       }
@@ -238,6 +239,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * For a failed/closed winning stream, the last closed stream closes the master listener, and
    * callExecutor scheduling happens-before that.
    */
+  @GuardedBy("lock")
   private void commitAndRun(Substream winningSubstream) {
     Runnable postCommitTask = commit(winningSubstream);
 
@@ -389,44 +391,44 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   /** Starts the first PRC attempt. */
   @Override
   public final void start(ClientStreamListener listener) {
-    masterListener = listener;
+    synchronized (RetriableStream.lock) {
+      masterListener = listener;
+      Status shutdownStatus = prestart();
 
-    Status shutdownStatus = prestart();
-
-    if (shutdownStatus != null) {
-      cancel(shutdownStatus);
-      return;
-    }
-
-    synchronized (lock) {
-      state.buffer.add(new StartEntry());
-    }
-
-    Substream substream = createSubstream(0, false);
-    if (substream == null) {
-      return;
-    }
-    if (isHedging) {
-      FutureCanceller scheduledHedgingRef = null;
+      if (shutdownStatus != null) {
+        cancel(shutdownStatus);
+        return;
+      }
 
       synchronized (lock) {
-        state = state.addActiveHedge(substream);
-        if (hasPotentialHedging(state)
-            && (throttle == null || throttle.isAboveThreshold())) {
-          scheduledHedging = scheduledHedgingRef = new FutureCanceller(lock);
+        state.buffer.add(new StartEntry());
+      }
+
+      Substream substream = createSubstream(0, false);
+      if (substream == null) {
+        return;
+      }
+      if (isHedging) {
+        FutureCanceller scheduledHedgingRef = null;
+
+        synchronized (lock) {
+          state = state.addActiveHedge(substream);
+          if (hasPotentialHedging(state)
+              && (throttle == null || throttle.isAboveThreshold())) {
+            scheduledHedging = scheduledHedgingRef = new FutureCanceller(lock);
+          }
+        }
+
+        if (scheduledHedgingRef != null) {
+          scheduledHedgingRef.setFuture(
+              scheduledExecutorService.schedule(
+                  new HedgingRunnable(scheduledHedgingRef),
+                  hedgingPolicy.hedgingDelayNanos,
+                  TimeUnit.NANOSECONDS));
         }
       }
-
-      if (scheduledHedgingRef != null) {
-        scheduledHedgingRef.setFuture(
-            scheduledExecutorService.schedule(
-                new HedgingRunnable(scheduledHedgingRef),
-                hedgingPolicy.hedgingDelayNanos,
-                TimeUnit.NANOSECONDS));
-      }
+      drain(substream);
     }
-
-    drain(substream);
   }
 
   @GuardedBy("lock")
@@ -491,7 +493,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                   cancelled = true;
                 } else {
                   state = state.addActiveHedge(newSubstream);
-                  synchronized (RetriableStream.this.lock) {
+                  synchronized (RetriableStream.lock) {
                     if (hasPotentialHedging(state)
                         && (throttle == null || throttle.isAboveThreshold())) {
                       scheduledHedging = future = new FutureCanceller(lock);
@@ -522,33 +524,36 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
+  @GuardedBy("lock")
   @Override
   public final void cancel(final Status reason) {
-    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
-    noopSubstream.stream = new NoopClientStream();
-    Runnable runnable = commit(noopSubstream);
+   synchronized (RetriableStream.lock) {
+      Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
+      noopSubstream.stream = new NoopClientStream();
+      Runnable runnable = commit(noopSubstream);
 
-    if (runnable != null) {
+      if (runnable != null) {
+        synchronized (lock) {
+          state = state.substreamDrained(noopSubstream);
+        }
+        runnable.run();
+        safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
+        return;
+      }
+
+      Substream winningSubstreamToCancel = null;
       synchronized (lock) {
-        state = state.substreamDrained(noopSubstream);
+        if (state.drainedSubstreams.contains(state.winningSubstream)) {
+          winningSubstreamToCancel = state.winningSubstream;
+        } else { // the winningSubstream will be cancelled while draining
+          cancellationStatus = reason;
+        }
+        state = state.cancelled();
       }
-      runnable.run();
-      safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
-      return;
-    }
-
-    Substream winningSubstreamToCancel = null;
-    synchronized (lock) {
-      if (state.drainedSubstreams.contains(state.winningSubstream)) {
-        winningSubstreamToCancel = state.winningSubstream;
-      } else { // the winningSubstream will be cancelled while draining
-        cancellationStatus = reason;
+      if (winningSubstreamToCancel != null) {
+        winningSubstreamToCancel.stream.cancel(reason);
       }
-      state = state.cancelled();
-    }
-    if (winningSubstreamToCancel != null) {
-      winningSubstreamToCancel.stream.cancel(reason);
-    }
+   }
   }
 
   private void delayOrExecute(BufferEntry bufferEntry) {
@@ -875,6 +880,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       this.substream = substream;
     }
 
+    @GuardedBy("lock")
     @Override
     public void headersRead(final Metadata headers) {
       if (substream.previousAttemptCount > 0) {
