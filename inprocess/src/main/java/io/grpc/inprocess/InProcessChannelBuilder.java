@@ -119,7 +119,7 @@ public final class InProcessChannelBuilder extends
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
     managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
-    if (isEnabledSupportTracingMessageSizes()) {
+    if (!isEnabledSupportTracingMessageSizes()) {
       managedChannelImplBuilder.disableRetry();
     }
   }
