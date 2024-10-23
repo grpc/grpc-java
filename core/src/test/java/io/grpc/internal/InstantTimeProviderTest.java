@@ -76,10 +76,12 @@ public class InstantTimeProviderTest {
       public int getNano() {
         return 0;
       }
+
       public long getEpochSecond() {
         return 0L;
       }
     }
+
     // This should throw a RuntimeException because "now" method is missing
     new InstantTimeProvider(InvalidInstant.class);
   }
