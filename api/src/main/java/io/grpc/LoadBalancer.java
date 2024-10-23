@@ -156,11 +156,11 @@ public abstract class LoadBalancer {
   private int recursionCount;
 
   /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
+   * Handles newly resolved addresses and metadata attributes from name resolution system.
+   * {@link EquivalentAddressGroup} addresses should be considered equivalent but may be flattened
+   * into a single list if needed.
    *
-   * <p>Implementations should not modify the given {@code servers}.
+   * <p>Implementations should not modify the given {@code resolvedAddresses}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
@@ -179,12 +179,12 @@ public abstract class LoadBalancer {
    * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
    * single list if needed.
    *
-   * <p>Implementations can choose to reject the given addresses by returning {@code false}.
+   * <p>Implementations can choose to reject the given addresses by returning {@code UNAVAILABLE}.
    *
-   * <p>Implementations should not modify the given {@code addresses}.
+   * <p>Implementations should not modify the given {@code resolvedAddresses}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
+   * @return {@code OK} if the resolved addresses were accepted. {@code UNAVAILABLE} if rejected.
    * @since 1.49.0
    */
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {

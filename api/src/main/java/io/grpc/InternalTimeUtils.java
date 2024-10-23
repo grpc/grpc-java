@@ -20,6 +20,7 @@ import java.time.Duration;
 
 @Internal
 public final class InternalTimeUtils {
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10245")
   public static long convert(Duration duration) {
     return TimeUtils.convertToNanos(duration);
   }
