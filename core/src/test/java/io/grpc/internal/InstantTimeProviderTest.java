@@ -38,7 +38,8 @@ public class InstantTimeProviderTest {
 
     // Get the current time from Instant for comparison
     Instant instantNow = Instant.now();
-    long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond()) + instantNow.getNano();
+    long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond())
+        + instantNow.getNano();
 
     // Validate the time returned is close to the expected value within a tolerance
     // (i,e 10 millisecond tolerance in nanoseconds).
@@ -56,7 +57,8 @@ public class InstantTimeProviderTest {
 
       // Get the current time from Instant for comparison
       Instant instantNow = Instant.now();
-      long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond()) + instantNow.getNano();
+      long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond())
+          + instantNow.getNano();
 
       // Validate the time returned is close to the expected value within a tolerance
       // (i,e 10 millisecond tolerance in nanoseconds).

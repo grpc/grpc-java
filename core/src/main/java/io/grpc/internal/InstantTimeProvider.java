@@ -40,7 +40,7 @@ final class InstantTimeProvider implements TimeProvider {
   @Override
   public long currentTimeNanos() {
     try {
-      Object instant = this.now.invoke(null);
+      Object instant = now.invoke(null);
       int nanos = (int) getNano.invoke(instant);
       long epochSeconds = (long) getEpochSecond.invoke(instant);
       return TimeUnit.SECONDS.toNanos(epochSeconds) + nanos;
