@@ -213,6 +213,7 @@ public class FileWatcherCertificateProviderTest {
     verify(mockWatcher, never())
         .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
     verify(mockWatcher, never()).updateTrustedRoots(ArgumentMatchers.<X509Certificate>anyList());
+    verify(mockWatcher, never()).updateSpiffeRoots(ArgumentMatchers.anyMap());
     verify(timeService, never()).schedule(any(Runnable.class), any(Long.TYPE), any(TimeUnit.class));
     verify(timeService, times(1)).shutdownNow();
   }
@@ -260,6 +261,39 @@ public class FileWatcherCertificateProviderTest {
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, null, null, false, false, false, false);
     provider.checkAndReloadCertificates();
     verifyWatcherUpdates(SERVER_0_PEM_FILE, null, null);
+    verifyTimeServiceAndScheduledFuture();
+  }
+
+  @Test
+  public void spiffeFileUpdateOnly() throws Exception {
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
+    provider.checkAndReloadCertificates();
+    verify(mockWatcher, never()).updateSpiffeRoots(ArgumentMatchers.anyMap());
+
+    reset(timeService);
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, false,
+        false, false, false);
+    provider.checkAndReloadCertificates();
+    verify(mockWatcher, times(1)).updateSpiffeRoots(ArgumentMatchers.anyMap());
+
+    reset(timeService);
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, SPIFFE_TRUST_BUNDLE_1_FILE, false,
+        false, false, false);
+    provider.checkAndReloadCertificates();
+    verify(mockWatcher, times(2)).updateSpiffeRoots(ArgumentMatchers.anyMap());
     verifyTimeServiceAndScheduledFuture();
   }
 
