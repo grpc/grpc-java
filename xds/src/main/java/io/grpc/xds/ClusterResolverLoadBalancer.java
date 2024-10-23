@@ -608,6 +608,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private class NameResolverListener extends NameResolver.Listener2 {
         private final String dnsHostName;
+
         NameResolverListener(String dnsHostName) {
           this.dnsHostName = dnsHostName;
         }

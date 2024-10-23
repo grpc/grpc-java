@@ -172,7 +172,8 @@ abstract class VirtualHost {
           String cluster, List<HashPolicy> hashPolicies, @Nullable Long timeoutNano,
           @Nullable RetryPolicy retryPolicy, boolean autoHostRewrite) {
         checkNotNull(cluster, "cluster");
-        return RouteAction.create(hashPolicies, timeoutNano, cluster, null, null, retryPolicy, autoHostRewrite);
+        return RouteAction.create(hashPolicies, timeoutNano, cluster, null, null, retryPolicy,
+            autoHostRewrite);
       }
 
       static RouteAction forWeightedClusters(
@@ -191,7 +192,8 @@ abstract class VirtualHost {
           @Nullable RetryPolicy retryPolicy,
           boolean autoHostRewrite) {
         checkNotNull(namedConfig, "namedConfig");
-        return RouteAction.create(hashPolicies, timeoutNano, null, null, namedConfig, retryPolicy, autoHostRewrite);
+        return RouteAction.create(hashPolicies, timeoutNano, null, null, namedConfig, retryPolicy,
+            autoHostRewrite);
       }
 
       private static RouteAction create(

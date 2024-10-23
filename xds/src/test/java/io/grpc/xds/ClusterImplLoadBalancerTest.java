@@ -753,7 +753,8 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void endpointAddressesAttachedWithAuthorityHostname_autoHostRewriteEnabled_pickResultHasAuthorityHostname() {
+  public void
+        endpointsWithAuthorityHostname_autoHostRewriteEnabled_pickResultHasAuthorityHostname() {
     System.setProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", "true");
     try {
       LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
@@ -805,7 +806,8 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void endpointAddressesAttachedWithAuthorityHostname_autoHostRewriteNotEnabled_pickResultDoesntHaveAuthorityHostname() {
+  public void
+        endpointWithAuthorityHostname_autoHostRewriteNotEnabled_pickResultNoAuthorityHostname() {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -951,7 +953,8 @@ public class ClusterImplLoadBalancerTest {
     return makeAddress(name, locality, null);
   }
 
-  private static EquivalentAddressGroup makeAddress(final String name, Locality locality, String authorityHostname) {
+  private static EquivalentAddressGroup makeAddress(final String name, Locality locality,
+      String authorityHostname) {
     class FakeSocketAddress extends SocketAddress {
       private final String name;
 
@@ -1077,6 +1080,16 @@ public class ClusterImplLoadBalancerTest {
       });
       subchannel.requestConnection();
       return subchannel;
+    }
+
+    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
+      SubchannelPicker picker = new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          return PickResult.withSubchannel(subchannel);
+        }
+      };
+      helper.updateBalancingState(state, picker);
     }
   }
 

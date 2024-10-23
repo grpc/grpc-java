@@ -427,8 +427,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             }
           }
           if (args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY) != null
-          && args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)) {
-            result.setAuthorityOverrideHostname(result.getSubchannel().getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME));
+            && args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)) {
+            result.setAuthorityOverrideHostname(result.getSubchannel().getAttributes().get(
+                InternalXdsAttributes.ATTR_ADDRESS_NAME));
           }
         }
         return result;

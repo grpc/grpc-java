@@ -930,8 +930,9 @@ public class GrpcXdsClientImplDataTest {
             .build();
     StructOrError<RouteAction> struct =
         XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
-            ImmutableMap.of(), ImmutableSet.of());
-    assertThat(struct).isNotNull();
+            ImmutableMap.of(CLUSTER_SPECIFIER_PLUGIN.name(), RlsPluginConfig.create(
+                ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"))), ImmutableSet.of());
+    assertThat(struct.getStruct()).isNotNull();
     assertThat(struct.getStruct().autoHostRewrite()).isFalse();
   }
 

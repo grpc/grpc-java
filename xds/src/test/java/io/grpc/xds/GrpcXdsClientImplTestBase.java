@@ -249,7 +249,7 @@ public abstract class GrpcXdsClientImplTestBase {
   // EDS test resources.
   private final Message lbEndpointHealthy =
       mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
-          mf.buildLbEndpoint("192.168.0.1", 8080, "healthy", 2), 1, 0);
+          mf.buildLbEndpoint("192.168.0.1", 8080, "healthy", 2, "endpoint-host-name"), 1, 0);
   // Locality with 0 endpoints
   private final Message lbEndpointEmpty =
       mf.buildLocalityLbEndpoints("region3", "zone3", "subzone3",
@@ -257,7 +257,7 @@ public abstract class GrpcXdsClientImplTestBase {
   // Locality with 0-weight endpoint
   private final Message lbEndpointZeroWeight =
       mf.buildLocalityLbEndpoints("region4", "zone4", "subzone4",
-          mf.buildLbEndpoint("192.168.142.5", 80, "unknown", 5), 0, 2);
+          mf.buildLbEndpoint("192.168.142.5", 80, "unknown", 5, "endpoint-host-name"), 0, 2);
   private final Any testClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
       ImmutableList.of(lbEndpointHealthy, lbEndpointEmpty, lbEndpointZeroWeight),
       ImmutableList.of(mf.buildDropOverload("lb", 200), mf.buildDropOverload("throttle", 1000))));
@@ -595,7 +595,7 @@ public abstract class GrpcXdsClientImplTestBase {
         .containsExactly(
             Locality.create("region1", "zone1", "subzone1"),
             LocalityLbEndpoints.create(
-                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true, "hostname")), 1, 0),
+                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true, "endpoint-host-name")), 1, 0),
             Locality.create("region3", "zone3", "subzone3"),
             LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
   }
@@ -1134,7 +1134,7 @@ public abstract class GrpcXdsClientImplTestBase {
         edsResourceNameWithWrongType,
         ImmutableList.of(mf.buildLocalityLbEndpoints(
             "region2", "zone2", "subzone2",
-            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 0)),
         ImmutableList.of()));
     call.sendResponse(EDS, testEdsConfig, VERSION_1, "0000");
     call.verifyRequestNack(
@@ -3048,7 +3048,7 @@ public abstract class GrpcXdsClientImplTestBase {
     // Updated EDS response.
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
         ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 0)),
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, VERSION_2, "0001");
     // message not processed due to flow control
@@ -3109,7 +3109,7 @@ public abstract class GrpcXdsClientImplTestBase {
     // Updated EDS response.
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
         ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 0)),
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, VERSION_2, "0001");
 
@@ -3122,7 +3122,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "hostname")), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
         TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -3138,9 +3138,9 @@ public abstract class GrpcXdsClientImplTestBase {
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
         ImmutableList.of(
             mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-              mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 1),
+              mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 1),
             mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                mf.buildLbEndpoint("172.44.2.3", 8080, "healthy", 10), 2, 1)
+                mf.buildLbEndpoint("172.44.2.3", 8080, "healthy", 10, "endpoint-host-name"), 2, 1)
             ),
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, "0", "0001");
@@ -3201,7 +3201,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 mf.buildClusterLoadAssignment(resource,
                     ImmutableList.of(
                         mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                            mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3), 1, 0)),
+                            mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3, "endpoint-host-name"), 1, 0)),
                     ImmutableList.of(mf.buildDropOverload("lb", 100)))));
     call.sendResponse(EDS, clusterLoadAssignments, VERSION_1, "0000");
     verify(edsWatcher).onChanged(edsUpdateCaptor.capture());
@@ -3278,7 +3278,7 @@ public abstract class GrpcXdsClientImplTestBase {
         mf.buildClusterLoadAssignment(edsResourceTwo,
             ImmutableList.of(
                 mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                    mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 3), 2, 0)),
+                    mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 3, "endpoint-host-name"), 2, 0)),
             ImmutableList.<Message>of()));
     call.sendResponse(EDS, clusterLoadAssignmentTwo, VERSION_2, "0001");
 
@@ -3291,7 +3291,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "hostname")), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResourceTwo);
@@ -3301,7 +3301,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "hostname")), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
     verifyNoMoreInteractions(edsResourceWatcher);
     verifyResourceMetadataAcked(
         EDS, edsResourceTwo, clusterLoadAssignmentTwo, VERSION_2, TIME_INCREMENT * 2);
@@ -4012,7 +4012,7 @@ public abstract class GrpcXdsClientImplTestBase {
     }
 
     protected abstract Message buildLbEndpoint(String address, int port, String healthStatus,
-        int lbWeight);
+        int lbWeight, String endpointHostname);
 
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
 

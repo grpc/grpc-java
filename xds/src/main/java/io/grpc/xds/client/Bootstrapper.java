@@ -70,7 +70,8 @@ public abstract class Bootstrapper {
 
     @VisibleForTesting
     public static ServerInfo create(
-        String target, Object implSpecificConfig, boolean ignoreResourceDeletion, boolean isTrustedXdsServer) {
+        String target, Object implSpecificConfig, boolean ignoreResourceDeletion,
+        boolean isTrustedXdsServer) {
       return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
           ignoreResourceDeletion, isTrustedXdsServer);
     }
