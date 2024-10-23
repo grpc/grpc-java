@@ -64,7 +64,6 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.UnresolvedAddressException;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -96,9 +95,6 @@ class Utils {
   private static final int HEADER_ENTRY_OVERHEAD = 32;
   private static final byte[] binaryHeaderSuffixBytes =
       Metadata.BINARY_HEADER_SUFFIX.getBytes(US_ASCII);
-
-  private static final Random softLimitEnforceRandom = new Random();
-
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
@@ -227,7 +223,7 @@ class Utils {
 
   private static int maybeAddBinaryHeaderOverhead(byte[] name, byte[] value) {
     if (endsWith(name, binaryHeaderSuffixBytes)) {
-      return (int) (value.length * 1.33);
+      return value.length * 4 / 3;
     }
     return value.length;
   }
@@ -254,7 +250,7 @@ class Utils {
     double failProbability =
         (double) (h2HeadersSize - softLimitHeaderListSize) / (double) (maxHeaderListSize
             - softLimitHeaderListSize);
-    return softLimitEnforceRandom.nextDouble() < failProbability;
+    return Math.random() < failProbability;
   }
 
   @CheckReturnValue

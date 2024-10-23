@@ -494,17 +494,17 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
     checkArgument(bytes > 0, "maxInboundMetadataSize must be positive: %s", bytes);
     this.maxHeaderListSize = bytes;
     // Clear the soft limit setting, by setting soft limit to maxInboundMetadataSize. The
-    // maxInboundMetadataSize will take precedence be applied before soft limit check.
+    // maxInboundMetadataSize will take precedence over soft limit check.
     this.softLimitHeaderListSize = bytes;
     return this;
   }
 
   /**
-   * Sets the size of metadata that advised to not exceed. When a metadata with size larger than the
-   * soft limit is encountered there will be a probability the RPC will fail. The chance of failing
-   * increases as the metadata size approaches the hard limit. {@code Integer.MAX_VALUE} disables
-   * the enforcement. The default is implementation-dependent, but is not generally less than 8 KiB
-   * and may be unlimited.
+   * Sets the size of metadata that clients are advised to not exceed. When a metadata with size
+   * larger than the soft limit is encountered there will be a probability the RPC will fail. The
+   * chance of failing increases as the metadata size approaches the hard limit.
+   * {@code Integer.MAX_VALUE} disables the enforcement. The default is implementation-dependent,
+   * but is not generally less than 8 KiB and may be unlimited.
    *
    * <p>This is cumulative size of the metadata. The precise calculation is
    * implementation-dependent, but implementations are encouraged to follow the calculation used
@@ -512,8 +512,6 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
    * <a href="http://httpwg.org/specs/rfc7540.html#rfc.section.6.5.2">HTTP/2's
    * SETTINGS_MAX_HEADER_LIST_SIZE</a>. It sums the bytes from each entry's key and value, plus 32
    * bytes of overhead per entry.
-   *
-   * <P>Note: gRPC has approximately 600B internal Metadata.
    *
    * @param soft the soft size limit of received metadata
    * @param max the hard size limit of received metadata

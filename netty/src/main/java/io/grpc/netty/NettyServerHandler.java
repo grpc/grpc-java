@@ -489,6 +489,16 @@ class NettyServerHandler extends AbstractNettyHandler {
         return;
       }
 
+      int h2HeadersSize = Utils.getH2HeadersSize(headers);
+      if (Utils.shouldRejectOnMetadataSizeSoftLimitExceeded(
+              h2HeadersSize, softLimitHeaderListSize, maxHeaderListSize)) {
+        respondWithHttpError(ctx, streamId, 431, Status.Code.RESOURCE_EXHAUSTED, String.format(
+                "Client Headers of size %d exceeded Metadata size soft limit: %d",
+                h2HeadersSize,
+                softLimitHeaderListSize));
+        return;
+      }
+
       if (!teWarningLogged && !TE_TRAILERS.contentEquals(headers.get(TE_HEADER))) {
         logger.warning(String.format("Expected header TE: %s, but %s is received. This means "
                 + "some intermediate proxy may not support trailers",
@@ -525,19 +535,6 @@ class NettyServerHandler extends AbstractNettyHandler {
         transportListener.streamCreated(stream, method, metadata);
         state.onStreamAllocated();
         http2Stream.setProperty(streamKey, state);
-        // check metadata size vs soft limit
-        // check after gRPC stream creation for better error message.
-        int h2HeadersSize = Utils.getH2HeadersSize(headers);
-        if (Utils.shouldRejectOnMetadataSizeSoftLimitExceeded(
-            h2HeadersSize, softLimitHeaderListSize, maxHeaderListSize)) {
-          stream.close(
-              Status.RESOURCE_EXHAUSTED.withDescription(
-                  String.format(
-                      "Client Headers of size %d exceeded Metadata size soft limit: %d",
-                      h2HeadersSize,
-                      softLimitHeaderListSize)),
-              new Metadata());
-        }
       }
     } catch (Exception e) {
       logger.log(Level.WARNING, "Exception in onHeadersRead()", e);
