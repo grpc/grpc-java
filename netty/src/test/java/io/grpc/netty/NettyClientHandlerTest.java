@@ -218,27 +218,30 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
   }
+
   @Test
   @SuppressWarnings("InlineMeInliner")
   public void sendLargerThanSoftLimitHeaderMayFail() throws Exception {
     createStream();
     // total head size of 7999, soft limit = 2000 and max = 8000. This header has 5999/6000 chance to be rejected.
     Http2Headers headers = new DefaultHttp2Headers()
-            .scheme(HTTPS)
-            .authority(as("www.fake.com"))
-            .path(as("/fakemethod"))
-            .method(HTTP_METHOD)
-            .add(as("auth"), as("sometoken"))
-            .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
-            .add(TE_HEADER, TE_TRAILERS)
-            .add("large-field", Strings.repeat("a", 7620));
+        .scheme(HTTPS)
+        .authority(as("www.fake.com"))
+        .path(as("/fakemethod"))
+        .method(HTTP_METHOD)
+        .add(as("auth"), as("sometoken"))
+        .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .add(TE_HEADER, TE_TRAILERS)
+        .add("large-field", Strings.repeat("a", 7620));
 
     ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     channelRead(headersFrame);
     ArgumentCaptor<Status> statusArgumentCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(statusArgumentCaptor.capture(), eq(PROCESSED), any(Metadata.class));
+    verify(streamListener).closed(statusArgumentCaptor.capture(), eq(PROCESSED),
+        any(Metadata.class));
     assertThat(statusArgumentCaptor.getValue().getCode()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
-    assertThat(statusArgumentCaptor.getValue().getDescription()).contains("exceeded Metadata size soft limit");
+    assertThat(statusArgumentCaptor.getValue().getDescription()).contains(
+        "exceeded Metadata size soft limit");
   }
 
   @Test
