@@ -487,8 +487,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
+        long messageLength = 0;
         if (isEnabledSupportTracingMessageSizes) {
-          long messageLength;
           try {
             if (assumedMessageSize != -1) {
               messageLength = assumedMessageSize;
@@ -504,11 +504,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           } catch (Exception e) {
             throw new RuntimeException("Error processing the message length", e);
           }
-          statsTraceCtx.outboundUncompressedSize(messageLength);
-          statsTraceCtx.outboundWireSize(messageLength);
-          // messageLength should be same at receiver's end as no actual wire is involved.
-          clientStream.statsTraceCtx.inboundUncompressedSize(messageLength);
-          clientStream.statsTraceCtx.inboundWireSize(messageLength);
         }
 
         synchronized (this) {
@@ -519,6 +514,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+          if (isEnabledSupportTracingMessageSizes) {
+            statsTraceCtx.outboundUncompressedSize(messageLength);
+            statsTraceCtx.outboundWireSize(messageLength);
+            // messageLength should be same at receiver's end as no actual wire is involved.
+            clientStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+            clientStream.statsTraceCtx.inboundWireSize(messageLength);
+          }
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (clientRequested > 0) {
@@ -781,8 +783,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
+        long messageLength = 0;
         if (isEnabledSupportTracingMessageSizes) {
-          long messageLength;
           try {
             if (assumedMessageSize != -1) {
               messageLength = assumedMessageSize;
@@ -798,11 +800,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           } catch (Exception e) {
             throw new RuntimeException("Error processing the message length", e);
           }
-          statsTraceCtx.outboundUncompressedSize(messageLength);
-          statsTraceCtx.outboundWireSize(messageLength);
-          // messageLength should be same at receiver's end as no actual wire is involved.
-          serverStream.statsTraceCtx.inboundUncompressedSize(messageLength);
-          serverStream.statsTraceCtx.inboundWireSize(messageLength);
         }
         synchronized (this) {
           if (closed) {
@@ -812,6 +809,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
+          if (isEnabledSupportTracingMessageSizes) {
+            statsTraceCtx.outboundUncompressedSize(messageLength);
+            statsTraceCtx.outboundWireSize(messageLength);
+            // messageLength should be same at receiver's end as no actual wire is involved.
+            serverStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+            serverStream.statsTraceCtx.inboundWireSize(messageLength);
+          }
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (serverRequested > 0) {
