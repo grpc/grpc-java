@@ -223,7 +223,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @SuppressWarnings("InlineMeInliner")
   public void sendLargerThanSoftLimitHeaderMayFail() throws Exception {
     createStream();
-    // total head size of 7999, soft limit = 2000 and max = 8000. This header has 5999/6000 chance to be rejected.
+    // total head size of 7999, soft limit = 2000 and max = 8000.
+    // This header has 5999/6000 chance to be rejected.
     Http2Headers headers = new DefaultHttp2Headers()
         .scheme(HTTPS)
         .authority(as("www.fake.com"))
