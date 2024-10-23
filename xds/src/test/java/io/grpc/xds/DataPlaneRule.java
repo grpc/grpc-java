@@ -30,7 +30,6 @@ import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
-import io.grpc.testing.protobuf.SimpleResponse.Builder;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
@@ -100,8 +99,8 @@ public class DataPlaneRule extends TestWatcher {
     controlPlane.setCdsConfig(ControlPlaneRule.buildCluster());
     InetSocketAddress edsInetSocketAddress = (InetSocketAddress) server.getListenSockets().get(0);
     controlPlane.setEdsConfig(
-        ControlPlaneRule.buildClusterLoadAssignment(edsInetSocketAddress.getHostName(), ENDPOINT_HOST_NAME,
-            edsInetSocketAddress.getPort()));
+        ControlPlaneRule.buildClusterLoadAssignment(edsInetSocketAddress.getHostName(),
+            ENDPOINT_HOST_NAME, edsInetSocketAddress.getPort()));
   }
 
   @Override

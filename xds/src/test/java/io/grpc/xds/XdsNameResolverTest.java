@@ -906,7 +906,8 @@ public class XdsNameResolverTest {
       throws XdsInitializationException {
     System.setProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", "true");
     try {
-      FakeXdsClient xdsClient = (FakeXdsClient) xdsClientPoolFactory.getOrCreate(AUTHORITY).getObject();
+      FakeXdsClient xdsClient =
+          (FakeXdsClient) xdsClientPoolFactory.getOrCreate(AUTHORITY).getObject();
       xdsClient.setTrustedXdsServer(true);
       resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
           syncContext, scheduler, xdsClientPoolFactory, mockRandom,
@@ -942,7 +943,8 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_routeActionHasAutoHostRewrite_flagDisabledTest()
       throws XdsInitializationException {
-    FakeXdsClient xdsClient = (FakeXdsClient) xdsClientPoolFactory.getOrCreate(AUTHORITY).getObject();
+    FakeXdsClient xdsClient =
+        (FakeXdsClient) xdsClientPoolFactory.getOrCreate(AUTHORITY).getObject();
     xdsClient.setTrustedXdsServer(true);
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler, xdsClientPoolFactory, mockRandom,
@@ -2294,7 +2296,8 @@ public class XdsNameResolverTest {
     @Nullable
     @Override
     public ServerInfo getServerInfo(String resource) {
-      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), false, isTrustedXdsServer);
+      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), false,
+          isTrustedXdsServer);
     }
   }
 

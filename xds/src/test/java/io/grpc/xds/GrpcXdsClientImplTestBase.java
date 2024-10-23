@@ -340,7 +340,8 @@ public abstract class GrpcXdsClientImplTestBase {
       }
     };
 
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(), true);
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -595,7 +596,8 @@ public abstract class GrpcXdsClientImplTestBase {
         .containsExactly(
             Locality.create("region1", "zone1", "subzone1"),
             LocalityLbEndpoints.create(
-                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true, "endpoint-host-name")), 1, 0),
+                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true,
+                    "endpoint-host-name")), 1, 0),
             Locality.create("region3", "zone3", "subzone3"),
             LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
   }
@@ -3201,7 +3203,8 @@ public abstract class GrpcXdsClientImplTestBase {
                 mf.buildClusterLoadAssignment(resource,
                     ImmutableList.of(
                         mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                            mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3, "endpoint-host-name"), 1, 0)),
+                            mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3,
+                                "endpoint-host-name"), 1, 0)),
                     ImmutableList.of(mf.buildDropOverload("lb", 100)))));
     call.sendResponse(EDS, clusterLoadAssignments, VERSION_1, "0000");
     verify(edsWatcher).onChanged(edsUpdateCaptor.capture());
@@ -3278,7 +3281,8 @@ public abstract class GrpcXdsClientImplTestBase {
         mf.buildClusterLoadAssignment(edsResourceTwo,
             ImmutableList.of(
                 mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                    mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 3, "endpoint-host-name"), 2, 0)),
+                    mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 3, "endpoint-host-name"),
+                    2, 0)),
             ImmutableList.<Message>of()));
     call.sendResponse(EDS, clusterLoadAssignmentTwo, VERSION_2, "0001");
 
