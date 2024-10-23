@@ -30,7 +30,6 @@ import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
-import io.grpc.Attributes.Builder;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
@@ -816,7 +815,8 @@ public class ClusterImplLoadBalancerTest {
         GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
             weightedTargetProvider, weightedTargetConfig),
         null, Collections.emptyMap());
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality, "authority-host-name");
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality,
+        "authority-host-name");
     deliverAddressesAndConfig(Arrays.asList(endpoint1), config);
     assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -838,7 +838,8 @@ public class ClusterImplLoadBalancerTest {
     // Sub Channel wrapper args won't have the address name although addresses will.
     assertThat(subchannel.getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME)).isNull();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo("authority-host-name");
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME))
+          .isEqualTo("authority-host-name");
     }
 
     leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
@@ -1080,16 +1081,6 @@ public class ClusterImplLoadBalancerTest {
       });
       subchannel.requestConnection();
       return subchannel;
-    }
-
-    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
-      SubchannelPicker picker = new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(subchannel);
-        }
-      };
-      helper.updateBalancingState(state, picker);
     }
   }
 

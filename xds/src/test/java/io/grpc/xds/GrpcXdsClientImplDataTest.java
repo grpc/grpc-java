@@ -58,7 +58,6 @@ import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
-import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
@@ -86,7 +85,6 @@ import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
@@ -147,7 +145,6 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -986,7 +983,8 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct()).isEqualTo(
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true, "")), 100, 1));
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true, "")),
+            100, 1));
   }
 
   @Test

@@ -62,7 +62,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
-import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancerProvider;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;

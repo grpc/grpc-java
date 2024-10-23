@@ -227,7 +227,8 @@ public class ControlPlaneRule extends TestWatcher {
   /**
    * Builds a new default EDS configuration.
    */
-  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, String endpointHostname, int port) {
+  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, String endpointHostname,
+      int port) {
     Address address = Address.newBuilder()
         .setSocketAddress(
             SocketAddress.newBuilder().setAddress(hostName).setPortValue(port).build()).build();
