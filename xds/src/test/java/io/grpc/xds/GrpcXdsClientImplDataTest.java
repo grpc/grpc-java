@@ -173,11 +173,13 @@ public class GrpcXdsClientImplDataTest {
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
+  private boolean originalEnableUseSystemRootCerts;
 
   @Before
   public void setUp() {
     originalEnableRouteLookup = XdsRouteConfigureResource.enableRouteLookup;
     originalEnableLeastRequest = XdsClusterResource.enableLeastRequest;
+    originalEnableUseSystemRootCerts = XdsClusterResource.enableSystemRootCerts;
     assertThat(originalEnableLeastRequest).isFalse();
   }
 
@@ -185,6 +187,7 @@ public class GrpcXdsClientImplDataTest {
   public void tearDown() {
     XdsRouteConfigureResource.enableRouteLookup = originalEnableRouteLookup;
     XdsClusterResource.enableLeastRequest = originalEnableLeastRequest;
+    XdsClusterResource.enableSystemRootCerts = originalEnableUseSystemRootCerts;
   }
 
   @Test
