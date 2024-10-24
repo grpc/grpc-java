@@ -17,18 +17,25 @@
 package io.grpc.xds.internal.matchers;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 
 import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.common.CelErrorCode;
+import dev.cel.common.CelValidationException;
 import dev.cel.common.CelValidationResult;
 import dev.cel.common.types.SimpleType;
 import dev.cel.compiler.CelCompiler;
 import dev.cel.compiler.CelCompilerFactory;
+import dev.cel.parser.CelStandardMacro;
 import dev.cel.runtime.CelEvaluationException;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NoopServerCall;
 import io.grpc.ServerCall;
+import io.grpc.Status;
+import io.grpc.Status.Code;
+import io.grpc.StatusRuntimeException;
 import io.grpc.StringMarshaller;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,9 +50,10 @@ public class CelMatcherTest {
       CelCompilerFactory.standardCelCompilerBuilder()
           .addVar("request", SimpleType.ANY)
           .setResultType(SimpleType.BOOL)
+          .setStandardMacros(CelStandardMacro.STANDARD_MACROS)
           .build();
   private static final CelValidationResult celProg1 =
-      CEL_COMPILER.compile("request.method == \"POST\"");
+      CEL_COMPILER.compile("request.method == 'POST'");
 
   CelAbstractSyntaxTree ast1;
   CelMatcher matcher1;
@@ -91,5 +99,35 @@ public class CelMatcherTest {
   @Test
   public void testProgTrue() {
     assertThat(matcher1.test(fakeInput)).isTrue();
+  }
+
+  @Test
+  public void macros_comprehensionsDisabled() throws Exception {
+    CelMatcher matcherWithComprehensions = newMatcher(
+        "size(['foo', 'bar'].map(x, [request.headers[x], request.headers[x]])) == 1");
+
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcherWithComprehensions.test(fakeInput)).getStatus();
+
+    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
+
+    // Verify CelErrorCode is ITERATION_BUDGET_EXCEEDED.
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ITERATION_BUDGET_EXCEEDED);
+  }
+
+  @Test
+  public void macros_hasEnabled() throws Exception {
+    boolean result = newMatcher("has(request.path)").test(fakeInput);
+    assertThat(result).isTrue();
+  }
+
+  private CelMatcher newMatcher(String expr) throws CelValidationException, CelEvaluationException {
+    return CelMatcher.create(celAst(expr));
+  }
+
+  private CelAbstractSyntaxTree celAst(String expr) throws CelValidationException {
+    return CEL_COMPILER.compile(expr).getAst();
   }
 }
