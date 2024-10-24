@@ -547,8 +547,8 @@ public class XdsX509TrustManagerTest {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
-    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
-        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
     trustManager = XdsTrustManagerFactory.createX509TrustManager(
         ImmutableMap.of("example.com", caCerts), null);
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
@@ -562,8 +562,8 @@ public class XdsX509TrustManagerTest {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
-    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
-        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
     trustManager = XdsTrustManagerFactory.createX509TrustManager(
         ImmutableMap.of("example.com", caCerts), null);
     try {
@@ -581,8 +581,8 @@ public class XdsX509TrustManagerTest {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
-    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
-        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
     trustManager = XdsTrustManagerFactory.createX509TrustManager(
         ImmutableMap.of("unknown.com", caCerts), null);
     try {
@@ -599,8 +599,8 @@ public class XdsX509TrustManagerTest {
       throws CertificateException, IOException, CertStoreException {
     X509Certificate[] clientCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(CLIENT_SPIFFE_PEM_FILE));
-    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
-        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
     trustManager = XdsTrustManagerFactory.createX509TrustManager(
         ImmutableMap.of("foo.bar.com", caCerts), null);
     trustManager.checkClientTrusted(clientCerts, "RSA");

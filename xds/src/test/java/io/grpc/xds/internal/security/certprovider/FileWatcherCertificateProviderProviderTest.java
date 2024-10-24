@@ -213,7 +213,8 @@ public class FileWatcherCertificateProviderProviderTest {
           + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates2.pem\","
           + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key3.pem\","
           + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates4.pem\","
-          + "        \"spiffe_trust_bundle_map_file\": \"/var/run/gke-spiffe/certs/spiffe_bundle.json\","
+          + "        \"spiffe_trust_bundle_map_file\":"
+          + " \"/var/run/gke-spiffe/certs/spiffe_bundle.json\","
           + "        \"refresh_interval\": \"7890s\""
           + "      }";
 

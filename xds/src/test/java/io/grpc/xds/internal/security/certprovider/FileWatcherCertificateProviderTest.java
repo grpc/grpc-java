@@ -147,7 +147,8 @@ public class FileWatcherCertificateProviderTest {
       Files.delete(Paths.get(spiffeFile));
     }
     if (spiffeFileSource != null) {
-      spiffeFileSource = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(spiffeFileSource);
+      spiffeFileSource = CommonTlsContextTestsUtil
+          .getTempFileNameForResourcesFile(spiffeFileSource);
       Files.copy(Paths.get(spiffeFileSource), Paths.get(spiffeFile), REPLACE_EXISTING);
       Files.setLastModifiedTime(
           Paths.get(spiffeFile), FileTime.fromMillis(timeProvider.currentTimeMillis()));
