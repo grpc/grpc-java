@@ -72,7 +72,7 @@ public class DualCallCredentialsTest {
     verify(tlsCallCredentials, never()).applyRequestMetadata(any(), any(), any());
   }
 
-  private final class RequestInfoImpl extends CallCredentials.RequestInfo {
+  private static final class RequestInfoImpl extends CallCredentials.RequestInfo {
     private Attributes attrs;
 
     RequestInfoImpl(boolean hasAltsContext) {
