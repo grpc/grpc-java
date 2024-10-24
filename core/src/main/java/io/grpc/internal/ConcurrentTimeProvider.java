@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,17 @@
 
 package io.grpc.internal;
 
-/**
- * Time source representing the current system time in nanos. Used to inject a fake clock
- * into unit tests.
- */
-public interface TimeProvider {
-  /** Returns the current nano time. */
-  long currentTimeNanos();
+import java.util.concurrent.TimeUnit;
 
-  TimeProvider SYSTEM_TIME_PROVIDER = TimeProviderResolverFactory.resolveTimeProvider();
+/**
+ * {@link ConcurrentTimeProvider} resolves ConcurrentTimeProvider which implements
+ * {@link TimeProvider}.
+ */
+
+final class ConcurrentTimeProvider implements TimeProvider {
+
+  @Override
+  public long currentTimeNanos() {
+    return TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
+  }
 }
