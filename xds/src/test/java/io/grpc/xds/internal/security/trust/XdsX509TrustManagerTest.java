@@ -21,6 +21,7 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doReturn;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
@@ -38,6 +40,7 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import javax.net.ssl.SSLEngine;
@@ -535,6 +538,59 @@ public class XdsX509TrustManagerTest {
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
     verify(sslEngine, times(1)).getHandshakeSession();
     assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustBundle()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
+        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null);
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+    verify(sslEngine, times(1)).getHandshakeSession();
+    assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustBundle_missing_spiffe_id()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
+        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Can't extract valid SPIFFE ID from the chain");
+    }
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeTrustBundle_missing_trust_domain()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
+        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("unknown.com", caCerts), null);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Spiffe Trust Bundle doesn't contain trust domain from the chain");
+    }
   }
 
   @Test

@@ -195,7 +195,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
       }
       delegates.put(entry.getKey(), myDelegate);
     }
-    return new XdsX509TrustManager(delegates);
+    return new XdsX509TrustManager(certContext, delegates);
   }
 
 

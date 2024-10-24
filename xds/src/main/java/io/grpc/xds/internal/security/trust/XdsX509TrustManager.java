@@ -19,6 +19,7 @@ package io.grpc.xds.internal.security.trust;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import com.google.common.base.Strings;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
@@ -64,10 +65,11 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     this.delegates = null;
   }
 
-  XdsX509TrustManager(Map<String, X509ExtendedTrustManager> delegates) {
+  XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
+      Map<String, X509ExtendedTrustManager> delegates) {
     checkNotNull(delegates, "delegates");
     this.delegates = delegates;
-    this.certContext = null;
+    this.certContext = certContext;
     this.delegate = null;
   }
 
@@ -262,7 +264,15 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       sslEngine.setSSLParameters(sslParams);
     }
     if (delegates != null) {
-      String trustDomain = SpiffeUtil.extractSpiffeId(chain).get().getTrustDomain();
+      Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(chain);
+      if (!spiffeId.isPresent()) {
+        throw new CertificateException("Can't extract valid SPIFFE ID from the chain");
+      }
+      String trustDomain = spiffeId.get().getTrustDomain();
+      if (!delegates.containsKey(trustDomain)) {
+        throw new CertificateException(
+            "Spiffe Trust Bundle doesn't contain trust domain from the chain");
+      }
       delegates.get(trustDomain).checkServerTrusted(chain, authType, sslEngine);
     } else {
       delegate.checkServerTrusted(chain, authType, sslEngine);
