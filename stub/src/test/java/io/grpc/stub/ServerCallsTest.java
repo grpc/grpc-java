@@ -33,7 +33,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -619,59 +618,6 @@ public class ServerCallsTest {
     // Very that number of messages produced in each onReady handler call matches the number
     // requested by the client.
     assertArrayEquals(new int[]{0, 1, 1, 2, 2, 2}, receivedMessages);
-  }
-
-  @Test
-  public void serverUnaryResponseMsgWithOkStatus() {
-    ServerCallHandler<Integer, Integer> serverCallHandler =
-        ServerCalls.asyncUnaryCall(
-            new ServerCalls.UnaryMethod<Integer, Integer>() {
-              @Override
-              public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
-                responseObserver.onNext(request);
-                responseObserver.onCompleted();
-              }
-            });
-    ServerCall.Listener<Integer> callListener =
-        serverCallHandler.startCall(serverCall, new Metadata());
-    serverCall.isReady = true;
-    serverCall.isCancelled = false;
-    callListener.onReady();
-    callListener.onMessage(1);
-    callListener.onHalfClose();
-
-    assertThat(serverCall.status.getCode()).isEqualTo(Code.OK);
-    assertThat(serverCall.responses).containsExactly(1);
-  }
-
-  @Test
-  public void serverUnaryResponseMsgWithNotOkStatus() {
-    ServerCallHandler<Integer, Integer> serverCallHandler =
-        ServerCalls.asyncUnaryCall(
-            new ServerCalls.UnaryMethod<Integer, Integer>() {
-              @Override
-              public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
-                responseObserver.onNext(request);
-                responseObserver.onError(
-                    Status.INTERNAL
-                        .withDescription("Response message is null for unary call")
-                        .asRuntimeException());
-              }
-            });
-
-    ServerCall.Listener<Integer> callListener =
-        serverCallHandler.startCall(serverCall, new Metadata());
-
-    serverCall.isReady = true;
-    serverCall.isCancelled = false;
-    callListener.onReady();
-    callListener.onMessage(1);
-    callListener.onHalfClose();
-
-    assertThat(serverCall.status.getCode()).isEqualTo(Code.INTERNAL);
-    assertThat(serverCall.status.getDescription())
-        .isEqualTo("Response message is null for unary call");
-    assertThat(serverCall.responses).isEmpty();
   }
 
   public static class IntegerMarshaller implements MethodDescriptor.Marshaller<Integer> {
