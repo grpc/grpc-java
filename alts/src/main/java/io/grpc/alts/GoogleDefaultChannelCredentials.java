@@ -63,6 +63,7 @@ public final class GoogleDefaultChannelCredentials {
    */
   public static final class Builder {
     private CallCredentials callCredentials;
+    private CallCredentials altsCallCredentials;
 
     private Builder() {}
 
@@ -72,16 +73,29 @@ public final class GoogleDefaultChannelCredentials {
       return this;
     }
 
+    /** Constructs GoogleDefaultChannelCredentials with an ALTS-specific call credential. */
+    public Builder altsCallCredentials(CallCredentials callCreds) {
+      altsCallCredentials = callCreds;
+      return this;
+    }
+
     /** Builds a GoogleDefaultChannelCredentials instance. */
     public ChannelCredentials build() {
       ChannelCredentials nettyCredentials =
           InternalNettyChannelCredentials.create(createClientFactory());
       if (callCredentials != null) {
+        if (altsCallCredentials != null) {
+          return CompositeChannelCredentials.create(
+              nettyCredentials, new DualCallCredentials(callCredentials, altsCallCredentials));
+        }
         return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
       }
       CallCredentials callCreds;
       try {
         callCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
+        if (altsCallCredentials != null) {
+          callCreds = new DualCallCredentials(callCreds, altsCallCredentials);
+        }
       } catch (IOException e) {
         callCreds =
             new FailingCallCredentials(
