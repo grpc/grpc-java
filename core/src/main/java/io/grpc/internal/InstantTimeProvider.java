@@ -29,9 +29,9 @@ final class InstantTimeProvider implements TimeProvider {
   private Method getEpochSecond;
 
   public InstantTimeProvider(Class<?> instantClass) throws NoSuchMethodException {
-      this.now = instantClass.getMethod("now");
-      this.getNano = instantClass.getMethod("getNano");
-      this.getEpochSecond = instantClass.getMethod("getEpochSecond");
+    this.now = instantClass.getMethod("now");
+    this.getNano = instantClass.getMethod("getNano");
+    this.getEpochSecond = instantClass.getMethod("getEpochSecond");
   }
 
   @Override
