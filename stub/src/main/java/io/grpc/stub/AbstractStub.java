@@ -151,6 +151,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
     return build(channel, callOptions.withDeadlineAfter(duration, unit));
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10245")
   public final S withDeadlineAfter(Duration duration) {
     return withDeadlineAfter(convert(duration), TimeUnit.NANOSECONDS);
   }
