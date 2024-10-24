@@ -313,15 +313,14 @@ public class FileWatcherCertificateProviderTest {
   @Test
   public void getCertificate_missingCertFile() throws IOException, InterruptedException {
     commonErrorTest(
-        null, CLIENT_KEY_FILE, CA_PEM_FILE, null, NoSuchFileException.class, 0, 1, 0, 0, 0,
+        null, CLIENT_KEY_FILE, CA_PEM_FILE, null, NoSuchFileException.class, 0, 1, 0, 0,
         "cert.pem");
   }
 
   @Test
   public void getCertificate_missingKeyFile() throws IOException, InterruptedException {
     commonErrorTest(
-        CLIENT_PEM_FILE, null, CA_PEM_FILE, null, NoSuchFileException.class, 0, 1, 0, 0, 0,
-        "key.pem");
+        CLIENT_PEM_FILE, null, CA_PEM_FILE, null, NoSuchFileException.class, 0, 1, 0, 0, "key.pem");
   }
 
   @Test
@@ -334,7 +333,6 @@ public class FileWatcherCertificateProviderTest {
         java.security.spec.InvalidKeySpecException.class,
         0,
         1,
-        0,
         0,
         0,
         "Neither RSA nor EC worked");
@@ -371,7 +369,6 @@ public class FileWatcherCertificateProviderTest {
       int firstUpdateRootCount,
       int secondUpdateCertCount,
       int secondUpdateRootCount,
-      int secondUpdateSpiffeCount,
       String... causeMessages)
       throws IOException, InterruptedException {
     TestScheduledFuture<?> scheduledFuture =
