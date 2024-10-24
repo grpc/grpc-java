@@ -124,6 +124,7 @@ final class XdsNameResolver extends NameResolver {
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
 
+  // TODO(sergiitk): [filter provider] routing config
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
@@ -374,6 +375,9 @@ final class XdsNameResolver extends NameResolver {
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
+      // TODO(sergiitk): [filter provider] config selector, but for the client.
+      // similar to server's interceptor
+      // determines what route is used.
       String cluster = null;
       Route selectedRoute = null;
       RoutingConfig routingCfg;
