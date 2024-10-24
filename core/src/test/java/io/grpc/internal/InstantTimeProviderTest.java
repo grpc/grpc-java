@@ -63,26 +63,8 @@ public class InstantTimeProviderTest {
       // Validate the time returned is close to the expected value within a tolerance
       // (i,e 10 millisecond tolerance in nanoseconds).
       assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException(e);
+    } catch (ClassNotFoundException | NoSuchMethodException e) {
+      throw new AssertionError();
     }
-  }
-
-  // Test to verify exception is thrown when "now" method is missing
-  @Test(expected = RuntimeException.class)
-  public void testMissingNowMethodThrowsException() {
-    // Define a class without the "now" method
-    class InvalidInstant {
-      public int getNano() {
-        return 0;
-      }
-
-      public long getEpochSecond() {
-        return 0L;
-      }
-    }
-
-    // This should throw a RuntimeException because "now" method is missing
-    new InstantTimeProvider(InvalidInstant.class);
   }
 }

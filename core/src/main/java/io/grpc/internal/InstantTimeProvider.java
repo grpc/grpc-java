@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 
@@ -27,14 +28,10 @@ final class InstantTimeProvider implements TimeProvider {
   private Method getNano;
   private Method getEpochSecond;
 
-  public InstantTimeProvider(Class<?> instantClass) {
-    try {
+  public InstantTimeProvider(Class<?> instantClass) throws NoSuchMethodException {
       this.now = instantClass.getMethod("now");
       this.getNano = instantClass.getMethod("getNano");
       this.getEpochSecond = instantClass.getMethod("getEpochSecond");
-    } catch (NoSuchMethodException e) {
-      throw new RuntimeException(e);
-    }
   }
 
   @Override
@@ -44,7 +41,7 @@ final class InstantTimeProvider implements TimeProvider {
       int nanos = (int) getNano.invoke(instant);
       long epochSeconds = (long) getEpochSecond.invoke(instant);
       return TimeUnit.SECONDS.toNanos(epochSeconds) + nanos;
-    } catch (Exception ex) {
+    } catch (IllegalAccessException | InvocationTargetException ex) {
       throw new RuntimeException(ex);
     }
   }
