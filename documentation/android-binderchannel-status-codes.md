@@ -341,7 +341,7 @@ Status code mapping: **UNIMPLEMENTED**
 
 Unfortunately `UNIMPLEMENTED` doesn’t capture (3) but none of the other canonical status codes do either and we expect this case to be extremely rare.
 
-(4) and (5) are intentially indistinguishable from (1) by Android design so we can't handle them differently. However, as a client manifest error, (4) isn't something a reasonable apps would handle at runtime anyway. (5) is an error in the server manifest so sending the user to the app store in hopes of a fixed version remains the best way to handle it.
+(4) and (5) are intentially indistinguishable from (1) by Android design so we can't handle them differently. However, as an error in its own manifest, (4) isn't something a reasonable client would handle at runtime anyway. (5) is an error in the server manifest and so just like the other cases, best error handling it is to send the user to the app store to look for an updated version than hopefully includes a fix.
 
 ### bindService() throws SecurityException
 
