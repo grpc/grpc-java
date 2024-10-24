@@ -217,26 +217,21 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
-    if (delegates != null) {
-      String trustDomain = SpiffeUtil.extractSpiffeId(chain).get().getTrustDomain();
-      delegates.get(trustDomain).checkClientTrusted(chain, authType, socket);
-    } else {
-      delegate.checkClientTrusted(chain, authType, socket);
-    }
+    chooseDelegate(chain).checkClientTrusted(chain, authType, socket);
     verifySubjectAltNameInChain(chain);
   }
 
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
-    delegate.checkClientTrusted(chain, authType, sslEngine);
+    chooseDelegate(chain).checkClientTrusted(chain, authType, sslEngine);
     verifySubjectAltNameInChain(chain);
   }
 
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    delegate.checkClientTrusted(chain, authType);
+    chooseDelegate(chain).checkClientTrusted(chain, authType);
     verifySubjectAltNameInChain(chain);
   }
 
@@ -251,7 +246,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
         sslSocket.setSSLParameters(sslParams);
       }
     }
-    delegate.checkServerTrusted(chain, authType, socket);
+    chooseDelegate(chain).checkServerTrusted(chain, authType, socket);
     verifySubjectAltNameInChain(chain);
   }
 
@@ -263,6 +258,19 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       sslParams.setEndpointIdentificationAlgorithm("");
       sslEngine.setSSLParameters(sslParams);
     }
+    chooseDelegate(chain).checkServerTrusted(chain, authType, sslEngine);
+    verifySubjectAltNameInChain(chain);
+  }
+
+  @Override
+  public void checkServerTrusted(X509Certificate[] chain, String authType)
+      throws CertificateException {
+    chooseDelegate(chain).checkServerTrusted(chain, authType);
+    verifySubjectAltNameInChain(chain);
+  }
+
+  private X509ExtendedTrustManager chooseDelegate(X509Certificate[] chain)
+      throws CertificateException{
     if (delegates != null) {
       Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(chain);
       if (!spiffeId.isPresent()) {
@@ -273,18 +281,10 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
         throw new CertificateException(
             "Spiffe Trust Bundle doesn't contain trust domain from the chain");
       }
-      delegates.get(trustDomain).checkServerTrusted(chain, authType, sslEngine);
+      return delegates.get(trustDomain);
     } else {
-      delegate.checkServerTrusted(chain, authType, sslEngine);
+      return delegate;
     }
-    verifySubjectAltNameInChain(chain);
-  }
-
-  @Override
-  public void checkServerTrusted(X509Certificate[] chain, String authType)
-      throws CertificateException {
-    delegate.checkServerTrusted(chain, authType);
-    verifySubjectAltNameInChain(chain);
   }
 
   @Override
