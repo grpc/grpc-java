@@ -47,14 +47,6 @@ public class DualCallCredentialsTest {
 
   @Mock CallCredentials altsCallCredentials;
 
-  private MethodDescriptor<Void, Void> method =
-      MethodDescriptor.<Void, Void>newBuilder()
-          .setType(MethodDescriptor.MethodType.UNKNOWN)
-          .setFullMethodName("a.service/method")
-          .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
-          .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
-          .build();
-
   private static final String AUTHORITY = "testauthority";
   private static final SecurityLevel SECURITY_LEVEL = SecurityLevel.PRIVACY_AND_INTEGRITY;
 
@@ -96,7 +88,7 @@ public class DualCallCredentialsTest {
 
     @Override
     public MethodDescriptor<?, ?> getMethodDescriptor() {
-      return method;
+      return TestMethodDescriptors.voidMethod();
     }
 
     @Override

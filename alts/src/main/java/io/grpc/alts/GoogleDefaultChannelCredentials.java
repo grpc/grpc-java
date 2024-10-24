@@ -83,26 +83,22 @@ public final class GoogleDefaultChannelCredentials {
     public ChannelCredentials build() {
       ChannelCredentials nettyCredentials =
           InternalNettyChannelCredentials.create(createClientFactory());
-      if (callCredentials != null) {
-        if (altsCallCredentials != null) {
-          return CompositeChannelCredentials.create(
-              nettyCredentials, new DualCallCredentials(callCredentials, altsCallCredentials));
+      CallCredentials tlsCallCreds = callCredentials;
+      if (tlsCallCreds == null) {
+        try {
+          tlsCallCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
+        } catch (IOException e) {
+          tlsCallCreds =
+              new FailingCallCredentials(
+                  Status.UNAUTHENTICATED
+                      .withDescription("Failed to get Google default credentials")
+                      .withCause(e));
         }
-        return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
       }
-      CallCredentials callCreds;
-      try {
-        callCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
-        if (altsCallCredentials != null) {
-          callCreds = new DualCallCredentials(callCreds, altsCallCredentials);
-        }
-      } catch (IOException e) {
-        callCreds =
-            new FailingCallCredentials(
-                Status.UNAUTHENTICATED
-                    .withDescription("Failed to get Google default credentials")
-                    .withCause(e));
-      }
+      CallCredentials callCreds =
+          altsCallCredentials == null
+              ? tlsCallCreds
+              : new DualCallCredentials(tlsCallCreds, altsCallCredentials);
       return CompositeChannelCredentials.create(nettyCredentials, callCreds);
     }
 
