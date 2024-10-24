@@ -41,6 +41,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable protected PrivateKey savedKey;
   @Nullable protected List<X509Certificate> savedCertChain;
   @Nullable protected List<X509Certificate> savedTrustedRoots;
+  @Nullable protected Map<String, List<X509Certificate>> savedSpiffeRoots;
 
   protected CertProviderSslContextProvider(
       Node node,
@@ -149,9 +150,19 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     updateSslContextWhenReady();
   }
 
+  @Override
+  public final void updateSpiffeRoots(Map<String, List<X509Certificate>> spiffeRoots) {
+    savedSpiffeRoots = spiffeRoots;
+    updateSslContextWhenReady();
+  }
+
   private void updateSslContextWhenReady() {
     if (isMtls()) {
       if (savedKey != null && savedTrustedRoots != null) {
+        updateSslContext();
+        clearKeysAndCerts();
+      }
+      if (savedSpiffeRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
@@ -160,8 +171,16 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
         updateSslContext();
         clearKeysAndCerts();
       }
+      if (savedSpiffeRoots != null) {
+        updateSslContext();
+        clearKeysAndCerts();
+      }
     } else if (isServerSideTls()) {
       if (savedKey != null) {
+        updateSslContext();
+        clearKeysAndCerts();
+      }
+      if (savedSpiffeRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
@@ -171,6 +190,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   private void clearKeysAndCerts() {
     savedKey = null;
     savedTrustedRoots = null;
+    savedSpiffeRoots = null;
     savedCertChain = null;
   }
 

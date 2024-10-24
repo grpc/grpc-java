@@ -88,7 +88,7 @@ public class CommonBootstrapperTestUtils {
       String certInstanceName1, @Nullable String privateKey1,
       @Nullable String cert1,
       @Nullable String trustCa1, String certInstanceName2, String privateKey2, String cert2,
-      String trustCa2) {
+      String trustCa2, @Nullable String spiffe) {
     // get temp file for each file
     try {
       if (privateKey1 != null) {
@@ -109,6 +109,9 @@ public class CommonBootstrapperTestUtils {
       if (trustCa2 != null) {
         trustCa2 = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(trustCa2);
       }
+      if (spiffe != null) {
+        spiffe = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(spiffe);
+      }
     } catch (IOException ioe) {
       throw new RuntimeException(ioe);
     }
@@ -116,6 +119,9 @@ public class CommonBootstrapperTestUtils {
     config.put("certificate_file", cert1);
     config.put("private_key_file", privateKey1);
     config.put("ca_certificate_file", trustCa1);
+    if (spiffe != null) {
+      config.put("spiffe_trust_bundle_map_file", spiffe);
+    }
     Bootstrapper.CertificateProviderInfo certificateProviderInfo =
         Bootstrapper.CertificateProviderInfo.create("file_watcher", config);
     HashMap<String, Bootstrapper.CertificateProviderInfo> certProviders =
