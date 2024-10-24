@@ -105,6 +105,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
+  private int softLimitHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -492,6 +493,39 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   public NettyServerBuilder maxInboundMetadataSize(int bytes) {
     checkArgument(bytes > 0, "maxInboundMetadataSize must be positive: %s", bytes);
     this.maxHeaderListSize = bytes;
+    // Clear the soft limit setting, by setting soft limit to maxInboundMetadataSize. The
+    // maxInboundMetadataSize will take precedence over soft limit check.
+    this.softLimitHeaderListSize = bytes;
+    return this;
+  }
+
+  /**
+   * Sets the size of metadata that clients are advised to not exceed. When a metadata with size
+   * larger than the soft limit is encountered there will be a probability the RPC will fail. The
+   * chance of failing increases as the metadata size approaches the hard limit.
+   * {@code Integer.MAX_VALUE} disables the enforcement. The default is implementation-dependent,
+   * but is not generally less than 8 KiB and may be unlimited.
+   *
+   * <p>This is cumulative size of the metadata. The precise calculation is
+   * implementation-dependent, but implementations are encouraged to follow the calculation used
+   * for
+   * <a href="http://httpwg.org/specs/rfc7540.html#rfc.section.6.5.2">HTTP/2's
+   * SETTINGS_MAX_HEADER_LIST_SIZE</a>. It sums the bytes from each entry's key and value, plus 32
+   * bytes of overhead per entry.
+   *
+   * @param soft the soft size limit of received metadata
+   * @param max the hard size limit of received metadata
+   * @return this
+   * @throws IllegalArgumentException if soft and/or max is non-positive, or max smaller than soft
+   * @since 1.68.0
+   */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder maxInboundMetadataSize(int soft, int max) {
+    checkArgument(soft > 0, "softLimitHeaderListSize must be positive: %s", soft);
+    checkArgument(max > soft,
+        "maxInboundMetadataSize: %s must be greater than softLimitHeaderListSize: %s", max, soft);
+    this.softLimitHeaderListSize = soft;
+    this.maxHeaderListSize = max;
     return this;
   }
 
@@ -677,14 +711,33 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
         this.serverImplBuilder.getExecutorPool());
 
     return new NettyServer(
-        listenAddresses, channelFactory, channelOptions, childChannelOptions,
-        bossEventLoopGroupPool, workerEventLoopGroupPool, forceHeapBuffer, negotiator,
-        streamTracerFactories, transportTracerFactory, maxConcurrentCallsPerConnection,
-        autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize,
-        keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-        maxConnectionIdleInNanos, maxConnectionAgeInNanos,
-        maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
-        maxRstCount, maxRstPeriodNanos, eagAttributes, this.serverImplBuilder.getChannelz());
+        listenAddresses,
+        channelFactory,
+        channelOptions,
+        childChannelOptions,
+        bossEventLoopGroupPool,
+        workerEventLoopGroupPool,
+        forceHeapBuffer,
+        negotiator,
+        streamTracerFactories,
+        transportTracerFactory,
+        maxConcurrentCallsPerConnection,
+        autoFlowControl,
+        flowControlWindow,
+        maxMessageSize,
+        maxHeaderListSize,
+        softLimitHeaderListSize,
+        keepAliveTimeInNanos,
+        keepAliveTimeoutInNanos,
+        maxConnectionIdleInNanos,
+        maxConnectionAgeInNanos,
+        maxConnectionAgeGraceInNanos,
+        permitKeepAliveWithoutCalls,
+        permitKeepAliveTimeInNanos,
+        maxRstCount,
+        maxRstPeriodNanos,
+        eagAttributes,
+        this.serverImplBuilder.getChannelz());
   }
 
   @VisibleForTesting

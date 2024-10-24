@@ -141,6 +141,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   private int maxConcurrentStreams = Integer.MAX_VALUE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
+  private int softLimitHeaderListSize = Integer.MAX_VALUE;
   private boolean permitKeepAliveWithoutCalls = true;
   private long permitKeepAliveTimeInNanos = 0;
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -1363,6 +1364,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
+        softLimitHeaderListSize,
         DEFAULT_MAX_MESSAGE_SIZE,
         keepAliveTimeInNanos,
         keepAliveTimeoutInNanos,
