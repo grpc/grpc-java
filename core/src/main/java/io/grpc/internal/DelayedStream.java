@@ -208,7 +208,6 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setAuthority(final String authority) {
-    checkState(listener == null, "May only be called before start");
     checkNotNull(authority, "authority");
     preStartPendingCalls.add(new Runnable() {
       @Override

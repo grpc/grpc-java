@@ -421,7 +421,8 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   }
 
   @Nullable
-  private ServerInfo getServerInfo(String resource) {
+  @Override
+  public ServerInfo getServerInfo(String resource) {
     if (resource.startsWith(XDSTP_SCHEME)) {
       URI uri = URI.create(resource);
       String authority = uri.getAuthority();

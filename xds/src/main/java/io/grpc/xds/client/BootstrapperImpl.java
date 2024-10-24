@@ -50,6 +50,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   // Server features.
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
+  private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
 
   protected final XdsLogger logger;
 
@@ -240,7 +241,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
       }
       servers.add(
-          ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion));
+          ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion,
+              serverFeatures != null
+                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER)));
     }
     return servers.build();
   }

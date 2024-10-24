@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.GrpcXdsClientImplTestBase.SERVER_URI;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -864,6 +865,12 @@ public class CdsLoadBalancer2Test {
       watchers.values().stream()
           .flatMap(List::stream)
           .forEach(w -> w.onError(error));
+    }
+
+    @Nullable
+    @Override
+    public ServerInfo getServerInfo(String resource) {
+      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create());
     }
   }
 }

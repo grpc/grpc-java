@@ -85,12 +85,6 @@ public class DelayedStreamTest {
   }
 
   @Test(expected = IllegalStateException.class)
-  public void setAuthority_afterStart() {
-    stream.start(listener);
-    stream.setAuthority("notgonnawork");
-  }
-
-  @Test(expected = IllegalStateException.class)
   public void start_afterStart() {
     stream.start(listener);
     stream.start(mock(ClientStreamListener.class));
