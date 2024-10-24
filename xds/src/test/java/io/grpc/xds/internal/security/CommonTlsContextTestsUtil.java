@@ -51,6 +51,7 @@ public class CommonTlsContextTestsUtil {
   public static final String SERVER_1_SPIFFE_PEM_FILE = "server1_spiffe.pem";
   public static final String SERVER_1_KEY_FILE = "server1.key";
   public static final String CLIENT_PEM_FILE = "client.pem";
+  public static final String CLIENT_SPIFFE_PEM_FILE = "client_spiffe.pem";
   public static final String CLIENT_KEY_FILE = "client.key";
   public static final String CA_PEM_FILE = "ca.pem";
   public static final String SPIFFE_TRUST_BUNDLE_FILE = "spiffebundle.json";

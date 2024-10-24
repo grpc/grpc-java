@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPIFFE_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
 import static org.junit.Assert.fail;
@@ -591,6 +592,18 @@ public class XdsX509TrustManagerTest {
       assertThat(expected).hasMessageThat()
           .isEqualTo("Spiffe Trust Bundle doesn't contain trust domain from the chain");
     }
+  }
+
+  @Test
+  public void checkClientTrustedSpiffeTrustBundle()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate[] clientCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(CLIENT_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils.
+        toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("foo.bar.com", caCerts), null);
+    trustManager.checkClientTrusted(clientCerts, "RSA");
   }
 
   @Test
