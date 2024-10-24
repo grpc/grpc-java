@@ -57,7 +57,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
           CertificateValidationContext certificateValidationContextdationContext)
       throws CertStoreException {
     SslContextBuilder sslContextBuilder;
-    if (savedSpiffeRoots!= null) {
+    if (savedSpiffeRoots != null) {
       sslContextBuilder = GrpcSslContexts.forClient().trustManager(
           new XdsTrustManagerFactory(
               savedSpiffeRoots,

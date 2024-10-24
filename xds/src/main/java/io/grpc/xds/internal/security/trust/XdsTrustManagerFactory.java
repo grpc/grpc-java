@@ -67,9 +67,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
     this(certs, staticCertificateValidationContext, true);
   }
 
-  public XdsTrustManagerFactory(
-      Map<String, List<X509Certificate>> spiffeRoots, CertificateValidationContext staticCertificateValidationContext)
-      throws CertStoreException {
+  public XdsTrustManagerFactory(Map<String, List<X509Certificate>> spiffeRoots,
+      CertificateValidationContext staticCertificateValidationContext) throws CertStoreException {
     this(spiffeRoots, staticCertificateValidationContext, true);
   }
 
@@ -158,8 +157,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   @VisibleForTesting
-  static XdsX509TrustManager createX509TrustManager(
-      Map<String, List<X509Certificate>> spiffeRoots, CertificateValidationContext certContext) throws CertStoreException {
+  static XdsX509TrustManager createX509TrustManager(Map<String, List<X509Certificate>> spiffeRoots,
+      CertificateValidationContext certContext) throws CertStoreException {
     TrustManagerFactory tmf = null;
     checkNotNull(spiffeRoots, "spiffeRoots");
     Map<String, X509ExtendedTrustManager> delegates = new HashMap<>();

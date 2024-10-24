@@ -270,7 +270,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   private X509ExtendedTrustManager chooseDelegate(X509Certificate[] chain)
-      throws CertificateException{
+      throws CertificateException {
     if (delegates != null) {
       Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(chain);
       if (!spiffeId.isPresent()) {
