@@ -173,11 +173,13 @@ public class GrpcXdsClientImplDataTest {
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
+  private boolean originalEnableUseSystemRootCerts;
 
   @Before
   public void setUp() {
     originalEnableRouteLookup = XdsRouteConfigureResource.enableRouteLookup;
     originalEnableLeastRequest = XdsClusterResource.enableLeastRequest;
+    originalEnableUseSystemRootCerts = XdsClusterResource.enableSystemRootCerts;
     assertThat(originalEnableLeastRequest).isFalse();
   }
 
@@ -185,6 +187,7 @@ public class GrpcXdsClientImplDataTest {
   public void tearDown() {
     XdsRouteConfigureResource.enableRouteLookup = originalEnableRouteLookup;
     XdsClusterResource.enableLeastRequest = originalEnableLeastRequest;
+    XdsClusterResource.enableSystemRootCerts = originalEnableUseSystemRootCerts;
   }
 
   @Test
@@ -2503,7 +2506,8 @@ public class GrpcXdsClientImplDataTest {
             .setValidationContext(CertificateValidationContext.getDefaultInstance())
             .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("ca_certificate_provider_instance is required in upstream-tls-context");
+    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required "
+        + "in upstream-tls-context");
     XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -2614,6 +2618,87 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void
+      validateCommonTlsContext_combinedValidationContextSystemRootCerts_envVarNotSet_throws() {
+    XdsClusterResource.enableSystemRootCerts = false;
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setCombinedValidationContext(
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setDefaultValidationContext(
+                    CertificateValidationContext.newBuilder()
+                        .setSystemRootCerts(
+                            CertificateValidationContext.SystemRootCerts.newBuilder().build())
+                        .build()
+                )
+                .build())
+        .build();
+    try {
+      XdsClusterResource
+          .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+      fail("Expected exception");
+    } catch (ResourceInvalidException ex) {
+      assertThat(ex.getMessage()).isEqualTo(
+          "ca_certificate_provider_instance or system_root_certs is required in"
+              + " upstream-tls-context");
+    }
+  }
+
+  @Test
+  public void validateCommonTlsContext_combinedValidationContextSystemRootCerts()
+      throws ResourceInvalidException {
+    XdsClusterResource.enableSystemRootCerts = true;
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setCombinedValidationContext(
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setDefaultValidationContext(
+                    CertificateValidationContext.newBuilder()
+                        .setSystemRootCerts(
+                            CertificateValidationContext.SystemRootCerts.newBuilder().build())
+                        .build()
+                )
+                .build())
+        .build();
+    XdsClusterResource
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+  }
+
+  @Test
+  public void validateCommonTlsContext_validationContextSystemRootCerts_envVarNotSet_throws() {
+    XdsClusterResource.enableSystemRootCerts = false;
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setValidationContext(
+            CertificateValidationContext.newBuilder()
+                .setSystemRootCerts(
+                    CertificateValidationContext.SystemRootCerts.newBuilder().build())
+                .build())
+        .build();
+    try {
+      XdsClusterResource
+          .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+      fail("Expected exception");
+    } catch (ResourceInvalidException ex) {
+      assertThat(ex.getMessage()).isEqualTo(
+          "ca_certificate_provider_instance or system_root_certs is required in "
+              + "upstream-tls-context");
+    }
+  }
+
+  @Test
+  public void validateCommonTlsContext_validationContextSystemRootCerts()
+      throws ResourceInvalidException {
+    XdsClusterResource.enableSystemRootCerts = true;
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setValidationContext(
+            CertificateValidationContext.newBuilder()
+                .setSystemRootCerts(
+                    CertificateValidationContext.SystemRootCerts.newBuilder().build())
+                .build())
+        .build();
+    XdsClusterResource
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+  }
+
+  @Test
   @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_validationContextProviderInstance_absentInBootstrapFile()
           throws ResourceInvalidException {
@@ -2674,7 +2759,8 @@ public class GrpcXdsClientImplDataTest {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("ca_certificate_provider_instance is required in upstream-tls-context");
+    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required "
+        + "in upstream-tls-context");
     XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -2687,7 +2773,8 @@ public class GrpcXdsClientImplDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "ca_certificate_provider_instance is required in upstream-tls-context");
+        "ca_certificate_provider_instance or system_root_certs is required in "
+            + "upstream-tls-context");
     XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
