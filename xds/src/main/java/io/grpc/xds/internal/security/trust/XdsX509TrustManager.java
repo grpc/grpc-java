@@ -289,6 +289,6 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   @Override
   public X509Certificate[] getAcceptedIssuers() {
-    return delegate.getAcceptedIssuers();
+    return delegates == null ? delegate.getAcceptedIssuers() : null;
   }
 }

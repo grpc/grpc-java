@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.security.trust;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -160,6 +161,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   static XdsX509TrustManager createX509TrustManager(
       Map<String, List<X509Certificate>> spiffeRoots, CertificateValidationContext certContext) throws CertStoreException {
     TrustManagerFactory tmf = null;
+    checkNotNull(spiffeRoots, "spiffeRoots");
     Map<String, X509ExtendedTrustManager> delegates = new HashMap<>();
     for (Map.Entry<String, List<X509Certificate>> entry:spiffeRoots.entrySet()) {
       try {
