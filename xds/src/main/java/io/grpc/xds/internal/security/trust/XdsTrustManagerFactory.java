@@ -176,8 +176,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
           i++;
         }
         tmf.init(ks);
-      } catch (NoSuchAlgorithmException | KeyStoreException | IOException |
-               CertificateException e) {
+      } catch (NoSuchAlgorithmException | KeyStoreException | IOException
+               | CertificateException e) {
         logger.log(Level.SEVERE, "createX509TrustManager", e);
         throw new CertStoreException(e);
       }
