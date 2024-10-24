@@ -165,6 +165,8 @@ public class XdsSecurityClientServerTest {
     assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
+
+
   @Test
   public void requireClientAuth_noClientCert_expectException()
       throws Exception {
@@ -229,6 +231,14 @@ public class XdsSecurityClientServerTest {
   }
 
   /** mTLS - client auth enabled - using {@link XdsChannelCredentials} API. */
+  @Test
+  public void mtlsClientServer_Spiffe_withClientAuthentication_withXdsChannelCreds()
+      throws Exception {
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, true);
+    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
+  }
+
   @Test
   public void mtlsClientServer_withClientAuthentication_withXdsChannelCreds()
       throws Exception {

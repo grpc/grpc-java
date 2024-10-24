@@ -190,6 +190,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   private void clearKeysAndCerts() {
     savedKey = null;
     savedTrustedRoots = null;
+    savedSpiffeRoots = null;
     savedCertChain = null;
   }
 
