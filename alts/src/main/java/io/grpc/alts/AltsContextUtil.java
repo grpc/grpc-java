@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-
 package io.grpc.alts;
 
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerCall;
 import io.grpc.alts.internal.AltsInternalContext;
@@ -35,7 +35,7 @@ public final class AltsContextUtil {
    * @return the created {@link AltsContext}
    * @throws IllegalArgumentException if the {@link ServerCall} has no ALTS information.
    */
-  public static AltsContext createFrom(ServerCall<?,?> call) {
+  public static AltsContext createFrom(ServerCall<?, ?> call) {
     Object authContext = call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
     if (!(authContext instanceof AltsInternalContext)) {
       throw new IllegalArgumentException("No ALTS context information found");
@@ -49,8 +49,18 @@ public final class AltsContextUtil {
    * @param call the {@link ServerCall} to check
    * @return true, if the {@link ServerCall} contains ALTS information and false otherwise.
    */
-  public static boolean check(ServerCall<?,?> call) {
-    Object authContext = call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
+  public static boolean check(ServerCall<?, ?> call) {
+    return check(call.getAttributes());
+  }
+
+  /**
+   * Checks if the {@link Attributes} contains ALTS information.
+   *
+   * @param attributes the {@link Attributes} to check
+   * @return true, if the {@link Attributes} contains ALTS information and false otherwise.
+   */
+  public static boolean check(Attributes attributes) {
+    Object authContext = attributes.get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
     return authContext instanceof AltsInternalContext;
   }
 }

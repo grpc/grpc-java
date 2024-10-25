@@ -18,6 +18,7 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.inprocess.InProcessTransport.isEnabledSupportTracingMessageSizes;
 
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
@@ -118,6 +119,9 @@ public final class InProcessChannelBuilder extends
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
     managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
+    if (!isEnabledSupportTracingMessageSizes) {
+      managedChannelImplBuilder.disableRetry();
+    }
   }
 
   @Internal

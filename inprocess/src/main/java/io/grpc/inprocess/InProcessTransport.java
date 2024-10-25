@@ -21,7 +21,6 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Optional;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -54,7 +53,6 @@ import io.grpc.internal.InsightBuilder;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
@@ -84,13 +82,14 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
+  static boolean isEnabledSupportTracingMessageSizes =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES", false);
 
   private final InternalLogId logId;
   private final SocketAddress address;
   private final int clientMaxInboundMetadataSize;
   private final String authority;
   private final String userAgent;
-  private final Optional<ServerListener> optionalServerListener;
   private int serverMaxInboundMetadataSize;
   private final boolean includeCauseWithStatus;
   private ObjectPool<ScheduledExecutorService> serverSchedulerPool;
@@ -139,8 +138,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         }
       };
 
-  private InProcessTransport(SocketAddress address, int maxInboundMetadataSize, String authority,
-      String userAgent, Attributes eagAttrs, Optional<ServerListener> optionalServerListener,
+  public InProcessTransport(SocketAddress address, int maxInboundMetadataSize, String authority,
+      String userAgent, Attributes eagAttrs,
       boolean includeCauseWithStatus, long assumedMessageSize) {
     this.address = address;
     this.clientMaxInboundMetadataSize = maxInboundMetadataSize;
@@ -153,48 +152,23 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, address)
         .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, address)
         .build();
-    this.optionalServerListener = optionalServerListener;
     logId = InternalLogId.allocate(getClass(), address.toString());
     this.includeCauseWithStatus = includeCauseWithStatus;
     this.assumedMessageSize = assumedMessageSize;
-  }
-
-  public InProcessTransport(
-      SocketAddress address, int maxInboundMetadataSize, String authority, String userAgent,
-      Attributes eagAttrs, boolean includeCauseWithStatus, long assumedMessageSize) {
-    this(address, maxInboundMetadataSize, authority, userAgent, eagAttrs,
-        Optional.<ServerListener>absent(), includeCauseWithStatus, assumedMessageSize);
-  }
-
-  InProcessTransport(
-      String name, int maxInboundMetadataSize, String authority, String userAgent,
-      Attributes eagAttrs, ObjectPool<ScheduledExecutorService> serverSchedulerPool,
-      List<ServerStreamTracer.Factory> serverStreamTracerFactories,
-      ServerListener serverListener, boolean includeCauseWithStatus, long assumedMessageSize) {
-    this(new InProcessSocketAddress(name), maxInboundMetadataSize, authority, userAgent, eagAttrs,
-        Optional.of(serverListener), includeCauseWithStatus, assumedMessageSize);
-    this.serverMaxInboundMetadataSize = maxInboundMetadataSize;
-    this.serverSchedulerPool = serverSchedulerPool;
-    this.serverStreamTracerFactories = serverStreamTracerFactories;
   }
 
   @CheckReturnValue
   @Override
   public synchronized Runnable start(ManagedClientTransport.Listener listener) {
     this.clientTransportListener = listener;
-    if (optionalServerListener.isPresent()) {
+    InProcessServer server = InProcessServer.findServer(address);
+    if (server != null) {
+      serverMaxInboundMetadataSize = server.getMaxInboundMetadataSize();
+      serverSchedulerPool = server.getScheduledExecutorServicePool();
       serverScheduler = serverSchedulerPool.getObject();
-      serverTransportListener = optionalServerListener.get().transportCreated(this);
-    } else {
-      InProcessServer server = InProcessServer.findServer(address);
-      if (server != null) {
-        serverMaxInboundMetadataSize = server.getMaxInboundMetadataSize();
-        serverSchedulerPool = server.getScheduledExecutorServicePool();
-        serverScheduler = serverSchedulerPool.getObject();
-        serverStreamTracerFactories = server.getStreamTracerFactories();
-        // Must be semi-initialized; past this point, can begin receiving requests
-        serverTransportListener = server.register(this);
-      }
+      serverStreamTracerFactories = server.getStreamTracerFactories();
+      // Must be semi-initialized; past this point, can begin receiving requests
+      serverTransportListener = server.register(this);
     }
     if (serverTransportListener == null) {
       shutdownStatus = Status.UNAVAILABLE.withDescription("Could not find server: " + address);
@@ -513,22 +487,25 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
-        long messageLength;
-        try {
-          if (assumedMessageSize != -1) {
-            messageLength = assumedMessageSize;
-          } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
-            messageLength = message.available();
-          } else {
-            InputStream oldMessage = message;
-            byte[] payload = ByteStreams.toByteArray(message);
-            messageLength = payload.length;
-            message = new ByteArrayInputStream(payload);
-            oldMessage.close();
+        long messageLength = 0;
+        if (isEnabledSupportTracingMessageSizes) {
+          try {
+            if (assumedMessageSize != -1) {
+              messageLength = assumedMessageSize;
+            } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
+              messageLength = message.available();
+            } else {
+              InputStream oldMessage = message;
+              byte[] payload = ByteStreams.toByteArray(message);
+              messageLength = payload.length;
+              message = new ByteArrayInputStream(payload);
+              oldMessage.close();
+            }
+          } catch (Exception e) {
+            throw new RuntimeException("Error processing the message length", e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException("Error processing the message length", e);
         }
+
         synchronized (this) {
           if (closed) {
             return;
@@ -537,11 +514,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           clientStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           clientStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
-          statsTraceCtx.outboundUncompressedSize(messageLength);
-          statsTraceCtx.outboundWireSize(messageLength);
-          // messageLength should be same at receiver's end as no actual wire is involved.
-          clientStream.statsTraceCtx.inboundUncompressedSize(messageLength);
-          clientStream.statsTraceCtx.inboundWireSize(messageLength);
+          if (isEnabledSupportTracingMessageSizes) {
+            statsTraceCtx.outboundUncompressedSize(messageLength);
+            statsTraceCtx.outboundWireSize(messageLength);
+            // messageLength should be same at receiver's end as no actual wire is involved.
+            clientStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+            clientStream.statsTraceCtx.inboundWireSize(messageLength);
+          }
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (clientRequested > 0) {
@@ -551,7 +530,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             clientReceiveQueue.add(producer);
           }
         }
-
         syncContext.drain();
       }
 
@@ -805,21 +783,23 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
-        long messageLength;
-        try {
-          if (assumedMessageSize != -1) {
-            messageLength = assumedMessageSize;
-          } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
-            messageLength = message.available();
-          } else {
-            InputStream oldMessage = message;
-            byte[] payload = ByteStreams.toByteArray(message);
-            messageLength = payload.length;
-            message = new ByteArrayInputStream(payload);
-            oldMessage.close();
+        long messageLength = 0;
+        if (isEnabledSupportTracingMessageSizes) {
+          try {
+            if (assumedMessageSize != -1) {
+              messageLength = assumedMessageSize;
+            } else if (message instanceof KnownLength || message instanceof ByteArrayInputStream) {
+              messageLength = message.available();
+            } else {
+              InputStream oldMessage = message;
+              byte[] payload = ByteStreams.toByteArray(message);
+              messageLength = payload.length;
+              message = new ByteArrayInputStream(payload);
+              oldMessage.close();
+            }
+          } catch (Exception e) {
+            throw new RuntimeException("Error processing the message length", e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException("Error processing the message length", e);
         }
         synchronized (this) {
           if (closed) {
@@ -829,11 +809,13 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           statsTraceCtx.outboundMessageSent(outboundSeqNo, -1, -1);
           serverStream.statsTraceCtx.inboundMessage(outboundSeqNo);
           serverStream.statsTraceCtx.inboundMessageRead(outboundSeqNo, -1, -1);
-          statsTraceCtx.outboundUncompressedSize(messageLength);
-          statsTraceCtx.outboundWireSize(messageLength);
-          // messageLength should be same at receiver's end as no actual wire is involved.
-          serverStream.statsTraceCtx.inboundUncompressedSize(messageLength);
-          serverStream.statsTraceCtx.inboundWireSize(messageLength);
+          if (isEnabledSupportTracingMessageSizes) {
+            statsTraceCtx.outboundUncompressedSize(messageLength);
+            statsTraceCtx.outboundWireSize(messageLength);
+            // messageLength should be same at receiver's end as no actual wire is involved.
+            serverStream.statsTraceCtx.inboundUncompressedSize(messageLength);
+            serverStream.statsTraceCtx.inboundWireSize(messageLength);
+          }
           outboundSeqNo++;
           StreamListener.MessageProducer producer = new SingleMessageProducer(message);
           if (serverRequested > 0) {
