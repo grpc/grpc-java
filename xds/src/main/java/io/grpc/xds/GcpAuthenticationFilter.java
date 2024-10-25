@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -78,13 +79,14 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
     if (cacheConfig != null) {
       cacheSize = cacheConfig.getCacheSize().getValue();
-      if (cacheSize <= 0) {
+      if (cacheSize == 0) {
         return ConfigOrError.fromError(
             "cache_config.cache_size must be in the range (0, INT64_MAX)");
+      } else if (UnsignedLongs.compare(cacheSize, 0L) < 0) {
+        cacheSize = Long.MAX_VALUE;
       }
     }
 
-    // Create and return the GcpAuthenticationConfig
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(cacheSize);
     return ConfigOrError.fromConfig(config);
   }
@@ -215,10 +217,6 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
           return size() > maxSize;
         }
       };
-    }
-
-    V get(K key) {
-      return cache.get(key);
     }
 
     V getOrInsert(K key, Function<K, V> create) {
