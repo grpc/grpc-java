@@ -22,7 +22,6 @@ import static io.grpc.xds.FaultFilter.HEADER_ABORT_HTTP_STATUS_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_ABORT_PERCENTAGE_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_PERCENTAGE_KEY;
-import static io.grpc.xds.GrpcXdsClientImplTestBase.SERVER_URI;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -902,54 +901,12 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolved_routeActionHasAutoHostRewrite_emitsCallOptionForTheSame()
-      throws XdsInitializationException {
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", "true");
-    try {
-      FakeXdsClient xdsClient =
-          (FakeXdsClient) xdsClientPoolFactory.getOrCreate(AUTHORITY).getObject();
-      xdsClient.setTrustedXdsServer(true);
-      resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
-          syncContext, scheduler, xdsClientPoolFactory, mockRandom,
-          FilterRegistry.getDefaultRegistry(), null);
-      resolver.start(mockListener);
-      xdsClient.deliverLdsUpdate(
-          Collections.singletonList(
-              Route.forAction(
-                  RouteMatch.withPathExactOnly(
-                      "/" + TestMethodDescriptors.voidMethod().getFullMethodName()),
-                  RouteAction.forCluster(
-                      cluster1,
-                      Collections.singletonList(
-                          HashPolicy.forHeader(false, "custom-key", null, null)),
-                      null,
-                      null,
-                      true),
-                  ImmutableMap.of())));
-      verify(mockListener).onResult(resolutionResultCaptor.capture());
-      InternalConfigSelector configSelector =
-          resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
-
-      // First call, with header "custom-key": "custom-value".
-      startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
-          ImmutableMap.of("custom-key", "custom-value"), CallOptions.DEFAULT);
-
-      assertThat(testCall.callOptions.getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)).isTrue();
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
-    }
-  }
-
-  @Test
-  public void resolved_routeActionHasAutoHostRewrite_flagDisabledTest()
-      throws XdsInitializationException {
-    FakeXdsClient xdsClient =
-        (FakeXdsClient) xdsClientPoolFactory.getOrCreate(AUTHORITY).getObject();
-    xdsClient.setTrustedXdsServer(true);
+  public void resolved_routeActionHasAutoHostRewrite_emitsCallOptionForTheSame() {
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler, xdsClientPoolFactory, mockRandom,
         FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Collections.singletonList(
             Route.forAction(
@@ -971,40 +928,38 @@ public class XdsNameResolverTest {
     startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         ImmutableMap.of("custom-key", "custom-value"), CallOptions.DEFAULT);
 
-    assertThat(testCall.callOptions.getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)).isNull();
+    assertThat(testCall.callOptions.getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)).isTrue();
   }
 
   @Test
-  public void resolved_routeActionHasAutoHostRewrite_notTrustedServer_noEmitCallOptionForTheSame() {
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", "true");
-    try {
-      resolver.start(mockListener);
-      FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-      xdsClient.deliverLdsUpdate(
-          Collections.singletonList(
-              Route.forAction(
-                  RouteMatch.withPathExactOnly(
-                      "/" + TestMethodDescriptors.voidMethod().getFullMethodName()),
-                  RouteAction.forCluster(
-                      cluster1,
-                      Collections.singletonList(
-                          HashPolicy.forHeader(false, "custom-key", null, null)),
-                      null,
-                      null,
-                      true),
-                  ImmutableMap.of())));
-      verify(mockListener).onResult(resolutionResultCaptor.capture());
-      InternalConfigSelector configSelector =
-          resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
+  public void resolved_routeActionNoAutoHostRewrite_doesntEmitCallOptionForTheSame() {
+    resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
+        syncContext, scheduler, xdsClientPoolFactory, mockRandom,
+        FilterRegistry.getDefaultRegistry(), null);
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        Collections.singletonList(
+            Route.forAction(
+                RouteMatch.withPathExactOnly(
+                    "/" + TestMethodDescriptors.voidMethod().getFullMethodName()),
+                RouteAction.forCluster(
+                    cluster1,
+                    Collections.singletonList(
+                        HashPolicy.forHeader(false, "custom-key", null, null)),
+                    null,
+                    null,
+                    false),
+                ImmutableMap.of())));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector =
+        resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
 
-      // First call, with header "custom-key": "custom-value".
-      startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
-          ImmutableMap.of("custom-key", "custom-value"), CallOptions.DEFAULT);
+    // First call, with header "custom-key": "custom-value".
+    startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
+        ImmutableMap.of("custom-key", "custom-value"), CallOptions.DEFAULT);
 
-      assertThat(testCall.callOptions.getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)).isNull();
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
-    }
+    assertThat(testCall.callOptions.getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)).isNull();
   }
 
   @SuppressWarnings("unchecked")
@@ -2071,15 +2026,10 @@ public class XdsNameResolverTest {
     private String rdsResource;
     private ResourceWatcher<LdsUpdate> ldsWatcher;
     private ResourceWatcher<RdsUpdate> rdsWatcher;
-    private boolean isTrustedXdsServer;
 
     @Override
     public BootstrapInfo getBootstrapInfo() {
       return bootstrapInfo;
-    }
-
-    public void setTrustedXdsServer(boolean isTrustedXdsServer) {
-      this.isTrustedXdsServer = isTrustedXdsServer;
     }
 
     @Override
@@ -2291,13 +2241,6 @@ public class XdsNameResolverTest {
           rdsWatcher.onError(error);
         });
       }
-    }
-
-    @Nullable
-    @Override
-    public ServerInfo getServerInfo(String resource) {
-      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), false,
-          isTrustedXdsServer);
     }
   }
 

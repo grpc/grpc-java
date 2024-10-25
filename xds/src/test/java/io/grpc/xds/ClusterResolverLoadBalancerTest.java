@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.GrpcXdsClientImplTestBase.SERVER_URI;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
@@ -1155,12 +1154,6 @@ public class ClusterResolverLoadBalancerTest {
   private static final class FakeXdsClient extends XdsClient {
 
     private final Map<String, ResourceWatcher<EdsUpdate>> watchers = new HashMap<>();
-
-    @Nullable
-    @Override
-    public ServerInfo getServerInfo(String resource) {
-      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create());
-    }
 
     @Override
     @SuppressWarnings("unchecked")

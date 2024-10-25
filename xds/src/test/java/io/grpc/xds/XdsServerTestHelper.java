@@ -33,7 +33,6 @@ import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
@@ -226,12 +225,6 @@ public class XdsServerTestHelper {
           break;
         default:
       }
-    }
-
-    @Nullable
-    @Override
-    public ServerInfo getServerInfo(String resource) {
-      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create());
     }
 
     @Override

@@ -117,9 +117,6 @@ public abstract class XdsClient {
     return Joiner.on('/').join(encodedSegs);
   }
 
-  @Nullable
-  public abstract ServerInfo getServerInfo(String resource);
-
   public interface ResourceUpdate {}
 
   /**

@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.GrpcXdsClientImplTestBase.SERVER_URI;
 import static io.grpc.xds.XdsNameResolver.AUTO_HOST_REWRITE_KEY;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -1221,12 +1220,6 @@ public class ClusterImplLoadBalancerTest {
     @Override
     public Map<ServerInfo, LoadReportClient> getServerLrsClientMap() {
       return null;
-    }
-
-    @Nullable
-    @Override
-    public ServerInfo getServerInfo(String resource) {
-      return ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create());
     }
   }
 

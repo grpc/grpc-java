@@ -142,7 +142,7 @@ import org.mockito.verification.VerificationMode;
 // The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
 // necessary. Still keep it for future version usage. Remove if too much trouble to maintain.
 public abstract class GrpcXdsClientImplTestBase {
-  static final String SERVER_URI = "trafficdirector.googleapis.com";
+  private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
