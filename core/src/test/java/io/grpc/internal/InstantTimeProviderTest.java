@@ -35,16 +35,16 @@ public class InstantTimeProviderTest {
     InstantTimeProvider instantTimeProvider = new InstantTimeProvider(
         Class.forName("java.time.Instant"));
 
-      // Get the current time from the InstantTimeProvider
-      long actualTimeNanos = instantTimeProvider.currentTimeNanos();
+    // Get the current time from the InstantTimeProvider
+    long actualTimeNanos = instantTimeProvider.currentTimeNanos();
 
-      // Get the current time from Instant for comparison
-      Instant instantNow = Instant.now();
-      long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond())
+    // Get the current time from Instant for comparison
+    Instant instantNow = Instant.now();
+    long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond())
           + instantNow.getNano();
 
-      // Validate the time returned is close to the expected value within a tolerance
-      // (i,e 10 millisecond tolerance in nanoseconds).
-      assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
+    // Validate the time returned is close to the expected value within a tolerance
+    // (i,e 10 millisecond tolerance in nanoseconds).
+    assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
   }
 }
