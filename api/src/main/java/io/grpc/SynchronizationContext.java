@@ -164,6 +164,12 @@ public final class SynchronizationContext implements Executor {
     return new ScheduledHandle(runnable, future);
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10245")
+  public final ScheduledHandle schedule(
+      final Runnable task, Duration delay, ScheduledExecutorService timerService) {
+    return schedule(task, convertToNanos(delay), TimeUnit.NANOSECONDS, timerService);
+  }
+
   /**
    * Schedules a task to be added and run via {@link #execute} after an initial delay and then
    * repeated after the delay until cancelled.

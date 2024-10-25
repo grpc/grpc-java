@@ -248,6 +248,23 @@ public class SynchronizationContextTest {
   }
 
   @Test
+  public void scheduleDuration() {
+    MockScheduledExecutorService executorService = new MockScheduledExecutorService();
+    ScheduledHandle handle =
+        syncContext.schedule(task1, Duration.ofSeconds(10), executorService);
+
+    assertThat(executorService.delay)
+        .isEqualTo(executorService.unit.convert(10, TimeUnit.SECONDS));
+    assertThat(handle.isPending()).isTrue();
+    verify(task1, never()).run();
+
+    executorService.command.run();
+
+    assertThat(handle.isPending()).isFalse();
+    verify(task1).run();
+  }
+
+  @Test
   public void scheduleWithFixedDelayDuration() {
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =
