@@ -35,8 +35,10 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
-import io.grpc.xds.internal.LruCache;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Function;
 import javax.annotation.Nullable;
 
 /**
@@ -83,9 +85,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     }
 
     // Create and return the GcpAuthenticationConfig
-    GcpAuthenticationConfig config = new GcpAuthenticationConfig(
-        cacheSize
-    );
+    GcpAuthenticationConfig config = new GcpAuthenticationConfig(cacheSize);
     return ConfigOrError.fromConfig(config);
   }
 
@@ -201,4 +201,28 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     public void sendMessage(ReqT message) {}
   }
 
+  private static final class LruCache<K, V> {
+
+    private final Map<K, V> cache;
+
+    LruCache(long maxSize) {
+      this.cache = new LinkedHashMap<K, V>(
+          (int) Math.min(maxSize, Integer.MAX_VALUE - 1),
+          0.75f,
+          true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+          return size() > maxSize;
+        }
+      };
+    }
+
+    V get(K key) {
+      return cache.get(key);
+    }
+
+    V getOrInsert(K key, Function<K, V> create) {
+      return cache.computeIfAbsent(key, create);
+    }
+  }
 }
