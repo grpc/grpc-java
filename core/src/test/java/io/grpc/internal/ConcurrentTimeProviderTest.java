@@ -25,26 +25,24 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link InstantTimeProvider}.
+ * Unit tests for {@link ConcurrentTimeProvider}.
  */
 @RunWith(JUnit4.class)
-public class InstantTimeProviderTest {
+public class ConcurrentTimeProviderTest {
   @Test
-  public void testInstantCurrentTimeNanos() throws Exception {
+  public void testConcurrentCurrentTimeNanos() {
 
-    InstantTimeProvider instantTimeProvider = new InstantTimeProvider(
-        Class.forName("java.time.Instant"));
+    ConcurrentTimeProvider concurrentTimeProvider = new ConcurrentTimeProvider();
+    // Get the current time from the ConcurrentTimeProvider
+    long actualTimeNanos = concurrentTimeProvider.currentTimeNanos();
 
-      // Get the current time from the InstantTimeProvider
-      long actualTimeNanos = instantTimeProvider.currentTimeNanos();
+    // Get the current time from Instant for comparison
+    Instant instantNow = Instant.now();
+    long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond())
+        + instantNow.getNano();
 
-      // Get the current time from Instant for comparison
-      Instant instantNow = Instant.now();
-      long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond())
-          + instantNow.getNano();
-
-      // Validate the time returned is close to the expected value within a tolerance
-      // (i,e 10 millisecond tolerance in nanoseconds).
-      assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
+    // Validate the time returned is close to the expected value within a tolerance
+    // (i,e 10 millisecond tolerance in nanoseconds).
+    assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
   }
 }
