@@ -105,6 +105,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -766,7 +767,8 @@ public class NettyClientTransportTest {
         .trustManager(caCert)
         .keyManager(clientCert, clientKey)
         .build();
-    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool);
+    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool,
+        Optional.empty());
     // after starting the client, the Executor in the client pool should be used
     assertEquals(true, clientExecutorPool.isInUse());
     final NettyClientTransport transport = newTransport(negotiator);

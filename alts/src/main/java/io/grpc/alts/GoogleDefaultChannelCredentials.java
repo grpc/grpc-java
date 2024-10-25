@@ -63,6 +63,7 @@ public final class GoogleDefaultChannelCredentials {
    */
   public static final class Builder {
     private CallCredentials callCredentials;
+    private CallCredentials altsCallCredentials;
 
     private Builder() {}
 
@@ -72,23 +73,32 @@ public final class GoogleDefaultChannelCredentials {
       return this;
     }
 
+    /** Constructs GoogleDefaultChannelCredentials with an ALTS-specific call credential. */
+    public Builder altsCallCredentials(CallCredentials callCreds) {
+      altsCallCredentials = callCreds;
+      return this;
+    }
+
     /** Builds a GoogleDefaultChannelCredentials instance. */
     public ChannelCredentials build() {
       ChannelCredentials nettyCredentials =
           InternalNettyChannelCredentials.create(createClientFactory());
-      if (callCredentials != null) {
-        return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
+      CallCredentials tlsCallCreds = callCredentials;
+      if (tlsCallCreds == null) {
+        try {
+          tlsCallCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
+        } catch (IOException e) {
+          tlsCallCreds =
+              new FailingCallCredentials(
+                  Status.UNAUTHENTICATED
+                      .withDescription("Failed to get Google default credentials")
+                      .withCause(e));
+        }
       }
-      CallCredentials callCreds;
-      try {
-        callCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
-      } catch (IOException e) {
-        callCreds =
-            new FailingCallCredentials(
-                Status.UNAUTHENTICATED
-                    .withDescription("Failed to get Google default credentials")
-                    .withCause(e));
-      }
+      CallCredentials callCreds =
+          altsCallCredentials == null
+              ? tlsCallCreds
+              : new DualCallCredentials(tlsCallCreds, altsCallCredentials);
       return CompositeChannelCredentials.create(nettyCredentials, callCreds);
     }
 

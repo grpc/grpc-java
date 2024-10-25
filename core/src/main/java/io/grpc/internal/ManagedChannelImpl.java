@@ -779,30 +779,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return;
     }
     panicMode = true;
-    cancelIdleTimer(/* permanent= */ true);
-    shutdownNameResolverAndLoadBalancer(false);
-    final class PanicSubchannelPicker extends SubchannelPicker {
-      private final PickResult panicPickResult =
-          PickResult.withDrop(
-              Status.INTERNAL.withDescription("Panic! This is a bug!").withCause(t));
-
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return panicPickResult;
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(PanicSubchannelPicker.class)
-            .add("panicPickResult", panicPickResult)
-            .toString();
-      }
+    try {
+      cancelIdleTimer(/* permanent= */ true);
+      shutdownNameResolverAndLoadBalancer(false);
+    } finally {
+      updateSubchannelPicker(new LoadBalancer.FixedResultPicker(PickResult.withDrop(
+          Status.INTERNAL.withDescription("Panic! This is a bug!").withCause(t))));
+      realChannel.updateConfigSelector(null);
+      channelLogger.log(ChannelLogLevel.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
+      channelStateManager.gotoState(TRANSIENT_FAILURE);
     }
-
-    updateSubchannelPicker(new PanicSubchannelPicker());
-    realChannel.updateConfigSelector(null);
-    channelLogger.log(ChannelLogLevel.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
-    channelStateManager.gotoState(TRANSIENT_FAILURE);
   }
 
   @VisibleForTesting
@@ -1404,7 +1390,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class UpdateBalancingState implements Runnable {
         @Override
         public void run() {
-          if (LbHelperImpl.this != lbHelper) {
+          if (LbHelperImpl.this != lbHelper || panicMode) {
             return;
           }
           updateSubchannelPicker(newPicker);

@@ -96,6 +96,9 @@ public abstract class AbstractTransportTest {
 
   private static final int TIMEOUT_MS = 5000;
 
+  protected static final String GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES =
+      "GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES";
+
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
       Attributes.Key.create("additional-attr");
 
@@ -136,13 +139,6 @@ public abstract class AbstractTransportTest {
    */
   protected abstract String testAuthority(InternalServer server);
 
-  /**
-   * Returns true (which is default) if the transport reports message sizes to StreamTracers.
-   */
-  protected boolean sizesReported() {
-    return true;
-  }
-
   protected final Attributes eagAttrs() {
     return EAG_ATTRS;
   }
@@ -163,9 +159,9 @@ public abstract class AbstractTransportTest {
    * tests in an indeterminate state.
    */
   protected InternalServer server;
-  private ServerTransport serverTransport;
-  private ManagedClientTransport client;
-  private MethodDescriptor<String, String> methodDescriptor =
+  protected ServerTransport serverTransport;
+  protected ManagedClientTransport client;
+  protected MethodDescriptor<String, String> methodDescriptor =
       MethodDescriptor.<String, String>newBuilder()
           .setType(MethodDescriptor.MethodType.UNKNOWN)
           .setFullMethodName("service/method")
@@ -182,22 +178,22 @@ public abstract class AbstractTransportTest {
       "tracer-key", Metadata.ASCII_STRING_MARSHALLER);
   private final String tracerKeyValue = "tracer-key-value";
 
-  private ManagedClientTransport.Listener mockClientTransportListener
+  protected ManagedClientTransport.Listener mockClientTransportListener
       = mock(ManagedClientTransport.Listener.class);
-  private MockServerListener serverListener = new MockServerListener();
+  protected MockServerListener serverListener = new MockServerListener();
   private ArgumentCaptor<Throwable> throwableCaptor = ArgumentCaptor.forClass(Throwable.class);
-  private final TestClientStreamTracer clientStreamTracer1 = new TestHeaderClientStreamTracer();
+  protected final TestClientStreamTracer clientStreamTracer1 = new TestHeaderClientStreamTracer();
   private final TestClientStreamTracer clientStreamTracer2 = new TestHeaderClientStreamTracer();
-  private final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+  protected final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
       clientStreamTracer1, clientStreamTracer2
   };
   private final ClientStreamTracer[] noopTracers = new ClientStreamTracer[] {
     new ClientStreamTracer() {}
   };
 
-  private final TestServerStreamTracer serverStreamTracer1 = new TestServerStreamTracer();
+  protected final TestServerStreamTracer serverStreamTracer1 = new TestServerStreamTracer();
   private final TestServerStreamTracer serverStreamTracer2 = new TestServerStreamTracer();
-  private final ServerStreamTracer.Factory serverStreamTracerFactory = mock(
+  protected final ServerStreamTracer.Factory serverStreamTracerFactory = mock(
       ServerStreamTracer.Factory.class,
       delegatesTo(new ServerStreamTracer.Factory() {
           final ArrayDeque<TestServerStreamTracer> tracers =
@@ -243,6 +239,13 @@ public abstract class AbstractTransportTest {
    */
   protected void advanceClock(long offset, TimeUnit unit) {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns true if env var is set.
+   */
+  protected static boolean isEnabledSupportTracingMessageSizes() {
+    return GrpcUtil.getFlag(GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES, false);
   }
 
   /**
@@ -857,25 +860,20 @@ public abstract class AbstractTransportTest {
     message.close();
     assertThat(clientStreamTracer1.nextOutboundEvent())
         .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
-    if (sizesReported()) {
+    if (isEnabledSupportTracingMessageSizes()) {
       assertThat(clientStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(clientStreamTracer1.getOutboundWireSize()).isEqualTo(0L);
-      assertThat(clientStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
     }
+
     assertThat(serverStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
     assertNull("no additional message expected", serverStreamListener.messageQueue.poll());
 
     clientStream.halfClose();
     assertTrue(serverStreamListener.awaitHalfClosed(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-    if (sizesReported()) {
+    if (isEnabledSupportTracingMessageSizes()) {
       assertThat(serverStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(serverStreamTracer1.getInboundWireSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getInboundUncompressedSize()).isEqualTo(0L);
     }
     assertThat(serverStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
@@ -907,24 +905,18 @@ public abstract class AbstractTransportTest {
     assertNotNull("message expected", message);
     assertThat(serverStreamTracer1.nextOutboundEvent())
         .matches("outboundMessageSent\\(0, -?[0-9]+, -?[0-9]+\\)");
-    if (sizesReported()) {
+    if (isEnabledSupportTracingMessageSizes()) {
       assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(serverStreamTracer1.getOutboundWireSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
     }
     assertTrue(clientStreamTracer1.getInboundHeaders());
     assertThat(clientStreamTracer1.nextInboundEvent()).isEqualTo("inboundMessage(0)");
     assertEquals("Hi. Who are you?", methodDescriptor.parseResponse(message));
     assertThat(clientStreamTracer1.nextInboundEvent())
         .matches("inboundMessageRead\\(0, -?[0-9]+, -?[0-9]+\\)");
-    if (sizesReported()) {
+    if (isEnabledSupportTracingMessageSizes()) {
       assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(clientStreamTracer1.getInboundWireSize()).isEqualTo(0L);
-      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isEqualTo(0L);
     }
 
     message.close();
@@ -1285,16 +1277,11 @@ public abstract class AbstractTransportTest {
     serverStream.close(Status.OK, new Metadata());
     assertTrue(clientStreamTracer1.getOutboundHeaders());
     assertTrue(clientStreamTracer1.getInboundHeaders());
-    if (sizesReported()) {
+    if (isEnabledSupportTracingMessageSizes()) {
       assertThat(clientStreamTracer1.getInboundWireSize()).isGreaterThan(0L);
       assertThat(clientStreamTracer1.getInboundUncompressedSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.getOutboundWireSize()).isGreaterThan(0L);
       assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isGreaterThan(0L);
-    } else {
-      assertThat(clientStreamTracer1.getInboundWireSize()).isEqualTo(0L);
-      assertThat(clientStreamTracer1.getInboundUncompressedSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getOutboundWireSize()).isEqualTo(0L);
-      assertThat(serverStreamTracer1.getOutboundUncompressedSize()).isEqualTo(0L);
     }
     assertNull(clientStreamTracer1.getInboundTrailers());
     assertSame(status, clientStreamTracer1.getStatus());
@@ -2184,7 +2171,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static void startTransport(
+  protected static void startTransport(
       ManagedClientTransport clientTransport,
       ManagedClientTransport.Listener listener) {
     runIfNotNull(clientTransport.start(listener));
@@ -2202,7 +2189,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class MockServerListener implements ServerListener {
+  public static class MockServerListener implements ServerListener {
     public final BlockingQueue<MockServerTransportListener> listeners
         = new LinkedBlockingQueue<>();
     private final SettableFuture<?> shutdown = SettableFuture.create();
@@ -2233,7 +2220,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class MockServerTransportListener implements ServerTransportListener {
+  public static class MockServerTransportListener implements ServerTransportListener {
     public final ServerTransport transport;
     public final BlockingQueue<StreamCreation> streams = new LinkedBlockingQueue<>();
     private final SettableFuture<?> terminated = SettableFuture.create();
@@ -2281,8 +2268,8 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class ServerStreamListenerBase implements ServerStreamListener {
-    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
+  public static class ServerStreamListenerBase implements ServerStreamListener {
+    public final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
     // Would have used Void instead of Object, but null elements are not allowed
     private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<>();
     private final CountDownLatch halfClosedLatch = new CountDownLatch(1);
@@ -2341,8 +2328,8 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class ClientStreamListenerBase implements ClientStreamListener {
-    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
+  public static class ClientStreamListenerBase implements ClientStreamListener {
+    public final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
     // Would have used Void instead of Object, but null elements are not allowed
     private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<>();
     private final SettableFuture<Metadata> headers = SettableFuture.create();
@@ -2399,7 +2386,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class StreamCreation {
+  public static class StreamCreation {
     public final ServerStream stream;
     public final String method;
     public final Metadata headers;

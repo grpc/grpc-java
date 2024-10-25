@@ -63,6 +63,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -604,7 +605,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
       case PLAINTEXT_UPGRADE:
         return ProtocolNegotiators.plaintextUpgrade();
       case TLS:
-        return ProtocolNegotiators.tls(sslContext, executorPool);
+        return ProtocolNegotiators.tls(sslContext, executorPool, Optional.empty());
       default:
         throw new IllegalArgumentException("Unsupported negotiationType: " + negotiationType);
     }

@@ -19,6 +19,7 @@ package io.grpc.s2a.internal.handshaker;
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -29,9 +30,12 @@ import io.grpc.ServerCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.benchmarks.Utils;
+import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.s2a.S2AChannelCredentials;
+import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.internal.handshaker.FakeS2AServer;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -139,6 +143,25 @@ public final class IntegrationTest {
     ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
 
     assertThat(doUnaryRpc(channel)).isTrue();
+  }
+
+  @Test
+  public void clientCommunicateUsingS2ACredentialsSucceeds_verifyStreamToS2AClosed()
+      throws Exception {
+    ObjectPool<Channel> s2aChannelPool =
+          SharedResourcePool.forResource(
+              S2AHandshakerServiceChannel.getChannelResource(s2aAddress,
+              InsecureChannelCredentials.create()));
+    Channel ch = s2aChannelPool.getObject();
+    S2AStub stub = S2AStub.newInstance(S2AServiceGrpc.newStub(ch));
+    ChannelCredentials credentials =
+        S2AChannelCredentials.newBuilder(s2aAddress, InsecureChannelCredentials.create())
+            .setLocalSpiffeId("test-spiffe-id").setStub(stub).build();
+    ManagedChannel channel = Grpc.newChannelBuilder(serverAddress, credentials).build();
+
+    s2aChannelPool.returnObject(ch);
+    assertThat(doUnaryRpc(channel)).isTrue();
+    assertThat(stub.isClosed()).isTrue();
   }
 
   @Test

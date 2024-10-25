@@ -120,6 +120,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -876,7 +877,7 @@ public class ProtocolNegotiatorsTest {
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger);
+        "authority", elg, noopLogger, Optional.empty());
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -914,7 +915,7 @@ public class ProtocolNegotiatorsTest {
         .applicationProtocolConfig(apn).build();
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger);
+        "authority", elg, noopLogger, Optional.empty());
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -938,7 +939,7 @@ public class ProtocolNegotiatorsTest {
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger);
+        "authority", elg, noopLogger, Optional.empty());
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -966,7 +967,7 @@ public class ProtocolNegotiatorsTest {
   @Test
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", null, noopLogger);
+        "authority", null, noopLogger, Optional.empty());
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 
@@ -1228,7 +1229,8 @@ public class ProtocolNegotiatorsTest {
       serverSslContext = GrpcSslContexts.forServer(server1Chain, server1Key).build();
     }
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
-    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext, null);
+    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext,
+        null, Optional.empty());
     WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 
