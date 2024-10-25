@@ -165,7 +165,21 @@ public class XdsSecurityClientServerTest {
     assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
+  @Test
+  public void tlsClientServer_Spiffe_noClientAuthentication_wrongServerCert() throws Exception {
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null,
+            null, false, false);
+    buildServerWithTlsContext(downstreamTlsContext);
 
+    // for TLS, client only needs trustCa, so BAD certs don't matter
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, false);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
 
   @Test
   public void requireClientAuth_noClientCert_expectException()
