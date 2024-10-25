@@ -241,13 +241,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.option(SO_KEEPALIVE, true);
-    // For non-epoll based channel, the option will be ignored.
-    if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
-      ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
-      if (tcpUserTimeout != null) {
-        b.option(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
-      }
-    }
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
       // Every entry in the map is obtained from
       // NettyChannelBuilder#withOption(ChannelOption<T> option, T value)
@@ -286,6 +279,20 @@ class NettyClientTransport implements ConnectionClientTransport {
       };
     }
     channel = regFuture.channel();
+    // For non-epoll based channel, the option will be ignored.
+    try {
+      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED
+              && Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel)) {
+        ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
+        if (tcpUserTimeout != null) {
+          int tcpUserTimeoutMs = (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos);
+          channel.config().setOption(tcpUserTimeout, tcpUserTimeoutMs);
+        }
+      }
+    } catch (ClassNotFoundException ignored) {
+      // JVM did not load AbstractEpollChannel, so the current channel will not be of epoll type,
+      // so there is no need to set TCP_USER_TIMEOUT
+    }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
     // This write will have no effect, yet it will only complete once the negotiationHandler

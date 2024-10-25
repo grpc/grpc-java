@@ -1,0 +1,12 @@
+[spiffe_client]
+subjectAltName = @alt_names
+
+[spiffe_client_multi]
+subjectAltName = @alt_names_multi
+
+[alt_names]
+URI = spiffe://foo.bar.com/client/workload/1
+
+[alt_names_multi]
+URI.1 = spiffe://foo.bar.com/client/workload/1
+URI.2 = spiffe://foo.bar.com/client/workload/2

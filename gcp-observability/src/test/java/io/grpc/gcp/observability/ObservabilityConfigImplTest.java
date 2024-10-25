@@ -108,8 +108,7 @@ public class ObservabilityConfigImplTest {
 
   private static final String PROJECT_ID = "{\n"
       + "    \"project_id\": \"grpc-testing\",\n"
-      + "    \"cloud_logging\": {},\n"
-      + "    \"project_id\": \"grpc-testing\"\n"
+      + "    \"cloud_logging\": {}\n"
       + "}";
 
   private static final String EMPTY_CONFIG = "{}";

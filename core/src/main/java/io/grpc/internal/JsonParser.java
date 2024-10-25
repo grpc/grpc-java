@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.gson.stream.JsonReader;
@@ -41,7 +42,8 @@ public final class JsonParser {
 
   /**
    * Parses a json string, returning either a {@code Map<String, ?>}, {@code List<?>},
-   * {@code String}, {@code Double}, {@code Boolean}, or {@code null}.
+   * {@code String}, {@code Double}, {@code Boolean}, or {@code null}. Fails if duplicate names
+   * found.
    */
   public static Object parse(String raw) throws IOException {
     JsonReader jr = new JsonReader(new StringReader(raw));
@@ -81,6 +83,7 @@ public final class JsonParser {
     Map<String, Object> obj = new LinkedHashMap<>();
     while (jr.hasNext()) {
       String name = jr.nextName();
+      checkArgument(!obj.containsKey(name), "Duplicate key found: %s", name);
       Object value = parseRecursive(jr);
       obj.put(name, value);
     }
