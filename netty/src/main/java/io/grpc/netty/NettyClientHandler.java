@@ -410,6 +410,7 @@ class NettyClientHandler extends AbstractNettyHandler {
                     "Server Status + Trailers of size %d exceeded Metadata size soft limit: %d",
                     h2HeadersSize,
                     softLimitHeaderListSize)), true, new Metadata());
+        return;
       } else if (shouldFail) {
         stream.transportReportStatus(Status.RESOURCE_EXHAUSTED
             .withDescription(
@@ -417,6 +418,7 @@ class NettyClientHandler extends AbstractNettyHandler {
                     "Server Headers of size %d exceeded Metadata size soft limit: %d",
                     h2HeadersSize,
                     softLimitHeaderListSize)), true, new Metadata());
+        return;
       }
       stream.transportHeadersReceived(headers, endStream);
     }
