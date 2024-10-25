@@ -19,7 +19,10 @@ package io.grpc.xds.internal.matchers;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.common.CelProtoAbstractSyntaxTree;
+import dev.cel.expr.CheckedExpr;
 import dev.cel.runtime.CelEvaluationException;
+import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.util.function.Predicate;
 
 /** Unified Matcher API: xds.type.matcher.v3.CelMatcher. */
@@ -40,6 +43,31 @@ public class CelMatcher implements Predicate<HttpMatchInput> {
   public static CelMatcher create(CelAbstractSyntaxTree ast, String description)
       throws CelEvaluationException {
     return new CelMatcher(ast, description);
+  }
+
+  public static CelMatcher fromEnvoyProto(com.github.xds.type.matcher.v3.CelMatcher proto)
+      throws ResourceInvalidException {
+    com.github.xds.type.v3.CelExpression exprMatch = proto.getExprMatch();
+    // TODO(sergiitk): do i need this?
+    // checkNotNull(exprMatch);
+
+    if (!exprMatch.hasCelExprChecked()) {
+      throw ResourceInvalidException.ofResource(proto, "cel_expr_checked is required");
+    }
+
+    // Canonical CEL.
+    CheckedExpr celExprChecked = exprMatch.getCelExprChecked();
+
+    // TODO(sergiitk): catch tree build errors?
+    CelAbstractSyntaxTree ast = CelProtoAbstractSyntaxTree.fromCheckedExpr(celExprChecked).getAst();
+
+    try {
+      return new CelMatcher(ast, proto.getDescription());
+    } catch (CelEvaluationException e) {
+      throw ResourceInvalidException.ofResource(exprMatch,
+          "Error Building CEL Program cel_expr_checked: " + e.getErrorCode() + " "
+              + e.getMessage());
+    }
   }
 
   public String description() {
