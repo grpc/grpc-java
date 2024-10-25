@@ -122,8 +122,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private NettyClientStream.TransportState streamTransportState;
   private Http2Headers grpcHeaders;
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
-  private int maxHeaderListSize = 8000;
-  private int softLimitHeaderListSize = 2000;
+  private int maxHeaderListSize = Integer.MAX_VALUE;
+  private int softLimitHeaderListSize = Integer.MAX_VALUE;
   private int streamId = STREAM_ID;
   private ClientTransportLifecycleManager lifecycleManager;
   private KeepAliveManager mockKeepAliveManager = null;
@@ -222,6 +222,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Test
   @SuppressWarnings("InlineMeInliner")
   public void sendLargerThanSoftLimitHeaderMayFail() throws Exception {
+    maxHeaderListSize = 8000;
+    softLimitHeaderListSize = 2000;
+    manualSetUp();
+
     createStream();
     // total head size of 7999, soft limit = 2000 and max = 8000.
     // This header has 5999/6000 chance to be rejected.
