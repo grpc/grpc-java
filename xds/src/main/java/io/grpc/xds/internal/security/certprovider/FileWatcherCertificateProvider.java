@@ -81,6 +81,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
 
   @Override
   public void start() {
+    run();
     scheduleNextRefreshCertificate(/* delayInSeconds= */0);
   }
 

@@ -178,7 +178,14 @@ public class XdsSecurityClientServerTest {
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
-    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+    try {
+      unaryRpc("buddy", blockingStub);
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre.getStatus().getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+      assertThat(sre.getCause().getCause().getMessage())
+          .contains("Can't extract valid SPIFFE ID from the chain");
+    }
   }
 
   @Test
