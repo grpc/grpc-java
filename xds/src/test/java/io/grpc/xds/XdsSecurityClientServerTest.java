@@ -263,13 +263,33 @@ public class XdsSecurityClientServerTest {
             null, SPIFFE_TRUST_BUNDLE_1_FILE, true, true);
     buildServerWithTlsContext(downstreamTlsContext);
 
-    // for TLS, client only needs trustCa, so BAD certs don't matter
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
         CLIENT_KEY_FILE, CLIENT_SPIFFE_PEM_FILE, SPIFFE_TRUST_BUNDLE_1_FILE, true);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
     assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
+  public void mtlsClientServer_Spiffe_badClientCert_expectException()
+      throws Exception {
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
+            null, SPIFFE_TRUST_BUNDLE_1_FILE, true, true);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_1_FILE, true);
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    try {
+      assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre.getStatus().getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+      assertThat(sre.getMessage()).contains("ssl exception");
+    }
   }
 
   @Test
