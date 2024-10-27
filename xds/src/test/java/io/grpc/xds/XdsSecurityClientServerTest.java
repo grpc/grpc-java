@@ -173,7 +173,8 @@ public class XdsSecurityClientServerTest {
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
       DownstreamTlsContext downstreamTlsContext =
-          setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
       buildServerWithTlsContext(downstreamTlsContext);
 
       UpstreamTlsContext upstreamTlsContext =
@@ -199,7 +200,8 @@ public class XdsSecurityClientServerTest {
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
       DownstreamTlsContext downstreamTlsContext =
-          setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
       buildServerWithTlsContext(downstreamTlsContext);
 
       UpstreamTlsContext upstreamTlsContext =
@@ -225,7 +227,8 @@ public class XdsSecurityClientServerTest {
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
       DownstreamTlsContext downstreamTlsContext =
-          setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
       buildServerWithTlsContext(downstreamTlsContext);
 
       UpstreamTlsContext upstreamTlsContext =
@@ -511,7 +514,7 @@ public class XdsSecurityClientServerTest {
       boolean useCombinedValidationContext) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, null);
     if (useCombinedValidationContext) {
       return CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
           "google_cloud_private_spiffe-client", "ROOT", null,
