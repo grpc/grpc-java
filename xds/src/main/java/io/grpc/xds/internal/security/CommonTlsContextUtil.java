@@ -25,7 +25,7 @@ public final class CommonTlsContextUtil {
 
   private CommonTlsContextUtil() {}
 
-  static boolean hasCertProviderInstance(CommonTlsContext commonTlsContext) {
+  public static boolean hasCertProviderInstance(CommonTlsContext commonTlsContext) {
     if (commonTlsContext == null) {
       return false;
     }
@@ -64,5 +64,16 @@ public final class CommonTlsContextUtil {
     return CommonTlsContext.CertificateProviderInstance.newBuilder()
         .setInstanceName(pluginInstance.getInstanceName())
         .setCertificateName(pluginInstance.getCertificateName()).build();
+  }
+
+  public static boolean isUsingSystemRootCerts(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasCombinedValidationContext()) {
+      return commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()
+          .hasSystemRootCerts();
+    }
+    if (commonTlsContext.hasValidationContext()) {
+      return commonTlsContext.getValidationContext().hasSystemRootCerts();
+    }
+    return false;
   }
 }

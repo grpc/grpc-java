@@ -37,11 +37,12 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable private final CertificateProviderStore.Handle certHandle;
   @Nullable private final CertificateProviderStore.Handle rootCertHandle;
   @Nullable private final CertificateProviderInstance certInstance;
-  @Nullable private final CertificateProviderInstance rootCertInstance;
+  @Nullable protected final CertificateProviderInstance rootCertInstance;
   @Nullable protected PrivateKey savedKey;
   @Nullable protected List<X509Certificate> savedCertChain;
   @Nullable protected List<X509Certificate> savedTrustedRoots;
   @Nullable protected Map<String, List<X509Certificate>> savedSpiffeRoots;
+  private final boolean isUsingSystemRootCerts;
 
   protected CertProviderSslContextProvider(
       Node node,
@@ -84,6 +85,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     } else {
       rootCertHandle = null;
     }
+    this.isUsingSystemRootCerts = rootCertInstance == null
+        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext());
   }
 
   private static CertificateProviderInfo getCertProviderConfig(
@@ -158,7 +161,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   private void updateSslContextWhenReady() {
     if (isMtls()) {
-      if (savedKey != null && savedTrustedRoots != null) {
+      if (savedKey != null && (savedTrustedRoots != null || isUsingSystemRootCerts)) {
         updateSslContext();
         clearKeysAndCerts();
       }
@@ -195,7 +198,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   protected final boolean isMtls() {
-    return certInstance != null && rootCertInstance != null;
+    return certInstance != null && (rootCertInstance != null || isUsingSystemRootCerts);
   }
 
   protected final boolean isClientSideTls() {

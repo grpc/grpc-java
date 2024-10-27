@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
@@ -46,6 +47,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -57,6 +59,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
+  @VisibleForTesting
+  public static boolean enableSystemRootCerts =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
 
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
@@ -430,9 +435,11 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
     String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
     if (rootCaInstanceName == null) {
-      if (!server) {
+      if (!server && (!enableSystemRootCerts
+          || !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext))) {
         throw new ResourceInvalidException(
-            "ca_certificate_provider_instance is required in upstream-tls-context");
+            "ca_certificate_provider_instance or system_root_certs is required in "
+                + "upstream-tls-context");
       }
     } else {
       if (certProviderInstances == null || !certProviderInstances.contains(rootCaInstanceName)) {
