@@ -64,15 +64,15 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
               savedSpiffeRoots,
               certificateValidationContextdationContext));
       } else {
-      sslContextBuilder = GrpcSslContexts.forClient().trustManager(
-          new XdsTrustManagerFactory(
-              savedTrustedRoots.toArray(new X509Certificate[0]),
-              certificateValidationContextdationContext));
+        sslContextBuilder = GrpcSslContexts.forClient().trustManager(
+            new XdsTrustManagerFactory(
+                savedTrustedRoots.toArray(new X509Certificate[0]),
+                certificateValidationContextdationContext));
+      }
     }
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }
     return sslContextBuilder;
   }
-
 }
