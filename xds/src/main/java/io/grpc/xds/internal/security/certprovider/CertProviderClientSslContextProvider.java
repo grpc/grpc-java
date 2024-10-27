@@ -16,8 +16,6 @@
 
 package io.grpc.xds.internal.security.certprovider;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -46,7 +44,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         node,
         certProviders,
         certInstance,
-        checkNotNull(rootCertInstance, "Client SSL requires rootCertInstance"),
+        rootCertInstance,
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
@@ -56,13 +54,16 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
   protected final SslContextBuilder getSslContextBuilder(
           CertificateValidationContext certificateValidationContextdationContext)
       throws CertStoreException {
-    SslContextBuilder sslContextBuilder;
-    if (savedSpiffeRoots != null) {
-      sslContextBuilder = GrpcSslContexts.forClient().trustManager(
+    SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
+    // Null rootCertInstance implies hasSystemRootCerts because of the check in
+    // CertProviderClientSslContextProviderFactory.
+    if (rootCertInstance != null) {
+      if (savedSpiffeRoots != null) {
+        sslContextBuilder = GrpcSslContexts.forClient().trustManager(
           new XdsTrustManagerFactory(
               savedSpiffeRoots,
               certificateValidationContextdationContext));
-    } else {
+      } else {
       sslContextBuilder = GrpcSslContexts.forClient().trustManager(
           new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),

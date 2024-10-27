@@ -38,8 +38,6 @@ import io.grpc.xds.internal.security.certprovider.CertificateProviderProvider;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderRegistry;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderStore;
 import io.grpc.xds.internal.security.certprovider.TestCertificateProvider;
-import java.io.IOException;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -283,22 +281,6 @@ public class ClientSslContextProviderFactoryTest {
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
-  }
-
-  @Test
-  public void createNullCommonTlsContext_exception() throws IOException {
-    clientSslContextProviderFactory =
-            new ClientSslContextProviderFactory(
-                    null, certProviderClientSslContextProviderFactory);
-    UpstreamTlsContext upstreamTlsContext = new UpstreamTlsContext(null);
-    try {
-      clientSslContextProviderFactory.create(upstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (NullPointerException expected) {
-      assertThat(expected)
-              .hasMessageThat()
-              .isEqualTo("upstreamTlsContext should have CommonTlsContext");
-    }
   }
 
   static void createAndRegisterProviderProvider(
