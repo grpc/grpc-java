@@ -132,6 +132,9 @@ public class CommonBootstrapperTestUtils {
       config.put("certificate_file", cert2);
       config.put("private_key_file", privateKey2);
       config.put("ca_certificate_file", trustCa2);
+      if (spiffe != null) {
+        config.put("spiffe_trust_bundle_map_file", spiffe);
+      }
       certificateProviderInfo =
           Bootstrapper.CertificateProviderInfo.create("file_watcher", config);
       certProviders.put(certInstanceName2, certificateProviderInfo);

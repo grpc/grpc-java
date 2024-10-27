@@ -24,9 +24,11 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPIFFE_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_BUNDLE_1_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_BUNDLE_FILE;
 import static org.junit.Assert.fail;
 
@@ -137,7 +139,7 @@ public class XdsSecurityClientServerTest {
   public void tlsClientServer_noClientAuthentication() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
-            false, false);
+            null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only needs trustCa
@@ -153,7 +155,7 @@ public class XdsSecurityClientServerTest {
   public void tlsClientServer_Spiffe_noClientAuthentication() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
-            null, false, false);
+            null, null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only needs trustCa, so BAD certs don't matter
@@ -168,7 +170,7 @@ public class XdsSecurityClientServerTest {
   @Test
   public void tlsClientServer_Spiffe_noClientAuthentication_wrongServerCert() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
-        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null,
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
             null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
@@ -193,7 +195,7 @@ public class XdsSecurityClientServerTest {
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
-            true, true);
+            null, true, true);
     buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only uses trustCa
@@ -221,7 +223,7 @@ public class XdsSecurityClientServerTest {
   public void noClientAuth_sendBadClientCert_passes() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
-            false, false);
+            null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
@@ -251,13 +253,23 @@ public class XdsSecurityClientServerTest {
     }
   }
 
-  /** mTLS - client auth enabled - using {@link XdsChannelCredentials} API. */
+  /** mTLS with Spiffe Trust Bundle - client auth enabled - using {@link XdsChannelCredentials}
+   * API. */
   @Test
   public void mtlsClientServer_Spiffe_withClientAuthentication_withXdsChannelCreds()
       throws Exception {
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
+            null, SPIFFE_TRUST_BUNDLE_1_FILE, true, true);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    // for TLS, client only needs trustCa, so BAD certs don't matter
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE, CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, true);
-    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
+        CLIENT_KEY_FILE, CLIENT_SPIFFE_PEM_FILE, SPIFFE_TRUST_BUNDLE_1_FILE, true);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
   @Test
@@ -272,7 +284,7 @@ public class XdsSecurityClientServerTest {
   public void tlsServer_plaintextClient_expectException() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
-            false, false);
+            null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
@@ -338,7 +350,7 @@ public class XdsSecurityClientServerTest {
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, certInstanceName2,
-            privateKey2, cert2, trustCa2, true, true);
+            privateKey2, cert2, trustCa2, null, true, false);
 
     buildServerWithFallbackServerCredentials(
             InsecureServerCredentials.create(), downstreamTlsContext);
@@ -349,20 +361,18 @@ public class XdsSecurityClientServerTest {
   }
 
   private DownstreamTlsContext setBootstrapInfoAndBuildDownstreamTlsContext(
-      String cert1,
-      String certInstanceName2,
-      String privateKey2,
-      String cert2, String trustCa2, boolean hasRootCert, boolean requireClientCertificate) {
+      String cert1, String certInstanceName2, String privateKey2,
+      String cert2, String trustCa2, String spiffeFile,
+      boolean hasRootCert, boolean requireClientCertificate) {
     bootstrapInfoForServer = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-server", SERVER_1_KEY_FILE,
-            cert1, CA_PEM_FILE, certInstanceName2, privateKey2, cert2, trustCa2, null);
+            cert1, CA_PEM_FILE, certInstanceName2, privateKey2, cert2, trustCa2, spiffeFile);
     return CommonTlsContextTestsUtil.buildDownstreamTlsContext(
         "google_cloud_private_spiffe-server", hasRootCert, requireClientCertificate);
   }
 
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContext(String clientKeyFile,
-      String clientPemFile, String spiffeFile,
-      boolean hasIdentityCert) {
+      String clientPemFile, String spiffeFile, boolean hasIdentityCert) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, spiffeFile);
