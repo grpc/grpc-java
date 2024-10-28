@@ -77,12 +77,16 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
     this.spiffeFile = spiffeFile == null ? null : Paths.get(spiffeFile);
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
+    try {
+      checkAndReloadCertificates();
+    } catch (Throwable t) {
+      logger.log(Level.SEVERE, "Uncaught exception!", t);
+    }
   }
 
   @Override
   public void start() {
-    run();
-    scheduleNextRefreshCertificate(/* delayInSeconds= */0);
+    scheduleNextRefreshCertificate(refreshIntervalInSeconds);
   }
 
   @Override
