@@ -21,7 +21,6 @@ import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.robolectric.Shadows.shadowOf;
-import static org.robolectric.annotation.LooperMode.Mode.PAUSED;
 
 import android.app.Application;
 import android.app.admin.DevicePolicyManager;
@@ -48,11 +47,9 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
-import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowDevicePolicyManager;
 
-@LooperMode(PAUSED)
 @RunWith(RobolectricTestRunner.class)
 public final class ServiceBindingTest {
 
