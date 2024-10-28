@@ -247,12 +247,23 @@ public final class XdsFederationTestClient {
      */
     public void run() {
       boolean resetChannelPerIteration;
+      boolean enableConcurrency;
       switch (testCase) {
         case "rpc_soak":
           resetChannelPerIteration = false;
+          enableConcurrency = false;
+          break;
+        case "rpc_soak_concurrent":
+          resetChannelPerIteration = false;
+          enableConcurrency = true;
           break;
         case "channel_soak":
           resetChannelPerIteration = true;
+          enableConcurrency = false;
+          break;
+        case "channel_soak_concurrent":
+          resetChannelPerIteration = true;
+          enableConcurrency = true;
           break;
         default:
           throw new RuntimeException("invalid testcase: " + testCase);
@@ -261,6 +272,7 @@ public final class XdsFederationTestClient {
         performSoakTest(
             serverUri,
             resetChannelPerIteration,
+            enableConcurrency,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
