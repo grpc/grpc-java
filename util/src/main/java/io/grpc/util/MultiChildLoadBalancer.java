@@ -193,7 +193,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       newChildLbStates.add(childLbState);
       if (entry.getValue() != null) {
         childLbState.setResolvedAddresses(entry.getValue()); // update child
-        childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
+        childLbState.lb.acceptResolvedAddresses(entry.getValue()); // update child LB
       }
     }
 

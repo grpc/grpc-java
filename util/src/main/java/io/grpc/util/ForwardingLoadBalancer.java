@@ -30,8 +30,8 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   protected abstract LoadBalancer delegate();
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    delegate().handleResolvedAddresses(resolvedAddresses);
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    return delegate().acceptResolvedAddresses(resolvedAddresses);
   }
 
   @Override

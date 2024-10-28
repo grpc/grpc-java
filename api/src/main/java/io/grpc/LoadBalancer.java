@@ -165,6 +165,7 @@ public abstract class LoadBalancer {
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
    */
+  @Deprecated
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
       // Note that the information about the addresses actually being accepted will be lost
@@ -200,7 +201,7 @@ public abstract class LoadBalancer {
       return unavailableStatus;
     } else {
       if (recursionCount++ == 0) {
-        handleResolvedAddresses(resolvedAddresses);
+        //handleResolvedAddresses(resolvedAddresses);
       }
       recursionCount = 0;
 
