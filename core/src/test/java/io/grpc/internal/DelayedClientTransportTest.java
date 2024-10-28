@@ -508,8 +508,8 @@ public class DelayedClientTransportTest {
         method, headers, callOptions, tracers);
     delayedStream.start(mock(ClientStreamListener.class));
     SubchannelPicker picker = mock(SubchannelPicker.class);
-    PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
-    pickResult.setAuthorityOverrideHostname("authority-override-hostname-from-lb");
+    PickResult pickResult = PickResult.withSubchannel(
+        mockSubchannel, null, "authority-override-hostname-from-lb");
     when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(pickResult);
 
     delayedTransport.reprocess(picker);
@@ -525,8 +525,8 @@ public class DelayedClientTransportTest {
         method, headers, callOptions.withAuthority(null), tracers);
     delayedStream.start(mock(ClientStreamListener.class));
     SubchannelPicker picker = mock(SubchannelPicker.class);
-    PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
-    pickResult.setAuthorityOverrideHostname("authority-override-hostname-from-lb");
+    PickResult pickResult = PickResult.withSubchannel(
+        mockSubchannel, null, "authority-override-hostname-from-lb");
     when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(pickResult);
     when(mockRealTransport.newStream(
         same(method), same(headers), any(CallOptions.class),
@@ -567,8 +567,8 @@ public class DelayedClientTransportTest {
     SubchannelPicker picker = mock(SubchannelPicker.class);
     AbstractSubchannel subchannel = mock(AbstractSubchannel.class);
     when(subchannel.getInternalSubchannel()).thenReturn(mockInternalSubchannel);
-    PickResult pickResult = PickResult.withSubchannel(subchannel);
-    pickResult.setAuthorityOverrideHostname("authority-override-hostname-from-lb");
+    PickResult pickResult = PickResult.withSubchannel(
+        subchannel, null, "authority-override-hostname-from-lb");
     when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(pickResult);
     ArgumentCaptor<CallOptions> callOptionsArgumentCaptor =
         ArgumentCaptor.forClass(CallOptions.class);
@@ -592,8 +592,8 @@ public class DelayedClientTransportTest {
     SubchannelPicker picker = mock(SubchannelPicker.class);
     AbstractSubchannel subchannel = mock(AbstractSubchannel.class);
     when(subchannel.getInternalSubchannel()).thenReturn(mockInternalSubchannel);
-    PickResult pickResult = PickResult.withSubchannel(subchannel);
-    pickResult.setAuthorityOverrideHostname("authority-override-hostname-from-lb");
+    PickResult pickResult = PickResult.withSubchannel(
+        subchannel, null, "authority-override-hostname-from-lb");
     when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(pickResult);
     ArgumentCaptor<CallOptions> callOptionsArgumentCaptor =
         ArgumentCaptor.forClass(CallOptions.class);
