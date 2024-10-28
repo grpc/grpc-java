@@ -237,7 +237,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         .add(as("auth"), as("sometoken"))
         .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
         .add(TE_HEADER, TE_TRAILERS)
-        .add("large-field", Strings.repeat("a", 7620));
+        .add("large-field", Strings.repeat("a", 7620)); // String.repeat() requires Java 11
 
     ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     channelRead(headersFrame);
