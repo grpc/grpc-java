@@ -27,8 +27,6 @@ final class TimeProviderResolverFactory {
       return new InstantTimeProvider(instantClass);
     } catch (ClassNotFoundException ex) {
       return new ConcurrentTimeProvider();
-    } catch (NoSuchMethodException ex) {
-      throw new AssertionError(ex);
     }
   }
 }
