@@ -76,10 +76,6 @@ public class CelMatcher implements Predicate<HttpMatchInput> {
 
   @Override
   public boolean test(HttpMatchInput httpMatchInput) {
-    // if (httpMatchInput.headers().keys().isEmpty()) {
-    //   return false;
-    // }
-    // TODO(sergiitk): [IMPL] convert headers to cel args
-    return program.eval(httpMatchInput.serverCall(), httpMatchInput.headers());
+    return program.eval(httpMatchInput);
   }
 }

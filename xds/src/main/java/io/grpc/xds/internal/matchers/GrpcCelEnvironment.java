@@ -16,24 +16,31 @@
 
 package io.grpc.xds.internal.matchers;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableMap;
+import com.google.common.base.Splitter;
 import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.common.CelErrorCode;
 import dev.cel.common.CelOptions;
+import dev.cel.common.CelRuntimeException;
 import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
 import dev.cel.runtime.CelRuntimeFactory;
-import io.grpc.Metadata;
-import io.grpc.ServerCall;
+import dev.cel.runtime.CelVariableResolver;
 import io.grpc.Status;
-import io.grpc.xds.internal.MetadataHelper;
+import java.util.List;
+import java.util.Optional;
+import javax.annotation.Nullable;
 
 /** Unified Matcher API: xds.type.matcher.v3.CelMatcher. */
 public class GrpcCelEnvironment  {
+  private static final CelOptions CEL_OPTIONS = CelOptions
+      .current()
+      .comprehensionMaxIterations(0)
+      .resolveTypeDependencies(false)
+      .build();
   private static final CelRuntime CEL_RUNTIME = CelRuntimeFactory
       .standardCelRuntimeBuilder()
-      .setOptions(CelOptions.current().comprehensionMaxIterations(0).build())
+      .setOptions(CEL_OPTIONS)
       .build();
 
   private final CelRuntime.Program program;
@@ -45,17 +52,61 @@ public class GrpcCelEnvironment  {
     this.program = CEL_RUNTIME.createProgram(ast);
   }
 
-  public boolean eval(ServerCall<?, ?> serverCall, Metadata metadata) {
-    ImmutableMap.Builder<String, Object> requestBuilder = ImmutableMap.<String, Object>builder()
-        .put("method", "POST")
-        .put("host", Strings.nullToEmpty(serverCall.getAuthority()))
-        .put("path", "/" + serverCall.getMethodDescriptor().getFullMethodName())
-        .put("headers", MetadataHelper.metadataToHeaders(metadata));
-    // TODO(sergiitk): handle other pseudo-headers
+  public boolean eval(HttpMatchInput httpMatchInput) {
     try {
-      return (boolean) program.eval(ImmutableMap.of("request", requestBuilder.build()));
-    } catch (CelEvaluationException e) {
+      GrpcCelVariableResolver requestResolver = new GrpcCelVariableResolver(httpMatchInput);
+      return (boolean) program.eval(requestResolver);
+    } catch (CelEvaluationException | ClassCastException e) {
       throw Status.fromThrowable(e).asRuntimeException();
+    }
+  }
+
+  static class GrpcCelVariableResolver implements CelVariableResolver {
+    private static final Splitter SPLITTER = Splitter.on('.').limit(2);
+    private final HttpMatchInput httpMatchInput;
+
+    GrpcCelVariableResolver(HttpMatchInput httpMatchInput) {
+      this.httpMatchInput = httpMatchInput;
+    }
+
+    @Override
+    public Optional<Object> find(String name) {
+      List<String> components = SPLITTER.splitToList(name);
+      if (components.size() < 2 || !components.get(0).equals("request")) {
+        return Optional.empty();
+      }
+      return Optional.ofNullable(getRequestField(components.get(1)));
+    }
+
+    @Nullable
+    private Object getRequestField(String requestField) {
+      switch (requestField) {
+        case "headers":
+          return httpMatchInput.getHeadersWrapper();
+        case "host":
+          return httpMatchInput.getHost();
+        case "id":
+          return httpMatchInput.getHeadersWrapper().get("x-request-id");
+        case "method":
+          return httpMatchInput.getMethod();
+        case "path":
+        case "url_path":
+          return httpMatchInput.getPath();
+        case "query":
+          return "";
+        case "referer":
+          return httpMatchInput.getHeadersWrapper().get("referer");
+        case "useragent":
+          return httpMatchInput.getHeadersWrapper().get("user-agent");
+        default:
+          // Throwing instead of Optional.empty() prevents evaluation non-boolean result type
+          // when comparing unknown fields, f.e. `request.protocol == 'HTTP'` will silently
+          // fail because `null == "HTTP" is not a valid CEL operation.
+          throw new CelRuntimeException(
+              // Similar to dev.cel.runtime.DescriptorMessageProvider#selectField
+              new IllegalArgumentException("request." + requestField),
+              CelErrorCode.ATTRIBUTE_NOT_FOUND);
+      }
     }
   }
 }

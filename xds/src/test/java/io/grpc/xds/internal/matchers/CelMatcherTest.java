@@ -22,7 +22,7 @@ import static org.junit.Assert.assertThrows;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelErrorCode;
 import dev.cel.common.CelValidationException;
-import dev.cel.common.CelValidationResult;
+import dev.cel.common.types.MapType;
 import dev.cel.common.types.SimpleType;
 import dev.cel.compiler.CelCompiler;
 import dev.cel.compiler.CelCompilerFactory;
@@ -37,7 +37,6 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.grpc.StringMarshaller;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -48,19 +47,21 @@ public class CelMatcherTest {
   // These instances are immutable and thus trivially thread-safe and amenable to caching.
   private static final CelCompiler CEL_COMPILER =
       CelCompilerFactory.standardCelCompilerBuilder()
-          .addVar("request", SimpleType.ANY)
+          .addVar("request.path", SimpleType.STRING)
+          .addVar("request.host", SimpleType.STRING)
+          .addVar("request.method", SimpleType.STRING)
+          .addVar("request.headers", MapType.create(SimpleType.STRING, SimpleType.STRING))
+          // request.protocol is a legal input, but we don't set it in java.
+          // TODO(sergiitk): add other fields not supported by gRPC
+          .addVar("request.protocol", SimpleType.STRING)
           .setResultType(SimpleType.BOOL)
           .setStandardMacros(CelStandardMacro.STANDARD_MACROS)
           .build();
-  private static final CelValidationResult celProg1 =
-      CEL_COMPILER.compile("request.method == 'POST'");
 
-  CelAbstractSyntaxTree ast1;
-  CelMatcher matcher1;
 
   private static final HttpMatchInput fakeInput = new HttpMatchInput() {
     @Override
-    public Metadata headers() {
+    public Metadata metadata() {
       return new Metadata();
     }
 
@@ -81,24 +82,50 @@ public class CelMatcherTest {
     }
   };
 
-  @Before
-  public void setUp() throws Exception {
-    ast1 = celProg1.getAst();
-    matcher1 = CelMatcher.create(ast1);
-  }
-
   @Test
-  public void construct() throws CelEvaluationException {
-    assertThat(matcher1.description()).isEqualTo("");
+  public void construct() throws Exception {
+    CelAbstractSyntaxTree ast = celAst("1 == 1");
+    CelMatcher matcher = CelMatcher.create(ast);
+    assertThat(matcher.description()).isEqualTo("");
 
     String description = "Optional description";
-    CelMatcher matcher = CelMatcher.create(ast1, description);
+    matcher = CelMatcher.create(ast, description);
     assertThat(matcher.description()).isEqualTo(description);
   }
 
   @Test
-  public void testProgTrue() {
-    assertThat(matcher1.test(fakeInput)).isTrue();
+  public void progTrue() throws Exception {
+    assertThat(newMatcher("request.method == 'POST'").test(fakeInput)).isTrue();
+  }
+
+  @Test
+  public void unknownRequestProperty() throws Exception {
+    CelMatcher matcher = newMatcher("request.protocol == 'Whatever'");
+
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
+
+    // Verify CelErrorCode is ATTRIBUTE_NOT_FOUND.
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ATTRIBUTE_NOT_FOUND);
+  }
+
+  @Test
+  public void unknownHeader() throws Exception {
+    CelMatcher matcher = newMatcher("request.headers['foo'] == 'bar'");
+
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
+
+    // Verify CelErrorCode is ATTRIBUTE_NOT_FOUND.
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ATTRIBUTE_NOT_FOUND);
   }
 
   @Test
@@ -119,8 +146,8 @@ public class CelMatcherTest {
 
   @Test
   public void macros_hasEnabled() throws Exception {
-    boolean result = newMatcher("has(request.path)").test(fakeInput);
-    assertThat(result).isTrue();
+    boolean result = newMatcher("has(request.headers.foo)").test(fakeInput);
+    assertThat(result).isFalse();
   }
 
   private CelMatcher newMatcher(String expr) throws CelValidationException, CelEvaluationException {

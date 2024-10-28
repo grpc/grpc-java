@@ -60,4 +60,8 @@ public class MetadataHelper {
     Iterable<String> values = metadata.getAll(key);
     return values == null ? null : String.join(",", values);
   }
+
+  public static boolean containsHeader(Metadata metadata, String headerName) {
+    return metadata.containsKey(Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
+  }
 }
