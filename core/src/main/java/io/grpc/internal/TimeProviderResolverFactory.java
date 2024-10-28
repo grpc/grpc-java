@@ -25,8 +25,10 @@ final class TimeProviderResolverFactory {
     try {
       Class<?> instantClass = Class.forName("java.time.Instant");
       return new InstantTimeProvider(instantClass);
-    } catch (ClassNotFoundException | NoSuchMethodException ex) {
+    } catch (ClassNotFoundException ex) {
       return new ConcurrentTimeProvider();
+    } catch (NoSuchMethodException ex) {
+      throw new AssertionError(ex);
     }
   }
 }

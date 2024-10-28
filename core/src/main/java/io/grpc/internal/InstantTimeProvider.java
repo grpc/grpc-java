@@ -16,6 +16,8 @@
 
 package io.grpc.internal;
 
+import static com.google.common.math.LongMath.saturatedAdd;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
@@ -40,7 +42,7 @@ final class InstantTimeProvider implements TimeProvider {
       Object instant = now.invoke(null);
       int nanos = (int) getNano.invoke(instant);
       long epochSeconds = (long) getEpochSecond.invoke(instant);
-      return TimeUnit.SECONDS.toNanos(epochSeconds) + nanos;
+      return saturatedAdd(TimeUnit.SECONDS.toNanos(epochSeconds), nanos);
     } catch (IllegalAccessException | InvocationTargetException ex) {
       throw new RuntimeException(ex);
     }
