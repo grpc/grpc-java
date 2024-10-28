@@ -217,7 +217,6 @@ final class OpenTelemetryTracingModule {
     @Override
     public void inboundMessageRead(
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
-      //TODO(yifeizhuang): needs support from message deframer.
       if (optionalWireSize != optionalUncompressedSize) {
         recordInboundCompressedMessage(span, seqNo, optionalWireSize);
       }
