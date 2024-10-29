@@ -122,6 +122,23 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   @VisibleForTesting
   static XdsX509TrustManager createX509TrustManager(
       X509Certificate[] certs, CertificateValidationContext certContext) throws CertStoreException {
+    return new XdsX509TrustManager(certContext, createTrustManager(certs));
+  }
+
+  @VisibleForTesting
+  static XdsX509TrustManager createX509TrustManager(Map<String, List<X509Certificate>> spiffeRoots,
+      CertificateValidationContext certContext) throws CertStoreException {
+    checkNotNull(spiffeRoots, "spiffeRoots");
+    Map<String, X509ExtendedTrustManager> delegates = new HashMap<>();
+    for (Map.Entry<String, List<X509Certificate>> entry:spiffeRoots.entrySet()) {
+      delegates.put(entry.getKey(), createTrustManager(
+          entry.getValue().toArray(new X509Certificate[0])));
+    }
+    return new XdsX509TrustManager(certContext, delegates);
+  }
+
+  private static X509ExtendedTrustManager createTrustManager(X509Certificate[] certs)
+      throws CertStoreException {
     TrustManagerFactory tmf = null;
     try {
       tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
@@ -153,52 +170,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
     if (myDelegate == null) {
       throw new CertStoreException("Native X509 TrustManager not found.");
     }
-    return new XdsX509TrustManager(certContext, myDelegate);
+    return myDelegate;
   }
-
-  @VisibleForTesting
-  static XdsX509TrustManager createX509TrustManager(Map<String, List<X509Certificate>> spiffeRoots,
-      CertificateValidationContext certContext) throws CertStoreException {
-    TrustManagerFactory tmf = null;
-    checkNotNull(spiffeRoots, "spiffeRoots");
-    Map<String, X509ExtendedTrustManager> delegates = new HashMap<>();
-    for (Map.Entry<String, List<X509Certificate>> entry:spiffeRoots.entrySet()) {
-      try {
-        tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        KeyStore ks = KeyStore.getInstance("PKCS12");
-        // perform a load to initialize KeyStore
-        ks.load(/* stream= */ null, /* password= */ null);
-        int i = 1;
-        for (X509Certificate cert : entry.getValue()) {
-          // note: alias lookup uses toLowerCase(Locale.ENGLISH)
-          // so our alias needs to be all lower-case and unique
-          ks.setCertificateEntry("alias" + i, cert);
-          i++;
-        }
-        tmf.init(ks);
-      } catch (NoSuchAlgorithmException | KeyStoreException | IOException
-               | CertificateException e) {
-        logger.log(Level.SEVERE, "createX509TrustManager", e);
-        throw new CertStoreException(e);
-      }
-      TrustManager[] tms = tmf.getTrustManagers();
-      X509ExtendedTrustManager myDelegate = null;
-      if (tms != null) {
-        for (TrustManager tm : tms) {
-          if (tm instanceof X509ExtendedTrustManager) {
-            myDelegate = (X509ExtendedTrustManager) tm;
-            break;
-          }
-        }
-      }
-      if (myDelegate == null) {
-        throw new CertStoreException("Native X509 TrustManager not found.");
-      }
-      delegates.put(entry.getKey(), myDelegate);
-    }
-    return new XdsX509TrustManager(certContext, delegates);
-  }
-
 
   @Override
   protected void engineInit(KeyStore keyStore) throws Exception {
