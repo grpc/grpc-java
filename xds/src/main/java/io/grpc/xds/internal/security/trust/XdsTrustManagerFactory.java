@@ -67,9 +67,9 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
     this(certs, staticCertificateValidationContext, true);
   }
 
-  public XdsTrustManagerFactory(Map<String, List<X509Certificate>> spiffeRoots,
+  public XdsTrustManagerFactory(Map<String, List<X509Certificate>> spiffeTrustMap,
       CertificateValidationContext staticCertificateValidationContext) throws CertStoreException {
-    this(spiffeRoots, staticCertificateValidationContext, true);
+    this(spiffeTrustMap, staticCertificateValidationContext, true);
   }
 
   private XdsTrustManagerFactory(
@@ -86,7 +86,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   private XdsTrustManagerFactory(
-      Map<String, List<X509Certificate>> spiffeRoots,
+      Map<String, List<X509Certificate>> spiffeTrustMap,
       CertificateValidationContext certificateValidationContext,
       boolean validationContextIsStatic)
       throws CertStoreException {
@@ -95,7 +95,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
           certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
           "only static certificateValidationContext expected");
     }
-    xdsX509TrustManager = createX509TrustManager(spiffeRoots, certificateValidationContext);
+    xdsX509TrustManager = createX509TrustManager(spiffeTrustMap, certificateValidationContext);
   }
 
   private static X509Certificate[] getTrustedCaFromCertContext(
@@ -126,11 +126,12 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   @VisibleForTesting
-  static XdsX509TrustManager createX509TrustManager(Map<String, List<X509Certificate>> spiffeRoots,
+  static XdsX509TrustManager createX509TrustManager(
+      Map<String, List<X509Certificate>> spiffeTrustMapFile,
       CertificateValidationContext certContext) throws CertStoreException {
-    checkNotNull(spiffeRoots, "spiffeRoots");
+    checkNotNull(spiffeTrustMapFile, "spiffeTrustMapFile");
     Map<String, X509ExtendedTrustManager> delegates = new HashMap<>();
-    for (Map.Entry<String, List<X509Certificate>> entry:spiffeRoots.entrySet()) {
+    for (Map.Entry<String, List<X509Certificate>> entry:spiffeTrustMapFile.entrySet()) {
       delegates.put(entry.getKey(), createTrustManager(
           entry.getValue().toArray(new X509Certificate[0])));
     }

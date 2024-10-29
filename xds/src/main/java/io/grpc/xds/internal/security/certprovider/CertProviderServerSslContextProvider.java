@@ -60,9 +60,9 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
       throws CertStoreException, CertificateException, IOException {
     SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(savedKey, savedCertChain);
     XdsTrustManagerFactory trustManagerFactory = null;
-    if (isMtls() && savedSpiffeRoots != null) {
+    if (isMtls() && savedSpiffeTrustMap != null) {
       trustManagerFactory = new XdsTrustManagerFactory(
-          savedSpiffeRoots,
+          savedSpiffeTrustMap,
           certificateValidationContextdationContext);
     } else if (isMtls()) {
       trustManagerFactory = new XdsTrustManagerFactory(

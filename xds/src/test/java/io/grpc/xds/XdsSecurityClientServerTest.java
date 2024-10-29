@@ -28,8 +28,8 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPI
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
-import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_BUNDLE_1_FILE;
-import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_BUNDLE_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_1_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
@@ -268,7 +268,7 @@ public class XdsSecurityClientServerTest {
 
     // for TLS, client only needs trustCa, so BAD certs don't matter
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, false);
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_MAP_FILE, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -284,7 +284,7 @@ public class XdsSecurityClientServerTest {
 
     // for TLS, client only needs trustCa, so BAD certs don't matter
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, false);
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_MAP_FILE, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -368,11 +368,11 @@ public class XdsSecurityClientServerTest {
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
-            null, SPIFFE_TRUST_BUNDLE_1_FILE, true, true);
+            null, SPIFFE_TRUST_MAP_1_FILE, true, true);
     buildServerWithTlsContext(downstreamTlsContext);
 
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE, CLIENT_SPIFFE_PEM_FILE, SPIFFE_TRUST_BUNDLE_1_FILE, true);
+        CLIENT_KEY_FILE, CLIENT_SPIFFE_PEM_FILE, SPIFFE_TRUST_MAP_1_FILE, true);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -384,11 +384,11 @@ public class XdsSecurityClientServerTest {
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
-            null, SPIFFE_TRUST_BUNDLE_1_FILE, true, true);
+            null, SPIFFE_TRUST_MAP_1_FILE, true, true);
     buildServerWithTlsContext(downstreamTlsContext);
 
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_BUNDLE_1_FILE, true);
+        CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_MAP_1_FILE, true);
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
     try {

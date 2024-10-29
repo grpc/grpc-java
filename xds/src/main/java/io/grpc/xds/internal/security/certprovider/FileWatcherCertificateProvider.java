@@ -49,13 +49,13 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   private final Path certFile;
   private final Path keyFile;
   private final Path trustFile;
-  private final Path spiffeFile;
+  private final Path spiffeTrustMapFile;
   private final long refreshIntervalInSeconds;
   @VisibleForTesting ScheduledFuture<?> scheduledFuture;
   private FileTime lastModifiedTimeCert;
   private FileTime lastModifiedTimeKey;
   private FileTime lastModifiedTimeRoot;
-  private FileTime lastModifiedTimeSpiffe;
+  private FileTime lastModifiedTimespiffeTrustMap;
   private boolean shutdown;
 
   FileWatcherCertificateProvider(
@@ -64,7 +64,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
       String certFile,
       String keyFile,
       String trustFile,
-      String spiffeFile,
+      String spiffeTrustMapFile,
       long refreshIntervalInSeconds,
       ScheduledExecutorService scheduledExecutorService,
       TimeProvider timeProvider) {
@@ -75,7 +75,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.certFile = Paths.get(checkNotNull(certFile, "certFile"));
     this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
     this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
-    this.spiffeFile = spiffeFile == null ? null : Paths.get(spiffeFile);
+    this.spiffeTrustMapFile = spiffeTrustMapFile == null ? null : Paths.get(spiffeTrustMapFile);
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
   }
 
@@ -155,17 +155,17 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
         getWatcher().onError(Status.fromThrowable(t));
       }
       try {
-        if (spiffeFile == null) {
+        if (spiffeTrustMapFile == null) {
           return;
         }
-        FileTime currentSpiffeTime = Files.getLastModifiedTime(spiffeFile);
-        if (currentSpiffeTime.equals(lastModifiedTimeSpiffe)) {
+        FileTime currentSpiffeTime = Files.getLastModifiedTime(spiffeTrustMapFile);
+        if (currentSpiffeTime.equals(lastModifiedTimespiffeTrustMap)) {
           return;
         }
         SpiffeUtil.SpiffeBundle trustBundle = SpiffeUtil
-            .loadTrustBundleFromFile(spiffeFile.toString());
+            .loadTrustBundleFromFile(spiffeTrustMapFile.toString());
         getWatcher().updateSpiffeTrustMap(new HashMap<>(trustBundle.getBundleMap()));
-        lastModifiedTimeSpiffe = currentSpiffeTime;
+        lastModifiedTimespiffeTrustMap = currentSpiffeTime;
       } catch (Throwable t) {
         getWatcher().onError(Status.fromThrowable(t));
       }
@@ -223,7 +223,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
               String certFile,
               String keyFile,
               String trustFile,
-              String spiffeFile,
+              String spiffeTrustMapFile,
               long refreshIntervalInSeconds,
               ScheduledExecutorService scheduledExecutorService,
               TimeProvider timeProvider) {
@@ -233,7 +233,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
                 certFile,
                 keyFile,
                 trustFile,
-                spiffeFile,
+                spiffeTrustMapFile,
                 refreshIntervalInSeconds,
                 scheduledExecutorService,
                 timeProvider);
@@ -250,7 +250,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
         String certFile,
         String keyFile,
         String trustFile,
-        String spiffeFile,
+        String spiffeTrustMapFile,
         long refreshIntervalInSeconds,
         ScheduledExecutorService scheduledExecutorService,
         TimeProvider timeProvider);

@@ -542,7 +542,7 @@ public class XdsX509TrustManagerTest {
   }
 
   @Test
-  public void checkServerTrustedSpiffeTrustBundle()
+  public void checkServerTrustedSpiffeTrustMap()
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
@@ -557,7 +557,7 @@ public class XdsX509TrustManagerTest {
   }
 
   @Test
-  public void checkServerTrustedSpiffeTrustBundle_missing_spiffe_id()
+  public void checkServerTrustedSpiffeTrustMap_missing_spiffe_id()
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
@@ -576,7 +576,7 @@ public class XdsX509TrustManagerTest {
   }
 
   @Test
-  public void checkServerTrustedSpiffeTrustBundle_missing_trust_domain()
+  public void checkServerTrustedSpiffeTrustMap_missing_trust_domain()
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
@@ -589,13 +589,13 @@ public class XdsX509TrustManagerTest {
       trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
       fail("exception expected");
     } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Spiffe Trust Bundle doesn't contain trust"
+      assertThat(expected).hasMessageThat().isEqualTo("Spiffe Trust Map doesn't contain trust"
           + " domain 'example.com' from peer leaf certificate");
     }
   }
 
   @Test
-  public void checkClientTrustedSpiffeTrustBundle()
+  public void checkClientTrustedSpiffeTrustMap()
       throws CertificateException, IOException, CertStoreException {
     X509Certificate[] clientCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(CLIENT_SPIFFE_PEM_FILE));

@@ -108,7 +108,7 @@ public class XdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void constructor_fromSpiffeMap()
+  public void constructor_fromSpiffeTrustMap()
       throws CertificateException, IOException, CertStoreException {
     X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
     CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
@@ -124,6 +124,8 @@ public class XdsTrustManagerFactoryTest {
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) myTm;
     assertThat(xdsX509TrustManager.getAcceptedIssuers()).isNotNull();
     assertThat(xdsX509TrustManager.getAcceptedIssuers()).hasLength(1);
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()[0].getIssuerX500Principal().getName())
+        .isEqualTo("CN=testca,O=Internet Widgits Pty Ltd,ST=Some-State,C=AU");
   }
 
   @Test

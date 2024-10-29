@@ -46,7 +46,7 @@ public abstract class CertificateProvider implements Closeable {
 
     void updateTrustedRoots(List<X509Certificate> trustedRoots);
 
-    void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeRoots);
+    void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap);
 
     void onError(Status errorStatus);
   }
@@ -56,7 +56,7 @@ public abstract class CertificateProvider implements Closeable {
     private PrivateKey privateKey;
     private List<X509Certificate> certChain;
     private List<X509Certificate> trustedRoots;
-    private Map<String, List<X509Certificate>> spiffeRoots;
+    private Map<String, List<X509Certificate>> spiffeTrustMap;
 
     @VisibleForTesting
     final Set<Watcher> downstreamWatchers = new HashSet<>();
@@ -69,8 +69,8 @@ public abstract class CertificateProvider implements Closeable {
       if (trustedRoots != null) {
         sendLastTrustedRootsUpdate(watcher);
       }
-      if (spiffeRoots != null) {
-        sendLastSpiffeRootsUpdate(watcher);
+      if (spiffeTrustMap != null) {
+        sendLastspiffeTrustMapUpdate(watcher);
       }
     }
 
@@ -90,8 +90,8 @@ public abstract class CertificateProvider implements Closeable {
       watcher.updateTrustedRoots(trustedRoots);
     }
 
-    private void sendLastSpiffeRootsUpdate(Watcher watcher) {
-      watcher.updateSpiffeTrustMap(spiffeRoots);
+    private void sendLastspiffeTrustMapUpdate(Watcher watcher) {
+      watcher.updateSpiffeTrustMap(spiffeTrustMap);
     }
 
     @Override
@@ -115,10 +115,10 @@ public abstract class CertificateProvider implements Closeable {
     }
 
     @Override
-    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeRoots) {
-      this.spiffeRoots = spiffeRoots;
+    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
+      this.spiffeTrustMap = spiffeTrustMap;
       for (Watcher watcher : downstreamWatchers) {
-        sendLastSpiffeRootsUpdate(watcher);
+        sendLastspiffeTrustMapUpdate(watcher);
       }
     }
 

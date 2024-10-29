@@ -33,9 +33,11 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
@@ -280,7 +282,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       }
       String trustDomain = spiffeId.get().getTrustDomain();
       if (!spiffeTrustMapDelegates.containsKey(trustDomain)) {
-        throw new CertificateException(String.format("Spiffe Trust Bundle doesn't contain trust"
+        throw new CertificateException(String.format("Spiffe Trust Map doesn't contain trust"
             + " domain '%s' from peer leaf certificate", trustDomain));
       }
       return spiffeTrustMapDelegates.get(trustDomain);
@@ -292,7 +294,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   @Override
   public X509Certificate[] getAcceptedIssuers() {
     if (spiffeTrustMapDelegates != null) {
-      List<X509Certificate> result = new ArrayList<>();
+      Set<X509Certificate> result = new HashSet<>();
       for (X509ExtendedTrustManager tm: spiffeTrustMapDelegates.values()) {
         result.addAll(Arrays.asList(tm.getAcceptedIssuers()));
       }

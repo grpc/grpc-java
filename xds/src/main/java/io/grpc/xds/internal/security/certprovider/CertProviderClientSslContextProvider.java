@@ -58,10 +58,10 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
     // Null rootCertInstance implies hasSystemRootCerts because of the check in
     // CertProviderClientSslContextProviderFactory.
     if (rootCertInstance != null) {
-      if (savedSpiffeRoots != null) {
+      if (savedSpiffeTrustMap != null) {
         sslContextBuilder = GrpcSslContexts.forClient().trustManager(
           new XdsTrustManagerFactory(
-              savedSpiffeRoots,
+              savedSpiffeTrustMap,
               certificateValidationContextdationContext));
       } else {
         sslContextBuilder = GrpcSslContexts.forClient().trustManager(
