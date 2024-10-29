@@ -627,6 +627,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
+        if (clientFrameHandler == null) {
+          return;
+        }
         if (connectingCallback != null) {
           connectingCallback.run();
         }
