@@ -77,16 +77,16 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
     this.spiffeFile = spiffeFile == null ? null : Paths.get(spiffeFile);
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
-    try {
-      checkAndReloadCertificates();
-    } catch (Throwable t) {
-      logger.log(Level.SEVERE, "Uncaught exception!", t);
-    }
   }
 
   @Override
   public void start() {
-    scheduleNextRefreshCertificate(refreshIntervalInSeconds);
+    scheduleNextRefreshCertificate(0);
+  }
+
+  @Override
+  public void init() {
+    checkAndReloadCertificates(false);
   }
 
   @Override
@@ -107,7 +107,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   }
 
   @VisibleForTesting
-  void checkAndReloadCertificates() {
+  void checkAndReloadCertificates(boolean scheduleNext) {
     try {
       try {
         FileTime currentCertTime = Files.getLastModifiedTime(certFile);
@@ -170,7 +170,9 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
         getWatcher().onError(Status.fromThrowable(t));
       }
     } finally {
-      scheduleNextRefreshCertificate(refreshIntervalInSeconds);
+      if (scheduleNext) {
+        scheduleNextRefreshCertificate(refreshIntervalInSeconds);
+      }
     }
   }
 
@@ -201,7 +203,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   public void run() {
     if (!shutdown) {
       try {
-        checkAndReloadCertificates();
+        checkAndReloadCertificates(true);
       } catch (Throwable t) {
         logger.log(Level.SEVERE, "Uncaught exception!", t);
         if (t instanceof InterruptedException) {

@@ -166,8 +166,11 @@ public abstract class CertificateProvider implements Closeable {
   @Override
   public abstract void close();
 
-  /** Starts the cert refresh and watcher update cycle. */
+  /** Starts the async cert refresh and watcher update cycle. */
   public abstract void start();
+
+  /** Initializes the instance by loading certs and updating watchers. */
+  public abstract void init();
 
   private final DistributorWatcher watcher;
   private final boolean notifyCertUpdates;

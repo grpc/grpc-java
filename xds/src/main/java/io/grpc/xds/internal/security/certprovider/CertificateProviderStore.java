@@ -132,6 +132,7 @@ public final class CertificateProviderStore {
       }
       CertificateProvider certProvider = certProviderProvider.createCertificateProvider(
               key.config, new CertificateProvider.DistributorWatcher(), key.notifyCertUpdates);
+      certProvider.init();
       certProvider.start();
       return certProvider;
     }
