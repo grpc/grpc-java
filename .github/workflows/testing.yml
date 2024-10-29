@@ -78,7 +78,7 @@ jobs:
   bazel:
     runs-on: ubuntu-latest
     env:
-      USE_BAZEL_VERSION: 6.0.0
+      USE_BAZEL_VERSION: 6.3.0
 
     steps:
     - uses: actions/checkout@v4
