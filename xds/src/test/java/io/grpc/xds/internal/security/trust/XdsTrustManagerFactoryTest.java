@@ -122,7 +122,8 @@ public class XdsTrustManagerFactoryTest {
     TrustManager myTm = tms[0];
     assertThat(myTm).isInstanceOf(XdsX509TrustManager.class);
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) myTm;
-    assertThat(xdsX509TrustManager.getAcceptedIssuers()).isNull();
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()).isNotNull();
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()).hasLength(1);
   }
 
   @Test
