@@ -606,7 +606,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         notifyClientClose(status, trailers);
       }
 
-      /** clientStream.serverClosed() must be called before this method */
+      /** clientStream.serverClosed() must be called before this method. */
       private void notifyClientClose(Status status, Metadata trailers) {
         Status clientStatus = cleanStatus(status, includeCauseWithStatus);
         synchronized (this) {

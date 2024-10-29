@@ -67,7 +67,7 @@ import javax.annotation.Nullable;
  * manner, and notifies gRPC library to receive additional response after one is consumed by
  * a fictional <code>processResponse()</code>.
  *
- * <p><pre>
+ * <pre>
  *   call = channel.newCall(bidiStreamingMethod, callOptions);
  *   listener = new ClientCall.Listener&lt;FooResponse&gt;() {
  *     &#64;Override

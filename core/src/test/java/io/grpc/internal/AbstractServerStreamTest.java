@@ -85,7 +85,7 @@ public class AbstractServerStreamTest {
   }
 
   /**
-   * Test for issue https://github.com/grpc/grpc-java/issues/1795
+   * Test for issue https://github.com/grpc/grpc-java/issues/1795 .
    */
   @Test
   public void frameShouldBeIgnoredAfterDeframerClosed() {
@@ -212,7 +212,7 @@ public class AbstractServerStreamTest {
   }
 
   /**
-   * Test for issue https://github.com/grpc/grpc-java/issues/615
+   * Test for issue https://github.com/grpc/grpc-java/issues/615 .
    */
   @Test
   public void completeWithoutClose() {

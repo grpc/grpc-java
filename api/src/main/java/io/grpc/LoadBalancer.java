@@ -1000,8 +1000,8 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Out-of-band channel for LoadBalancer’s own RPC needs, e.g., talking to an external
-     * load-balancer service.
+     * Create an out-of-band channel for the LoadBalancer’s own RPC needs, e.g., talking to an
+     * external load-balancer service.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
@@ -1011,7 +1011,12 @@ public abstract class LoadBalancer {
     public abstract ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority);
 
     /**
-     * Accept a list of EAG for multiple authorities: https://github.com/grpc/grpc-java/issues/4618
+     * Create an out-of-band channel for the LoadBalancer's own RPC needs, e.g., talking to an
+     * external load-balancer service. This version of the method allows multiple EAGs, so different
+     * addresses can have different authorities.
+     *
+     * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
+     * channels within {@link #shutdown}.
      * */
     public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag,
         String authority) {

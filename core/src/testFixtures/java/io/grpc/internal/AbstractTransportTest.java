@@ -269,7 +269,7 @@ public abstract class AbstractTransportTest {
   //     (and maybe exceptions handled)
 
   /**
-   * Test for issue https://github.com/grpc/grpc-java/issues/1682
+   * Test for issue https://github.com/grpc/grpc-java/issues/1682 .
    */
   @Test
   public void frameAfterRstStreamShouldNotBreakClientChannel() throws Exception {
