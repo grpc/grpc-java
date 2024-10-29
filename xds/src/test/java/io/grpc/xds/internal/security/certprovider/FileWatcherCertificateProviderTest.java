@@ -149,7 +149,8 @@ public class FileWatcherCertificateProviderTest {
     if (spiffeTrustMapFileSource != null) {
       spiffeTrustMapFileSource = CommonTlsContextTestsUtil
           .getTempFileNameForResourcesFile(spiffeTrustMapFileSource);
-      Files.copy(Paths.get(spiffeTrustMapFileSource), Paths.get(spiffeTrustMapFile), REPLACE_EXISTING);
+      Files.copy(Paths.get(spiffeTrustMapFileSource),
+          Paths.get(spiffeTrustMapFile), REPLACE_EXISTING);
       Files.setLastModifiedTime(
           Paths.get(spiffeTrustMapFile), FileTime.fromMillis(timeProvider.currentTimeMillis()));
     }
