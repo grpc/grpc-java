@@ -19,7 +19,7 @@ package io.grpc;
 import java.time.Duration;
 
 final class TimeUtils {
-  private TimeUtils(){}
+  private TimeUtils() {}
 
   static long convertToNanos(Duration duration) {
     try {
