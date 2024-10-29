@@ -164,7 +164,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
         }
         SpiffeUtil.SpiffeBundle trustBundle = SpiffeUtil
             .loadTrustBundleFromFile(spiffeFile.toString());
-        getWatcher().updateSpiffeRoots(new HashMap<>(trustBundle.getBundleMap()));
+        getWatcher().updateSpiffeTrustMap(new HashMap<>(trustBundle.getBundleMap()));
         lastModifiedTimeSpiffe = currentSpiffeTime;
       } catch (Throwable t) {
         getWatcher().onError(Status.fromThrowable(t));

@@ -154,7 +154,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   @Override
-  public final void updateSpiffeRoots(Map<String, List<X509Certificate>> spiffeRoots) {
+  public final void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeRoots) {
     savedSpiffeRoots = spiffeRoots;
     updateSslContextWhenReady();
   }
@@ -180,10 +180,6 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       }
     } else if (isServerSideTls()) {
       if (savedKey != null) {
-        updateSslContext();
-        clearKeysAndCerts();
-      }
-      if (savedSpiffeRoots != null) {
         updateSslContext();
         clearKeysAndCerts();
       }

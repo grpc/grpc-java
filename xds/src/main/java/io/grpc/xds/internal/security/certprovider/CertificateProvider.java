@@ -46,7 +46,7 @@ public abstract class CertificateProvider implements Closeable {
 
     void updateTrustedRoots(List<X509Certificate> trustedRoots);
 
-    void updateSpiffeRoots(Map<String, List<X509Certificate>> spiffeRoots);
+    void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeRoots);
 
     void onError(Status errorStatus);
   }
@@ -91,7 +91,7 @@ public abstract class CertificateProvider implements Closeable {
     }
 
     private void sendLastSpiffeRootsUpdate(Watcher watcher) {
-      watcher.updateSpiffeRoots(spiffeRoots);
+      watcher.updateSpiffeTrustMap(spiffeRoots);
     }
 
     @Override
@@ -115,7 +115,7 @@ public abstract class CertificateProvider implements Closeable {
     }
 
     @Override
-    public void updateSpiffeRoots(Map<String, List<X509Certificate>> spiffeRoots) {
+    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeRoots) {
       this.spiffeRoots = spiffeRoots;
       for (Watcher watcher : downstreamWatchers) {
         sendLastSpiffeRootsUpdate(watcher);

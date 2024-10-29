@@ -214,7 +214,7 @@ public class FileWatcherCertificateProviderTest {
     verify(mockWatcher, never())
         .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
     verify(mockWatcher, never()).updateTrustedRoots(ArgumentMatchers.<X509Certificate>anyList());
-    verify(mockWatcher, never()).updateSpiffeRoots(ArgumentMatchers.anyMap());
+    verify(mockWatcher, never()).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
     verify(timeService, never()).schedule(any(Runnable.class), any(Long.TYPE), any(TimeUnit.class));
     verify(timeService, times(1)).shutdownNow();
   }
@@ -274,7 +274,7 @@ public class FileWatcherCertificateProviderTest {
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
     provider.checkAndReloadCertificates(true);
-    verify(mockWatcher, never()).updateSpiffeRoots(ArgumentMatchers.anyMap());
+    verify(mockWatcher, never()).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
 
     reset(timeService);
     doReturn(scheduledFuture)
@@ -284,7 +284,7 @@ public class FileWatcherCertificateProviderTest {
     populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, SPIFFE_TRUST_BUNDLE_FILE, false,
         false, false, false);
     provider.checkAndReloadCertificates(true);
-    verify(mockWatcher, times(1)).updateSpiffeRoots(ArgumentMatchers.anyMap());
+    verify(mockWatcher, times(1)).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
 
     reset(timeService);
     doReturn(scheduledFuture)
@@ -294,7 +294,7 @@ public class FileWatcherCertificateProviderTest {
     populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, SPIFFE_TRUST_BUNDLE_1_FILE, false,
         false, false, false);
     provider.checkAndReloadCertificates(true);
-    verify(mockWatcher, times(2)).updateSpiffeRoots(ArgumentMatchers.anyMap());
+    verify(mockWatcher, times(2)).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
     verifyTimeServiceAndScheduledFuture();
   }
 
@@ -468,12 +468,12 @@ public class FileWatcherCertificateProviderTest {
       @SuppressWarnings("unchecked")
       ArgumentCaptor<Map<String, List<X509Certificate>>> spiffeCaptor =
           ArgumentCaptor.forClass(Map.class);
-      verify(mockWatcher, times(1)).updateSpiffeRoots(spiffeCaptor.capture());
+      verify(mockWatcher, times(1)).updateSpiffeTrustMap(spiffeCaptor.capture());
       Map<String, List<X509Certificate>> trustBundle = spiffeCaptor.getValue();
       assertThat(trustBundle).hasSize(2);
       verify(mockWatcher, never()).onError(any(Status.class));
     } else {
-      verify(mockWatcher, never()).updateSpiffeRoots(ArgumentMatchers.anyMap());
+      verify(mockWatcher, never()).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
     }
   }
 

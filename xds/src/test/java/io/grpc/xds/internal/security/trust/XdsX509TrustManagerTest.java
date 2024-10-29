@@ -571,7 +571,7 @@ public class XdsX509TrustManagerTest {
       fail("exception expected");
     } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat()
-          .isEqualTo("Can't extract valid SPIFFE ID from the chain");
+          .isEqualTo("Failed to extract SPIFFE ID from peer leaf certificate");
     }
   }
 
@@ -589,8 +589,8 @@ public class XdsX509TrustManagerTest {
       trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
       fail("exception expected");
     } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat()
-          .isEqualTo("Spiffe Trust Bundle doesn't contain trust domain from the chain");
+      assertThat(expected).hasMessageThat().isEqualTo("Spiffe Trust Bundle doesn't contain trust"
+          + " domain 'example.com' from peer leaf certificate");
     }
   }
 

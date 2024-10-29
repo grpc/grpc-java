@@ -30,6 +30,8 @@ import java.net.Socket;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -54,7 +56,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private static final int ALT_IPA_NAME = 7;
 
   private final X509ExtendedTrustManager delegate;
-  private final Map<String, X509ExtendedTrustManager> delegates;
+  private final Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates;
   private final CertificateValidationContext certContext;
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
@@ -62,13 +64,13 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;
-    this.delegates = null;
+    this.spiffeTrustMapDelegates = null;
   }
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-      Map<String, X509ExtendedTrustManager> delegates) {
-    checkNotNull(delegates, "delegates");
-    this.delegates = delegates;
+      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates) {
+    checkNotNull(spiffeTrustMapDelegates, "spiffeTrustMapDelegates");
+    this.spiffeTrustMapDelegates = spiffeTrustMapDelegates;
     this.certContext = certContext;
     this.delegate = null;
   }
@@ -271,17 +273,17 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   private X509ExtendedTrustManager chooseDelegate(X509Certificate[] chain)
       throws CertificateException {
-    if (delegates != null) {
+    if (spiffeTrustMapDelegates != null) {
       Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(chain);
       if (!spiffeId.isPresent()) {
-        throw new CertificateException("Can't extract valid SPIFFE ID from the chain");
+        throw new CertificateException("Failed to extract SPIFFE ID from peer leaf certificate");
       }
       String trustDomain = spiffeId.get().getTrustDomain();
-      if (!delegates.containsKey(trustDomain)) {
-        throw new CertificateException(
-            "Spiffe Trust Bundle doesn't contain trust domain from the chain");
+      if (!spiffeTrustMapDelegates.containsKey(trustDomain)) {
+        throw new CertificateException(String.format("Spiffe Trust Bundle doesn't contain trust"
+            + " domain '%s' from peer leaf certificate", trustDomain));
       }
-      return delegates.get(trustDomain);
+      return spiffeTrustMapDelegates.get(trustDomain);
     } else {
       return delegate;
     }
@@ -289,6 +291,13 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   @Override
   public X509Certificate[] getAcceptedIssuers() {
-    return delegates == null ? delegate.getAcceptedIssuers() : null;
+    if (spiffeTrustMapDelegates != null) {
+      List<X509Certificate> result = new ArrayList<>();
+      for (X509ExtendedTrustManager tm: spiffeTrustMapDelegates.values()){
+        result.addAll(Arrays.asList(tm.getAcceptedIssuers()));
+      }
+      return result.toArray(new X509Certificate[0]);
+    }
+    return delegate.getAcceptedIssuers();
   }
 }

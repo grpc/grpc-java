@@ -294,7 +294,7 @@ public class XdsSecurityClientServerTest {
     } catch (StatusRuntimeException sre) {
       assertThat(sre.getStatus().getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
       assertThat(sre.getCause().getCause().getMessage())
-          .contains("Can't extract valid SPIFFE ID from the chain");
+          .contains("Failed to extract SPIFFE ID from peer leaf certificate");
     }
   }
 
