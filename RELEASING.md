@@ -167,14 +167,14 @@ Tagging the Release
     generation instructions][gcr-image]. Summary:
     ```bash
     # If you haven't previously configured docker:
-    gcloud auth configure-docker
+    gcloud auth configure-docker us-docker.pkg.dev
 
     # In main grpc repo, add the new version to matrix
     ${EDITOR:-nano -w} tools/interop_matrix/client_matrix.py
     tools/interop_matrix/create_matrix_images.py --git_checkout --release=v$MAJOR.$MINOR.$PATCH \
         --upload_images --language java
-    docker pull gcr.io/grpc-testing/grpc_interop_java:v$MAJOR.$MINOR.$PATCH
-    docker_image=gcr.io/grpc-testing/grpc_interop_java:v$MAJOR.$MINOR.$PATCH \
+    docker pull us-docker.pkg.dev/grpc-testing/testing-images-public/grpc_interop_java:v$MAJOR.$MINOR.$PATCH
+    docker_image=us-docker.pkg.dev/grpc-testing/testing-images-public/grpc_interop_java:v$MAJOR.$MINOR.$PATCH \
         tools/interop_matrix/testcases/java__master
 
     # Commit the changes
