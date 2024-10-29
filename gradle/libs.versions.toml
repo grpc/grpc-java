@@ -29,7 +29,7 @@ cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.28.0"
 errorprone-core = "com.google.errorprone:error_prone_core:2.28.0"
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.41.0"
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.48.0"
 google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.23.0"
 google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.23.0"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
