@@ -293,7 +293,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   public X509Certificate[] getAcceptedIssuers() {
     if (spiffeTrustMapDelegates != null) {
       List<X509Certificate> result = new ArrayList<>();
-      for (X509ExtendedTrustManager tm: spiffeTrustMapDelegates.values()){
+      for (X509ExtendedTrustManager tm: spiffeTrustMapDelegates.values()) {
         result.addAll(Arrays.asList(tm.getAcceptedIssuers()));
       }
       return result.toArray(new X509Certificate[0]);
