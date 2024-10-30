@@ -552,7 +552,7 @@ public abstract class LoadBalancer {
     private final Status status;
     // True if the result is created by withDrop()
     private final boolean drop;
-    @Nullable private final String authorityOverrideHostname;
+    @Nullable private final String authorityOverride;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
@@ -561,17 +561,17 @@ public abstract class LoadBalancer {
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
-      this.authorityOverrideHostname = null;
+      this.authorityOverride = null;
     }
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
-        Status status, boolean drop, @Nullable String authorityOverrideHostname) {
+        Status status, boolean drop, @Nullable String authorityOverride) {
       this.subchannel = subchannel;
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
-      this.authorityOverrideHostname = authorityOverrideHostname;
+      this.authorityOverride = authorityOverride;
     }
 
     /**
@@ -655,12 +655,13 @@ public abstract class LoadBalancer {
      * Same as {@code withSubchannel(subchannel, streamTracerFactory)} but with an authority name
      * to override in the host header.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
-        @Nullable String authorityOverrideHostname) {
+        @Nullable String authorityOverride) {
       return new PickResult(
           checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK,
-          false, authorityOverrideHostname);
+          false, authorityOverride);
     }
 
     /**
@@ -706,10 +707,11 @@ public abstract class LoadBalancer {
       return NO_RESULT;
     }
 
-    /** Returns the authority override hostname if any. */
+    /** Returns the authority override if any. */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
     @Nullable
-    public String getAuthorityOverrideHostname() {
-      return authorityOverrideHostname;
+    public String getAuthorityOverride() {
+      return authorityOverride;
     }
 
     /**
@@ -766,7 +768,7 @@ public abstract class LoadBalancer {
           .add("streamTracerFactory", streamTracerFactory)
           .add("status", status)
           .add("drop", drop)
-          .add("authority-override", authorityOverrideHostname)
+          .add("authority-override", authorityOverride)
           .toString();
     }
 

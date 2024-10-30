@@ -797,7 +797,7 @@ public class ClusterImplLoadBalancerTest {
           TestMethodDescriptors.voidMethod(), new Metadata(),
           CallOptions.DEFAULT.withOption(AUTO_HOST_REWRITE_KEY, true), detailsConsumer);
       PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
-      assertThat(result.getAuthorityOverrideHostname()).isEqualTo("authority-host-name");
+      assertThat(result.getAuthorityOverride()).isEqualTo("authority-host-name");
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
     }
@@ -847,7 +847,7 @@ public class ClusterImplLoadBalancerTest {
     pickSubchannelArgs = new PickSubchannelArgsImpl(
         TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT, detailsConsumer);
     PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
-    assertThat(result.getAuthorityOverrideHostname()).isNull();
+    assertThat(result.getAuthorityOverride()).isNull();
   }
 
   @Test

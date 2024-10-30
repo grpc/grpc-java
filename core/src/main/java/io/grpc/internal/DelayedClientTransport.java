@@ -134,8 +134,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
           callOptions = args.getCallOptions();
           // User code provided authority takes precedence over the LB provided one.
           if (callOptions.getAuthority() == null
-              && pickResult.getAuthorityOverrideHostname() != null) {
-            callOptions = callOptions.withAuthority(pickResult.getAuthorityOverrideHostname());
+              && pickResult.getAuthorityOverride() != null) {
+            callOptions = callOptions.withAuthority(pickResult.getAuthorityOverride());
           }
           ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
               callOptions.isWaitForReady());
@@ -288,8 +288,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       PickResult pickResult = picker.pickSubchannel(stream.args);
       CallOptions callOptions = stream.args.getCallOptions();
       // User code provided authority takes precedence over the LB provided one.
-      if (callOptions.getAuthority() == null && pickResult.getAuthorityOverrideHostname() != null) {
-        stream.setAuthority(pickResult.getAuthorityOverrideHostname());
+      if (callOptions.getAuthority() == null && pickResult.getAuthorityOverride() != null) {
+        stream.setAuthority(pickResult.getAuthorityOverride());
       }
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
           callOptions.isWaitForReady());
