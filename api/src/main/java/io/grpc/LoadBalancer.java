@@ -212,7 +212,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.21.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
   public static final class ResolvedAddresses {
     private final List<EquivalentAddressGroup> addresses;
     @NameResolver.ResolutionResultAttr
