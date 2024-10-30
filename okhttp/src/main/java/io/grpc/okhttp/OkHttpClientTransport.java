@@ -543,6 +543,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             barrier.await(1000, TimeUnit.MILLISECONDS);
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+          } catch (TimeoutException | BrokenBarrierException e) {
+            startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
+                .withDescription("Timed out waiting for second handshake thread. "
+                    + "The transport executor pool may have run out of threads"));
+            return;
           }
 
           if (proxiedAddr == null) {
@@ -582,11 +587,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
               .build();
         } catch (StatusException e) {
           startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
-          return;
-        } catch (TimeoutException | BrokenBarrierException e) {
-          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
-              .withDescription("Timed out waiting for second handshake thread. "
-                  + "The transport executor pool may have run out of threads"));
           return;
         } catch (Exception e) {
           onException(e);
