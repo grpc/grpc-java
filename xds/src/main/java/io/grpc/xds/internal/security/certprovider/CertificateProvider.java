@@ -70,7 +70,7 @@ public abstract class CertificateProvider implements Closeable {
         sendLastTrustedRootsUpdate(watcher);
       }
       if (spiffeTrustMap != null) {
-        sendLastspiffeTrustMapUpdate(watcher);
+        sendLastSpiffeTrustMapUpdate(watcher);
       }
     }
 
@@ -90,7 +90,7 @@ public abstract class CertificateProvider implements Closeable {
       watcher.updateTrustedRoots(trustedRoots);
     }
 
-    private void sendLastspiffeTrustMapUpdate(Watcher watcher) {
+    private void sendLastSpiffeTrustMapUpdate(Watcher watcher) {
       watcher.updateSpiffeTrustMap(spiffeTrustMap);
     }
 
@@ -118,7 +118,7 @@ public abstract class CertificateProvider implements Closeable {
     public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
       this.spiffeTrustMap = spiffeTrustMap;
       for (Watcher watcher : downstreamWatchers) {
-        sendLastspiffeTrustMapUpdate(watcher);
+        sendLastSpiffeTrustMapUpdate(watcher);
       }
     }
 
