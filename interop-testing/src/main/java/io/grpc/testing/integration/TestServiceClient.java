@@ -520,6 +520,22 @@ public class TestServiceClient {
         tester.performSoakTest(
             serverHost,
             false /* resetChannelPerIteration */,
+            false /* concurrent */,
+            soakIterations,
+            soakMaxFailures,
+            soakPerIterationMaxAcceptableLatencyMs,
+            soakMinTimeMsBetweenRpcs,
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
+        break;
+      }
+
+      case RPC_SOAK_CONCURRENT: {
+        tester.performSoakTest(
+            serverHost,
+            false /* resetChannelPerIteration */,
+            true /* concurrent */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
@@ -534,6 +550,7 @@ public class TestServiceClient {
         tester.performSoakTest(
             serverHost,
             true /* resetChannelPerIteration */,
+            false /* concurrent */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
@@ -542,7 +559,21 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize);
         break;
+      }
 
+      case CHANNEL_SOAK_CONCURRENT: {
+        tester.performSoakTest(
+            serverHost,
+            true /* resetChannelPerIteration */,
+            true /* concurrent */,
+            soakIterations,
+            soakMaxFailures,
+            soakPerIterationMaxAcceptableLatencyMs,
+            soakMinTimeMsBetweenRpcs,
+            soakOverallTimeoutSeconds,
+            soakRequestSize,
+            soakResponseSize);
+        break;
       }
 
       case ORCA_PER_RPC: {
