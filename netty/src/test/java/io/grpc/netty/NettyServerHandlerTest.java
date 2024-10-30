@@ -1367,7 +1367,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     try {
       return dataFrame(streamId, endStream, buf);
     } finally {
-      buf.release();
+      buf.clear();
     }
   }
 
