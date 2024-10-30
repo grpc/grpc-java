@@ -552,6 +552,7 @@ public abstract class LoadBalancer {
     private final Status status;
     // True if the result is created by withDrop()
     private final boolean drop;
+    @Nullable private final String authorityOverride;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
@@ -560,6 +561,17 @@ public abstract class LoadBalancer {
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
+      this.authorityOverride = null;
+    }
+
+    private PickResult(
+        @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        Status status, boolean drop, @Nullable String authorityOverride) {
+      this.subchannel = subchannel;
+      this.streamTracerFactory = streamTracerFactory;
+      this.status = checkNotNull(status, "status");
+      this.drop = drop;
+      this.authorityOverride = authorityOverride;
     }
 
     /**
@@ -640,6 +652,19 @@ public abstract class LoadBalancer {
     }
 
     /**
+     * Same as {@code withSubchannel(subchannel, streamTracerFactory)} but with an authority name
+     * to override in the host header.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
+    public static PickResult withSubchannel(
+        Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        @Nullable String authorityOverride) {
+      return new PickResult(
+          checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK,
+          false, authorityOverride);
+    }
+
+    /**
      * Equivalent to {@code withSubchannel(subchannel, null)}.
      *
      * @since 1.2.0
@@ -680,6 +705,13 @@ public abstract class LoadBalancer {
      */
     public static PickResult withNoResult() {
       return NO_RESULT;
+    }
+
+    /** Returns the authority override if any. */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
+    @Nullable
+    public String getAuthorityOverride() {
+      return authorityOverride;
     }
 
     /**
@@ -736,6 +768,7 @@ public abstract class LoadBalancer {
           .add("streamTracerFactory", streamTracerFactory)
           .add("status", status)
           .add("drop", drop)
+          .add("authority-override", authorityOverride)
           .toString();
     }
 

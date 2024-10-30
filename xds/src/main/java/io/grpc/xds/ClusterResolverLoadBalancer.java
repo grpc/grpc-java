@@ -428,6 +428,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                           .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT,
                               localityLbInfo.localityWeight())
                           .set(InternalXdsAttributes.ATTR_SERVER_WEIGHT, weight)
+                          .set(InternalXdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                           .build();
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
                       endpoint.eag().getAddresses(), attr);
@@ -567,7 +568,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           handleEndpointResolutionError();
           return;
         }
-        resolver.start(new NameResolverListener());
+        resolver.start(new NameResolverListener(dnsHostName));
       }
 
       void refresh() {
@@ -606,6 +607,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
 
       private class NameResolverListener extends NameResolver.Listener2 {
+        private final String dnsHostName;
+
+        NameResolverListener(String dnsHostName) {
+          this.dnsHostName = dnsHostName;
+        }
+
         @Override
         public void onResult(final ResolutionResult resolutionResult) {
           class NameResolved implements Runnable {
@@ -625,6 +632,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 Attributes attr = eag.getAttributes().toBuilder()
                     .set(InternalXdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
                     .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                    .set(InternalXdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
                     .build();
                 eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
                 eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
