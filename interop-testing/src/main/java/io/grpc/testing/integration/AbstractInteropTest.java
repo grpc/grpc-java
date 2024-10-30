@@ -111,11 +111,13 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -1724,12 +1726,13 @@ public abstract class AbstractInteropTest {
   }
 
   /**
-    * Runs large unary RPCs in a loop with configurable failure thresholds
-    * and channel creation behavior.
+   * Runs large unary RPCs in a loop with configurable failure thresholds
+   * and channel creation behavior.
    */
   public void performSoakTest(
       String serverUri,
       boolean resetChannelPerIteration,
+      boolean concurrent,
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
@@ -1738,14 +1741,19 @@ public abstract class AbstractInteropTest {
       int soakRequestSize,
       int soakResponseSize)
       throws Exception {
-    int iterationsDone = 0;
-    int totalFailures = 0;
+    // int iterationsDone = 0;
+    // int totalFailures = 0;
+    AtomicInteger iterationsDone = new AtomicInteger(0);
+    AtomicInteger totalFailures = new AtomicInteger(0);
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
     long startNs = System.nanoTime();
     ManagedChannel soakChannel = createChannel();
     TestServiceGrpc.TestServiceBlockingStub soakStub = TestServiceGrpc
         .newBlockingStub(soakChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+    List<Thread> threads = new ArrayList<>();
+    // Only allow up to 10 threads to run concurrently
+    Semaphore semaphore = new Semaphore(10);
     for (int i = 0; i < soakIterations; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
@@ -1760,33 +1768,38 @@ public abstract class AbstractInteropTest {
             .newBlockingStub(soakChannel)
             .withInterceptors(recordClientCallInterceptor(clientCallCapture));
       }
-      SoakIterationResult result = 
-          performOneSoakIteration(soakStub, soakRequestSize, soakResponseSize);
-      SocketAddress peer = clientCallCapture
-          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-      StringBuilder logStr = new StringBuilder(
-          String.format(
-              Locale.US,
-              "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
-              i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
-      if (!result.getStatus().equals(Status.OK)) {
-        totalFailures++;
-        logStr.append(String.format(" failed: %s", result.getStatus()));
-      } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
-        totalFailures++;
-        logStr.append(
-            " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
+
+      final TestServiceGrpc.TestServiceBlockingStub currSoakStub = soakStub;
+      if (concurrent) {
+        semaphore.acquire();
+        // Create a new thread for each soak iteration
+        Thread thread = new Thread(() -> {
+          try {
+             executeSoakIteration(currSoakStub,soakRequestSize,
+                soakResponseSize, iterationsDone, totalFailures, serverUri, latencies,
+                maxAcceptablePerIterationLatencyMs);
+          } finally {
+            semaphore.release();
+          }
+        });
+        threads.add(thread);
+        thread.start();
       } else {
-        logStr.append(" succeeded");
+        executeSoakIteration(currSoakStub, soakRequestSize, soakResponseSize, iterationsDone,
+            totalFailures, serverUri, latencies, maxAcceptablePerIterationLatencyMs);
       }
-      System.err.println(logStr.toString());
-      iterationsDone++;
-      latencies.recordValue(result.getLatencyMs());
       long remainingNs = earliestNextStartNs - System.nanoTime();
       if (remainingNs > 0) {
         TimeUnit.NANOSECONDS.sleep(remainingNs);
       }
     }
+    // Wait for all threads to finish if running in concurrent mode
+    if (concurrent) {
+      for (Thread thread :threads) {
+        thread.join();
+      }}
+
+
     soakChannel.shutdownNow();
     soakChannel.awaitTermination(10, TimeUnit.SECONDS);
     System.err.println(
@@ -1819,8 +1832,43 @@ public abstract class AbstractInteropTest {
             "(server_uri: %s) soak test total failures: %d exceeds max failures "
                 + "threshold: %d.",
             serverUri, totalFailures, maxFailures);
-    assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
+    assertTrue(tooManyFailuresErrorMessage, totalFailures.get() <= maxFailures);
   }
+
+  private void executeSoakIteration(
+      TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize,
+    int soakResponseSize, AtomicInteger iterationsDone, AtomicInteger totalFailures,
+        String serverUri, Histogram latencies, int maxAcceptablePerIterationLatencyMs) {
+      try {
+        SoakIterationResult result =
+            performOneSoakIteration(soakStub, soakRequestSize, soakResponseSize);
+        SocketAddress peer = clientCallCapture
+            .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+        StringBuilder logStr = new StringBuilder(
+            String.format(
+                Locale.US,
+                "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+                iterationsDone.get(), result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
+        if (!result.getStatus().equals(Status.OK)) {
+          // totalFailures++;
+          totalFailures.incrementAndGet();
+          logStr.append(String.format(" failed: %s", result.getStatus()));
+        } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
+          // totalFailures++;
+          totalFailures.incrementAndGet();
+          logStr.append(
+              " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
+        } else {
+          logStr.append(" succeeded");
+          iterationsDone.incrementAndGet();
+        }
+        System.err.println(logStr.toString());
+        // iterationsDone++;
+        latencies.recordValue(result.getLatencyMs());
+      } catch (Exception e) {
+        e.printStackTrace();
+        totalFailures.incrementAndGet();
+      }}
 
   private static void assertSuccess(StreamRecorder<?> recorder) {
     if (recorder.getError() != null) {
