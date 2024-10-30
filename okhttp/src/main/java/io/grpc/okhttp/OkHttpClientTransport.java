@@ -531,26 +531,20 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           public void close() {
           }
         });
-        clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
-        // This is a hack to make sure the connection preface and initial settings to be sent out
-        // without blocking the start. By doing this essentially prevents potential deadlock when
-        // network is not available during startup while another thread holding lock to send the
-        // initial preface.
-        try {
-          latch.await();
-          barrier.await(1000, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-        } catch (TimeoutException | BrokenBarrierException e) {
-          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
-              .withDescription("Timed out waiting for second handshake thread. "
-                  + "The transport executor pool may have run out of threads"));
-          return;
-        }
-
         Socket sock;
         SSLSession sslSession = null;
         try {
+          // This is a hack to make sure the connection preface and initial settings to be sent out
+          // without blocking the start. By doing this essentially prevents potential deadlock when
+          // network is not available during startup while another thread holding lock to send the
+          // initial preface.
+          try {
+            latch.await();
+            barrier.await(1000, TimeUnit.MILLISECONDS);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+
           if (proxiedAddr == null) {
             sock = socketFactory.createSocket(address.getAddress(), address.getPort());
           } else {
@@ -588,6 +582,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
               .build();
         } catch (StatusException e) {
           startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
+          return;
+        } catch (TimeoutException | BrokenBarrierException e) {
+          startGoAway(0, ErrorCode.INTERNAL_ERROR, Status.UNAVAILABLE
+              .withDescription("Timed out waiting for second handshake thread. "
+                  + "The transport executor pool may have run out of threads"));
           return;
         } catch (Exception e) {
           onException(e);
