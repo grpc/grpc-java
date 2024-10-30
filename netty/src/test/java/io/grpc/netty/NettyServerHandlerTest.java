@@ -873,7 +873,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     future.get();
     for (int i = 0; i < 10; i++) {
       future = enqueue(
-          //new SendGrpcFrameCommand(stream.transportState(), content().retainedSlice(), false));
           new SendGrpcFrameCommand(stream.transportState(), content(), false));
       future.get();
       channel().releaseOutbound();
@@ -1368,7 +1367,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     try {
       return dataFrame(streamId, endStream, buf);
     } finally {
-      buf.clear();
+      buf.release();
     }
   }
 

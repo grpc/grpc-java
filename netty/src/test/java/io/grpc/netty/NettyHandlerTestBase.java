@@ -123,7 +123,6 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
    * Must be called by subclasses to initialize the handler and channel.
    */
   protected final void initChannel(Http2HeadersDecoder headersDecoder) throws Exception {
-    //ByteBuf content = Unpooled.copiedBuffer("hello world", UTF_8);
     frameWriter = mock(Http2FrameWriter.class, delegatesTo(new DefaultHttp2FrameWriter()));
     frameReader = new DefaultHttp2FrameReader(headersDecoder);
 
@@ -365,7 +364,6 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     for (ByteBuf buf : captor.getAllValues()) {
       composite.addComponent(buf);
       composite.writerIndex(composite.writerIndex() + buf.readableBytes());
-      buf.clear();
     }
     return composite;
   }
