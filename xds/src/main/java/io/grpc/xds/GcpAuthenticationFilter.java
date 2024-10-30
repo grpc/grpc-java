@@ -144,7 +144,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     };
   }
 
-  private CallCredentials getCallCredentials(LruCache<String, CallCredentials> cache,
+  CallCredentials getCallCredentials(LruCache<String, CallCredentials> cache,
       String audience, ComputeEngineCredentials credentials) {
 
     synchronized (cache) {
@@ -158,7 +158,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     }
   }
 
-  private static final class GcpAuthenticationConfig implements FilterConfig {
+  static final class GcpAuthenticationConfig implements FilterConfig {
 
     private final long cacheSize;
 
@@ -177,7 +177,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
   }
 
   /** An implementation of {@link ClientCall} that fails when started. */
-  private static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+  static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     private final Status error;
 
@@ -203,7 +203,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     public void sendMessage(ReqT message) {}
   }
 
-  private static final class LruCache<K, V> {
+  static final class LruCache<K, V> {
 
     private final Map<K, V> cache;
 
