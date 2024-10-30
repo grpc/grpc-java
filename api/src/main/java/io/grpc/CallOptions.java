@@ -178,7 +178,7 @@ public final class CallOptions {
     return withDeadline(Deadline.after(duration, unit));
   }
 
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10245")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
   public CallOptions withDeadlineAfter(Duration duration) {
     return withDeadlineAfter(convertToNanos(duration), TimeUnit.NANOSECONDS);
   }

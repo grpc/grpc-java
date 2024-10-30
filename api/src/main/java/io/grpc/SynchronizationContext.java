@@ -164,7 +164,7 @@ public final class SynchronizationContext implements Executor {
     return new ScheduledHandle(runnable, future);
   }
 
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10245")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
   public final ScheduledHandle schedule(
       final Runnable task, Duration delay, ScheduledExecutorService timerService) {
     return schedule(task, convertToNanos(delay), TimeUnit.NANOSECONDS, timerService);
@@ -201,7 +201,7 @@ public final class SynchronizationContext implements Executor {
     return new ScheduledHandle(runnable, future);
   }
 
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10245")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
   public final ScheduledHandle scheduleWithFixedDelay(
       final Runnable task, Duration initialDelay, Duration delay,
       ScheduledExecutorService timerService) {
