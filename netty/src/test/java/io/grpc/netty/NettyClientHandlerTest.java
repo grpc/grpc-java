@@ -215,6 +215,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
+    channel().releaseOutbound();
   }
 
   @Test
