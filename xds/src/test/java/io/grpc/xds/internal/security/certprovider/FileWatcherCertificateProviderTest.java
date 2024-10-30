@@ -478,8 +478,8 @@ public class FileWatcherCertificateProviderTest {
       ArgumentCaptor<Map<String, List<X509Certificate>>> spiffeCaptor =
           ArgumentCaptor.forClass(Map.class);
       verify(mockWatcher, times(1)).updateSpiffeTrustMap(spiffeCaptor.capture());
-      Map<String, List<X509Certificate>> trustBundle = spiffeCaptor.getValue();
-      assertThat(trustBundle).hasSize(2);
+      Map<String, List<X509Certificate>> trustMap = spiffeCaptor.getValue();
+      assertThat(trustMap).hasSize(2);
       verify(mockWatcher, never()).onError(any(Status.class));
     } else {
       verify(mockWatcher, never()).updateSpiffeTrustMap(ArgumentMatchers.anyMap());

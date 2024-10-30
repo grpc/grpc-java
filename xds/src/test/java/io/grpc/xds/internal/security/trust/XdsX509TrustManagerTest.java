@@ -542,7 +542,7 @@ public class XdsX509TrustManagerTest {
   }
 
   @Test
-  public void checkServerTrustedSpiffeTrustMap()
+  public void checkServerTrustedSslEngineSpiffeTrustMap()
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
@@ -557,7 +557,7 @@ public class XdsX509TrustManagerTest {
   }
 
   @Test
-  public void checkServerTrustedSpiffeTrustMap_missing_spiffe_id()
+  public void checkServerTrustedSslEngineSpiffeTrustMap_missing_spiffe_id()
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
@@ -576,7 +576,7 @@ public class XdsX509TrustManagerTest {
   }
 
   @Test
-  public void checkServerTrustedSpiffeTrustMap_missing_trust_domain()
+  public void checkServerTrustedSpiffeSslEngineTrustMap_missing_trust_domain()
       throws CertificateException, IOException, CertStoreException {
     TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
     X509Certificate[] serverCerts =
@@ -628,6 +628,22 @@ public class XdsX509TrustManagerTest {
     TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
     X509Certificate[] serverCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
+    verify(sslSocket, times(1)).isConnected();
+    verify(sslSocket, times(1)).getHandshakeSession();
+    assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSslSocketSpiffeTrustMap()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null);
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
     verify(sslSocket, times(1)).isConnected();
     verify(sslSocket, times(1)).getHandshakeSession();
