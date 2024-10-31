@@ -1732,17 +1732,15 @@ public abstract class AbstractInteropTest {
   public void performSoakTest(
       String serverUri,
       boolean resetChannelPerIteration,
-      boolean concurrent,
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
       int minTimeMsBetweenRpcs,
       int overallTimeoutSeconds,
       int soakRequestSize,
-      int soakResponseSize)
+      int soakResponseSize,
+      int numThreads)
       throws Exception {
-    // int iterationsDone = 0;
-    // int totalFailures = 0;
     AtomicInteger iterationsDone = new AtomicInteger(0);
     AtomicInteger totalFailures = new AtomicInteger(0);
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
@@ -1751,54 +1749,88 @@ public abstract class AbstractInteropTest {
     TestServiceGrpc.TestServiceBlockingStub soakStub = TestServiceGrpc
         .newBlockingStub(soakChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-    List<Thread> threads = new ArrayList<>();
-    // Only allow up to 10 threads to run concurrently
-    Semaphore semaphore = new Semaphore(10);
-    for (int i = 0; i < soakIterations; i++) {
-      if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
-        break;
-      }
-      long earliestNextStartNs = System.nanoTime()
-          + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-      if (resetChannelPerIteration) {
-        soakChannel.shutdownNow();
-        soakChannel.awaitTermination(10, TimeUnit.SECONDS);
-        soakChannel = createChannel();
-        soakStub = TestServiceGrpc
-            .newBlockingStub(soakChannel)
-            .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-      }
-
-      final TestServiceGrpc.TestServiceBlockingStub currSoakStub = soakStub;
-      if (concurrent) {
-        semaphore.acquire();
-        // Create a new thread for each soak iteration
-        Thread thread = new Thread(() -> {
-          try {
-             executeSoakIteration(currSoakStub,soakRequestSize,
-                soakResponseSize, iterationsDone, totalFailures, serverUri, latencies,
-                maxAcceptablePerIterationLatencyMs);
-          } finally {
-            semaphore.release();
+    Thread[] threads = new Thread[numThreads];
+    int soakIterationsPerThread = (int) Math.ceil((double) soakIterations / numThreads);
+    for (int threadInd = 0; threadInd < numThreads; threadInd++) {
+      final int startIteration = threadInd * soakIterationsPerThread;
+      final int endIteration = Math.min(startIteration + soakIterationsPerThread, soakIterations);
+      threads[threadInd] = new Thread(() -> {
+        ManagedChannel currentChannel = soakChannel;
+        TestServiceGrpc.TestServiceBlockingStub currentStub = soakStub;
+        for (int i = startIteration; i < endIteration; i++) {
+          if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
+            break;
           }
-        });
-        threads.add(thread);
-        thread.start();
-      } else {
-        executeSoakIteration(currSoakStub, soakRequestSize, soakResponseSize, iterationsDone,
-            totalFailures, serverUri, latencies, maxAcceptablePerIterationLatencyMs);
-      }
-      long remainingNs = earliestNextStartNs - System.nanoTime();
-      if (remainingNs > 0) {
-        TimeUnit.NANOSECONDS.sleep(remainingNs);
-      }
-    }
-    // Wait for all threads to finish if running in concurrent mode
-    if (concurrent) {
-      for (Thread thread :threads) {
-        thread.join();
-      }}
+          long earliestNextStartNs = System.nanoTime()
+              + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
+          if (resetChannelPerIteration) {
+            currentChannel.shutdownNow();
+            try {
+              currentChannel.awaitTermination(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            }
+            currentChannel = createChannel();
+            currentStub = TestServiceGrpc
+                .newBlockingStub(soakChannel)
+                .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+          }
+          SoakIterationResult result;
+          try {
+            result = performOneSoakIteration(currentStub, soakRequestSize, soakResponseSize);
+          } catch (Exception e) {
+            synchronized (this) {
+              totalFailures.incrementAndGet();
+            }
+            System.err.println("Error during soak iteration: " + e.getMessage());
+            continue; // Skip to the next iteration
+          }
 
+          SocketAddress peer = clientCallCapture
+              .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+          StringBuilder logStr = new StringBuilder(
+              String.format(
+                  Locale.US,
+                  "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+                  i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
+          if (!result.getStatus().equals(Status.OK)) {
+            synchronized (this) {
+              totalFailures.incrementAndGet();
+            }
+            logStr.append(String.format(" failed: %s", result.getStatus()));
+          } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
+            synchronized (this) {
+              totalFailures.incrementAndGet();
+            }
+            logStr.append(
+                " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
+          } else {
+            logStr.append(" succeeded");
+          }
+          System.err.println(logStr.toString());
+          synchronized (this) {
+            iterationsDone.incrementAndGet();
+          }
+          latencies.recordValue(result.getLatencyMs());
+          long remainingNs = earliestNextStartNs - System.nanoTime();
+          if (remainingNs > 0) {
+            try {
+              TimeUnit.NANOSECONDS.sleep(remainingNs);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            }
+          }
+        }
+      });
+      threads[threadInd].start();
+    }
+
+    for (Thread thread : threads) {
+        try {
+          thread.join();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }}
 
     soakChannel.shutdownNow();
     soakChannel.awaitTermination(10, TimeUnit.SECONDS);
@@ -1834,41 +1866,6 @@ public abstract class AbstractInteropTest {
             serverUri, totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures.get() <= maxFailures);
   }
-
-  private void executeSoakIteration(
-      TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize,
-    int soakResponseSize, AtomicInteger iterationsDone, AtomicInteger totalFailures,
-        String serverUri, Histogram latencies, int maxAcceptablePerIterationLatencyMs) {
-      try {
-        SoakIterationResult result =
-            performOneSoakIteration(soakStub, soakRequestSize, soakResponseSize);
-        SocketAddress peer = clientCallCapture
-            .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-        StringBuilder logStr = new StringBuilder(
-            String.format(
-                Locale.US,
-                "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
-                iterationsDone.get(), result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
-        if (!result.getStatus().equals(Status.OK)) {
-          // totalFailures++;
-          totalFailures.incrementAndGet();
-          logStr.append(String.format(" failed: %s", result.getStatus()));
-        } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
-          // totalFailures++;
-          totalFailures.incrementAndGet();
-          logStr.append(
-              " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
-        } else {
-          logStr.append(" succeeded");
-          iterationsDone.incrementAndGet();
-        }
-        System.err.println(logStr.toString());
-        // iterationsDone++;
-        latencies.recordValue(result.getLatencyMs());
-      } catch (Exception e) {
-        e.printStackTrace();
-        totalFailures.incrementAndGet();
-      }}
 
   private static void assertSuccess(StreamRecorder<?> recorder) {
     if (recorder.getError() != null) {

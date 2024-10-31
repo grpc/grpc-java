@@ -134,6 +134,7 @@ public class TestServiceClient {
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
   private int soakRequestSize = 271828;
   private int soakResponseSize = 314159;
+  private int numThreads = 1;
   private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
@@ -214,6 +215,8 @@ public class TestServiceClient {
         soakRequestSize = Integer.parseInt(value);
       } else if ("soak_response_size".equals(key)) {
         soakResponseSize = Integer.parseInt(value);
+      }  else if ("soak_num_threads".equals(key)) {
+        numThreads = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
       } else {
@@ -290,6 +293,9 @@ public class TestServiceClient {
           + "\n --soak_response_size "
           + "\n                              The response size in a soak RPC. Default "
             + c.soakResponseSize
+          + "\n --soak_num_threads           The number of threads for concurrent execution of the "
+          + "\n                              soak tests (rpc_soak or channel_soak). Default "
+            + c.numThreads
           + "\n --additional_metadata "
           + "\n                              Additional metadata to send in each request, as a "
           + "\n                              semicolon-separated list of key:value pairs. Default "
@@ -520,29 +526,14 @@ public class TestServiceClient {
         tester.performSoakTest(
             serverHost,
             false /* resetChannelPerIteration */,
-            false /* concurrent */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
             soakOverallTimeoutSeconds,
             soakRequestSize,
-            soakResponseSize);
-        break;
-      }
-
-      case RPC_SOAK_CONCURRENT: {
-        tester.performSoakTest(
-            serverHost,
-            false /* resetChannelPerIteration */,
-            true /* concurrent */,
-            soakIterations,
-            soakMaxFailures,
-            soakPerIterationMaxAcceptableLatencyMs,
-            soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds,
-            soakRequestSize,
-            soakResponseSize);
+            soakResponseSize,
+            numThreads);
         break;
       }
 
@@ -550,29 +541,14 @@ public class TestServiceClient {
         tester.performSoakTest(
             serverHost,
             true /* resetChannelPerIteration */,
-            false /* concurrent */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
             soakMinTimeMsBetweenRpcs,
             soakOverallTimeoutSeconds,
             soakRequestSize,
-            soakResponseSize);
-        break;
-      }
-
-      case CHANNEL_SOAK_CONCURRENT: {
-        tester.performSoakTest(
-            serverHost,
-            true /* resetChannelPerIteration */,
-            true /* concurrent */,
-            soakIterations,
-            soakMaxFailures,
-            soakPerIterationMaxAcceptableLatencyMs,
-            soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds,
-            soakRequestSize,
-            soakResponseSize);
+            soakResponseSize,
+            numThreads);
         break;
       }
 
