@@ -34,6 +34,8 @@ public class RlqsBucket {
 
   // TODO(sergiitk): [impl] consider AtomicLongFieldUpdater
   private final AtomicLong lastSnapshotTimeNanos = new AtomicLong(-1);
+
+  // TODO(sergiitk): [impl] consider java.util.concurrent.atomic.LongAdder for counters
   private final AtomicLong numRequestsAllowed = new AtomicLong();
   private final AtomicLong numRequestsDenied = new AtomicLong();
 
