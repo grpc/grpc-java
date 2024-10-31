@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
@@ -30,6 +31,9 @@ interface XdsClientPoolFactory {
   ObjectPool<XdsClient> get(String target);
 
   ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException;
+
+  ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+      throws XdsInitializationException;
 
   List<String> getTargets();
 }

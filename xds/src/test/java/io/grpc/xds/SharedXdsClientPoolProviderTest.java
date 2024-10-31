@@ -23,6 +23,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.SharedXdsClientPoolProvider.RefCountedXdsClientObjectPool;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -91,7 +92,7 @@ public class SharedXdsClientPoolProviderTest {
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(bootstrapInfo, DUMMY_TARGET);
+        new RefCountedXdsClientObjectPool(bootstrapInfo, DUMMY_TARGET, new MetricRecorder() {});
     assertThat(xdsClientPool.getXdsClientForTest()).isNull();
     XdsClient xdsClient = xdsClientPool.getObject();
     assertThat(xdsClientPool.getXdsClientForTest()).isNotNull();
@@ -104,7 +105,7 @@ public class SharedXdsClientPoolProviderTest {
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(bootstrapInfo, DUMMY_TARGET);
+        new RefCountedXdsClientObjectPool(bootstrapInfo, DUMMY_TARGET, new MetricRecorder() {});
     // getObject once
     XdsClient xdsClient = xdsClientPool.getObject();
     assertThat(xdsClient).isNotNull();
@@ -124,7 +125,7 @@ public class SharedXdsClientPoolProviderTest {
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool =
-        new RefCountedXdsClientObjectPool(bootstrapInfo, DUMMY_TARGET);
+        new RefCountedXdsClientObjectPool(bootstrapInfo, DUMMY_TARGET, new MetricRecorder() {});
     XdsClient xdsClient1 = xdsClientPool.getObject();
     assertThat(xdsClientPool.returnObject(xdsClient1)).isNull();
     assertThat(xdsClient1.isShutDown()).isTrue();

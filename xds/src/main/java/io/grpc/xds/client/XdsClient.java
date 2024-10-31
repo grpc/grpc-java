@@ -24,9 +24,11 @@ import com.google.common.base.Splitter;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
+import io.grpc.xds.XdsClientMetricReporter.CallbackMetricReporter;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -375,6 +377,16 @@ public abstract class XdsClient {
    * responsible for sending load reports to the control plane servers.
    */
   public Map<Bootstrapper.ServerInfo, LoadReportClient> getServerLrsClientMap() {
+    throw new UnsupportedOperationException();
+  }
+
+  public SettableFuture<Void> reportResourceCounts(
+      CallbackMetricReporter callbackMetricReporter) {
+    throw new UnsupportedOperationException();
+  }
+
+  public SettableFuture<Void> reportServerConnections(
+      CallbackMetricReporter callbackMetricReporter) {
     throw new UnsupportedOperationException();
   }
 

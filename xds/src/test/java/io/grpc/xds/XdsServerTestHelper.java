@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -152,6 +153,12 @@ public class XdsServerTestHelper {
 
     @Override
     public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
+      return getOrCreate(target, new MetricRecorder() {});
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+        throws XdsInitializationException {
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {

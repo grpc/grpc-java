@@ -21,6 +21,7 @@ import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import io.grpc.MetricRecorder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -56,6 +57,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private final Object lock = new Object();
   private final AtomicReference<Map<String, ?>> bootstrapOverride = new AtomicReference<>();
   private final Map<String, ObjectPool<XdsClient>> targetToXdsClientMap = new ConcurrentHashMap<>();
+  private final Map<String, MetricRecorder> targetToMetricRecorderMap = new ConcurrentHashMap<>();
 
   SharedXdsClientPoolProvider() {
     this(new GrpcBootstrapperImpl());
@@ -82,7 +84,14 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   }
 
   @Override
+  @Nullable
   public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
+    return this.getOrCreate(target, new MetricRecorder() {});
+  }
+
+  @Override
+  public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+      throws XdsInitializationException {
     ObjectPool<XdsClient> ref = targetToXdsClientMap.get(target);
     if (ref == null) {
       synchronized (lock) {
@@ -98,8 +107,12 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           if (bootstrapInfo.servers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
-          ref = new RefCountedXdsClientObjectPool(bootstrapInfo, target);
+          MetricRecorder metricRecorderForTarget = targetToMetricRecorderMap.get(target);
+          metricRecorder =
+              metricRecorderForTarget != null ? metricRecorderForTarget : metricRecorder;
+          ref = new RefCountedXdsClientObjectPool(bootstrapInfo, target, metricRecorder);
           targetToXdsClientMap.put(target, ref);
+          targetToMetricRecorderMap.putIfAbsent(target, metricRecorder);
         }
       }
     }
@@ -124,6 +137,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         new ExponentialBackoffPolicy.Provider();
     private final BootstrapInfo bootstrapInfo;
     private final String target; // The target associated with the xDS client.
+    private final MetricRecorder metricRecorder;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -133,9 +147,11 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private int refCount;
 
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target) {
+    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target,
+        MetricRecorder metricRecorder) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
       this.target = target;
+      this.metricRecorder = metricRecorder;
     }
 
     @Override
@@ -154,7 +170,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               GrpcUtil.STOPWATCH_SUPPLIER,
               TimeProvider.SYSTEM_TIME_PROVIDER,
               MessagePrinter.INSTANCE,
-              new TlsContextManagerImpl(bootstrapInfo));
+              new TlsContextManagerImpl(bootstrapInfo),
+              getTarget(),
+              new XdsClientMetricReporterImpl(metricRecorder));
         }
         refCount++;
         return xdsClient;

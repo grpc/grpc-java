@@ -55,6 +55,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
@@ -187,7 +188,7 @@ public class XdsNameResolverTest {
         RouterFilter.INSTANCE);
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, filterRegistry, null);
+        xdsClientPoolFactory, mockRandom, filterRegistry, null, new MetricRecorder() {});
   }
 
   @After
@@ -220,6 +221,12 @@ public class XdsNameResolverTest {
       }
 
       @Override
+      public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+          throws XdsInitializationException {
+        throw new XdsInitializationException("Fail to read bootstrap file");
+      }
+
+      @Override
       public List<String> getTargets() {
         return null;
       }
@@ -227,7 +234,8 @@ public class XdsNameResolverTest {
 
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -240,7 +248,8 @@ public class XdsNameResolverTest {
   public void resolving_withTargetAuthorityNotFound() {
     resolver = new XdsNameResolver(targetUri,
         "notfound.google.com", AUTHORITY, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -262,7 +271,7 @@ public class XdsNameResolverTest {
     resolver = new XdsNameResolver(
         targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext,
         scheduler, xdsClientPoolFactory,
-        mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        mockRandom, FilterRegistry.getDefaultRegistry(), null, new MetricRecorder() {});
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
@@ -282,7 +291,8 @@ public class XdsNameResolverTest {
             + "%5B::FFFF:129.144.52.38%5D:80?id=1";
     resolver = new XdsNameResolver(
         targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
@@ -302,7 +312,8 @@ public class XdsNameResolverTest {
             + "path/to/service?id=1";
     resolver = new XdsNameResolver(
         targetUri, null, serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
 
 
     // The Service Authority must be URL encoded, but unlike the LDS resource name.
@@ -330,7 +341,8 @@ public class XdsNameResolverTest {
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
     resolver = new XdsNameResolver(targetUri,
         "xds.authority.com", serviceAuthority, null, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }
@@ -362,7 +374,8 @@ public class XdsNameResolverTest {
         .build();
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     // use different ldsResourceName and service authority. The virtualhost lookup should use
     // service authority.
     expectedLdsResourceName = "test-" + expectedLdsResourceName;
@@ -543,7 +556,8 @@ public class XdsNameResolverTest {
 
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, "random",
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
@@ -566,7 +580,8 @@ public class XdsNameResolverTest {
 
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, "random",
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
@@ -577,7 +592,8 @@ public class XdsNameResolverTest {
   public void resolving_matchingVirtualHostNotFoundForOverrideAuthority() {
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, AUTHORITY,
         serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(0L, buildUnmatchedVirtualHosts());
@@ -661,7 +677,8 @@ public class XdsNameResolverTest {
     ServiceConfigParser realParser = new ScParser(
         true, 5, 5, new AutoConfiguredLoadBalancerFactory("pick-first"));
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, realParser, syncContext,
-        scheduler, xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        scheduler, xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     RetryPolicy retryPolicy = RetryPolicy.create(
@@ -871,7 +888,8 @@ public class XdsNameResolverTest {
     when(mockRandom.nextLong()).thenReturn(123L);
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null,
+        new MetricRecorder() {});
     resolver.start(mockListener);
     xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -1995,6 +2013,12 @@ public class XdsNameResolverTest {
 
     @Override
     public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
+      return getOrCreate(target, new MetricRecorder() {});
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+        throws XdsInitializationException {
       targets.add(target);
       return new ObjectPool<XdsClient>() {
         @Override

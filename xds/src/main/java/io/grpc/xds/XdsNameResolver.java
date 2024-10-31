@@ -41,6 +41,7 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -127,6 +128,7 @@ final class XdsNameResolver extends NameResolver {
   private final long randomChannelId;
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
+  private volatile MetricRecorder metricRecorder;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -140,10 +142,12 @@ final class XdsNameResolver extends NameResolver {
       URI targetUri, String name, @Nullable String overrideAuthority,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
-      @Nullable Map<String, ?> bootstrapOverride) {
+      @Nullable Map<String, ?> bootstrapOverride,
+      @Nullable MetricRecorder metricRecorder) {
     this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
-        ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride);
+        ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
+        metricRecorder);
   }
 
   @VisibleForTesting
@@ -152,7 +156,8 @@ final class XdsNameResolver extends NameResolver {
       @Nullable String overrideAuthority, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
-      FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
+      FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride,
+      @Nullable MetricRecorder metricRecorder) {
     this.targetAuthority = targetAuthority;
     target = targetUri.toString();
 
@@ -170,6 +175,7 @@ final class XdsNameResolver extends NameResolver {
     this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
+    this.metricRecorder = metricRecorder;
     randomChannelId = random.nextLong();
     logId = InternalLogId.allocate("xds-resolver", name);
     logger = XdsLogger.withLogId(logId);
@@ -185,7 +191,7 @@ final class XdsNameResolver extends NameResolver {
   public void start(Listener2 listener) {
     this.listener = checkNotNull(listener, "listener");
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate(target);
+      xdsClientPool = xdsClientPoolFactory.getOrCreate(target, metricRecorder);
     } catch (Exception e) {
       listener.onError(
           Status.UNAVAILABLE.withDescription("Failed to initialize xDS").withCause(e));

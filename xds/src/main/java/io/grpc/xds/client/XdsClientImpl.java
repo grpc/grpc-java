@@ -38,16 +38,19 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
+import io.grpc.xds.XdsClientMetricReporter;
+import io.grpc.xds.XdsClientMetricReporter.CallbackMetricReporter;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ResourceStore;
-import io.grpc.xds.client.XdsClient.XdsResponseHandler;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -60,7 +63,7 @@ import javax.annotation.Nullable;
  * XdsClient implementation.
  */
 @Internal
-public final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
+public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -100,6 +103,8 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   private final XdsLogger logger;
   private volatile boolean isShutdown;
   private final MessagePrettyPrinter messagePrinter;
+  private final String target;
+  private final XdsClientMetricReporter metricReporter;
 
   public XdsClientImpl(
       XdsTransportFactory xdsTransportFactory,
@@ -109,7 +114,9 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       Supplier<Stopwatch> stopwatchSupplier,
       TimeProvider timeProvider,
       MessagePrettyPrinter messagePrinter,
-      Object securityConfig) {
+      Object securityConfig,
+      String target,
+      XdsClientMetricReporter metricReporter) {
     this.xdsTransportFactory = xdsTransportFactory;
     this.bootstrapInfo = bootstrapInfo;
     this.timeService = timeService;
@@ -118,13 +125,15 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     this.timeProvider = timeProvider;
     this.messagePrinter = messagePrinter;
     this.securityConfig = securityConfig;
+    this.target = target;
+    this.metricReporter = metricReporter;
+    metricReporter.setXdsClient(this);
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
-  @Override
-  public void handleResourceResponse(
+  private void handleResourceResponse(
       XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
       List<Any> resources, String nonce, ProcessingTracker processingTracker) {
     checkNotNull(xdsResourceType, "xdsResourceType");
@@ -138,11 +147,11 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
   }
 
-  @Override
-  public void handleStreamClosed(Status error) {
+  private void handleStreamClosed(Status error, ServerInfo serverInfo) {
     syncContext.throwIfNotInThisSynchronizationContext();
     cleanUpResourceTimers();
     if (!error.isOk()) {
+      metricReporter.reportServerFailure(1L, target, serverInfo.target());
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
@@ -154,8 +163,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     }
   }
 
-  @Override
-  public void handleStreamRestarted(ServerInfo serverInfo) {
+  private void handleStreamRestarted(ServerInfo serverInfo) {
     syncContext.throwIfNotInThisSynchronizationContext();
     for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
         resourceSubscribers.values()) {
@@ -183,6 +191,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
             for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
               lrsClient.stopLoadReporting();
             }
+            metricReporter.close();
             cleanUpResourceTimers();
           }
         });
@@ -394,7 +403,27 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
         xdsTransport,
         serverInfo,
         bootstrapInfo.node(),
-        this,
+        new XdsResponseHandler() {
+
+          @Override
+          public void handleResourceResponse(
+              XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
+              List<Any> resources, String nonce, ProcessingTracker processingTracker) {
+            XdsClientImpl.this.handleResourceResponse(resourceType, serverInfo, versionInfo,
+                resources, nonce,
+                processingTracker);
+          }
+
+          @Override
+          public void handleStreamClosed(Status error) {
+            XdsClientImpl.this.handleStreamClosed(error, serverInfo);
+          }
+
+          @Override
+          public void handleStreamRestarted(ServerInfo serverInfo) {
+            XdsClientImpl.this.handleStreamRestarted(serverInfo);
+          }
+        },
         this,
         timeService,
         syncContext,
@@ -448,6 +477,10 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
          xdsResourceType.typeName(), args.versionInfo, args.nonce, result.unpackedResources);
     Map<String, ParsedResource<T>> parsedResources = result.parsedResources;
     Set<String> invalidResources = result.invalidResources;
+    metricReporter.reportResourceUpdates(Long.valueOf(parsedResources.size()),
+        Long.valueOf(invalidResources.size()), target,
+        args.getServerInfo().target(), xdsResourceType.typeUrl());
+
     List<String> errors = result.errors;
     String errorDetail = null;
     if (errors.isEmpty()) {
@@ -503,6 +536,76 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       }
     }
   }
+
+  @Override
+  public SettableFuture<Void> reportServerConnections(
+      CallbackMetricReporter callbackMetricReporter) {
+    SettableFuture<Void> future = SettableFuture.create();
+    syncContext.execute(() -> {
+      serverCpClientMap.forEach((serverInfo, controlPlaneClient) ->
+          callbackMetricReporter.reportServerConnections(
+              controlPlaneClient.hasWorkingAdsStream() ? 1 : 0,
+              target,
+              serverInfo.target()));
+      future.set(null);
+    });
+    return future;
+  }
+
+  @Override
+  public SettableFuture<Void> reportResourceCounts(CallbackMetricReporter callbackMetricReporter) {
+    SettableFuture<Void> future = SettableFuture.create();
+    syncContext.execute(() -> {
+      Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType =
+          getResourceCountsByType();
+      reportResourceCountsToCallback(callbackMetricReporter, resourceCountsByType);
+      future.set(null);
+    });
+    return future;
+  }
+
+  private String cacheStateFromResourceStatus(ResourceMetadata metadata, boolean isResourceCached) {
+    String status = metadata.getStatus().toString().toLowerCase(Locale.ROOT);
+    return metadata.getStatus() == ResourceMetadataStatus.NACKED && isResourceCached
+        ? status + "_but_cached" : status;
+  }
+
+  /**
+   * Calculates resource counts by ResourceType and ResourceSubscriber.metadata.status
+   */
+  Map<XdsResourceType<?>, Map<String, Long>> getResourceCountsByType() {
+    Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType = new HashMap<>();
+    for (XdsResourceType<? extends ResourceUpdate> resourceType : resourceSubscribers.keySet()) {
+      Map<String, Long> resourceCountsByState = new HashMap<>();
+      for (ResourceSubscriber<? extends ResourceUpdate> subscriber :
+          resourceSubscribers.get(resourceType).values()) {
+        String cacheState = cacheStateFromResourceStatus(subscriber.metadata,
+            subscriber.data != null);
+        resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
+      }
+      resourceCountsByType.put(resourceType, resourceCountsByState);
+    }
+    return resourceCountsByType;
+  }
+
+  /**
+   * Reports resource counts using the provided callbackMetricReporter.
+   */
+  void reportResourceCountsToCallback(CallbackMetricReporter callbackMetricReporter,
+      Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType) {
+    for (Map.Entry<XdsResourceType<?>, Map<String, Long>> entry :
+        resourceCountsByType.entrySet()) {
+      XdsResourceType<?> resourceType = entry.getKey();
+      Map<String, Long> resourceCountsByState = entry.getValue();
+      // TODO(@dnvindhya): include the "authority" label once authority is available here.
+      resourceCountsByState.forEach((cacheState, count) ->
+          callbackMetricReporter.reportResourceCounts(
+              count,
+              cacheState, resourceType.typeUrl(), target
+          ));
+    }
+  }
+
 
   /**
    * Tracks a single subscribed resource.
