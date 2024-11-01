@@ -3173,7 +3173,7 @@ public class GrpcXdsClientImplDataTest {
 
   /**
    *  Tests compliance with RFC 3986 section 3.3
-   *  https://datatracker.ietf.org/doc/html/rfc3986#section-3.3
+   *  https://datatracker.ietf.org/doc/html/rfc3986#section-3.3 .
    */
   @Test
   public void percentEncodePath()  {
