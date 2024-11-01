@@ -47,11 +47,6 @@ public class TestCertificateProvider extends CertificateProvider {
     startCalled++;
   }
 
-  @Override
-  public void init(){
-
-  }
-
   static void createAndRegisterProviderProvider(
       CertificateProviderRegistry certificateProviderRegistry,
       final CertificateProvider.DistributorWatcher[] watcherCaptor,

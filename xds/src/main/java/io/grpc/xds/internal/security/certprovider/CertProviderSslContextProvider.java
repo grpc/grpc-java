@@ -161,20 +161,13 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   private void updateSslContextWhenReady() {
     if (isMtls()) {
-      if (savedKey != null && (savedTrustedRoots != null || isUsingSystemRootCerts)) {
-        updateSslContext();
-        clearKeysAndCerts();
-      }
-      if (savedKey != null && savedSpiffeTrustMap != null) {
+      if (savedKey != null &&
+          (savedTrustedRoots != null || isUsingSystemRootCerts || savedSpiffeTrustMap != null)) {
         updateSslContext();
         clearKeysAndCerts();
       }
     } else if (isClientSideTls()) {
-      if (savedTrustedRoots != null) {
-        updateSslContext();
-        clearKeysAndCerts();
-      }
-      if (savedSpiffeTrustMap != null) {
+      if (savedTrustedRoots != null || savedSpiffeTrustMap != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
