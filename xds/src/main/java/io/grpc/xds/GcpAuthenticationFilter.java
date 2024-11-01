@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
-import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -51,10 +50,6 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
 
-  public GcpAuthenticationFilter() {
-
-  }
-
   @Override
   public String[] typeUrls() {
     return new String[] { TYPE_URL };
@@ -82,8 +77,8 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
       if (cacheSize == 0) {
         return ConfigOrError.fromError(
             "cache_config.cache_size must be in the range (0, INT64_MAX)");
-      } else if (UnsignedLongs.compare(cacheSize, 0L) < 0) {
-        cacheSize = Long.MAX_VALUE;
+      } else if (cacheSize < 0 || cacheSize >= Integer.MAX_VALUE) {
+        cacheSize = Integer.MAX_VALUE - 1;
       }
     }
 
@@ -104,7 +99,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
     LruCache<String, CallCredentials> callCredentialsCache =
-        new LruCache<>(((GcpAuthenticationConfig) config).getCacheSize());
+        new LruCache<>(((GcpAuthenticationConfig) config).getCacheSize().intValue());
     return new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -144,7 +139,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     };
   }
 
-  CallCredentials getCallCredentials(LruCache<String, CallCredentials> cache,
+  private CallCredentials getCallCredentials(LruCache<String, CallCredentials> cache,
       String audience, ComputeEngineCredentials credentials) {
 
     synchronized (cache) {
@@ -177,7 +172,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
   }
 
   /** An implementation of {@link ClientCall} that fails when started. */
-  static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+  private static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     private final Status error;
 
@@ -203,13 +198,13 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     public void sendMessage(ReqT message) {}
   }
 
-  static final class LruCache<K, V> {
+  private static final class LruCache<K, V> {
 
     private final Map<K, V> cache;
 
-    LruCache(long maxSize) {
+    LruCache(int maxSize) {
       this.cache = new LinkedHashMap<K, V>(
-          (int) Math.min(maxSize, Integer.MAX_VALUE - 1),
+          maxSize,
           0.75f,
           true) {
         @Override
