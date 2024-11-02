@@ -547,8 +547,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
               controlPlaneClient.hasWorkingAdsStream() ? 1 : 0,
               target,
               serverInfo.target()));
-      future.set(null);
     });
+    future.set(null);
     return future;
   }
 
@@ -559,8 +559,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType =
           getResourceCountsByType();
       reportResourceCountsToCallback(callbackMetricReporter, resourceCountsByType);
-      future.set(null);
     });
+    future.set(null);
     return future;
   }
 
@@ -571,7 +571,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   }
 
   /**
-   * Calculates resource counts by ResourceType and ResourceSubscriber.metadata.status
+   * Calculates number of resources by ResourceType and ResourceSubscriber.metadata.status
    */
   Map<XdsResourceType<?>, Map<String, Long>> getResourceCountsByType() {
     Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType = new HashMap<>();

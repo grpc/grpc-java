@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -31,15 +32,12 @@ import io.grpc.MetricInstrument;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricRecorder.BatchCallback;
 import io.grpc.MetricRecorder.BatchRecorder;
-import io.grpc.MetricRecorder.Registration;
-import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.MetricSink;
 import io.grpc.xds.XdsClientMetricReporter.CallbackMetricReporter;
+import io.grpc.xds.XdsClientMetricReporterImpl.CallbackMetricReporterImpl;
 import io.grpc.xds.client.XdsClient;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -73,8 +71,6 @@ public class XdsClientMetricReporterImplTest {
   private XdsClient mockXdsClient;
   @Mock
   private BatchRecorder mockBatchRecorder;
-  @Mock
-  private Registration mockGaugeRegistration;
   @Captor
   private ArgumentCaptor<BatchCallback> gaugeBatchCallbackCaptor;
 
@@ -82,20 +78,31 @@ public class XdsClientMetricReporterImplTest {
 
   @Before
   public void setUp() {
-    when(mockMetricRecorder.registerBatchCallback(any(), any())).thenReturn(mockGaugeRegistration);
     reporter = new XdsClientMetricReporterImpl(mockMetricRecorder);
   }
 
   @Test
   public void reportResourceUpdates() {
+    // TODO(dnvindhya): support the "authority" label once available.
     reporter.reportResourceUpdates(10, 5, target, server, resourceTypeUrl);
-    verifyValidInvalidResourceCounterAdd(10, 5, target, server, resourceTypeUrl);
+    verify(mockMetricRecorder).addLongCounter(
+        eqMetricInstrumentName("grpc.xds_client.resource_updates_valid"), eq((long) 10),
+        eq(Lists.newArrayList(target, server, resourceTypeUrl)),
+        eq(Lists.newArrayList()));
+    verify(mockMetricRecorder).addLongCounter(
+        eqMetricInstrumentName("grpc.xds_client.resource_updates_invalid"),
+        eq((long) 5),
+        eq(Lists.newArrayList(target, server, resourceTypeUrl)),
+        eq(Lists.newArrayList()));
   }
 
   @Test
   public void reportServerFailure() {
     reporter.reportServerFailure(1, target, server);
-    verifyServerFailureCounterAdd("grpc.xds_client.server_failure", 1, target, server);
+    verify(mockMetricRecorder).addLongCounter(
+        eqMetricInstrumentName("grpc.xds_client.server_failure"), eq((long) 1),
+        eq(Lists.newArrayList(target, server)),
+        eq(Lists.newArrayList()));
   }
 
   @Test
@@ -107,61 +114,62 @@ public class XdsClientMetricReporterImplTest {
     when(mockXdsClient.reportServerConnections(any(CallbackMetricReporter.class)))
         .thenReturn(future);
     reporter.setXdsClient(mockXdsClient);
-    verify(mockMetricRecorder).registerBatchCallback(any(MetricRecorder.BatchCallback.class),
+    verify(mockMetricRecorder).registerBatchCallback(gaugeBatchCallbackCaptor.capture(),
         eqMetricInstrumentName("grpc.xds_client.connected"),
         eqMetricInstrumentName("grpc.xds_client.resources"));
-
-    reporter.reportCallbackMetrics(mockBatchRecorder);
+    gaugeBatchCallbackCaptor.getValue().accept(mockBatchRecorder);
     verify(mockXdsClient).reportResourceCounts(any(CallbackMetricReporter.class));
     verify(mockXdsClient).reportServerConnections(any(CallbackMetricReporter.class));
   }
 
   @Test
-  public void setXdsClient_reportMetrics_exception() throws Exception {
-    SettableFuture<Void> future = SettableFuture.create();
-    future.setException(new Exception("test"));
-    when(mockXdsClient.reportResourceCounts(any(CallbackMetricReporter.class)))
-        .thenReturn(future);
-    reporter.setXdsClient(mockXdsClient);
-    verify(mockMetricRecorder).registerBatchCallback(any(MetricRecorder.BatchCallback.class),
-        eqMetricInstrumentName("grpc.xds_client.connected"),
-        eqMetricInstrumentName("grpc.xds_client.resources"));
+  public void setXdsClient_reportCallbackMetrics_resourceCountsFails() {
+    SettableFuture<Void> resourceCountsFuture = SettableFuture.create();
+    resourceCountsFuture.setException(new Exception("test"));
+    when(mockXdsClient.reportResourceCounts(any())).thenReturn(resourceCountsFuture);
 
-    reporter.reportCallbackMetrics(mockBatchRecorder);
+    reporter.setXdsClient(mockXdsClient);
+    verify(mockMetricRecorder)
+        .registerBatchCallback(gaugeBatchCallbackCaptor.capture(), any(), any());
+    gaugeBatchCallbackCaptor.getValue().accept(mockBatchRecorder);
+
     verify(mockXdsClient).reportResourceCounts(any(CallbackMetricReporter.class));
-    verify(mockXdsClient, never()).reportServerConnections(
-        any(CallbackMetricReporter.class));
+    verify(mockXdsClient, never()).reportServerConnections(any(CallbackMetricReporter.class));
   }
 
-  // @Test
-  // public void metricGauges() throws ExecutionException, InterruptedException, TimeoutException {
-  //   reporter.setXdsClient(mockXdsClient);
-  //   verify(mockMetricRecorder).registerBatchCallback(gaugeBatchCallbackCaptor.capture(),
-  //       any());
-  //   BatchCallback gaugeBatchCallback = gaugeBatchCallbackCaptor.getValue();
-  //   // Verify the correct resource gauge values when requested at this point.
-  //   InOrder inOrder = inOrder(mockBatchRecorder);
-  //   gaugeBatchCallback.accept(mockBatchRecorder);
-  //
-  //   verify(mockXdsClient).reportResourceCounts(any(CallbackMetricReporter.class));
-  //   verify(mockXdsClient).reportServerConnections(any(CallbackMetricReporter.class));
-  //
-  //   inOrder.verify(mockBatchRecorder).recordLongGauge(
-  //       argThat(new LongGaugeInstrumentArgumentMatcher("grpc.lb.rls.cache_entries")), eq(0L),
-  //       any(), any());
-  //   inOrder.verify(mockBatchRecorder)
-  //       .recordLongGauge(argThat(new LongGaugeInstrumentArgumentMatcher(
-  //       "grpc.lb.rls.cache_size")),
-  //           eq(0L), any(), any());
-  // }
-
   @Test
-  public void close() {
+  public void metricGauges() {
+    SettableFuture<Void> future = SettableFuture.create();
+    future.set(null);
+    when(mockXdsClient.reportResourceCounts(any(CallbackMetricReporter.class)))
+        .thenReturn(future);
+    when(mockXdsClient.reportServerConnections(any(CallbackMetricReporter.class)))
+        .thenReturn(future);
+    CallbackMetricReporterImpl callbackMetricReporter = new CallbackMetricReporterImpl(
+        mockBatchRecorder);
+    reporter.injectCallbackMetricReporter(callbackMetricReporter);
     reporter.setXdsClient(mockXdsClient);
-    verify(mockMetricRecorder).registerBatchCallback(any(MetricRecorder.BatchCallback.class),
+    verify(mockMetricRecorder).registerBatchCallback(gaugeBatchCallbackCaptor.capture(),
         eqMetricInstrumentName("grpc.xds_client.connected"),
         eqMetricInstrumentName("grpc.xds_client.resources"));
-    reporter.close();
+    BatchCallback gaugeBatchCallback = gaugeBatchCallbackCaptor.getValue();
+    // Verify the correct resource gauge values when requested at this point.
+    InOrder inOrder = inOrder(mockBatchRecorder);
+    gaugeBatchCallback.accept(mockBatchRecorder);
+
+    verify(mockXdsClient).reportResourceCounts(eq(callbackMetricReporter));
+    verify(mockXdsClient).reportServerConnections(eq(callbackMetricReporter));
+
+    callbackMetricReporter.reportResourceCounts(10, "acked", resourceTypeUrl, target);
+    inOrder.verify(mockBatchRecorder)
+        .recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"), eq(10L), any(),
+            any());
+
+    callbackMetricReporter.reportServerConnections(1, target, "xdsServer");
+    inOrder.verify(mockBatchRecorder)
+        .recordLongGauge(eqMetricInstrumentName("grpc.xds_client.connected"), eq(1L), any(), any());
+
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test
@@ -183,28 +191,18 @@ public class XdsClientMetricReporterImplTest {
         eq(Collections.emptyList()));
   }
 
-  private void verifyServerFailureCounterAdd(String name, long value,
-      String dataPlaneTargetLabel, String xdsServer) {
-    verify(mockMetricRecorder).addLongCounter(
-        eqMetricInstrumentName(name), eq(value),
-        eq(Lists.newArrayList(dataPlaneTargetLabel, xdsServer)),
-        eq(Lists.newArrayList()));
-  }
+  @Test
+  public void close_closesGaugeRegistration() {
+    MetricSink.Registration mockRegistration = mock(MetricSink.Registration.class);
+    when(mockMetricRecorder.registerBatchCallback(any(MetricRecorder.BatchCallback.class),
+        eqMetricInstrumentName("grpc.xds_client.connected"),
+        eqMetricInstrumentName("grpc.xds_client.resources"))).thenReturn(mockRegistration);
 
-  private void verifyValidInvalidResourceCounterAdd(long validResourceCount,
-      long invalidResourceCount,
-      String target, String xdsServer, String resourceTypeUrl) {
-    // TODO(dnvindhya): support the "authority" label once available.
-    verify(mockMetricRecorder).addLongCounter(
-        eqMetricInstrumentName("grpc.xds_client.resource_updates_valid"), eq(validResourceCount),
-        eq(Lists.newArrayList(target, xdsServer, resourceTypeUrl)),
-        eq(Lists.newArrayList()));
-    // TODO(dnvindhya): support the "authority" label once available.
-    verify(mockMetricRecorder).addLongCounter(
-        eqMetricInstrumentName("grpc.xds_client.resource_updates_invalid"),
-        eq(invalidResourceCount),
-        eq(Lists.newArrayList(target, xdsServer, resourceTypeUrl)),
-        eq(Lists.newArrayList()));
+    // Sets XdsClient and register the gauges
+    reporter.setXdsClient(mockXdsClient);
+    // Closes registered gauges
+    reporter.close();
+    verify(mockRegistration, times(1)).close();
   }
 
   @SuppressWarnings("TypeParameterUnusedInFormals")

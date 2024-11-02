@@ -53,6 +53,8 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   private Registration gaugeRegistration = null;
   @Nullable
   private XdsClient xdsClient = null;
+  @Nullable
+  private CallbackMetricReporter callbackMetricReporter = null;
 
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
@@ -129,12 +131,18 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
 
   @VisibleForTesting
   void reportCallbackMetrics(BatchRecorder recorder) {
-    CallbackMetricReporter callbackMetricReporter = new CallbackMetricReporterImpl(recorder);
+    if (callbackMetricReporter == null) {
+      // Instantiate only if not injected
+      callbackMetricReporter = new CallbackMetricReporterImpl(recorder);
+    }
     try {
       reportResourceCounts(callbackMetricReporter);
       reportServerConnections(callbackMetricReporter);
     } catch (Exception e) {
-      logger.log(Level.WARNING, "Reporting gauge metrics failed", e);
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt(); // re-set the current thread's interruption state
+      }
+      logger.log(Level.WARNING, "Failed to report gauge metrics", e);
     }
   }
 
@@ -147,7 +155,7 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     SettableFuture<Void> ret = this.xdsClient.reportResourceCounts(
         callbackMetricReporter);
     // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
-    ret.get(5, TimeUnit.SECONDS);
+    Void unused = ret.get(5, TimeUnit.SECONDS);
   }
 
   /**
@@ -158,7 +166,15 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   void reportServerConnections(CallbackMetricReporter callbackMetricReporter) throws Exception {
     SettableFuture<Void> ret = this.xdsClient.reportServerConnections(callbackMetricReporter);
     // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
-    ret.get(5, TimeUnit.SECONDS);
+    Void unused = ret.get(5, TimeUnit.SECONDS);
+  }
+
+  /**
+   * Allows injecting a custom {@link CallbackMetricReporter} for testing purposes.
+   */
+  @VisibleForTesting
+  void injectCallbackMetricReporter(CallbackMetricReporter reporter) {
+    this.callbackMetricReporter = reporter;
   }
 
   @VisibleForTesting

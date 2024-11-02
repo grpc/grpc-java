@@ -143,7 +143,7 @@ final class XdsNameResolver extends NameResolver {
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride,
-      @Nullable MetricRecorder metricRecorder) {
+      MetricRecorder metricRecorder) {
     this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
         ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
@@ -157,7 +157,7 @@ final class XdsNameResolver extends NameResolver {
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride,
-      @Nullable MetricRecorder metricRecorder) {
+      MetricRecorder metricRecorder) {
     this.targetAuthority = targetAuthority;
     target = targetUri.toString();
 

@@ -564,8 +564,6 @@ public abstract class NameResolver {
 
       /**
        * See {@link Args#getMetricRecorder()}. This is an optional field.
-       *
-       * @since 1.67.0
        */
       @ExperimentalApi("Insert github issue")
       public Builder setMetricRecorder(MetricRecorder metricRecorder) {

@@ -124,6 +124,11 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     return ImmutableList.copyOf(targetToXdsClientMap.keySet());
   }
 
+  @VisibleForTesting
+  MetricRecorder getMetricRecorder(String target) {
+    return targetToMetricRecorderMap.get(target);
+  }
+
 
   private static class SharedXdsClientPoolProviderHolder {
     private static final SharedXdsClientPoolProvider instance = new SharedXdsClientPoolProvider();

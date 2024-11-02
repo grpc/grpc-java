@@ -64,6 +64,7 @@ public class NameResolverTest {
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
   private final Executor executor = Executors.newSingleThreadExecutor();
   private final String overrideAuthority = "grpc.io";
+  private final MetricRecorder metricRecorder = new MetricRecorder() {};
   @Mock NameResolver.Listener mockListener;
 
   @Test
@@ -77,6 +78,7 @@ public class NameResolverTest {
     assertThat(args.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
+    assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
@@ -87,6 +89,7 @@ public class NameResolverTest {
     assertThat(args2.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
+    assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
@@ -102,6 +105,7 @@ public class NameResolverTest {
         .setChannelLogger(channelLogger)
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
+        .setMetricRecorder(metricRecorder)
         .build();
   }
 
