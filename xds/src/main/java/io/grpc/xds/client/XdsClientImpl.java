@@ -571,7 +571,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   }
 
   /**
-   * Calculates number of resources by ResourceType and ResourceSubscriber.metadata.status
+   * Calculates number of resources by ResourceType and ResourceSubscriber.metadata.status.
    */
   Map<XdsResourceType<?>, Map<String, Long>> getResourceCountsByType() {
     Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType = new HashMap<>();

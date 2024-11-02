@@ -380,11 +380,24 @@ public abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  public SettableFuture<Void> reportResourceCounts(
-      CallbackMetricReporter callbackMetricReporter) {
+  /**
+   * Reports the number of resources in each cache state through {@link CallbackMetricReporter}.
+   *
+   * <p>Cache state is determined by two factors:
+   * <ul>
+   *   <li>Whether the resource is cached.
+   *   <li>The {@link io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus} of the
+   *   resource.
+   * </ul>
+   */
+  public SettableFuture<Void> reportResourceCounts(CallbackMetricReporter callbackMetricReporter) {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Reports whether xDS client has a working ADS stream to xDS server. Reporting is done through
+   * {@link CallbackMetricReporter}.
+   */
   public SettableFuture<Void> reportServerConnections(
       CallbackMetricReporter callbackMetricReporter) {
     throw new UnsupportedOperationException();

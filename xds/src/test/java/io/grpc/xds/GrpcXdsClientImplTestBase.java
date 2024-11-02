@@ -2575,10 +2575,11 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // The response NACKed with errors indicating indices of the failed resources.
-    String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
+    String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
         + "io.grpc.xds.client.XdsResourceType$ResourceInvalidException: "
-        + "ca_certificate_provider_instance is required in upstream-tls-context";
+        + "ca_certificate_provider_instance or system_root_certs is required in "
+        + "upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);

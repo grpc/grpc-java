@@ -923,7 +923,7 @@ public class XdsNameResolverTest {
   public void resolved_routeActionHasAutoHostRewrite_emitsCallOptionForTheSame() {
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler, xdsClientPoolFactory, mockRandom,
-        FilterRegistry.getDefaultRegistry(), null);
+        FilterRegistry.getDefaultRegistry(), null, metricRecorder);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -954,7 +954,7 @@ public class XdsNameResolverTest {
   public void resolved_routeActionNoAutoHostRewrite_doesntEmitCallOptionForTheSame() {
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler, xdsClientPoolFactory, mockRandom,
-        FilterRegistry.getDefaultRegistry(), null);
+        FilterRegistry.getDefaultRegistry(), null, metricRecorder);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(

@@ -109,13 +109,6 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   }
 
   @Override
-  public void close() {
-    if (gaugeRegistration != null) {
-      gaugeRegistration.close();
-    }
-  }
-
-  @Override
   public void setXdsClient(XdsClient client) {
     this.xdsClient = client;
     // register gauge here
@@ -127,9 +120,13 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }, CONNECTED_GAUGE, RESOURCES_GAUGE);
   }
 
-  // ... (other methods)
+  @Override
+  public void close() {
+    if (gaugeRegistration != null) {
+      gaugeRegistration.close();
+    }
+  }
 
-  @VisibleForTesting
   void reportCallbackMetrics(BatchRecorder recorder) {
     if (callbackMetricReporter == null) {
       // Instantiate only if not injected
@@ -146,11 +143,6 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
   }
 
-  /**
-   * Reports resource counts.
-   * This method is extracted for better testability.
-   */
-  @VisibleForTesting
   void reportResourceCounts(CallbackMetricReporter callbackMetricReporter) throws Exception {
     SettableFuture<Void> ret = this.xdsClient.reportResourceCounts(
         callbackMetricReporter);
@@ -158,11 +150,6 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     Void unused = ret.get(5, TimeUnit.SECONDS);
   }
 
-  /**
-   * Reports server connections.
-   * This method is extracted for better testability.
-   */
-  @VisibleForTesting
   void reportServerConnections(CallbackMetricReporter callbackMetricReporter) throws Exception {
     SettableFuture<Void> ret = this.xdsClient.reportServerConnections(callbackMetricReporter);
     // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
@@ -192,7 +179,7 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
           Collections.emptyList());
     }
 
-    // TODO(@dnvindhya): include the "authority" label once authority is available.
+    // TODO(@dnvindhya): include the "authority" label once xds.authority is available.
     @Override
     public void reportResourceCounts(long resourceCount, String cacheState, String resourceType,
         String target) {

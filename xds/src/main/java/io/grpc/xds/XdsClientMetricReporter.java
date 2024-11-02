@@ -21,38 +21,35 @@ import io.grpc.xds.client.XdsClient;
 
 /**
  * Interface for reporting metrics from the xDS client.
- * We need this indirection, to de couple Xds from OpenTelemetry
  */
 @Internal
 public interface XdsClientMetricReporter {
 
   /**
-   * Reports resource update counts.
+   * Reports number of valid and invalid resources.
    *
-   * @param validResourceCount the number of resources that were successfully updated.
-   * @param invalidResourceCount the number of resources that failed to update.
-   * @param target the xDS management server name for the load balancing policy this update is for.
-   * @param xdsServer the xDS management server address for this update.
-   * @param resourceType the type of resource (e.g., "LDS", "RDS", "CDS", "EDS").
+   * @param validResourceCount Number of resources that were valid.
+   * @param invalidResourceCount Number of resources that were invalid.
+   * @param target Target of the gRPC channel.
+   * @param xdsServer Target URI of the xDS server with which the XdsClient is communicating.
+   * @param resourceType Type of XDS resource (e.g., "envoy.config.listener.v3.Listener").
    */
   default void reportResourceUpdates(long validResourceCount, long invalidResourceCount,
       String target, String xdsServer, String resourceType) {
   }
 
   /**
-   * Reports xDS server failure counts.
+   * Reports number of xDS servers going from healthy to unhealthy.
    *
-   * @param serverFailure the number of times the xDS server has failed.
-   * @param target the xDS management server name for the load balancing policy this failure is for.
-   * @param xdsServer the xDS management server address for this failure.
+   * @param serverFailure Number of xDS server failures.
+   * @param target Target of the gRPC channel.
+   * @param xdsServer Target URI of the xDS server with which the XdsClient is communicating.
    */
   default void reportServerFailure(long serverFailure, String target, String xdsServer) {
   }
 
   /**
-   * Sets the {@link XdsClient} instance to the reporter.
-   *
-   * @param xdsClient the {@link XdsClient} instance.
+   * Sets the {@link XdsClient} instance.
    */
   default void setXdsClient(XdsClient xdsClient) {
   }
@@ -64,34 +61,31 @@ public interface XdsClientMetricReporter {
   }
 
   /**
-   * Interface for reporting metrics from the xDS client callbacks.
+   * Interface for reporting metrics through callback.
    *
    */
   interface CallbackMetricReporter {
 
     /**
-     * Reports resource counts in the cache.
+     * Reports number of resources in each cache state.
      *
-     * @param resourceCount the number of resources in the cache.
-     * @param cacheState the state of the cache (e.g., "SYNCED", "DOES_NOT_EXIST").
-     * @param resourceType the type of resource (e.g., "LDS", "RDS", "CDS", "EDS").
-     * @param target the xDS management server name for the load balancing policy this count is
-     *     for.
+     * @param resourceCount Number of resources.
+     * @param cacheState Status of the resource metadata
+     *     {@link io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus}.
+     * @param resourceType Type of XDS resource (e.g., "envoy.config.listener.v3.Listener").
+     * @param target Target of the gRPC channel.
      */
-    // TODO(@dnvindhya): include the "authority" label once authority is available.
+    // TODO(@dnvindhya): include the "authority" label once xds.authority is available.
     default void reportResourceCounts(long resourceCount, String cacheState, String resourceType,
         String target) {
     }
 
     /**
-     * Reports server connection status.
+     * Reports whether xDS client has a working ADS stream to the xDS server.
      *
-     * @param isConnected {@code true} if the client is connected to the xDS server, {@code false}
-     *        otherwise.
-     * @param target the xDS management server name for the load balancing policy this connection
-     *        is for.
-     * @param xdsServer the xDS management server address for this connection.
-     * @since 0.1.0
+     * @param isConnected 1 if the client is connected to the xDS server, 0 otherwise.
+     * @param target Target of the gRPC channel.
+     * @param xdsServer Target URI of the xDS server with which the XdsClient is communicating.
      */
     default void reportServerConnections(int isConnected, String target, String xdsServer) {
     }

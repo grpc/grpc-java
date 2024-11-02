@@ -83,7 +83,7 @@ public class XdsClientMetricReporterImplTest {
 
   @Test
   public void reportResourceUpdates() {
-    // TODO(dnvindhya): support the "authority" label once available.
+    // TODO(dnvindhya): add the "authority" label once available.
     reporter.reportResourceUpdates(10, 5, target, server, resourceTypeUrl);
     verify(mockMetricRecorder).addLongCounter(
         eqMetricInstrumentName("grpc.xds_client.resource_updates_valid"), eq((long) 10),

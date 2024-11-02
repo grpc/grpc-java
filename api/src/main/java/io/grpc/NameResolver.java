@@ -408,8 +408,6 @@ public abstract class NameResolver {
 
     /**
      * Returns the {@link MetricRecorder} that the channel uses to record metrics.
-     *
-     * @since 1.67.0
      */
     @Nullable
     @ExperimentalApi("Insert GitHub issue")
