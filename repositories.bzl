@@ -141,10 +141,10 @@ def grpc_java_repositories(bzlmod = False):
     if not native.existing_rule("envoy_api"):
         http_archive(
             name = "envoy_api",
-            sha256 = "b3e8eab24528e0c30f4e3b25c4c2578f1fa2d3f4433d657b3eb98c9bb2a51e06",
-            strip_prefix = "data-plane-api-1.32.1",
+            sha256 = "bd5203b3aa7d90637277c00090e554bff1ee4506e1ea10d7cf0fda5d57d5482c",
+            strip_prefix = "data-plane-api-470d9be5aae6f8ab6b72a1efd136c56ad19f1b2b",
             urls = [
-                "https://github.com/envoyproxy/data-plane-api/archive/v1.32.1.tar.gz",
+                "https://github.com/envoyproxy/data-plane-api/archive/470d9be5aae6f8ab6b72a1efd136c56ad19f1b2b.tar.gz",
             ],
         )
 
