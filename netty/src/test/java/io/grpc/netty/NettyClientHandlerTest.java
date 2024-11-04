@@ -826,7 +826,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     channelRead(dataFrame(STREAM_ID, false, content()));
     // No ping was sent
     verifyWrite(times(1)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
-    channel().releaseOutbound();
   }
 
   @Test
@@ -866,7 +865,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // But now one is sent
     channelRead(dataFrame(STREAM_ID, false, content()));
     verifyWrite(times(1)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
-    channel().releaseOutbound();
   }
 
   @Override
