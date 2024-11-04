@@ -352,7 +352,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -375,7 +374,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -404,7 +402,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
         isA(ByteBuf.class), any(ChannelPromise.class));
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -417,7 +414,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     // Once https://github.com/netty/netty/issues/4316 is resolved, we should also verify that
     // any open streams are closed properly.
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -827,7 +823,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verifyWrite(times(2))
         .writePing(eq(ctx()), eq(false), eq(0xDEADL), any(ChannelPromise.class));
     assertTrue(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -843,7 +838,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardNanos(keepAliveTimeoutInNanos);
 
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -942,7 +936,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             any(ByteBuf.class),
             any(ChannelPromise.class));
     assertTrue(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -978,7 +971,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1009,7 +1001,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1054,7 +1045,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1099,7 +1089,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1118,7 +1107,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
             any(ByteBuf.class),
             any(ChannelPromise.class));
     assertTrue(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1155,7 +1143,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1187,7 +1174,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1218,7 +1204,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelPromise.class));
     // channel not closed yet
     assertTrue(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1257,7 +1242,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1298,7 +1282,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     // channel closed
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
