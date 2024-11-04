@@ -1744,6 +1744,7 @@ public abstract class AbstractInteropTest {
     if (soakIterations % numThreads != 0) {
       throw new IllegalArgumentException("soakIterations must be evenly divisible by numThreads.");
     }
+    ManagedChannel sharedChannel = createChannel();
     AtomicInteger iterationsDone = new AtomicInteger(0);
     int totalFailures = 0;
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
@@ -1769,7 +1770,8 @@ public abstract class AbstractInteropTest {
           soakResponseSize,
           maxAcceptablePerIterationLatencyMs,
           overallTimeoutSeconds,
-          serverUri));
+          serverUri,
+          sharedChannel));
       threads[threadInd].start();
     }
     for (Thread thread : threads) {
@@ -1812,6 +1814,18 @@ public abstract class AbstractInteropTest {
                 + "threshold: %d.",
             serverUri, totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
+    shutdownChannel(sharedChannel);
+  }
+
+  private void shutdownChannel(ManagedChannel channel) {
+    if (channel != null) {
+      channel.shutdownNow();
+      try {
+        channel.awaitTermination(10, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    }
   }
 
   private void executeSoakTestInThreads(
@@ -1826,9 +1840,10 @@ public abstract class AbstractInteropTest {
       int soakResponseSize,
       int maxAcceptablePerIterationLatencyMs,
       int overallTimeoutSeconds,
-      String serverUri) {
-    // Each thread creates its own channel
-    ManagedChannel currentChannel = createChannel();
+      String serverUri,
+      ManagedChannel sharedChannel) {
+    // Get the correct channel (shared channel or new channel)
+    ManagedChannel currentChannel = sharedChannel;
     TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
         .newBlockingStub(currentChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
@@ -1840,12 +1855,7 @@ public abstract class AbstractInteropTest {
       long earliestNextStartNs = System.nanoTime()
           + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
       if (resetChannelPerIteration) {
-        currentChannel.shutdownNow();
-        try {
-          currentChannel.awaitTermination(10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-        }
+        shutdownChannel(currentChannel);
         currentChannel = createChannel();
         currentStub = TestServiceGrpc
             .newBlockingStub(currentChannel)
@@ -1890,13 +1900,6 @@ public abstract class AbstractInteropTest {
           Thread.currentThread().interrupt();
         }
       }
-    }
-    // Shutdown the channel after completing the current thread soakiterations
-    currentChannel.shutdownNow();
-    try {
-      currentChannel.awaitTermination(10, TimeUnit.SECONDS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
     }
   }
 
