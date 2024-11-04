@@ -506,7 +506,6 @@ public class CsdsServiceTest {
     public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
       return ImmutableMap.of();
     }
-
   }
 
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {

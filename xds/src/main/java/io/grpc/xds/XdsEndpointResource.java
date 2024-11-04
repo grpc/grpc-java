@@ -213,7 +213,8 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
               || (endpoint.getHealthStatus() == HealthStatus.UNKNOWN);
       endpoints.add(Endpoints.LbEndpoint.create(
           new EquivalentAddressGroup(addresses),
-          endpoint.getLoadBalancingWeight().getValue(), isHealthy));
+          endpoint.getLoadBalancingWeight().getValue(), isHealthy,
+          endpoint.getEndpoint().getHostname()));
     }
     return StructOrError.fromStruct(Endpoints.LocalityLbEndpoints.create(
         endpoints, proto.getLoadBalancingWeight().getValue(), proto.getPriority()));
