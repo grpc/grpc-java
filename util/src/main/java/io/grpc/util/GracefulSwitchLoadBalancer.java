@@ -56,6 +56,19 @@ import javax.annotation.concurrent.NotThreadSafe;
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      //  Most LB policies using this class will receive child policy configuration within the
+      //  service config, so they are naturally calling switchTo() just before
+      //  handleResolvedAddresses(), within their own handleResolvedAddresses(). If switchTo() is
+      //  not called immediately after construction that does open up potential for bugs in the
+      //  parent policies, where they fail to call switchTo(). So we will use the exception to try
+      //  to notice those bugs quickly, as it will fail very loudly.
+      throw new IllegalStateException(
+          "GracefulSwitchLoadBalancer must switch to a load balancing policy before handling"
+              + " ResolvedAddresses");
+    }
+
+    @Override
     public void handleNameResolutionError(final Status error) {
       helper.updateBalancingState(
           ConnectivityState.TRANSIENT_FAILURE,
