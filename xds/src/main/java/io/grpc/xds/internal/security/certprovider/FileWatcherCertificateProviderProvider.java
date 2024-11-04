@@ -102,7 +102,7 @@ final class FileWatcherCertificateProviderProvider implements CertificateProvide
     configObj.keyFile = checkForNullAndGet(map, KEY_FILE_KEY);
     configObj.rootFile = checkForNullAndGet(map, ROOT_FILE_KEY);
     if (map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
-      configObj.spiffeTrustMapFile = checkForNullAndGet(map, SPIFFE_TRUST_MAP_FILE_KEY);
+      configObj.spiffeTrustMapFile = JsonUtil.getString(map, SPIFFE_TRUST_MAP_FILE_KEY);
     }
     String refreshIntervalString = JsonUtil.getString(map, REFRESH_INTERVAL_KEY);
     if (refreshIntervalString != null) {

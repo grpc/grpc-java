@@ -59,12 +59,12 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
     // CertProviderClientSslContextProviderFactory.
     if (rootCertInstance != null) {
       if (savedSpiffeTrustMap != null) {
-        sslContextBuilder = GrpcSslContexts.forClient().trustManager(
+        sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
               savedSpiffeTrustMap,
               certificateValidationContextdationContext));
       } else {
-        sslContextBuilder = GrpcSslContexts.forClient().trustManager(
+        sslContextBuilder = sslContextBuilder.trustManager(
             new XdsTrustManagerFactory(
                 savedTrustedRoots.toArray(new X509Certificate[0]),
                 certificateValidationContextdationContext));

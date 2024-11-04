@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
@@ -71,7 +72,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
       Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates) {
     checkNotNull(spiffeTrustMapDelegates, "spiffeTrustMapDelegates");
-    this.spiffeTrustMapDelegates = spiffeTrustMapDelegates;
+    this.spiffeTrustMapDelegates = ImmutableMap.copyOf(spiffeTrustMapDelegates);
     this.certContext = certContext;
     this.delegate = null;
   }
