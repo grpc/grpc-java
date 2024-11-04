@@ -34,6 +34,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -231,10 +232,16 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           args.getAddresses().get(0).getAttributes());
       AtomicReference<ClusterLocality> localityAtomicReference = new AtomicReference<>(
           clusterLocality);
-      Attributes attrs = args.getAttributes().toBuilder()
-          .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference)
-          .build();
-      args = args.toBuilder().setAddresses(addresses).setAttributes(attrs).build();
+      Attributes.Builder attrsBuilder = args.getAttributes().toBuilder()
+          .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference);
+      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", false)) {
+        String hostname = args.getAddresses().get(0).getAttributes()
+            .get(InternalXdsAttributes.ATTR_ADDRESS_NAME);
+        if (hostname != null) {
+          attrsBuilder.set(InternalXdsAttributes.ATTR_ADDRESS_NAME, hostname);
+        }
+      }
+      args = args.toBuilder().setAddresses(addresses).setAttributes(attrsBuilder.build()).build();
       final Subchannel subchannel = delegate().createSubchannel(args);
 
       return new ForwardingSubchannel() {
@@ -389,7 +396,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                 Status.UNAVAILABLE.withDescription("Dropped: " + dropOverload.category()));
           }
         }
-        final PickResult result = delegate.pickSubchannel(args);
+        PickResult result = delegate.pickSubchannel(args);
         if (result.getStatus().isOk() && result.getSubchannel() != null) {
           if (enableCircuitBreaking) {
             if (inFlights.get() >= maxConcurrentRequests) {
@@ -415,8 +422,16 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                   stats, inFlights, result.getStreamTracerFactory());
               ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
                   .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
-              return PickResult.withSubchannel(result.getSubchannel(), orcaTracerFactory);
+              result = PickResult.withSubchannel(result.getSubchannel(),
+                  orcaTracerFactory);
             }
+          }
+          if (args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY) != null
+              && args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)) {
+            result = PickResult.withSubchannel(result.getSubchannel(),
+                result.getStreamTracerFactory(),
+                result.getSubchannel().getAttributes().get(
+                    InternalXdsAttributes.ATTR_ADDRESS_NAME));
           }
         }
         return result;
