@@ -100,9 +100,9 @@ final class FileWatcherCertificateProviderProvider implements CertificateProvide
     Config configObj = new Config();
     configObj.certFile = checkForNullAndGet(map, CERT_FILE_KEY);
     configObj.keyFile = checkForNullAndGet(map, KEY_FILE_KEY);
-    if (!map.containsKey(ROOT_FILE_KEY) && !map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)){
-      throw new NullPointerException(String.format("either '%s' or '%s' is required in the config"
-          , ROOT_FILE_KEY, SPIFFE_TRUST_MAP_FILE_KEY));
+    if (!map.containsKey(ROOT_FILE_KEY) && !map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
+      throw new NullPointerException(String.format("either '%s' or '%s' is required in the config",
+          ROOT_FILE_KEY, SPIFFE_TRUST_MAP_FILE_KEY));
     }
     if (map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
       configObj.spiffeTrustMapFile = JsonUtil.getString(map, SPIFFE_TRUST_MAP_FILE_KEY);
