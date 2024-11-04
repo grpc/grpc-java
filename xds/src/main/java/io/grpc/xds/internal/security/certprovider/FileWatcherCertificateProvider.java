@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.security.certprovider;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -74,8 +75,15 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.certFile = Paths.get(checkNotNull(certFile, "certFile"));
     this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
-    this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
-    this.spiffeTrustMapFile = spiffeTrustMapFile == null ? null : Paths.get(spiffeTrustMapFile);
+    checkArgument((trustFile != null || spiffeTrustMapFile != null),
+        "either trustFile or spiffeTrustMapFile must be present");
+    if (spiffeTrustMapFile != null) {
+      this.spiffeTrustMapFile = Paths.get(spiffeTrustMapFile);
+      this.trustFile = null;
+    } else {
+      this.spiffeTrustMapFile = null;
+      this.trustFile = Paths.get(trustFile);
+    }
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
   }
 

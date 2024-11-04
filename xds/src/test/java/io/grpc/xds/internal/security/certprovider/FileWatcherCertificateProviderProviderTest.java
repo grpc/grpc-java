@@ -92,6 +92,28 @@ public class FileWatcherCertificateProviderProviderTest {
   }
 
   @Test
+  public void createProvider_minimalSpiffeConfig() throws IOException {
+    CertificateProvider.DistributorWatcher distWatcher =
+        new CertificateProvider.DistributorWatcher();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MINIMAL_FILE_WATCHER_WITH_SPIFFE_CONFIG);
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
+    provider.createCertificateProvider(map, distWatcher, true);
+    verify(fileWatcherCertificateProviderFactory, times(1))
+        .create(
+            eq(distWatcher),
+            eq(true),
+            eq("/var/run/gke-spiffe/certs/certificates.pem"),
+            eq("/var/run/gke-spiffe/certs/private_key.pem"),
+            eq(null),
+            eq("/var/run/gke-spiffe/certs/spiffe_bundle.json"),
+            eq(600L),
+            eq(mockService),
+            eq(timeProvider));
+  }
+
+  @Test
   public void createProvider_fullConfig() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
@@ -128,7 +150,7 @@ public class FileWatcherCertificateProviderProviderTest {
             eq(true),
             eq("/var/run/gke-spiffe/certs/certificates2.pem"),
             eq("/var/run/gke-spiffe/certs/private_key3.pem"),
-            eq("/var/run/gke-spiffe/certs/ca_certificates4.pem"),
+            eq(null),
             eq("/var/run/gke-spiffe/certs/spiffe_bundle.json"),
             eq(7890L),
             eq(mockService),
@@ -184,12 +206,13 @@ public class FileWatcherCertificateProviderProviderTest {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
-    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MISSING_ROOT_CONFIG);
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MISSING_ROOT_AND_SPIFFE_CONFIG);
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("'ca_certificate_file' is required in the config");
+      assertThat(npe).hasMessageThat().isEqualTo("either 'ca_certificate_file' or "
+          + "'spiffe_trust_bundle_map_file' is required in the config");
     }
   }
 
@@ -198,6 +221,14 @@ public class FileWatcherCertificateProviderProviderTest {
           + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
           + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\","
           + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
+          + "      }";
+
+  private static final String MINIMAL_FILE_WATCHER_WITH_SPIFFE_CONFIG =
+      "{\n"
+          + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
+          + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\","
+          + "        \"spiffe_trust_bundle_map_file\":"
+          + " \"/var/run/gke-spiffe/certs/spiffe_bundle.json\""
           + "      }";
 
   private static final String FULL_FILE_WATCHER_CONFIG =
@@ -230,7 +261,7 @@ public class FileWatcherCertificateProviderProviderTest {
           + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
           + "      }";
 
-  private static final String MISSING_ROOT_CONFIG =
+  private static final String MISSING_ROOT_AND_SPIFFE_CONFIG =
       "{\n"
           + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
           + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\""
