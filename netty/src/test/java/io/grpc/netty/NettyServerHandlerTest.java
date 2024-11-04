@@ -1309,7 +1309,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     rapidReset(maxRstCount);
 
     assertTrue(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -1318,8 +1317,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
     manualSetUp();
     assertThrows(ClosedChannelException.class, () -> rapidReset(maxRstCount + 1));
+
     assertFalse(channel().isOpen());
-    channel().releaseOutbound();
   }
 
   private void rapidReset(int burstSize) throws Exception {
@@ -1342,7 +1341,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
       while (channel().readOutbound() != null) {}
       fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
     }
-    channel().releaseOutbound();
   }
 
   private void createStream() throws Exception {
