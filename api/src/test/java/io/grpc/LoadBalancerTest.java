@@ -240,9 +240,8 @@ public class LoadBalancerTest {
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           resultCapture.set(resolvedAddresses);
-          return Status.OK;
         }
 
         @Override
@@ -263,7 +262,7 @@ public class LoadBalancerTest {
         new EquivalentAddressGroup(new SocketAddress(){}));
     ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
         .setAttributes(attrs).build();
-    balancer.acceptResolvedAddresses(addresses);
+    balancer.handleResolvedAddresses(addresses);
     assertThat(resultCapture.get()).isEqualTo(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
   }
@@ -275,9 +274,8 @@ public class LoadBalancerTest {
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public Status acceptResolvedAddresses(ResolvedAddresses addresses) {
+        public void handleResolvedAddresses(ResolvedAddresses addresses) {
           addressesCapture.set(addresses);
-          return Status.OK;
         }
 
         @Override
@@ -298,7 +296,7 @@ public class LoadBalancerTest {
         new EquivalentAddressGroup(new SocketAddress(){}));
     ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
         .setAttributes(attrs).build();
-    balancer.acceptResolvedAddresses(addresses);
+    balancer.handleResolvedAddresses(addresses);
     assertThat(addressesCapture.get().getAddresses()).isEqualTo(servers);
     assertThat(addressesCapture.get().getAttributes()).isEqualTo(attrs);
   }
@@ -310,10 +308,9 @@ public class LoadBalancerTest {
 
     LoadBalancer balancer = new LoadBalancer() {
       @Override
-      public Status acceptResolvedAddresses(ResolvedAddresses addresses) {
+      public void handleResolvedAddresses(ResolvedAddresses addresses) {
         addressesCapture.add(addresses);
-        super.acceptResolvedAddresses(addresses);
-        return Status.OK;
+        super.handleResolvedAddresses(addresses);
       }
 
       @Override
@@ -330,7 +327,7 @@ public class LoadBalancerTest {
         new EquivalentAddressGroup(new SocketAddress(){}));
     ResolvedAddresses addresses = ResolvedAddresses.newBuilder().setAddresses(servers)
         .setAttributes(attrs).build();
-    balancer.acceptResolvedAddresses(addresses);
+    balancer.handleResolvedAddresses(addresses);
     assertThat(addressesCapture).hasSize(1);
     assertThat(addressesCapture.get(0).getAddresses()).isEqualTo(servers);
     assertThat(addressesCapture.get(0).getAttributes()).isEqualTo(attrs);

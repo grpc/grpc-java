@@ -201,7 +201,7 @@ public abstract class LoadBalancer {
       return unavailableStatus;
     } else {
       if (recursionCount++ == 0) {
-        //handleResolvedAddresses(resolvedAddresses);
+        handleResolvedAddresses(resolvedAddresses);
       }
       recursionCount = 0;
 
