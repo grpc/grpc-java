@@ -361,6 +361,7 @@ public final class SimpleServiceGrpc {
      * Simple client-to-server streaming RPC.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>
         clientStreamingRpc() {
       return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
@@ -372,6 +373,7 @@ public final class SimpleServiceGrpc {
      * Simple server-to-client streaming RPC.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.protobuf.SimpleResponse>
         serverStreamingRpc(io.grpc.testing.protobuf.SimpleRequest request) throws java.lang.InterruptedException,
             io.grpc.StatusException {
@@ -384,6 +386,7 @@ public final class SimpleServiceGrpc {
      * Simple bidirectional streaming RPC.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>
         bidiStreamingRpc() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

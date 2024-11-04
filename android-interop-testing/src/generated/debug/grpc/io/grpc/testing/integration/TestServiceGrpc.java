@@ -609,6 +609,7 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
         streamingOutputCall(io.grpc.testing.integration.Messages.StreamingOutputCallRequest request) throws java.lang.InterruptedException,
             io.grpc.StatusException {
@@ -622,6 +623,7 @@ public final class TestServiceGrpc {
      * The server returns the aggregated size of client payload as the result.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingInputCallRequest, io.grpc.testing.integration.Messages.StreamingInputCallResponse>
         streamingInputCall() {
       return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
@@ -635,6 +637,7 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full duplexing.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
         fullDuplexCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
@@ -649,6 +652,7 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>
         halfDuplexCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

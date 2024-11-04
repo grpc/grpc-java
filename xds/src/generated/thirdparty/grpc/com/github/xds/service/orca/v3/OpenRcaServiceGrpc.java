@@ -221,6 +221,7 @@ public final class OpenRcaServiceGrpc {
 
     /**
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<?, com.github.xds.data.orca.v3.OrcaLoadReport>
         streamCoreMetrics(com.github.xds.service.orca.v3.OrcaLoadReportRequest request) throws java.lang.InterruptedException,
             io.grpc.StatusException {

@@ -183,6 +183,7 @@ public final class ServerReflectionGrpc {
      * all related requests go to a single server.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.reflection.v1.ServerReflectionRequest, io.grpc.reflection.v1.ServerReflectionResponse>
         serverReflectionInfo() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

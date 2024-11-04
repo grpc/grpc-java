@@ -413,6 +413,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is on each response
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
@@ -425,6 +426,7 @@ public final class BenchmarkServiceGrpc {
      * The server returns the client payload as-is once the client does WritesDone
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingFromClient() {
       return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
@@ -437,6 +439,7 @@ public final class BenchmarkServiceGrpc {
      * The server repeatedly returns the client payload as-is
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<?, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingFromServer(io.grpc.benchmarks.proto.Messages.SimpleRequest request) throws java.lang.InterruptedException,
             io.grpc.StatusException {
@@ -450,6 +453,7 @@ public final class BenchmarkServiceGrpc {
      * Both sides send the content of their own choice to the other
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse>
         streamingBothWays() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

@@ -180,6 +180,7 @@ public final class LoadBalancerGrpc {
      * Bidirectional rpc to get a list of servers.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.lb.v1.LoadBalanceRequest, io.grpc.lb.v1.LoadBalanceResponse>
         balanceLoad() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

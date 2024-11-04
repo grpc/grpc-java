@@ -195,6 +195,7 @@ public final class HandshakerServiceGrpc {
      * response before sending next request.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.alts.internal.HandshakerReq, io.grpc.alts.internal.HandshakerResp>
         doHandshake() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

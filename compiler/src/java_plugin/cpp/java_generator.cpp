@@ -698,6 +698,11 @@ static void PrintStub(
       p->Print(*vars, "@$Deprecated$\n");
     }
 
+    if ((call_type == BLOCKING_CALL && client_streaming && server_streaming)
+       || (call_type == BLOCKING_V2_CALL && (client_streaming || server_streaming))) {
+      p->Print(*vars, "@io.grpc.ExperimentalApi(\"https://github.com/grpc/grpc-java/issues/10918\")\n");
+    }
+
     if (!interface) {
       p->Print("public ");
     } else {

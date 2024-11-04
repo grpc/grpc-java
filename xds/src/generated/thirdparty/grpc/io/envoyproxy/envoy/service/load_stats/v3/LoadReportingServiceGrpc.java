@@ -258,6 +258,7 @@ public final class LoadReportingServiceGrpc {
      *    assignment destined for each zone Envoys are located in. Goto 2.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest, io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse>
         streamLoadStats() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

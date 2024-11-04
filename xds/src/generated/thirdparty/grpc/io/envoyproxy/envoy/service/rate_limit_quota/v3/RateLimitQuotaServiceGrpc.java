@@ -198,6 +198,7 @@ public final class RateLimitQuotaServiceGrpc {
      * and the server asynchronously responding with the assignments.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaUsageReports, io.envoyproxy.envoy.service.rate_limit_quota.v3.RateLimitQuotaResponse>
         streamRateLimitQuotas() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

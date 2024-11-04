@@ -281,6 +281,7 @@ public final class HealthGrpc {
      * clients should retry the call with appropriate exponential backoff.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<?, io.grpc.health.v1.HealthCheckResponse>
         watch(io.grpc.health.v1.HealthCheckRequest request) throws java.lang.InterruptedException,
             io.grpc.StatusException {

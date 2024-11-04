@@ -580,6 +580,7 @@ public final class TestServiceGrpc {
      * The server returns the payload with client desired type and sizes.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         streamingOutputCall(io.grpc.testing.compiler.Test.StreamingOutputCallRequest request) throws java.lang.InterruptedException,
             io.grpc.StatusException {
@@ -593,6 +594,7 @@ public final class TestServiceGrpc {
      * The server returns the aggregated size of client payload as the result.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest, io.grpc.testing.compiler.Test.StreamingInputCallResponse>
         streamingInputCall() {
       return io.grpc.stub.ClientCalls.blockingClientStreamingCall(
@@ -606,6 +608,7 @@ public final class TestServiceGrpc {
      * demonstrates the idea of full bidirectionality.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest, io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         fullBidiCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
@@ -620,6 +623,7 @@ public final class TestServiceGrpc {
      * first request.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingOutputCallRequest, io.grpc.testing.compiler.Test.StreamingOutputCallResponse>
         halfBidiCall() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
@@ -632,6 +636,7 @@ public final class TestServiceGrpc {
      * method should have a '_' appended.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.testing.compiler.Test.StreamingInputCallRequest, io.grpc.testing.compiler.Test.StreamingInputCallResponse>
         import_() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

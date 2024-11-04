@@ -242,6 +242,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
     /**
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.status.v3.ClientStatusRequest, io.envoyproxy.envoy.service.status.v3.ClientStatusResponse>
         streamClientStatus() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

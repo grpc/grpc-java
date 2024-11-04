@@ -266,6 +266,7 @@ public final class AggregatedDiscoveryServiceGrpc {
      * This is a gRPC-only API.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest, io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse>
         streamAggregatedResources() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
@@ -274,6 +275,7 @@ public final class AggregatedDiscoveryServiceGrpc {
 
     /**
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest, io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse>
         deltaAggregatedResources() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(

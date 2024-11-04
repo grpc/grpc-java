@@ -361,6 +361,7 @@ public final class WorkerServiceGrpc {
      * this RPC.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Control.ServerArgs, io.grpc.benchmarks.proto.Control.ServerStatus>
         runServer() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
@@ -377,6 +378,7 @@ public final class WorkerServiceGrpc {
      * this RPC.
      * </pre>
      */
+    @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<io.grpc.benchmarks.proto.Control.ClientArgs, io.grpc.benchmarks.proto.Control.ClientStatus>
         runClient() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
