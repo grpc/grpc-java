@@ -417,7 +417,6 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     channelRead(dataFrame(3, false, buff.copy()));
 
     assertEquals(length * 3, handler.flowControlPing().getDataSincePing());
-    channel().releaseOutbound();
   }
 
   @Test
@@ -578,7 +577,6 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
       }
     }
     assertEquals(6, handler.flowControlPing().getPingCount());
-    channel().releaseOutbound();
   }
 
   @Test

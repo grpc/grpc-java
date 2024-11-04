@@ -756,12 +756,10 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verify(spyKeepAliveManager).onDataReceived(); // received headers
 
     channelRead(grpcDataFrame(STREAM_ID, false, contentAsArray()));
-    channel().releaseOutbound();
 
     verify(spyKeepAliveManager, times(2)).onDataReceived();
 
     channelRead(grpcDataFrame(STREAM_ID, false, contentAsArray()));
-    channel().releaseOutbound();
 
     verify(spyKeepAliveManager, times(3)).onDataReceived();
     verify(spyKeepAliveManager, never()).onTransportTermination();
