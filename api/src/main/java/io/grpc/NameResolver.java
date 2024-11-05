@@ -31,7 +31,6 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -287,8 +286,8 @@ public abstract class NameResolver {
    *
    * <p>The address to be resolved is provided to a {@link NameResolver} as a URI while {@link Args}
    * are normally reserved for supporting dependencies. However, extended args are very useful for
-   * passing auxiliary addressing information that can't be encoded as a string or can't be part of the URI
-   * for other reasons.
+   * passing auxiliary addressing information that can't be encoded as a string or can't be part of
+   * the URI for other reasons.
    *
    * <p>Note this class overrides neither {@code equals()} nor {@code hashCode()}.
    *
@@ -649,9 +648,13 @@ public abstract class NameResolver {
     public static final class Extensions {
       private static final IdentityHashMap<Key<?>, Object> EMPTY_MAP = new IdentityHashMap<>();
 
+      /**
+       * The canonical empty instance.
+       */
       public static final Extensions EMPTY = new Extensions(EMPTY_MAP);
 
       private final IdentityHashMap<Key<?>, Object> data;
+
       private Extensions(IdentityHashMap<Key<?>, Object> data) {
         assert data != null;
         this.data = data;

@@ -17,7 +17,7 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
-import io.grpc.NameResolver.Args;
+import io.grpc.NameResolver;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -642,7 +642,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/00000")
-  public <X> T setNameResolverArg(Args.Key<X> key, X value) {
+  public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
     throw new UnsupportedOperationException();
   }
 
