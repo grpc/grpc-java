@@ -149,16 +149,18 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
         getWatcher().onError(Status.fromThrowable(t));
       }
       try {
-        FileTime currentRootTime = Files.getLastModifiedTime(trustFile);
-        if (!currentRootTime.equals(lastModifiedTimeRoot)) {
-          byte[] rootFileContents = Files.readAllBytes(trustFile);
-          FileTime currentRootTime2 = Files.getLastModifiedTime(trustFile);
-          if (currentRootTime2.equals(currentRootTime)) {
-            try (ByteArrayInputStream rootStream = new ByteArrayInputStream(rootFileContents)) {
-              X509Certificate[] caCerts = CertificateUtils.toX509Certificates(rootStream);
-              getWatcher().updateTrustedRoots(Arrays.asList(caCerts));
+        if (trustFile != null) {
+          FileTime currentRootTime = Files.getLastModifiedTime(trustFile);
+          if (!currentRootTime.equals(lastModifiedTimeRoot)) {
+            byte[] rootFileContents = Files.readAllBytes(trustFile);
+            FileTime currentRootTime2 = Files.getLastModifiedTime(trustFile);
+            if (currentRootTime2.equals(currentRootTime)) {
+              try (ByteArrayInputStream rootStream = new ByteArrayInputStream(rootFileContents)) {
+                X509Certificate[] caCerts = CertificateUtils.toX509Certificates(rootStream);
+                getWatcher().updateTrustedRoots(Arrays.asList(caCerts));
+              }
+              lastModifiedTimeRoot = currentRootTime;
             }
-            lastModifiedTimeRoot = currentRootTime;
           }
         }
       } catch (Throwable t) {

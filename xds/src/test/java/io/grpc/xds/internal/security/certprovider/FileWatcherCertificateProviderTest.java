@@ -75,7 +75,7 @@ public class FileWatcherCertificateProviderTest {
   private static final String CERT_FILE = "cert.pem";
   private static final String KEY_FILE = "key.pem";
   private static final String ROOT_FILE = "root.pem";
-  private static final String SPIFFE_TRUST_MAP_FILE = "spiffebundle.pem";
+  private static final String SPIFFE_TRUST_MAP_FILE = "spiffebundle.json";
 
   @Mock private CertificateProvider.Watcher mockWatcher;
   @Mock private ScheduledExecutorService timeService;
@@ -90,20 +90,17 @@ public class FileWatcherCertificateProviderTest {
   private String spiffeTrustMapFile;
 
   private FileWatcherCertificateProvider provider;
+  private DistributorWatcher watcher;
 
   @Before
   public void setUp() throws IOException {
-    DistributorWatcher watcher = new DistributorWatcher();
+    watcher = new DistributorWatcher();
     watcher.addWatcher(mockWatcher);
 
     certFile = new File(tempFolder.getRoot(), CERT_FILE).getAbsolutePath();
     keyFile = new File(tempFolder.getRoot(), KEY_FILE).getAbsolutePath();
     rootFile = new File(tempFolder.getRoot(), ROOT_FILE).getAbsolutePath();
     spiffeTrustMapFile = new File(tempFolder.getRoot(), SPIFFE_TRUST_MAP_FILE).getAbsolutePath();
-    provider =
-        new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile,
-            spiffeTrustMapFile,
-            600L, timeService, timeProvider);
   }
 
   private void populateTarget(
@@ -158,17 +155,16 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificateAndCheckUpdates() throws IOException, CertificateException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+        600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE, false,
-        false, false, false);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
     provider.checkAndReloadCertificates();
-    verifyWatcherUpdates(CLIENT_PEM_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE);
+    verifyWatcherUpdates(CLIENT_PEM_FILE, CA_PEM_FILE, null);
     verifyTimeServiceAndScheduledFuture();
 
     reset(mockWatcher, timeService);
@@ -182,14 +178,14 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void allUpdateSecondTime() throws IOException, CertificateException, InterruptedException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+        600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE, false,
-        false, false, false);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
     provider.checkAndReloadCertificates();
 
     reset(mockWatcher, timeService);
@@ -197,23 +193,23 @@ public class FileWatcherCertificateProviderTest {
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     timeProvider.forwardTime(1, TimeUnit.SECONDS);
-    populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE,
-        SPIFFE_TRUST_MAP_1_FILE, false, false, false, false);
+    populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE, null, false, false,
+        false, false);
     provider.checkAndReloadCertificates();
-    verifyWatcherUpdates(SERVER_0_PEM_FILE, SERVER_1_PEM_FILE, SPIFFE_TRUST_MAP_1_FILE);
+    verifyWatcherUpdates(SERVER_0_PEM_FILE, SERVER_1_PEM_FILE, null);
     verifyTimeServiceAndScheduledFuture();
   }
 
   @Test
   public void closeDoesNotScheduleNext() throws IOException, CertificateException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+        600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
             new TestScheduledFuture<>();
     doReturn(scheduledFuture)
             .when(timeService)
             .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE, false,
-        false, false, false);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
     provider.close();
     provider.checkAndReloadCertificates();
     verify(mockWatcher, never())
@@ -227,14 +223,14 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void rootFileUpdateOnly() throws IOException, CertificateException, InterruptedException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+            600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE, false,
-        false, false, false);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
     provider.checkAndReloadCertificates();
 
     reset(mockWatcher, timeService);
@@ -251,14 +247,14 @@ public class FileWatcherCertificateProviderTest {
   @Test
   public void certAndKeyFileUpdateOnly()
       throws IOException, CertificateException, InterruptedException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+        600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE, false,
-        false, false, false);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
     provider.checkAndReloadCertificates();
 
     reset(mockWatcher, timeService);
@@ -274,12 +270,14 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void spiffeTrustMapFileUpdateOnly() throws Exception {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, null,
+        spiffeTrustMapFile, 600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, null, null, false, false, false, false);
     provider.checkAndReloadCertificates();
     verify(mockWatcher, never()).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
 
@@ -288,8 +286,7 @@ public class FileWatcherCertificateProviderTest {
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     timeProvider.forwardTime(1, TimeUnit.SECONDS);
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE, false,
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, null, SPIFFE_TRUST_MAP_FILE, false,
         false, false, false);
     provider.checkAndReloadCertificates();
     verify(mockWatcher, times(1)).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
@@ -299,7 +296,7 @@ public class FileWatcherCertificateProviderTest {
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
     timeProvider.forwardTime(1, TimeUnit.SECONDS);
-    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, SPIFFE_TRUST_MAP_1_FILE, false,
+    populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, null, SPIFFE_TRUST_MAP_1_FILE, false,
         false, false, false);
     provider.checkAndReloadCertificates();
     verify(mockWatcher, times(2)).updateSpiffeTrustMap(ArgumentMatchers.anyMap());
@@ -308,14 +305,14 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_initialMissingCertFile() throws IOException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+        600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(null, CLIENT_KEY_FILE, CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE, false, false,
-        false, false);
+    populateTarget(null, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(Status.Code.UNKNOWN, NoSuchFileException.class, 0, 1, "cert.pem");
   }
@@ -339,7 +336,7 @@ public class FileWatcherCertificateProviderTest {
         CLIENT_PEM_FILE,
         SERVER_0_PEM_FILE,
         CA_PEM_FILE,
-        CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE,
+        null,
         java.security.spec.InvalidKeySpecException.class,
         0,
         1,
@@ -350,13 +347,15 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_missingRootFile() throws IOException, InterruptedException {
+    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+        600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE,
-        SPIFFE_TRUST_MAP_1_FILE, false, false, false, false);
+    populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE, null, false, false,
+        false, false);
     provider.checkAndReloadCertificates();
 
     reset(mockWatcher);
@@ -386,6 +385,9 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    provider = new FileWatcherCertificateProvider(watcher, true, this.certFile, this.keyFile,
+        rootFile == null ? null : this.rootFile,
+        spiffeFile == null ? null : this.spiffeTrustMapFile, 600L, timeService, timeProvider);
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE,
         SPIFFE_TRUST_MAP_1_FILE, false, false, false, false);
     provider.checkAndReloadCertificates();
