@@ -635,10 +635,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Adds an "extra" externally-defined argument for the name resolver, if any.
+   * Provides an extended argument for the name resolver, if any.
    *
    * @param key identifies the argument in a type-safe manner
-   * @param value the extra argument
+   * @param value the argument itself
    * @return this
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/00000")

@@ -277,17 +277,9 @@ public abstract class NameResolver {
    * Information that a {@link Factory} uses to create a {@link NameResolver}.
    *
    * <p>Args applicable to all {@link NameResolver}s are defined here using ordinary setters and
-   * getters. This container can additionally hold externally-defined "extended" args that aren't
-   * universally useful. An extended arg may be appropriate when it's only meaningful for a certain
-   * URI scheme, a certain {@link java.net.SocketAddress}, a specific {@link NameResolver} subclass
-   * or in other cases where a direct dependency from here would be undesirable. Extended args are
-   * identified by {@link Args.Key} which should be defined as a static constant in a java package
-   * and class appropriate to it's scope.
-   *
-   * <p>The address to be resolved is provided to a {@link NameResolver} as a URI while {@link Args}
-   * are normally reserved for supporting dependencies. However, extended args are very useful for
-   * passing auxiliary addressing information that can't be encoded as a string or can't be part of
-   * the URI for other reasons.
+   * getters. This container can also hold externally-defined "extended" args that aren't so widely
+   * useful or to avoid adding dependencies to this low level class. See {@link Args.Extensions} for
+   * more.
    *
    * <p>Note this class overrides neither {@code equals()} nor {@code hashCode()}.
    *
@@ -299,7 +291,7 @@ public abstract class NameResolver {
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
-    private final Extensions extras;
+    private final Extensions extensions;
     @Nullable private final ScheduledExecutorService scheduledExecutorService;
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
@@ -310,7 +302,7 @@ public abstract class NameResolver {
         ProxyDetector proxyDetector,
         SynchronizationContext syncContext,
         ServiceConfigParser serviceConfigParser,
-        Extensions extras,
+        Extensions extensions,
         @Nullable ScheduledExecutorService scheduledExecutorService,
         @Nullable ChannelLogger channelLogger,
         @Nullable Executor executor,
@@ -319,7 +311,7 @@ public abstract class NameResolver {
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
       this.syncContext = checkNotNull(syncContext, "syncContext not set");
       this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
-      this.extras = checkNotNull(extras, "extras not set");
+      this.extensions = checkNotNull(extensions, "extras not set");
       this.scheduledExecutorService = scheduledExecutorService;
       this.channelLogger = channelLogger;
       this.executor = executor;
@@ -385,21 +377,12 @@ public abstract class NameResolver {
     }
 
     /**
-     * Gets the value for an extra by key, or {@code null} if it's not present.
+     * Gets the value of an extended arg by key, or {@code null} if it's not set.
      */
     @SuppressWarnings("unchecked")
     @Nullable
     public <T> T getExtension(Key<T> key) {
-      return extras.get(key);
-    }
-
-    /**
-     * Returns the set of externally-defined "extra" args.
-     */
-    @SuppressWarnings("unchecked")
-    @Internal
-    public Extensions getExtras() {
-      return extras;
+      return extensions.get(key);
     }
 
     /**
@@ -447,7 +430,7 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
-          .add("extraArgs", extras)
+          .add("extensions", extensions)
           .add("scheduledExecutorService", scheduledExecutorService)
           .add("channelLogger", channelLogger)
           .add("executor", executor)
@@ -466,7 +449,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
-      builder.setExtensions(extras);
+      builder.setExtensions(extensions);
       builder.setScheduledExecutorService(scheduledExecutorService);
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
@@ -640,6 +623,21 @@ public abstract class NameResolver {
 
     /**
      * An immutable type-safe container of externally-defined {@link NameResolver} arguments.
+     *
+     * <p>While ordinary {@link Args} should be universally useful and meaningful, extended args can
+     * apply just to resolvers of a certain URI scheme, just to resolvers producing a particular
+     * type of {@link java.net.SocketAddress}, or even a individual {@link NameResolver} subclass.
+     * Extended args are identified by {@link Args.Key} which should be defined as a static constant
+     * in a java package and class appropriate to the argument's scope.
+     *
+     * <p>{@link Args} are normally reserved for information in support of name resolution, not the
+     * actual address to be resolved. However, there are rare cases where some or all of the input
+     * address can't be represented by any standard URI scheme or encoded as a String at all.
+     * Extension args can be a useful work around in these cases because they can hold an arbitrary
+     * Java type.
+     *
+     * <p>Extensions can also simply be used to avoid adding inappropriate deps to the low level
+     * io.grpc package.
      *
      * <p>NB: This class overrides neither {@code equals()} nor {@code hashCode()}.
      */
