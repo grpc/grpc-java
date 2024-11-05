@@ -278,8 +278,8 @@ public abstract class NameResolver {
    *
    * <p>Args applicable to all {@link NameResolver}s are defined here using ordinary setters and
    * getters. This container can also hold externally-defined "extended" args that aren't so widely
-   * useful or to avoid adding dependencies to this low level class. See {@link Args.Extensions} for
-   * more.
+   * useful or that would be inappropriate dependencies for this low level API. See {@link
+   * Args.Extensions} for more.
    *
    * <p>Note this class overrides neither {@code equals()} nor {@code hashCode()}.
    *
