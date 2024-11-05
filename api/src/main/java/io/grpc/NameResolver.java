@@ -297,30 +297,24 @@ public abstract class NameResolver {
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
 
-    private Args(
-        Integer defaultPort,
-        ProxyDetector proxyDetector,
-        SynchronizationContext syncContext,
-        ServiceConfigParser serviceConfigParser,
-        Extensions extensions,
-        @Nullable ScheduledExecutorService scheduledExecutorService,
-        @Nullable ChannelLogger channelLogger,
-        @Nullable Executor executor,
-        @Nullable String overrideAuthority) {
-      this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
-      this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
-      this.syncContext = checkNotNull(syncContext, "syncContext not set");
-      this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
-      this.extensions = checkNotNull(extensions, "extras not set");
-      this.scheduledExecutorService = scheduledExecutorService;
-      this.channelLogger = channelLogger;
-      this.executor = executor;
-      this.overrideAuthority = overrideAuthority;
+    private Args(Builder builder) {
+      this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
+      this.proxyDetector = checkNotNull(builder.proxyDetector, "proxyDetector not set");
+      this.syncContext = checkNotNull(builder.syncContext, "syncContext not set");
+      this.serviceConfigParser =
+          checkNotNull(builder.serviceConfigParser, "serviceConfigParser not set");
+      this.extensions = checkNotNull(builder.extensions, "extensions not set");
+      this.scheduledExecutorService = builder.scheduledExecutorService;
+      this.channelLogger = builder.channelLogger;
+      this.executor = builder.executor;
+      this.overrideAuthority = builder.overrideAuthority;
     }
 
     /**
      * The port number used in case the target or the underlying naming system doesn't provide a
      * port number.
+     *
+     * <p>TODO: Only meaningful for InetSocketAddress producers. Move to {@link Extensions}?
      *
      * @since 1.21.0
      */
@@ -569,6 +563,8 @@ public abstract class NameResolver {
 
       /**
        * See {@link Args#getExtension(Key)}.
+       *
+       * <p>Optional, {@link Extensions#EMPTY} by default.
        */
       public Builder setExtensions(Extensions extensions) {
         this.extensions = extensions;
@@ -581,17 +577,14 @@ public abstract class NameResolver {
        * @since 1.21.0
        */
       public Args build() {
-        return
-            new Args(
-                defaultPort, proxyDetector, syncContext, serviceConfigParser, extensions,
-                scheduledExecutorService, channelLogger, executor, overrideAuthority);
+        return new Args(this);
       }
     }
 
     /**
      * Identifies an externally-defined {@link Args} extension.
      *
-     * <p>Uses reference equality.
+     * <p>Uses reference equality so keys should be defined as global constants.
      *
      * @param <T> type of the value in the key-value pair
      */
@@ -626,15 +619,15 @@ public abstract class NameResolver {
      *
      * <p>While ordinary {@link Args} should be universally useful and meaningful, extended args can
      * apply just to resolvers of a certain URI scheme, just to resolvers producing a particular
-     * type of {@link java.net.SocketAddress}, or even a individual {@link NameResolver} subclass.
-     * Extended args are identified by {@link Args.Key} which should be defined as a static constant
-     * in a java package and class appropriate to the argument's scope.
+     * type of {@link java.net.SocketAddress}, or even an individual {@link NameResolver} subclass.
+     * Extended args are identified by {@link Args.Key} which should be defined in a java package
+     * and class appropriate to the argument's scope.
      *
-     * <p>{@link Args} are normally reserved for information in support of name resolution, not the
-     * actual address to be resolved. However, there are rare cases where some or all of the input
-     * address can't be represented by any standard URI scheme or encoded as a String at all.
-     * Extension args can be a useful work around in these cases because they can hold an arbitrary
-     * Java type.
+     * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
+     * the address to be resolved itself. However, there are rare cases where some or all of the
+     * input address can't be represented by any standard URI scheme or can't be encoded as a String
+     * at all. Extensions, in contrast, can be an arbitrary Java type making them a useful work
+     * around in these cases.
      *
      * <p>Extensions can also simply be used to avoid adding inappropriate deps to the low level
      * io.grpc package.
