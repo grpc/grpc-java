@@ -30,12 +30,10 @@ import java.util.List;
 final class UdsNameResolver extends NameResolver {
   private NameResolver.Listener2 listener;
   private final String authority;
-  private final Args args;
 
   UdsNameResolver(String authority, String targetPath, Args args) {
     checkArgument(authority == null, "non-null authority not supported");
     this.authority = targetPath;
-    this.args = args;
   }
 
   @Override
@@ -60,8 +58,7 @@ final class UdsNameResolver extends NameResolver {
     List<EquivalentAddressGroup> servers = new ArrayList<>(1);
     servers.add(new EquivalentAddressGroup(new DomainSocketAddress(authority)));
     resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(servers));
-    args.getSynchronizationContext().execute(() ->
-        listener.onResult2(resolutionResultBuilder.build()));
+    listener.onResult2(resolutionResultBuilder.build());
   }
 
   @Override
