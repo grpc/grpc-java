@@ -599,6 +599,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
+            .setExtensions(builder.resolverExArgsBuilder.build())
             .build();
     this.nameResolver = getNameResolver(
         targetUri, authorityOverride, nameResolverProvider, nameResolverArgs);

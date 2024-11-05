@@ -17,6 +17,7 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
+import io.grpc.NameResolver.Args;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -633,6 +634,17 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Adds an "extra" externally-defined argument for the name resolver, if any.
+   *
+   * @param key identifies the argument in a type-safe manner
+   * @param value the extra argument
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/00000")
+  public <X> T setNameResolverArg(Args.Key<X> key, X value) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Builds a channel using the given parameters.

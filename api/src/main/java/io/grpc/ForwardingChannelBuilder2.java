@@ -18,6 +18,7 @@ package io.grpc;
 
 import com.google.common.base.MoreObjects;
 import com.google.errorprone.annotations.DoNotCall;
+import io.grpc.NameResolver.Args;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -260,6 +261,12 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   @Override
   protected T addMetricSink(MetricSink metricSink) {
     delegate().addMetricSink(metricSink);
+    return thisT();
+  }
+
+  @Override
+  public <X> T setNameResolverArg(Args.Key<X> key, X value) {
+    delegate().setNameResolverArg(key, value);
     return thisT();
   }
 
