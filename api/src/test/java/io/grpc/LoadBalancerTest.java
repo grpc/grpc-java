@@ -240,8 +240,9 @@ public class LoadBalancerTest {
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           resultCapture.set(resolvedAddresses);
+          return Status.OK;
         }
 
         @Override
