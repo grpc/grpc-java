@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -77,12 +78,12 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
       if (cacheSize == 0) {
         return ConfigOrError.fromError(
             "cache_config.cache_size must be in the range (0, INT64_MAX)");
-      } else if (cacheSize < 0 || cacheSize >= Integer.MAX_VALUE) {
-        cacheSize = Integer.MAX_VALUE - 1;
       }
+      // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
+      cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);
     }
 
-    GcpAuthenticationConfig config = new GcpAuthenticationConfig(cacheSize);
+    GcpAuthenticationConfig config = new GcpAuthenticationConfig((int) cacheSize);
     return ConfigOrError.fromConfig(config);
   }
 
@@ -99,7 +100,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
     LruCache<String, CallCredentials> callCredentialsCache =
-        new LruCache<>(((GcpAuthenticationConfig) config).getCacheSize().intValue());
+        new LruCache<>(((GcpAuthenticationConfig) config).getCacheSize());
     return new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -155,13 +156,13 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
   static final class GcpAuthenticationConfig implements FilterConfig {
 
-    private final long cacheSize;
+    private final int cacheSize;
 
-    public GcpAuthenticationConfig(long cacheSize) {
+    public GcpAuthenticationConfig(int cacheSize) {
       this.cacheSize = cacheSize;
     }
 
-    public Long getCacheSize() {
+    public int getCacheSize() {
       return cacheSize;
     }
 

@@ -56,7 +56,7 @@ public class GcpAuthenticationFilterTest {
     assertNull(result.errorDetail);
     assertEquals(10L,
         ((GcpAuthenticationFilter.GcpAuthenticationConfig)
-            result.config).getCacheSize().longValue());
+            result.config).getCacheSize());
   }
 
   @Test
@@ -88,7 +88,7 @@ public class GcpAuthenticationFilterTest {
   @Test
   public void testBuildClientInterceptor() {
     GcpAuthenticationFilter.GcpAuthenticationConfig config =
-        new GcpAuthenticationFilter.GcpAuthenticationConfig(10L);
+        new GcpAuthenticationFilter.GcpAuthenticationConfig(10);
     GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
 
     // Create interceptor

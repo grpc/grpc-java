@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=fcdc9d6d5a9da98fe30ad749201034770ff6b30e
+VERSION=742a3b02e3b2a9dfb877a7e378607c6ed0c2aa53
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"

@@ -55,6 +55,7 @@ import org.mockito.InOrder;
  * To use it replace <br>
  * \@mock Helper mockHelper<br>
  * with<br>
+ *
  * <p>Helper mockHelper = mock(Helper.class, delegatesTo(new TestHelper()));</p>
  * <br>
  * TestHelper will need to define accessors for the maps that information is store within as

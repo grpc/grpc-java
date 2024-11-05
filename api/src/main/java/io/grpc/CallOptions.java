@@ -17,9 +17,11 @@
 package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.grpc.TimeUtils.convertToNanos;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -174,6 +176,11 @@ public final class CallOptions {
    */
   public CallOptions withDeadlineAfter(long duration, TimeUnit unit) {
     return withDeadline(Deadline.after(duration, unit));
+  }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  public CallOptions withDeadlineAfter(Duration duration) {
+    return withDeadlineAfter(convertToNanos(duration), TimeUnit.NANOSECONDS);
   }
 
   /**
