@@ -710,7 +710,7 @@ public abstract class NameResolver {
         }
 
         /**
-         * Build the extensions.
+         * Builds the extensions.
          */
         public Extensions build() {
           if (newdata != null) {
