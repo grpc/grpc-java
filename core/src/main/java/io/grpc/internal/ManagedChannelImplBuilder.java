@@ -198,6 +198,9 @@ public final class ManagedChannelImplBuilder
   @Nullable
   ProxyDetector proxyDetector;
 
+  NameResolver.Args.Extensions.Builder resolverExArgsBuilder =
+      NameResolver.Args.Extensions.newBuilder();
+
   private boolean authorityCheckerDisabled;
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
@@ -551,6 +554,12 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
     // TODO(notcarl): use real parsing
     defaultServiceConfig = checkMapEntryTypes(serviceConfig);
+    return this;
+  }
+
+  @Override
+  public <X> ManagedChannelImplBuilder setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
+    resolverExArgsBuilder.set(key, value);
     return this;
   }
 
