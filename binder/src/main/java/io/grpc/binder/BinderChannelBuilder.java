@@ -246,10 +246,10 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * normally reserved for system apps. See {@link android.content.Context#bindServiceAsUser} for
    * details.
    *
-   * @deprecated This method's name is confusing since it implies impersonation. It's also no longer
-   *     necessary since the target user is now part of the {@link AndroidComponentAddress}. Prefer
-   *     to specify your target there instead, either as a direct address or via a
-   *     {@link io.grpc.NameResolverProvider}.
+   * @deprecated This method's name is misleading because it implies an impersonated client identity
+   *     when it's actually specifying part of the server's location. It's also no longer necessary
+   *     since the target user is part of {@link AndroidComponentAddress}. Prefer to specify target
+   *     user in the address instead, either directly or via a {@link io.grpc.NameResolverProvider}.
    * @param targetUserHandle the target user to bind into.
    * @return this
    */
