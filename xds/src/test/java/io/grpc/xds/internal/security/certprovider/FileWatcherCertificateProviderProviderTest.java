@@ -69,16 +69,16 @@ public class FileWatcherCertificateProviderProviderTest {
         new FileWatcherCertificateProviderProvider(
             fileWatcherCertificateProviderFactory, scheduledExecutorServiceFactory, timeProvider);
     saveEnvironment();
-    provider.enableSpiffe = enableSpiffe;
+    FileWatcherCertificateProviderProvider.enableSpiffe = enableSpiffe;
   }
 
   private void saveEnvironment() {
-    originalEnableSpiffe = provider.enableSpiffe;
+    originalEnableSpiffe = FileWatcherCertificateProviderProvider.enableSpiffe;
   }
 
   @After
   public void restoreEnvironment() {
-    provider.enableSpiffe = originalEnableSpiffe;
+    FileWatcherCertificateProviderProvider.enableSpiffe = originalEnableSpiffe;
   }
 
   @Test
