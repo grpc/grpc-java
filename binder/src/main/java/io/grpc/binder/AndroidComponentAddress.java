@@ -236,14 +236,6 @@ public final class AndroidComponentAddress extends SocketAddress {
     }
 
     /**
-     * See {@link Intent#setClassName(String, String)}.
-     */
-    public Builder setClassName(String packageName, String className) {
-      bindIntent.setClassName(packageName, className);
-      return this;
-    }
-
-    /**
      * See {@link Intent#setComponent(ComponentName)}.
      */
     public Builder setComponent(ComponentName component) {
