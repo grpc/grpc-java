@@ -77,7 +77,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
       cacheSize = cacheConfig.getCacheSize().getValue();
       if (cacheSize == 0) {
         return ConfigOrError.fromError(
-            "cache_config.cache_size must be in the range (0, INT64_MAX)");
+            "cache_config.cache_size must be greater than zero");
       }
       // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
       cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);

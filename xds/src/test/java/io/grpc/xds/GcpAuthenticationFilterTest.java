@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -24,6 +25,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 
 import com.google.protobuf.Any;
+import com.google.protobuf.Empty;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt64Value;
 import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig;
@@ -45,7 +47,7 @@ public class GcpAuthenticationFilterTest {
   @Test
   public void testParseFilterConfig_withValidConfig() {
     GcpAuthnFilterConfig config = GcpAuthnFilterConfig.newBuilder()
-        .setCacheConfig(TokenCacheConfig.newBuilder().setCacheSize(UInt64Value.of(10)))
+        .setCacheConfig(TokenCacheConfig.newBuilder().setCacheSize(UInt64Value.of(20)))
         .build();
     Any anyMessage = Any.pack(config);
 
@@ -54,9 +56,8 @@ public class GcpAuthenticationFilterTest {
 
     assertNotNull(result.config);
     assertNull(result.errorDetail);
-    assertEquals(10L,
-        ((GcpAuthenticationFilter.GcpAuthenticationConfig)
-            result.config).getCacheSize());
+    assertEquals(20L,
+        ((GcpAuthenticationFilter.GcpAuthenticationConfig) result.config).getCacheSize());
   }
 
   @Test
@@ -71,22 +72,21 @@ public class GcpAuthenticationFilterTest {
 
     assertNull(result.config);
     assertNotNull(result.errorDetail);
-    assertTrue(result.errorDetail.contains("cache_config.cache_size must be in the range"));
+    assertTrue(result.errorDetail.contains("cache_config.cache_size must be greater than zero"));
   }
 
   @Test
   public void testParseFilterConfig_withInvalidMessageType() {
     GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
-    Message invalidMessage = Mockito.mock(Message.class);
+    Message invalidMessage = Empty.getDefaultInstance();
     ConfigOrError<? extends Filter.FilterConfig> result = filter.parseFilterConfig(invalidMessage);
 
     assertNull(result.config);
-    assertNotNull(result.errorDetail);
-    assertTrue(result.errorDetail.contains("Invalid config type"));
+    assertThat(result.errorDetail).contains("Invalid config type");
   }
 
   @Test
-  public void testBuildClientInterceptor() {
+  public void testClientInterceptor_createsAndReusesCachedCredentials() {
     GcpAuthenticationFilter.GcpAuthenticationConfig config =
         new GcpAuthenticationFilter.GcpAuthenticationConfig(10);
     GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
