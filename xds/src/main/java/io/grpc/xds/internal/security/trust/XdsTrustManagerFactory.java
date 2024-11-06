@@ -52,7 +52,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   private static final Logger logger = Logger.getLogger(XdsTrustManagerFactory.class.getName());
   @VisibleForTesting
-  static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
+  public static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
       false);
   private XdsX509TrustManager xdsX509TrustManager;
 

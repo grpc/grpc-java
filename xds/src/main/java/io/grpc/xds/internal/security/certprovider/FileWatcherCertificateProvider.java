@@ -42,12 +42,13 @@ import java.util.logging.Logger;
 
 // TODO(sanjaypujare): abstract out common functionality into an an abstract superclass
 /** Implementation of {@link CertificateProvider} for file watching cert provider. */
-final class FileWatcherCertificateProvider extends CertificateProvider implements Runnable {
+@VisibleForTesting
+public final class FileWatcherCertificateProvider extends CertificateProvider implements Runnable {
   private static final Logger logger =
       Logger.getLogger(FileWatcherCertificateProvider.class.getName());
 
   @VisibleForTesting
-  static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
+  public static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
       false);
   private final ScheduledExecutorService scheduledExecutorService;
   private final TimeProvider timeProvider;

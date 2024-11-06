@@ -34,10 +34,10 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * Provider of {@link FileWatcherCertificateProvider}s.
  */
-final class FileWatcherCertificateProviderProvider implements CertificateProviderProvider {
+public final class FileWatcherCertificateProviderProvider implements CertificateProviderProvider {
 
   @VisibleForTesting
-  static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
+  public static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
       false);
   private static final String CERT_FILE_KEY = "certificate_file";
   private static final String KEY_FILE_KEY = "private_key_file";

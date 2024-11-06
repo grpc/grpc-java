@@ -71,6 +71,9 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
+import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProvider;
+import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
+import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -89,6 +92,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -96,17 +100,25 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 /**
  * Unit tests for {@link XdsChannelCredentials} and {@link XdsServerBuilder} for plaintext/TLS/mTLS
  * modes.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class XdsSecurityClientServerTest {
+
+  @Parameter
+  public Boolean enableSpiffe;
+  private Boolean originalEnableSpiffe;
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
@@ -119,11 +131,31 @@ public class XdsSecurityClientServerTest {
   private FakeXdsClientPoolFactory fakePoolFactory = new FakeXdsClientPoolFactory(xdsClient);
   private static final String OVERRIDE_AUTHORITY = "foo.test.google.fr";
 
+  @Parameters(name = "enableSpiffe={0}")
+  public static Collection<Boolean> data() {
+    return ImmutableList.of(true, false);
+  }
+
+  @Before
+  public void setUp() throws IOException {
+    saveEnvironment();
+    FileWatcherCertificateProvider.enableSpiffe = enableSpiffe;
+    FileWatcherCertificateProviderProvider.enableSpiffe = enableSpiffe;
+    XdsTrustManagerFactory.enableSpiffe = enableSpiffe;
+  }
+
+  private void saveEnvironment() {
+    originalEnableSpiffe = FileWatcherCertificateProvider.enableSpiffe;
+  }
+
   @After
   public void tearDown() throws IOException {
     if (fakeNameResolverFactory != null) {
       NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverFactory);
     }
+    FileWatcherCertificateProvider.enableSpiffe = originalEnableSpiffe;
+    FileWatcherCertificateProviderProvider.enableSpiffe = originalEnableSpiffe;
+    XdsTrustManagerFactory.enableSpiffe = originalEnableSpiffe;
   }
 
   @Test
@@ -277,6 +309,9 @@ public class XdsSecurityClientServerTest {
 
   @Test
   public void tlsClientServer_Spiffe_noClientAuthentication_wrongServerCert() throws Exception {
+    if (!enableSpiffe) {
+      return;
+    }
     DownstreamTlsContext downstreamTlsContext =
         setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
             null, false, false);
