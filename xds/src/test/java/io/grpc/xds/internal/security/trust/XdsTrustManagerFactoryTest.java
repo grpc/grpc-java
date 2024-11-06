@@ -144,7 +144,7 @@ public class XdsTrustManagerFactoryTest {
     X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
     CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
         "san2");
-    XdsTrustManagerFactory factory = null;
+    XdsTrustManagerFactory factory;
     if (!enableSpiffe) {
       try {
         factory = new XdsTrustManagerFactory(ImmutableMap
