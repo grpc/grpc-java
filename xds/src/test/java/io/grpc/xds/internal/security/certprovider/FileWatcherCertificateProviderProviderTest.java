@@ -117,7 +117,7 @@ public class FileWatcherCertificateProviderProviderTest {
 
   @Test
   public void createProvider_minimalSpiffeConfig() throws IOException {
-    if (!enableSpiffe){
+    if (!enableSpiffe) {
       return;
     }
     CertificateProvider.DistributorWatcher distWatcher =

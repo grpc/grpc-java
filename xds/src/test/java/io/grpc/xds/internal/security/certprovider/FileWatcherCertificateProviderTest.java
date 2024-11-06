@@ -61,7 +61,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
@@ -184,8 +183,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificateAndCheckUpdates() throws IOException, CertificateException {
-    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -207,8 +204,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void allUpdateSecondTime() throws IOException, CertificateException, InterruptedException {
-    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -231,8 +226,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void closeDoesNotScheduleNext() throws IOException, CertificateException {
-    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
             new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -252,8 +245,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void rootFileUpdateOnly() throws IOException, CertificateException, InterruptedException {
-    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-    //         600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -276,8 +267,6 @@ public class FileWatcherCertificateProviderTest {
   @Test
   public void certAndKeyFileUpdateOnly()
       throws IOException, CertificateException, InterruptedException {
-    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -337,8 +326,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_initialMissingCertFile() throws IOException {
-    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -379,8 +366,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_missingRootFile() throws IOException, InterruptedException {
-    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -417,9 +402,6 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    // provider = new FileWatcherCertificateProvider(watcher, true, this.certFile, this.keyFile,
-    //     rootFile == null ? null : this.rootFile,
-    //     spiffeFile == null ? null : this.spiffeTrustMapFile, 600L, timeService, timeProvider);
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE,
         SPIFFE_TRUST_MAP_1_FILE, false, false, false, false);
     provider.checkAndReloadCertificates();
