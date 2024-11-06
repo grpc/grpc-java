@@ -219,13 +219,15 @@ public abstract class NameResolver {
     @Override
     @Deprecated
     @InlineMe(
-        replacement = "this.onResult2(ResolutionResult.newBuilder().setAddressesOrError("
+        replacement = "this.onResult(ResolutionResult.newBuilder().setAddressesOrError("
             + "StatusOr.fromValue(servers)).setAttributes(attributes).build())",
         imports = {"io.grpc.NameResolver.ResolutionResult", "io.grpc.StatusOr"})
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
       // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
-      onResult2(
+      // Calling onResult and not onResult2 because onResult2 can only be called from a
+      // synchronization context.
+      onResult(
           ResolutionResult.newBuilder().setAddressesOrError(
               StatusOr.fromValue(servers)).setAttributes(attributes).build());
     }

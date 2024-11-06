@@ -154,8 +154,8 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void deframeFailed(Throwable cause) {
-      if (logger.isLoggable(FINE)) {
-        logger.log(FINE, String.format("[{%s}] Exception processing message", logId), cause);
+      if (logger.isLoggable(WARNING)) {
+        logger.log(WARNING, String.format("[{%s}] Exception processing message", logId), cause);
       }
       cancel(Status.fromThrowable(cause));
     }
