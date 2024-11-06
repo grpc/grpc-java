@@ -26,7 +26,6 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.benchmarks.Utils;
 import io.grpc.s2a.internal.handshaker.ValidatePeerCertificateChainReq.VerificationMode;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
@@ -49,22 +48,21 @@ public final class FakeS2AServerTest {
 
   private static final ImmutableList<ByteString> FAKE_CERT_DER_CHAIN =
       ImmutableList.of(ByteString.copyFrom("fake-der-chain".getBytes(StandardCharsets.US_ASCII)));
-  private int port;
   private String serverAddress;
   private SessionResp response = null;
   private Server fakeS2AServer;
 
   @Before
   public void setUp() throws Exception {
-    port = Utils.pickUnusedPort();
-    fakeS2AServer = ServerBuilder.forPort(port).addService(new FakeS2AServer()).build();
+    fakeS2AServer = ServerBuilder.forPort(0).addService(new FakeS2AServer()).build();
     fakeS2AServer.start();
-    serverAddress = String.format("localhost:%d", port);
+    serverAddress = String.format("localhost:%d", fakeS2AServer.getPort());
   }
 
   @After
-  public void tearDown() {
+  public void tearDown() throws Exception {
     fakeS2AServer.shutdown();
+    fakeS2AServer.awaitTermination(10, SECONDS);
   }
 
   @Test
@@ -79,6 +77,7 @@ public final class FakeS2AServerTest {
 
     try {
       S2AServiceGrpc.S2AServiceStub asyncStub = S2AServiceGrpc.newStub(channel);
+      CountDownLatch finishLatch = new CountDownLatch(1);
       StreamObserver<SessionReq> requestObserver =
           asyncStub.setUpSession(
               new StreamObserver<SessionResp>() {
@@ -89,11 +88,14 @@ public final class FakeS2AServerTest {
 
                 @Override
                 public void onError(Throwable t) {
+                  finishLatch.countDown();
                   throw new RuntimeException(t);
                 }
 
                 @Override
-                public void onCompleted() {}
+                public void onCompleted() {
+                  finishLatch.countDown();
+                }
               });
       try {
         requestObserver.onNext(
@@ -110,6 +112,9 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
+      if (!finishLatch.await(10, SECONDS)) {
+        throw new RuntimeException();
+      }
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
@@ -153,6 +158,7 @@ public final class FakeS2AServerTest {
 
     try {
       S2AServiceGrpc.S2AServiceStub asyncStub = S2AServiceGrpc.newStub(channel);
+      CountDownLatch finishLatch = new CountDownLatch(1);
       StreamObserver<SessionReq> requestObserver =
           asyncStub.setUpSession(
               new StreamObserver<SessionResp>() {
@@ -163,11 +169,14 @@ public final class FakeS2AServerTest {
 
                 @Override
                 public void onError(Throwable t) {
+                  finishLatch.countDown();
                   throw new RuntimeException(t);
                 }
 
                 @Override
-                public void onCompleted() {}
+                public void onCompleted() {
+                  finishLatch.countDown();
+                }
               });
       try {
         requestObserver.onNext(
@@ -187,6 +196,9 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
+      if (!finishLatch.await(10, SECONDS)) {
+        throw new RuntimeException();
+      }
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
