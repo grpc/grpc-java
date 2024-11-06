@@ -582,11 +582,11 @@ public abstract class NameResolver {
     }
 
     /**
-     * Identifies an externally-defined {@link Args} extension.
+     * Identifies an externally-defined extension argument that can be stored in {@link Args}.
      *
      * <p>Uses reference equality so keys should be defined as global constants.
      *
-     * @param <T> type of the value in the key-value pair
+     * @param <T> type of values that can be stored under this key
      */
     @Immutable
     @SuppressWarnings("UnusedTypeParameter")
@@ -603,11 +603,11 @@ public abstract class NameResolver {
       }
 
       /**
-       * Factory method for creating instances of {@link Key}.
+       * Creates a new instance of {@link Key}.
        *
        * @param debugString a string used to describe the key, used for debugging.
        * @param <T> Key type
-       * @return Key object
+       * @return a new instance of Key
        */
       public static <T> Key<T> create(String debugString) {
         return new Key<>(debugString);
@@ -617,24 +617,24 @@ public abstract class NameResolver {
     /**
      * An immutable type-safe container of externally-defined {@link NameResolver} arguments.
      *
-     * <p>While ordinary {@link Args} should be universally useful and meaningful, extended args can
-     * apply just to resolvers of a certain URI scheme, just to resolvers producing a particular
-     * type of {@link java.net.SocketAddress}, or even an individual {@link NameResolver} subclass.
-     * Extended args are identified by {@link Args.Key} which should be defined in a java package
-     * and class appropriate to the argument's scope.
+     * <p>While ordinary {@link Args} should be universally useful and meaningful, argument {@link
+     * Extensions} can apply just to resolvers of a certain URI scheme, just to resolvers producing
+     * a particular type of {@link java.net.SocketAddress}, or even an individual {@link
+     * NameResolver} subclass. Extended args are identified by an instance of {@link Args.Key} which
+     * should be defined in a java package and class appropriate to the argument's scope.
      *
      * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
-     * the address to be resolved itself. However, there are rare cases where some or all of the
-     * input address can't be represented by any standard URI scheme or can't be encoded as a String
-     * at all. Extensions, in contrast, can be an arbitrary Java type making them a useful work
-     * around in these cases.
+     * the name to be resolved itself. However, there are rare cases where all or part of the target
+     * name can't be represented by any standard URI scheme or can't be encoded as a String at all.
+     * Extensions, in contrast, can be an arbitrary Java type, making them a useful work around in
+     * these cases.
      *
-     * <p>Extensions can also simply be used to avoid adding inappropriate deps to the low level
+     * <p>Extensions can also be used simply to avoid adding inappropriate deps to the low level
      * io.grpc package.
      *
      * <p>NB: This class overrides neither {@code equals()} nor {@code hashCode()}.
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/0000")
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     @Immutable
     public static final class Extensions {
       private static final IdentityHashMap<Key<?>, Object> EMPTY_MAP = new IdentityHashMap<>();
@@ -681,7 +681,7 @@ public abstract class NameResolver {
       }
 
       /**
-       * Fluently builds an instance of {@link Extensions}.
+       * Fluently builds instances of {@link Extensions}.
        */
       public static final class Builder {
         private Extensions base;
@@ -699,13 +699,13 @@ public abstract class NameResolver {
           return newdata;
         }
 
+        /**
+         * Associates 'value' with 'key', replacing any previously associated value.
+         *
+         * @return this
+         */
         public <T> Builder set(Key<T> key, T value) {
           data(1).put(key, value);
-          return this;
-        }
-
-        public Builder setAll(Extensions other) {
-          data(other.data.size()).putAll(other.data);
           return this;
         }
 
