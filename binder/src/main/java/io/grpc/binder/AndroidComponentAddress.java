@@ -151,6 +151,9 @@ public final class AndroidComponentAddress extends SocketAddress {
   /**
    * Returns this address as an explicit {@link Intent} suitable for passing to {@link
    * Context#bindService}.
+   *
+   * <p>NB: The returned Intent does not specify a target Android user. If {@link #getTargetUser()}
+   * is non-null, {@link Context#bindServiceAsUser} should be called instead.
    */
   public Intent asBindIntent() {
     return bindIntent.cloneFilter(); // Intent is mutable so return a copy.
