@@ -244,6 +244,14 @@ public final class AndroidComponentAddress extends SocketAddress {
     }
 
     /**
+     * See {@link Intent#addCategory(String)}.
+     */
+    public Builder addCategory(String category) {
+      bindIntent.addCategory(category);
+      return this;
+    }
+
+    /**
      * See {@link Intent#setAction(String)}.
      */
     public Builder setAction(String action) {
