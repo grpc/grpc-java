@@ -22,6 +22,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
+import android.os.UserHandle;
+import com.google.common.base.Objects;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
 
@@ -41,18 +44,25 @@ import javax.annotation.Nullable;
  * fields, namely, an action of {@link ApiConstants#ACTION_BIND}, an empty category set and null
  * type and data URI.
  *
- * <p>The semantics of {@link #equals(Object)} are the same as {@link Intent#filterEquals(Intent)}.
+ * <p>Optionally contains a {@link UserHandle} that must be considered wherever the {@link Intent}
+ * is evaluated.
+ *
+ * <p>{@link #equals(Object)} uses {@link Intent#filterEquals(Intent)} semantics to compare Intents.
  */
 public final class AndroidComponentAddress extends SocketAddress {
   private static final long serialVersionUID = 0L;
 
   private final Intent bindIntent; // "Explicit", having either a component or package restriction.
 
-  protected AndroidComponentAddress(Intent bindIntent) {
+  @Nullable
+  private final UserHandle targetUser; // null means the same user that hosts this process.
+
+  protected AndroidComponentAddress(Intent bindIntent, @Nullable UserHandle targetUser) {
     checkArgument(
         bindIntent.getComponent() != null || bindIntent.getPackage() != null,
         "'bindIntent' must be explicit. Specify either a package or ComponentName.");
     this.bindIntent = bindIntent;
+    this.targetUser = targetUser;
   }
 
   /**
@@ -99,7 +109,7 @@ public final class AndroidComponentAddress extends SocketAddress {
    * @throws IllegalArgumentException if 'intent' isn't "explicit"
    */
   public static AndroidComponentAddress forBindIntent(Intent intent) {
-    return new AndroidComponentAddress(intent.cloneFilter());
+    return new AndroidComponentAddress(intent.cloneFilter(), null);
   }
 
   /**
@@ -108,7 +118,7 @@ public final class AndroidComponentAddress extends SocketAddress {
    */
   public static AndroidComponentAddress forComponent(ComponentName component) {
     return new AndroidComponentAddress(
-        new Intent(ApiConstants.ACTION_BIND).setComponent(component));
+        new Intent(ApiConstants.ACTION_BIND).setComponent(component), null);
   }
 
   /**
@@ -177,13 +187,96 @@ public final class AndroidComponentAddress extends SocketAddress {
   public boolean equals(Object obj) {
     if (obj instanceof AndroidComponentAddress) {
       AndroidComponentAddress that = (AndroidComponentAddress) obj;
-      return bindIntent.filterEquals(that.bindIntent);
+      return bindIntent.filterEquals(that.bindIntent)
+          && Objects.equal(this.targetUser, that.targetUser);
     }
     return false;
   }
 
   @Override
   public String toString() {
-    return "AndroidComponentAddress[" + bindIntent + "]";
+    StringBuilder builder = new StringBuilder("AndroidComponentAddress[");
+    if (targetUser != null) {
+      builder.append(targetUser);
+      builder.append("@");
+    }
+    builder.append(bindIntent);
+    builder.append("]");
+    return builder.toString();
+  }
+
+  /**
+   * Identifies the Android user in which the bind Intent will be evaluated.
+   *
+   * <p>Returns the {@link UserHandle}, or null which means that the Android user hosting the
+   * current process will be used.
+   */
+  @Nullable
+  public UserHandle getTargetUser() {
+    return targetUser;
+  }
+
+  public static Builder newBuilder() {
+    return new Builder();
+  }
+
+  /**
+   * Fluently builds instances of {@link AndroidComponentAddress}.
+   */
+  public static class Builder {
+    Intent bindIntent = new Intent(ApiConstants.ACTION_BIND);
+    UserHandle targetUser;
+
+    /**
+     * See {@link Intent#setPackage(String)}.
+     */
+    public Builder setPackage(String pkg) {
+      bindIntent.setPackage(pkg);
+      return this;
+    }
+
+    /**
+     * See {@link Intent#setClassName(String, String)}.
+     */
+    public Builder setClassName(String packageName, String className) {
+      bindIntent.setClassName(packageName, className);
+      return this;
+    }
+
+    /**
+     * See {@link Intent#setComponent(ComponentName)}.
+     */
+    public Builder setComponent(ComponentName component) {
+      bindIntent.setComponent(component);
+      return this;
+    }
+
+    /**
+     * See {@link Intent#setAction(String)}.
+     */
+    public Builder setAction(String action) {
+      bindIntent.setAction(action);
+      return this;
+    }
+
+    /**
+     * See {@link Intent#setData(Uri)}.
+     */
+    public Builder setData(Uri data) {
+      bindIntent.setData(data);
+      return this;
+    }
+
+    /**
+     * See {@link AndroidComponentAddress#getTargetUser()}.
+     */
+    public Builder setTargetUser(@Nullable UserHandle targetUser) {
+      this.targetUser = targetUser;
+      return this;
+    }
+
+    public AndroidComponentAddress build() {
+      return new AndroidComponentAddress(bindIntent, targetUser);
+    }
   }
 }

@@ -299,7 +299,10 @@ public abstract class BinderTransport
 
   @Override
   public synchronized void binderDied() {
-    shutdownInternal(Status.UNAVAILABLE.withDescription("Peer process crashed, exited or was killed (binderDied)"), true);
+    shutdownInternal(
+        Status.UNAVAILABLE.withDescription(
+            "Peer process crashed, exited or was killed (binderDied)"),
+        true);
   }
 
   @GuardedBy("this")
@@ -611,7 +614,9 @@ public abstract class BinderTransport
               factory.sourceContext,
               factory.channelCredentials,
               targetAddress.asBindIntent(),
-              factory.targetUserHandle,
+              targetAddress.getTargetUser() != null
+                  ? targetAddress.getTargetUser()
+                  : factory.defaultTargetUserHandle,
               factory.bindServiceFlags.toInteger(),
               this);
     }

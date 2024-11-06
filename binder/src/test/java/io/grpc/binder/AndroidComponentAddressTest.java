@@ -23,6 +23,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Parcel;
+import android.os.UserHandle;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.testing.EqualsTester;
 import java.net.URISyntaxException;
@@ -117,19 +119,51 @@ public final class AndroidComponentAddressTest {
             AndroidComponentAddress.forContext(appContext),
             AndroidComponentAddress.forLocalComponent(appContext, appContext.getClass()),
             AndroidComponentAddress.forRemoteComponent(
-                appContext.getPackageName(), appContext.getClass().getName()))
+                appContext.getPackageName(), appContext.getClass().getName()),
+            AndroidComponentAddress.newBuilder()
+                .setComponent(hostComponent)
+                .setTargetUser(null)
+                .build())
         .addEqualityGroup(
             AndroidComponentAddress.forRemoteComponent("appy.mcappface", ".McActivity"))
         .addEqualityGroup(AndroidComponentAddress.forLocalComponent(appContext, getClass()))
         .addEqualityGroup(
             AndroidComponentAddress.forBindIntent(
-                new Intent().setAction("custom-action").setComponent(hostComponent)))
+                new Intent().setAction("custom-action").setComponent(hostComponent)),
+            AndroidComponentAddress.newBuilder()
+                .setAction("custom-action")
+                .setComponent(hostComponent)
+                .setTargetUser(null)
+                .build())
         .addEqualityGroup(
             AndroidComponentAddress.forBindIntent(
                 new Intent()
                     .setAction("custom-action")
                     .setType("some-type")
                     .setComponent(hostComponent)))
+        .testEquals();
+  }
+
+  @Test
+  public void testUnequalTargetUsers() {
+    new EqualsTester()
+        .addEqualityGroup(
+            AndroidComponentAddress.newBuilder()
+                .setPackage("com.foo")
+                .setTargetUser(newUserHandle(10))
+                .build(),
+            AndroidComponentAddress.newBuilder()
+                .setPackage("com.foo")
+                .setTargetUser(newUserHandle(10))
+                .build())
+        .addEqualityGroup(
+            AndroidComponentAddress.newBuilder()
+                .setPackage("com.foo")
+                .setTargetUser(newUserHandle(11))
+                .build())
+        .addEqualityGroup(
+            AndroidComponentAddress.newBuilder().setPackage("com.foo").setTargetUser(null).build(),
+            AndroidComponentAddress.newBuilder().setPackage("com.foo").build())
         .testEquals();
   }
 
@@ -162,5 +196,16 @@ public final class AndroidComponentAddressTest {
                     .setPackage("pkg")
                     .setComponent(new ComponentName("pkg", "cls"))))
         .testEquals();
+  }
+
+  private static UserHandle newUserHandle(int userId) {
+    Parcel parcel = Parcel.obtain();
+    try {
+      parcel.writeInt(userId);
+      parcel.setDataPosition(0);
+      return new UserHandle(parcel);
+    } finally {
+      parcel.recycle();
+    }
   }
 }
