@@ -33,6 +33,7 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
@@ -47,18 +48,23 @@ import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
@@ -66,7 +72,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link FileWatcherCertificateProvider}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class FileWatcherCertificateProviderTest {
   /**
    * Expire time of cert SERVER_0_PEM_FILE.
@@ -83,6 +89,10 @@ public class FileWatcherCertificateProviderTest {
 
   @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
+  @Parameter
+  public Boolean enableSpiffe;
+  private Boolean originalEnableSpiffe;
 
   private String certFile;
   private String keyFile;
@@ -101,6 +111,25 @@ public class FileWatcherCertificateProviderTest {
     keyFile = new File(tempFolder.getRoot(), KEY_FILE).getAbsolutePath();
     rootFile = new File(tempFolder.getRoot(), ROOT_FILE).getAbsolutePath();
     spiffeTrustMapFile = new File(tempFolder.getRoot(), SPIFFE_TRUST_MAP_FILE).getAbsolutePath();
+    provider =
+        new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null, 600L,
+            timeService, timeProvider);
+    saveEnvironment();
+    provider.enableSpiffe = enableSpiffe;
+  }
+
+  private void saveEnvironment() {
+    originalEnableSpiffe = provider.enableSpiffe;
+  }
+
+  @After
+  public void restoreEnvironment() {
+    provider.enableSpiffe = originalEnableSpiffe;
+  }
+
+  @Parameters(name = "enableSpiffe={0}")
+  public static Collection<Boolean> data() {
+    return ImmutableList.of(true, false);
   }
 
   private void populateTarget(
@@ -155,8 +184,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificateAndCheckUpdates() throws IOException, CertificateException {
-    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-        600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -178,8 +207,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void allUpdateSecondTime() throws IOException, CertificateException, InterruptedException {
-    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-        600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -202,8 +231,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void closeDoesNotScheduleNext() throws IOException, CertificateException {
-    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-        600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
             new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -223,8 +252,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void rootFileUpdateOnly() throws IOException, CertificateException, InterruptedException {
-    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-            600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+    //         600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -247,8 +276,8 @@ public class FileWatcherCertificateProviderTest {
   @Test
   public void certAndKeyFileUpdateOnly()
       throws IOException, CertificateException, InterruptedException {
-    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-        600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -270,6 +299,9 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void spiffeTrustMapFileUpdateOnly() throws Exception {
+    if (!enableSpiffe) {
+      return;
+    }
     provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, null,
         spiffeTrustMapFile, 600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
@@ -305,8 +337,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_initialMissingCertFile() throws IOException {
-    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-        600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -347,8 +379,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_missingRootFile() throws IOException, InterruptedException {
-    provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
-        600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null,
+    //     600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =
         new TestScheduledFuture<>();
     doReturn(scheduledFuture)
@@ -385,9 +417,9 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    provider = new FileWatcherCertificateProvider(watcher, true, this.certFile, this.keyFile,
-        rootFile == null ? null : this.rootFile,
-        spiffeFile == null ? null : this.spiffeTrustMapFile, 600L, timeService, timeProvider);
+    // provider = new FileWatcherCertificateProvider(watcher, true, this.certFile, this.keyFile,
+    //     rootFile == null ? null : this.rootFile,
+    //     spiffeFile == null ? null : this.spiffeTrustMapFile, 600L, timeService, timeProvider);
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE,
         SPIFFE_TRUST_MAP_1_FILE, false, false, false, false);
     provider.checkAndReloadCertificates();

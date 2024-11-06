@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.TimeProvider;
 import java.text.ParseException;
@@ -35,6 +36,9 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 final class FileWatcherCertificateProviderProvider implements CertificateProviderProvider {
 
+  @VisibleForTesting
+  static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
+      false);
   private static final String CERT_FILE_KEY = "certificate_file";
   private static final String KEY_FILE_KEY = "private_key_file";
   private static final String ROOT_FILE_KEY = "ca_certificate_file";
@@ -100,14 +104,19 @@ final class FileWatcherCertificateProviderProvider implements CertificateProvide
     Config configObj = new Config();
     configObj.certFile = checkForNullAndGet(map, CERT_FILE_KEY);
     configObj.keyFile = checkForNullAndGet(map, KEY_FILE_KEY);
-    if (!map.containsKey(ROOT_FILE_KEY) && !map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
-      throw new NullPointerException(String.format("either '%s' or '%s' is required in the config",
-          ROOT_FILE_KEY, SPIFFE_TRUST_MAP_FILE_KEY));
-    }
-    if (map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
-      configObj.spiffeTrustMapFile = JsonUtil.getString(map, SPIFFE_TRUST_MAP_FILE_KEY);
+    if (enableSpiffe) {
+      if (!map.containsKey(ROOT_FILE_KEY) && !map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
+        throw new NullPointerException(
+            String.format("either '%s' or '%s' is required in the config",
+                ROOT_FILE_KEY, SPIFFE_TRUST_MAP_FILE_KEY));
+      }
+      if (map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
+        configObj.spiffeTrustMapFile = JsonUtil.getString(map, SPIFFE_TRUST_MAP_FILE_KEY);
+      } else {
+        configObj.rootFile = JsonUtil.getString(map, ROOT_FILE_KEY);
+      }
     } else {
-      configObj.rootFile = JsonUtil.getString(map, ROOT_FILE_KEY);
+      configObj.rootFile = checkForNullAndGet(map, ROOT_FILE_KEY);
     }
     String refreshIntervalString = JsonUtil.getString(map, REFRESH_INTERVAL_KEY);
     if (refreshIntervalString != null) {

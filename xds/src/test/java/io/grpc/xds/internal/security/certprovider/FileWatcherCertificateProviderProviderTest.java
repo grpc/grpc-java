@@ -24,22 +24,27 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.TimeProvider;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link FileWatcherCertificateProviderProvider}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class FileWatcherCertificateProviderProviderTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -48,13 +53,32 @@ public class FileWatcherCertificateProviderProviderTest {
       scheduledExecutorServiceFactory;
   @Mock private TimeProvider timeProvider;
 
+  @Parameter
+  public Boolean enableSpiffe;
+  private Boolean originalEnableSpiffe;
   private FileWatcherCertificateProviderProvider provider;
+
+  @Parameters(name = "enableSpiffe={0}")
+  public static Collection<Boolean> data() {
+    return ImmutableList.of(true, false);
+  }
 
   @Before
   public void setUp() throws IOException {
     provider =
         new FileWatcherCertificateProviderProvider(
             fileWatcherCertificateProviderFactory, scheduledExecutorServiceFactory, timeProvider);
+    saveEnvironment();
+    provider.enableSpiffe = enableSpiffe;
+  }
+
+  private void saveEnvironment() {
+    originalEnableSpiffe = provider.enableSpiffe;
+  }
+
+  @After
+  public void restoreEnvironment() {
+    provider.enableSpiffe = originalEnableSpiffe;
   }
 
   @Test
@@ -93,6 +117,9 @@ public class FileWatcherCertificateProviderProviderTest {
 
   @Test
   public void createProvider_minimalSpiffeConfig() throws IOException {
+    if (!enableSpiffe){
+      return;
+    }
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
@@ -137,6 +164,9 @@ public class FileWatcherCertificateProviderProviderTest {
 
   @Test
   public void createProvider_spiffeConfig() throws IOException {
+    if (!enableSpiffe) {
+      return;
+    }
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
@@ -203,6 +233,9 @@ public class FileWatcherCertificateProviderProviderTest {
 
   @Test
   public void createProvider_missingRoot_expectException() throws IOException {
+    String expectedMessage = enableSpiffe ? "either 'ca_certificate_file' or "
+        + "'spiffe_trust_bundle_map_file' is required in the config"
+        : "'ca_certificate_file' is required in the config";
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
@@ -211,8 +244,7 @@ public class FileWatcherCertificateProviderProviderTest {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("either 'ca_certificate_file' or "
-          + "'spiffe_trust_bundle_map_file' is required in the config");
+      assertThat(npe).hasMessageThat().isEqualTo(expectedMessage);
     }
   }
 

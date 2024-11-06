@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SpiffeUtil;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
@@ -45,6 +46,9 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   private static final Logger logger =
       Logger.getLogger(FileWatcherCertificateProvider.class.getName());
 
+  @VisibleForTesting
+  static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
+      false);
   private final ScheduledExecutorService scheduledExecutorService;
   private final TimeProvider timeProvider;
   private final Path certFile;
@@ -75,14 +79,19 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.certFile = Paths.get(checkNotNull(certFile, "certFile"));
     this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
-    checkArgument((trustFile != null || spiffeTrustMapFile != null),
-        "either trustFile or spiffeTrustMapFile must be present");
-    if (spiffeTrustMapFile != null) {
-      this.spiffeTrustMapFile = Paths.get(spiffeTrustMapFile);
-      this.trustFile = null;
+    if (enableSpiffe) {
+      checkArgument((trustFile != null || spiffeTrustMapFile != null),
+          "either trustFile or spiffeTrustMapFile must be present");
+      if (spiffeTrustMapFile != null) {
+        this.spiffeTrustMapFile = Paths.get(spiffeTrustMapFile);
+        this.trustFile = null;
+      } else {
+        this.spiffeTrustMapFile = null;
+        this.trustFile = Paths.get(trustFile);
+      }
     } else {
       this.spiffeTrustMapFile = null;
-      this.trustFile = Paths.get(trustFile);
+      this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
     }
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
   }
