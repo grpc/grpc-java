@@ -636,7 +636,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
   /**
    * Provides an "extended" argument for the {@link NameResolver}, if applicable, replacing any
-   * value previously provided for this key.
+   * 'value' previously provided for 'key'.
    *
    * <p>NB: If the selected {@link NameResolver} does not understand your extension, it will be
    * silently ignored.
