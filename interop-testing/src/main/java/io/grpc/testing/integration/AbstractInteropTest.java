@@ -28,6 +28,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
@@ -1700,6 +1701,25 @@ public abstract class AbstractInteropTest {
     private Status status = Status.OK;
   }
 
+
+  private static class ThreadResults {
+    private final AtomicInteger threadFailures = new AtomicInteger(0);
+    private final AtomicInteger iterationsDone = new AtomicInteger(0);
+    private final Histogram latencies = new Histogram(4);
+
+    public AtomicInteger getThreadFailures() {
+      return threadFailures;
+    }
+
+    public AtomicInteger getIterationsDone() {
+      return iterationsDone;
+    }
+
+    public Histogram getLatencies() {
+      return latencies;
+    }
+  }
+
   private SoakIterationResult performOneSoakIteration(
       TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize, int soakResponseSize)
       throws Exception {
@@ -1731,7 +1751,7 @@ public abstract class AbstractInteropTest {
    */
   public void performSoakTest(
       String serverUri,
-      boolean resetChannelPerIteration,
+      // boolean resetChannelPerIteration,
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
@@ -1739,39 +1759,34 @@ public abstract class AbstractInteropTest {
       int overallTimeoutSeconds,
       int soakRequestSize,
       int soakResponseSize,
-      int numThreads)
+      int numThreads,
+      Function<ManagedChannel, ManagedChannel> maybeCreateNewChannel)
       throws Exception {
     if (soakIterations % numThreads != 0) {
       throw new IllegalArgumentException("soakIterations must be evenly divisible by numThreads.");
     }
     ManagedChannel sharedChannel = createChannel();
-    AtomicInteger iterationsDone = new AtomicInteger(0);
-    int totalFailures = 0;
-    Histogram latencies = new Histogram(4 /* number of significant value digits */);
     long startNs = System.nanoTime();
     Thread[] threads = new Thread[numThreads];
     int soakIterationsPerThread = soakIterations / numThreads;
-    // Hold pre-thread failure counts
-    AtomicInteger[] threadFailures = new AtomicInteger[numThreads];
+    List<ThreadResults> threadResultsList = new ArrayList<>(numThreads);
     for (int i = 0; i < numThreads; i++) {
-      threadFailures[i] = new AtomicInteger(0);
+      threadResultsList.add(new ThreadResults());
     }
     for (int threadInd = 0; threadInd < numThreads; threadInd++) {
       final int currentThreadInd = threadInd;
       threads[threadInd] = new Thread(() -> executeSoakTestInThreads(
           soakIterationsPerThread,
           startNs,
-          resetChannelPerIteration,
           minTimeMsBetweenRpcs,
-          threadFailures[currentThreadInd],
-          iterationsDone,
-          latencies,
           soakRequestSize,
           soakResponseSize,
           maxAcceptablePerIterationLatencyMs,
           overallTimeoutSeconds,
           serverUri,
-          sharedChannel));
+          threadResultsList.get(currentThreadInd),
+          sharedChannel,
+          maybeCreateNewChannel));
       threads[threadInd].start();
     }
     for (Thread thread : threads) {
@@ -1780,8 +1795,14 @@ public abstract class AbstractInteropTest {
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         }}
-    for (AtomicInteger threadFailure :threadFailures) {
-      totalFailures += threadFailure.get();
+
+    int totalFailures = 0;
+    AtomicInteger iterationsDone = new AtomicInteger(0);
+    Histogram latencies = new Histogram(4);
+    for (ThreadResults threadResult :threadResultsList) {
+      totalFailures += threadResult.getThreadFailures().get();
+      iterationsDone.addAndGet(threadResult.getIterationsDone().get());
+      latencies.add(threadResult.getLatencies());
     }
     System.err.println(
         String.format(
@@ -1827,22 +1848,26 @@ public abstract class AbstractInteropTest {
       }
     }
   }
+  protected ManagedChannel maybeCreateNewChannel(ManagedChannel currentChannel, boolean resetChannel) {
+    if (resetChannel) {
+      shutdownChannel(currentChannel);
+      return createChannel();
+    }
+    return currentChannel;
+  }
 
   private void executeSoakTestInThreads(
       int soakIterationsPerThread,
       long startNs,
-      boolean resetChannelPerIteration,
       int minTimeMsBetweenRpcs,
-      AtomicInteger threadFailures,
-      AtomicInteger iterationsDone,
-      Histogram latencies,
       int soakRequestSize,
       int soakResponseSize,
       int maxAcceptablePerIterationLatencyMs,
       int overallTimeoutSeconds,
       String serverUri,
-      ManagedChannel sharedChannel) {
-    // Get the correct channel (shared channel or new channel)
+      ThreadResults threadResults,
+      ManagedChannel sharedChannel,
+      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) {
     ManagedChannel currentChannel = sharedChannel;
     TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
         .newBlockingStub(currentChannel)
@@ -1854,9 +1879,9 @@ public abstract class AbstractInteropTest {
       }
       long earliestNextStartNs = System.nanoTime()
           + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-      if (resetChannelPerIteration) {
-        shutdownChannel(currentChannel);
-        currentChannel = createChannel();
+      ManagedChannel newChannel = maybeCreateChannel.apply(currentChannel);
+      if (newChannel != currentChannel) {
+        currentChannel = newChannel
         currentStub = TestServiceGrpc
             .newBlockingStub(currentChannel)
             .withInterceptors(recordClientCallInterceptor(clientCallCapture));
@@ -1865,7 +1890,7 @@ public abstract class AbstractInteropTest {
       try {
         result = performOneSoakIteration(currentStub, soakRequestSize, soakResponseSize);
       } catch (Exception e) {
-        threadFailures.incrementAndGet();
+        threadResults.getThreadFailures().incrementAndGet();
         System.err.println("Error during soak iteration: " + e.getMessage());
         continue; // Skip to the next iteration
       }
@@ -1875,23 +1900,21 @@ public abstract class AbstractInteropTest {
       StringBuilder logStr = new StringBuilder(
           String.format(
               Locale.US,
-              "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+              "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s", Thread.currentThread().getId(),
               i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
       if (!result.getStatus().equals(Status.OK)) {
-        threadFailures.incrementAndGet();
+        threadResults.getThreadFailures().incrementAndGet();
         logStr.append(String.format(" failed: %s", result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
-        threadFailures.incrementAndGet();
+        threadResults.getThreadFailures().incrementAndGet();
         logStr.append(
             " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
       } else {
         logStr.append(" succeeded");
       }
       System.err.println(logStr.toString());
-      synchronized (this) {
-        iterationsDone.incrementAndGet();
-      }
-      latencies.recordValue(result.getLatencyMs());
+      threadResults.getIterationsDone().incrementAndGet();
+      threadResults.getLatencies().recordValue(result.getLatencyMs());
       long remainingNs = earliestNextStartNs - System.nanoTime();
       if (remainingNs > 0) {
         try {

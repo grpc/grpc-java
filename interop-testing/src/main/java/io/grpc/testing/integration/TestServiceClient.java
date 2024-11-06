@@ -525,7 +525,6 @@ public class TestServiceClient {
       case RPC_SOAK: {
         tester.performSoakTest(
             serverHost,
-            false /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
@@ -533,14 +532,15 @@ public class TestServiceClient {
             soakOverallTimeoutSeconds,
             soakRequestSize,
             soakResponseSize,
-            numThreads);
+            numThreads,
+            (currentChannel) -> tester.maybeCreateNewChannel(currentChannel, false)
+        );
         break;
       }
 
       case CHANNEL_SOAK: {
         tester.performSoakTest(
             serverHost,
-            true /* resetChannelPerIteration */,
             soakIterations,
             soakMaxFailures,
             soakPerIterationMaxAcceptableLatencyMs,
@@ -548,7 +548,9 @@ public class TestServiceClient {
             soakOverallTimeoutSeconds,
             soakRequestSize,
             soakResponseSize,
-            numThreads);
+            numThreads,
+            (currentChannel) -> tester.maybeCreateNewChannel(currentChannel, true)
+            );
         break;
       }
 
