@@ -57,6 +57,9 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.GrpcTraceBinContextPropagator;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -68,6 +71,12 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.samplers.Sampler;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -136,7 +145,8 @@ public class TestServiceClient {
   private int soakResponseSize = 314159;
   private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
-
+  private boolean useOpenTelemetryTracing;
+  private TextMapPropagator textMapPropagator = GrpcTraceBinContextPropagator.defaultInstance();
   private Tester tester = new Tester();
 
   @VisibleForTesting
@@ -216,6 +226,18 @@ public class TestServiceClient {
         soakResponseSize = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
+      } else if ("use_open_telemetry_tracing".equals(key)) {
+        useOpenTelemetryTracing = Boolean.parseBoolean(value);
+      } else if ("open_telemetry_propagator".equals(key)) {
+        if (value.toLowerCase().contains("w3c")) {
+          textMapPropagator = W3CTraceContextPropagator.getInstance();
+        } else if (value.toLowerCase().contains("grpc-trace-bin")) {
+          textMapPropagator = GrpcTraceBinContextPropagator.defaultInstance();
+        } else {
+          System.err.println("Unsupported text map propagator, use 'w3c' or 'grpc-trace-bin'");
+          usage = true;
+          break;
+        }
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -294,6 +316,12 @@ public class TestServiceClient {
           + "\n                              Additional metadata to send in each request, as a "
           + "\n                              semicolon-separated list of key:value pairs. Default "
             + c.additionalMetadata
+          + "\n --use_open_telemetry_tracing Whether to use open telemetry tracing. Default "
+            + c.useOpenTelemetryTracing
+          + "\n --text_map_propagator w3c|grpc-trace-bin "
+          + "\n                              The TextMapPropagator for openTelemetry. Default "
+          + "grpc-trace-bin "
+
       );
       System.exit(1);
     }
@@ -677,6 +705,25 @@ public class TestServiceClient {
         }
         if (addMdInterceptor != null) {
           nettyBuilder.intercept(addMdInterceptor);
+        }
+        if (useOpenTelemetryTracing) {
+          OpenTelemetrySdk openTelemetrySdk = OpenTelemetrySdk.builder()
+              .setTracerProvider(SdkTracerProvider.builder()
+                      .setSampler(Sampler.alwaysOn())
+                  .build())
+              .setPropagators(ContextPropagators.create(TextMapPropagator.composite(
+                  textMapPropagator
+              )))
+              .build();
+          GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
+              .sdk(openTelemetrySdk);
+          InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
+          GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
+          // Disabling census-tracing is necessary to avoid trace ID mismatches.
+          // This is because census-tracing overrides the grpc-trace-bin header with
+          // OpenTelemetry's GrpcTraceBinPropagator.
+          InternalNettyChannelBuilder.setTracingEnabled(nettyBuilder, false);
+          grpcOpenTelemetry.configureChannelBuilder(nettyBuilder);
         }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
