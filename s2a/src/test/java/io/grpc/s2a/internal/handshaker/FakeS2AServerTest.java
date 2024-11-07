@@ -20,6 +20,9 @@ import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -57,6 +60,7 @@ public final class FakeS2AServerTest {
     fakeS2AServer = ServerBuilder.forPort(0).addService(new FakeS2AServer()).build();
     fakeS2AServer.start();
     serverAddress = String.format("localhost:%d", fakeS2AServer.getPort());
+    response = null;
   }
 
   @After
@@ -67,8 +71,10 @@ public final class FakeS2AServerTest {
 
   @Test
   public void callS2AServerOnce_getTlsConfiguration_returnsValidResult()
-      throws InterruptedException, IOException {
+      throws InterruptedException, IOException, java.util.concurrent.ExecutionException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
+    ListeningExecutorService service =
+        MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(1));
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
         Grpc.newChannelBuilder(serverAddress, InsecureChannelCredentials.create())
@@ -77,24 +83,23 @@ public final class FakeS2AServerTest {
 
     try {
       S2AServiceGrpc.S2AServiceStub asyncStub = S2AServiceGrpc.newStub(channel);
-      CountDownLatch finishLatch = new CountDownLatch(1);
       StreamObserver<SessionReq> requestObserver =
           asyncStub.setUpSession(
               new StreamObserver<SessionResp>() {
+                SessionResp recvResp = null;
                 @Override
                 public void onNext(SessionResp resp) {
-                  response = resp;
+                  recvResp = resp;
                 }
 
                 @Override
                 public void onError(Throwable t) {
-                  finishLatch.countDown();
                   throw new RuntimeException(t);
                 }
 
                 @Override
                 public void onCompleted() {
-                  finishLatch.countDown();
+                  response = recvResp;
                 }
               });
       try {
@@ -112,9 +117,6 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
-      if (!finishLatch.await(10, SECONDS)) {
-        throw new RuntimeException();
-      }
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
@@ -143,7 +145,12 @@ public final class FakeS2AServerTest {
                             .addCiphersuites(
                                 Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)))
             .build();
-    assertThat(response).ignoringRepeatedFieldOrder().isEqualTo(expected);
+    ListenableFuture<SessionResp> respFuture =
+        service.submit(() -> {
+          while (this.response == null) {}
+          return this.response;
+        });
+    assertThat(respFuture.get()).ignoringRepeatedFieldOrder().isEqualTo(expected);
   }
 
   @Test
