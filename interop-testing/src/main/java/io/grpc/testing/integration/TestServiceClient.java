@@ -82,6 +82,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -229,9 +230,9 @@ public class TestServiceClient {
       } else if ("use_open_telemetry_tracing".equals(key)) {
         useOpenTelemetryTracing = Boolean.parseBoolean(value);
       } else if ("open_telemetry_propagator".equals(key)) {
-        if (value.toLowerCase().contains("w3c")) {
+        if (value.toLowerCase(Locale.ROOT).contains("w3c")) {
           textMapPropagator = W3CTraceContextPropagator.getInstance();
-        } else if (value.toLowerCase().contains("grpc-trace-bin")) {
+        } else if (value.toLowerCase(Locale.ROOT).contains("grpc-trace-bin")) {
           textMapPropagator = GrpcTraceBinContextPropagator.defaultInstance();
         } else {
           System.err.println("Unsupported text map propagator, use 'w3c' or 'grpc-trace-bin'");
