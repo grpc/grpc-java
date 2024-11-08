@@ -22,7 +22,6 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
-import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
