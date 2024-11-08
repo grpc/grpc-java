@@ -149,7 +149,7 @@ public class SecurityProtocolNegotiatorsTest {
     CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
             .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
@@ -216,7 +216,7 @@ public class SecurityProtocolNegotiatorsTest {
     pipeline = channel.pipeline();
     Bootstrapper.BootstrapInfo bootstrapInfoForServer = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-server", SERVER_1_KEY_FILE,
-            SERVER_1_PEM_FILE, CA_PEM_FILE, null, null, null, null);
+            SERVER_1_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(
             "google_cloud_private_spiffe-server", true, true);
@@ -361,7 +361,7 @@ public class SecurityProtocolNegotiatorsTest {
     CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
             .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
@@ -412,7 +412,7 @@ public class SecurityProtocolNegotiatorsTest {
     CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
             .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
