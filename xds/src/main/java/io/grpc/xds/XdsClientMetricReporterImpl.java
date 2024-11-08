@@ -27,6 +27,7 @@ import io.grpc.MetricRecorder.BatchCallback;
 import io.grpc.MetricRecorder.BatchRecorder;
 import io.grpc.MetricRecorder.Registration;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClientMetricReporter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
@@ -53,8 +54,6 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   private Registration gaugeRegistration = null;
   @Nullable
   private XdsClient xdsClient = null;
-  @Nullable
-  private CallbackMetricReporter callbackMetricReporter = null;
 
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
@@ -108,8 +107,7 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
         Arrays.asList(target, xdsServer), Collections.emptyList());
   }
 
-  @Override
-  public void setXdsClient(XdsClient client) {
+  void setXdsClient(XdsClient client) {
     this.xdsClient = client;
     // register gauge here
     this.gaugeRegistration = metricRecorder.registerBatchCallback(new BatchCallback() {
@@ -120,21 +118,22 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }, CONNECTED_GAUGE, RESOURCES_GAUGE);
   }
 
-  @Override
-  public void close() {
+  void close() {
     if (gaugeRegistration != null) {
       gaugeRegistration.close();
     }
   }
 
   void reportCallbackMetrics(BatchRecorder recorder) {
-    if (callbackMetricReporter == null) {
-      // Instantiate only if not injected
-      callbackMetricReporter = new CallbackMetricReporterImpl(recorder);
-    }
+    CallbackMetricReporter callbackMetricReporter = createCallbackMetricReporter(recorder);
     try {
-      reportResourceCounts(callbackMetricReporter);
-      reportServerConnections(callbackMetricReporter);
+      SettableFuture<Void> ret = this.xdsClient.reportResourceCounts(
+          callbackMetricReporter);
+      // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
+      Void unused = ret.get(5, TimeUnit.SECONDS);
+      SettableFuture<Void> ret1 = this.xdsClient.reportServerConnections(callbackMetricReporter);
+      // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
+      Void unused1 = ret1.get(5, TimeUnit.SECONDS);
     } catch (Exception e) {
       if (e instanceof InterruptedException) {
         Thread.currentThread().interrupt(); // re-set the current thread's interruption state
@@ -143,25 +142,12 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
   }
 
-  void reportResourceCounts(CallbackMetricReporter callbackMetricReporter) throws Exception {
-    SettableFuture<Void> ret = this.xdsClient.reportResourceCounts(
-        callbackMetricReporter);
-    // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
-    Void unused = ret.get(5, TimeUnit.SECONDS);
-  }
-
-  void reportServerConnections(CallbackMetricReporter callbackMetricReporter) throws Exception {
-    SettableFuture<Void> ret = this.xdsClient.reportServerConnections(callbackMetricReporter);
-    // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
-    Void unused = ret.get(5, TimeUnit.SECONDS);
-  }
-
   /**
    * Allows injecting a custom {@link CallbackMetricReporter} for testing purposes.
    */
   @VisibleForTesting
-  void injectCallbackMetricReporter(CallbackMetricReporter reporter) {
-    this.callbackMetricReporter = reporter;
+  CallbackMetricReporter createCallbackMetricReporter(BatchRecorder recorder) {
+    return new CallbackMetricReporterImpl(recorder);
   }
 
   @VisibleForTesting

@@ -30,8 +30,6 @@ interface XdsClientPoolFactory {
   @Nullable
   ObjectPool<XdsClient> get(String target);
 
-  ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException;
-
   ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
       throws XdsInitializationException;
 

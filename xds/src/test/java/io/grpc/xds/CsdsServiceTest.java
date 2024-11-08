@@ -554,10 +554,6 @@ public class CsdsServiceTest {
       throw new UnsupportedOperationException("Should not be called");
     }
 
-    @Override
-    public ObjectPool<XdsClient> getOrCreate(String target) {
-      throw new UnsupportedOperationException("Should not be called");
-    }
 
     @Override
     public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder) {

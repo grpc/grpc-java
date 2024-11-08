@@ -38,12 +38,12 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
-import io.grpc.xds.XdsClientMetricReporter;
-import io.grpc.xds.XdsClientMetricReporter.CallbackMetricReporter;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ResourceStore;
+import io.grpc.xds.client.XdsClientMetricReporter;
+import io.grpc.xds.client.XdsClientMetricReporter.CallbackMetricReporter;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.URI;
 import java.util.Collection;
@@ -127,7 +127,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     this.securityConfig = securityConfig;
     this.target = target;
     this.metricReporter = metricReporter;
-    metricReporter.setXdsClient(this);
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -191,7 +190,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
             for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
               lrsClient.stopLoadReporting();
             }
-            metricReporter.close();
             cleanUpResourceTimers();
           }
         });

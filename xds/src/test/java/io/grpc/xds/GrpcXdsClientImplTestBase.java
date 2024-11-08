@@ -96,6 +96,7 @@ import io.grpc.xds.client.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsClientImpl;
+import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.client.XdsTransportFactory;

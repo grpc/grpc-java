@@ -217,11 +217,6 @@ public class XdsNameResolverTest {
       }
 
       @Override
-      public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
-        throw new XdsInitializationException("Fail to read bootstrap file");
-      }
-
-      @Override
       public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
           throws XdsInitializationException {
         throw new XdsInitializationException("Fail to read bootstrap file");
@@ -2010,11 +2005,6 @@ public class XdsNameResolverTest {
     @Nullable
     public ObjectPool<XdsClient> get(String target) {
       throw new UnsupportedOperationException("Should not be called");
-    }
-
-    @Override
-    public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
-      return getOrCreate(target, metricRecorder);
     }
 
     @Override

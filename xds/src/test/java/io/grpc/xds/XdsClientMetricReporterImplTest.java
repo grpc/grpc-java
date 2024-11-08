@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,9 +34,9 @@ import io.grpc.MetricRecorder;
 import io.grpc.MetricRecorder.BatchCallback;
 import io.grpc.MetricRecorder.BatchRecorder;
 import io.grpc.MetricSink;
-import io.grpc.xds.XdsClientMetricReporter.CallbackMetricReporter;
 import io.grpc.xds.XdsClientMetricReporterImpl.CallbackMetricReporterImpl;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClientMetricReporter.CallbackMetricReporter;
 import java.util.Arrays;
 import java.util.Collections;
 import org.junit.Before;
@@ -139,16 +140,19 @@ public class XdsClientMetricReporterImplTest {
 
   @Test
   public void metricGauges() {
+    XdsClientMetricReporterImpl spyReporter = spy(
+        new XdsClientMetricReporterImpl(mockMetricRecorder));
     SettableFuture<Void> future = SettableFuture.create();
     future.set(null);
     when(mockXdsClient.reportResourceCounts(any(CallbackMetricReporter.class)))
         .thenReturn(future);
     when(mockXdsClient.reportServerConnections(any(CallbackMetricReporter.class)))
         .thenReturn(future);
-    CallbackMetricReporterImpl callbackMetricReporter = new CallbackMetricReporterImpl(
+    CallbackMetricReporter callbackMetricReporter = new CallbackMetricReporterImpl(
         mockBatchRecorder);
-    reporter.injectCallbackMetricReporter(callbackMetricReporter);
-    reporter.setXdsClient(mockXdsClient);
+    when(spyReporter.createCallbackMetricReporter(mockBatchRecorder)).thenReturn(
+        callbackMetricReporter);
+    spyReporter.setXdsClient(mockXdsClient);
     verify(mockMetricRecorder).registerBatchCallback(gaugeBatchCallbackCaptor.capture(),
         eqMetricInstrumentName("grpc.xds_client.connected"),
         eqMetricInstrumentName("grpc.xds_client.resources"));

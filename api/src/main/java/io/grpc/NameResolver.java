@@ -410,7 +410,6 @@ public abstract class NameResolver {
      * Returns the {@link MetricRecorder} that the channel uses to record metrics.
      */
     @Nullable
-    @ExperimentalApi("Insert GitHub issue")
     public MetricRecorder getMetricRecorder() {
       return metricRecorder;
     }
@@ -563,7 +562,6 @@ public abstract class NameResolver {
       /**
        * See {@link Args#getMetricRecorder()}. This is an optional field.
        */
-      @ExperimentalApi("Insert github issue")
       public Builder setMetricRecorder(MetricRecorder metricRecorder) {
         this.metricRecorder = metricRecorder;
         return this;

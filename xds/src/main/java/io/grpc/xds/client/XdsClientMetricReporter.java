@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import io.grpc.Internal;
-import io.grpc.xds.client.XdsClient;
 
 /**
  * Interface for reporting metrics from the xDS client.
@@ -49,44 +48,18 @@ public interface XdsClientMetricReporter {
   }
 
   /**
-   * Sets the {@link XdsClient} instance.
-   */
-  default void setXdsClient(XdsClient xdsClient) {
-  }
-
-  /**
-   * Closes the metric reporter.
-   */
-  default void close() {
-  }
-
-  /**
    * Interface for reporting metrics through callback.
    *
    */
   interface CallbackMetricReporter {
 
-    /**
-     * Reports number of resources in each cache state.
-     *
-     * @param resourceCount Number of resources.
-     * @param cacheState Status of the resource metadata
-     *     {@link io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus}.
-     * @param resourceType Type of XDS resource (e.g., "envoy.config.listener.v3.Listener").
-     * @param target Target of the gRPC channel.
-     */
+
     // TODO(@dnvindhya): include the "authority" label once xds.authority is available.
     default void reportResourceCounts(long resourceCount, String cacheState, String resourceType,
         String target) {
     }
 
-    /**
-     * Reports whether xDS client has a working ADS stream to the xDS server.
-     *
-     * @param isConnected 1 if the client is connected to the xDS server, 0 otherwise.
-     * @param target Target of the gRPC channel.
-     * @param xdsServer Target URI of the xDS server with which the XdsClient is communicating.
-     */
+
     default void reportServerConnections(int isConnected, String target, String xdsServer) {
     }
   }

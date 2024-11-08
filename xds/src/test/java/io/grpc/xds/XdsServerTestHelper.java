@@ -152,11 +152,6 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate(String target) throws XdsInitializationException {
-      return getOrCreate(target, new MetricRecorder() {});
-    }
-
-    @Override
     public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
         throws XdsInitializationException {
       return new ObjectPool<XdsClient>() {
