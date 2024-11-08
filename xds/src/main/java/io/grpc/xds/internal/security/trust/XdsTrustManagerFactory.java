@@ -24,7 +24,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import io.envoyproxy.envoy.config.core.v3.DataSource.SpecifierCase;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
-import io.grpc.internal.GrpcUtil;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;
 import java.io.IOException;
@@ -95,7 +94,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
       checkArgument(
           certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
           "only static certificateValidationContext expected");
-    xdsX509TrustManager = createX509TrustManager(spiffeTrustMap, certificateValidationContext);
+      xdsX509TrustManager = createX509TrustManager(spiffeTrustMap, certificateValidationContext);
     }
   }
 
