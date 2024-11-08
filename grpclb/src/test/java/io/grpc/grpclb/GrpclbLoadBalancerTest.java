@@ -1788,7 +1788,7 @@ public class GrpclbLoadBalancerTest {
     StreamObserver<LoadBalanceRequest> lbRequestObserver;
     StreamObserver<LoadBalanceResponse> lbResponseObserver;
 
-    getFirstBalancerRPC(expectedInitialRequest, inOrder);
+    getFirstBalancerRpc(expectedInitialRequest, inOrder);
 
     // Will start backoff sequence 1 (10ns)
     inOrder.verify(backoffPolicyProvider).get();
@@ -1834,7 +1834,7 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
-    getFastForwardBeforeRetry(10 -4 -1, inOrder, expectedInitialRequest);
+    getFastForwardBeforeRetry(10 - 4 - 1, inOrder, expectedInitialRequest);
 
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();
@@ -1859,7 +1859,7 @@ public class GrpclbLoadBalancerTest {
     return lbResponseObserver;
   }
 
-  private void getFirstBalancerRPC(LoadBalanceRequest expectedInitialRequest, InOrder inOrder) {
+  private void getFirstBalancerRpc(LoadBalanceRequest expectedInitialRequest, InOrder inOrder) {
     // First balancer RPC
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
