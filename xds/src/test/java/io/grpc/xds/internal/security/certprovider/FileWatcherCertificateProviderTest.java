@@ -33,7 +33,6 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
@@ -48,22 +47,20 @@ import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import org.junit.After;
+import net.bytebuddy.matcher.ElementMatcher.Junction;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameter;
-import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
@@ -71,7 +68,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link FileWatcherCertificateProvider}. */
-@RunWith(Parameterized.class)
+@RunWith(JUnit4.class)
 public class FileWatcherCertificateProviderTest {
   /**
    * Expire time of cert SERVER_0_PEM_FILE.
@@ -88,10 +85,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-
-  @Parameter
-  public Boolean enableSpiffe;
-  private Boolean originalEnableSpiffe;
 
   private String certFile;
   private String keyFile;
@@ -113,22 +106,6 @@ public class FileWatcherCertificateProviderTest {
     provider =
         new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, rootFile, null, 600L,
             timeService, timeProvider);
-    saveEnvironment();
-    FileWatcherCertificateProvider.enableSpiffe = enableSpiffe;
-  }
-
-  private void saveEnvironment() {
-    originalEnableSpiffe = FileWatcherCertificateProvider.enableSpiffe;
-  }
-
-  @After
-  public void restoreEnvironment() {
-    FileWatcherCertificateProvider.enableSpiffe = originalEnableSpiffe;
-  }
-
-  @Parameters(name = "enableSpiffe={0}")
-  public static Collection<Boolean> data() {
-    return ImmutableList.of(true, false);
   }
 
   private void populateTarget(
@@ -288,9 +265,6 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void spiffeTrustMapFileUpdateOnly() throws Exception {
-    if (!enableSpiffe) {
-      return;
-    }
     provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, null,
         spiffeTrustMapFile, 600L, timeService, timeProvider);
     TestScheduledFuture<?> scheduledFuture =

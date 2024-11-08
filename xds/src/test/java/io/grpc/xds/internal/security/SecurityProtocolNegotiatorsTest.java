@@ -178,7 +178,7 @@ public class SecurityProtocolNegotiatorsTest {
             future.set(throwable);
           }
         });
-    assertThat(executor.forwardTime(600L, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(executor.runDueTasks()).isEqualTo(1);
     channel.runPendingTasks();
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);

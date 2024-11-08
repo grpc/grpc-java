@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SpiffeUtil;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
@@ -42,14 +41,10 @@ import java.util.logging.Logger;
 
 // TODO(sanjaypujare): abstract out common functionality into an an abstract superclass
 /** Implementation of {@link CertificateProvider} for file watching cert provider. */
-@VisibleForTesting
-public final class FileWatcherCertificateProvider extends CertificateProvider implements Runnable {
+final class FileWatcherCertificateProvider extends CertificateProvider implements Runnable {
   private static final Logger logger =
       Logger.getLogger(FileWatcherCertificateProvider.class.getName());
 
-  @VisibleForTesting
-  public static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
-      false);
   private final ScheduledExecutorService scheduledExecutorService;
   private final TimeProvider timeProvider;
   private final Path certFile;
@@ -80,19 +75,14 @@ public final class FileWatcherCertificateProvider extends CertificateProvider im
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.certFile = Paths.get(checkNotNull(certFile, "certFile"));
     this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
-    if (enableSpiffe) {
-      checkArgument((trustFile != null || spiffeTrustMapFile != null),
-          "either trustFile or spiffeTrustMapFile must be present");
-      if (spiffeTrustMapFile != null) {
-        this.spiffeTrustMapFile = Paths.get(spiffeTrustMapFile);
-        this.trustFile = null;
-      } else {
-        this.spiffeTrustMapFile = null;
-        this.trustFile = Paths.get(trustFile);
-      }
+    checkArgument((trustFile != null || spiffeTrustMapFile != null),
+        "either trustFile or spiffeTrustMapFile must be present");
+    if (spiffeTrustMapFile != null) {
+      this.spiffeTrustMapFile = Paths.get(spiffeTrustMapFile);
+      this.trustFile = null;
     } else {
       this.spiffeTrustMapFile = null;
-      this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
+      this.trustFile = Paths.get(trustFile);
     }
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
   }

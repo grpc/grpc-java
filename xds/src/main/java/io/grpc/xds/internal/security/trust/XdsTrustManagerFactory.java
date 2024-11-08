@@ -51,9 +51,6 @@ import javax.net.ssl.X509ExtendedTrustManager;
 public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   private static final Logger logger = Logger.getLogger(XdsTrustManagerFactory.class.getName());
-  @VisibleForTesting
-  public static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
-      false);
   private XdsX509TrustManager xdsX509TrustManager;
 
   /** Constructor constructs from a {@link CertificateValidationContext}. */
@@ -94,16 +91,11 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
       CertificateValidationContext certificateValidationContext,
       boolean validationContextIsStatic)
       throws CertStoreException {
-    if (enableSpiffe) {
-      if (validationContextIsStatic) {
-        checkArgument(
-            certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
-            "only static certificateValidationContext expected");
-      }
-      xdsX509TrustManager = createX509TrustManager(spiffeTrustMap, certificateValidationContext);
-    }
-    else {
-      throw new RuntimeException("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP flag must be enabled");
+    if (validationContextIsStatic) {
+      checkArgument(
+          certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
+          "only static certificateValidationContext expected");
+    xdsX509TrustManager = createX509TrustManager(spiffeTrustMap, certificateValidationContext);
     }
   }
 

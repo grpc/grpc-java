@@ -32,6 +32,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -54,8 +55,8 @@ public class FileWatcherCertificateProviderProviderTest {
   @Mock private TimeProvider timeProvider;
 
   @Parameter
-  public Boolean enableSpiffe;
-  private Boolean originalEnableSpiffe;
+  public boolean enableSpiffe;
+  private boolean originalEnableSpiffe;
   private FileWatcherCertificateProviderProvider provider;
 
   @Parameters(name = "enableSpiffe={0}")
@@ -68,12 +69,8 @@ public class FileWatcherCertificateProviderProviderTest {
     provider =
         new FileWatcherCertificateProviderProvider(
             fileWatcherCertificateProviderFactory, scheduledExecutorServiceFactory, timeProvider);
-    saveEnvironment();
-    FileWatcherCertificateProviderProvider.enableSpiffe = enableSpiffe;
-  }
-
-  private void saveEnvironment() {
     originalEnableSpiffe = FileWatcherCertificateProviderProvider.enableSpiffe;
+    FileWatcherCertificateProviderProvider.enableSpiffe = enableSpiffe;
   }
 
   @After
@@ -117,9 +114,7 @@ public class FileWatcherCertificateProviderProviderTest {
 
   @Test
   public void createProvider_minimalSpiffeConfig() throws IOException {
-    if (!enableSpiffe) {
-      return;
-    }
+    Assume.assumeTrue(enableSpiffe);
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
@@ -164,9 +159,7 @@ public class FileWatcherCertificateProviderProviderTest {
 
   @Test
   public void createProvider_spiffeConfig() throws IOException {
-    if (!enableSpiffe) {
-      return;
-    }
+    Assume.assumeTrue(enableSpiffe);
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")

@@ -36,44 +36,15 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Collection;
 import javax.net.ssl.TrustManager;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameter;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link XdsTrustManagerFactory}. */
-@RunWith(Parameterized.class)
+@RunWith(JUnit4.class)
 public class XdsTrustManagerFactoryTest {
-
-  @Parameter
-  public Boolean enableSpiffe;
-  private Boolean originalEnableSpiffe;
-
-  @Parameters(name = "enableSpiffe={0}")
-  public static Collection<Boolean> data() {
-    return ImmutableList.of(true, false);
-  }
-
-  @Before
-  public void setUp() throws IOException {
-    saveEnvironment();
-    XdsTrustManagerFactory.enableSpiffe = enableSpiffe;
-  }
-
-  private void saveEnvironment() {
-    originalEnableSpiffe = XdsTrustManagerFactory.enableSpiffe;
-  }
-
-  @After
-  public void restoreEnvironment() {
-    XdsTrustManagerFactory.enableSpiffe = originalEnableSpiffe;
-  }
 
   @Test
   public void constructor_fromFile() throws CertificateException, IOException, CertStoreException {
@@ -143,20 +114,8 @@ public class XdsTrustManagerFactoryTest {
     X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
     CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
         "san2");
-    XdsTrustManagerFactory factory;
-    if (!enableSpiffe) {
-      try {
-        factory = new XdsTrustManagerFactory(ImmutableMap
-            .of("example.com", ImmutableList.of(x509Cert)), staticValidationContext);
-        fail("exception expected");
-      } catch (RuntimeException e) {
-        assertThat(e).hasMessageThat()
-            .isEqualTo("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP flag must be enabled");
-        return;
-      }
-    }
     // Single domain and single cert
-    factory = new XdsTrustManagerFactory(ImmutableMap
+    XdsTrustManagerFactory factory = new XdsTrustManagerFactory(ImmutableMap
         .of("example.com", ImmutableList.of(x509Cert)), staticValidationContext);
     assertThat(factory).isNotNull();
     TrustManager[] tms = factory.getTrustManagers();

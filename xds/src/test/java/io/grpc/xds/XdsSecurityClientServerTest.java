@@ -71,9 +71,7 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
-import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProvider;
 import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
-import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -138,13 +136,11 @@ public class XdsSecurityClientServerTest {
   @Before
   public void setUp() throws IOException {
     saveEnvironment();
-    FileWatcherCertificateProvider.enableSpiffe = enableSpiffe;
     FileWatcherCertificateProviderProvider.enableSpiffe = enableSpiffe;
-    XdsTrustManagerFactory.enableSpiffe = enableSpiffe;
   }
 
   private void saveEnvironment() {
-    originalEnableSpiffe = FileWatcherCertificateProvider.enableSpiffe;
+    originalEnableSpiffe = FileWatcherCertificateProviderProvider.enableSpiffe;
   }
 
   @After
@@ -152,9 +148,7 @@ public class XdsSecurityClientServerTest {
     if (fakeNameResolverFactory != null) {
       NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverFactory);
     }
-    FileWatcherCertificateProvider.enableSpiffe = originalEnableSpiffe;
     FileWatcherCertificateProviderProvider.enableSpiffe = originalEnableSpiffe;
-    XdsTrustManagerFactory.enableSpiffe = originalEnableSpiffe;
   }
 
   @Test
