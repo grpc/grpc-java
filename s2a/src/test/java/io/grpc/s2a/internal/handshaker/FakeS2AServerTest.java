@@ -20,9 +20,7 @@ import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.ListeningExecutorService;
-import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -52,7 +50,6 @@ public final class FakeS2AServerTest {
   private static final ImmutableList<ByteString> FAKE_CERT_DER_CHAIN =
       ImmutableList.of(ByteString.copyFrom("fake-der-chain".getBytes(StandardCharsets.US_ASCII)));
   private String serverAddress;
-  private SessionResp response = null;
   private Server fakeS2AServer;
 
   @Before
@@ -60,7 +57,6 @@ public final class FakeS2AServerTest {
     fakeS2AServer = ServerBuilder.forPort(0).addService(new FakeS2AServer()).build();
     fakeS2AServer.start();
     serverAddress = String.format("localhost:%d", fakeS2AServer.getPort());
-    response = null;
   }
 
   @After
@@ -73,20 +69,18 @@ public final class FakeS2AServerTest {
   public void callS2AServerOnce_getTlsConfiguration_returnsValidResult()
       throws InterruptedException, IOException, java.util.concurrent.ExecutionException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
-    ListeningExecutorService service =
-        MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(1));
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
         Grpc.newChannelBuilder(serverAddress, InsecureChannelCredentials.create())
             .executor(executor)
             .build();
-
+    SettableFuture<SessionResp> respFuture = SettableFuture.create();
     try {
       S2AServiceGrpc.S2AServiceStub asyncStub = S2AServiceGrpc.newStub(channel);
       StreamObserver<SessionReq> requestObserver =
           asyncStub.setUpSession(
               new StreamObserver<SessionResp>() {
-                SessionResp recvResp = null;
+                SessionResp recvResp;
                 @Override
                 public void onNext(SessionResp resp) {
                   recvResp = resp;
@@ -94,12 +88,12 @@ public final class FakeS2AServerTest {
 
                 @Override
                 public void onError(Throwable t) {
-                  throw new RuntimeException(t);
+                  respFuture.setException(t);
                 }
 
                 @Override
                 public void onCompleted() {
-                  response = recvResp;
+                  respFuture.set(recvResp);
                 }
               });
       try {
@@ -145,44 +139,38 @@ public final class FakeS2AServerTest {
                             .addCiphersuites(
                                 Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)))
             .build();
-    ListenableFuture<SessionResp> respFuture =
-        service.submit(() -> {
-          while (this.response == null) {}
-          return this.response;
-        });
     assertThat(respFuture.get()).ignoringRepeatedFieldOrder().isEqualTo(expected);
   }
 
   @Test
   public void callS2AServerOnce_validatePeerCertifiate_returnsValidResult()
-      throws InterruptedException {
+      throws InterruptedException, java.util.concurrent.ExecutionException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
         Grpc.newChannelBuilder(serverAddress, InsecureChannelCredentials.create())
             .executor(executor)
             .build();
-
+    SettableFuture<SessionResp> respFuture = SettableFuture.create();
     try {
       S2AServiceGrpc.S2AServiceStub asyncStub = S2AServiceGrpc.newStub(channel);
-      CountDownLatch finishLatch = new CountDownLatch(1);
       StreamObserver<SessionReq> requestObserver =
           asyncStub.setUpSession(
               new StreamObserver<SessionResp>() {
+                private SessionResp recvResp;
                 @Override
                 public void onNext(SessionResp resp) {
-                  response = resp;
+                  recvResp = resp;
                 }
 
                 @Override
                 public void onError(Throwable t) {
-                  finishLatch.countDown();
-                  throw new RuntimeException(t);
+                  respFuture.setException(t);
                 }
 
                 @Override
                 public void onCompleted() {
-                  finishLatch.countDown();
+                  respFuture.set(recvResp);
                 }
               });
       try {
@@ -203,9 +191,6 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
-      if (!finishLatch.await(10, SECONDS)) {
-        throw new RuntimeException();
-      }
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
@@ -219,7 +204,7 @@ public final class FakeS2AServerTest {
                 ValidatePeerCertificateChainResp.newBuilder()
                     .setValidationResult(ValidatePeerCertificateChainResp.ValidationResult.SUCCESS))
             .build();
-    assertThat(response).ignoringRepeatedFieldOrder().isEqualTo(expected);
+    assertThat(respFuture.get()).ignoringRepeatedFieldOrder().isEqualTo(expected);
   }
 
   @Test
