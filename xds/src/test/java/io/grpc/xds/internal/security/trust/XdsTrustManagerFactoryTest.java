@@ -23,6 +23,8 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FIL
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
@@ -103,6 +105,46 @@ public class XdsTrustManagerFactoryTest {
     X509Certificate caCert = acceptedIssuers[0];
     assertThat(caCert)
         .isEqualTo(CertificateUtils.toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE))[0]);
+  }
+
+  @Test
+  public void constructor_fromSpiffeTrustMap()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
+    CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
+        "san2");
+    // Single domain and single cert
+    XdsTrustManagerFactory factory = new XdsTrustManagerFactory(ImmutableMap
+        .of("example.com", ImmutableList.of(x509Cert)), staticValidationContext);
+    assertThat(factory).isNotNull();
+    TrustManager[] tms = factory.getTrustManagers();
+    assertThat(tms).isNotNull();
+    assertThat(tms).hasLength(1);
+    TrustManager myTm = tms[0];
+    assertThat(myTm).isInstanceOf(XdsX509TrustManager.class);
+    XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) myTm;
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()).isNotNull();
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()).hasLength(1);
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()[0].getIssuerX500Principal().getName())
+        .isEqualTo("CN=testca,O=Internet Widgits Pty Ltd,ST=Some-State,C=AU");
+    // Multiple domains and multiple certs for one of it
+    X509Certificate anotherCert = TestUtils.loadX509Cert(CLIENT_PEM_FILE);
+    factory = new XdsTrustManagerFactory(ImmutableMap
+        .of("example.com", ImmutableList.of(x509Cert),
+            "google.com", ImmutableList.of(x509Cert, anotherCert)), staticValidationContext);
+    assertThat(factory).isNotNull();
+    tms = factory.getTrustManagers();
+    assertThat(tms).isNotNull();
+    assertThat(tms).hasLength(1);
+    myTm = tms[0];
+    assertThat(myTm).isInstanceOf(XdsX509TrustManager.class);
+    xdsX509TrustManager = (XdsX509TrustManager) myTm;
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()).isNotNull();
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()).hasLength(2);
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()[0].getIssuerX500Principal().getName())
+        .isEqualTo("CN=testca,O=Internet Widgits Pty Ltd,ST=Some-State,C=AU");
+    assertThat(xdsX509TrustManager.getAcceptedIssuers()[1].getIssuerX500Principal().getName())
+        .isEqualTo("CN=testca,O=Internet Widgits Pty Ltd,ST=Some-State,C=AU");
   }
 
   @Test

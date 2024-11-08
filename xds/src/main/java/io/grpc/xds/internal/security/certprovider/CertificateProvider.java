@@ -26,6 +26,7 @@ import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,6 +46,8 @@ public abstract class CertificateProvider implements Closeable {
 
     void updateTrustedRoots(List<X509Certificate> trustedRoots);
 
+    void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap);
+
     void onError(Status errorStatus);
   }
 
@@ -53,6 +56,7 @@ public abstract class CertificateProvider implements Closeable {
     private PrivateKey privateKey;
     private List<X509Certificate> certChain;
     private List<X509Certificate> trustedRoots;
+    private Map<String, List<X509Certificate>> spiffeTrustMap;
 
     @VisibleForTesting
     final Set<Watcher> downstreamWatchers = new HashSet<>();
@@ -64,6 +68,9 @@ public abstract class CertificateProvider implements Closeable {
       }
       if (trustedRoots != null) {
         sendLastTrustedRootsUpdate(watcher);
+      }
+      if (spiffeTrustMap != null) {
+        sendLastSpiffeTrustMapUpdate(watcher);
       }
     }
 
@@ -83,6 +90,10 @@ public abstract class CertificateProvider implements Closeable {
       watcher.updateTrustedRoots(trustedRoots);
     }
 
+    private void sendLastSpiffeTrustMapUpdate(Watcher watcher) {
+      watcher.updateSpiffeTrustMap(spiffeTrustMap);
+    }
+
     @Override
     public synchronized void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
       checkNotNull(key, "key");
@@ -100,6 +111,14 @@ public abstract class CertificateProvider implements Closeable {
       this.trustedRoots = trustedRoots;
       for (Watcher watcher : downstreamWatchers) {
         sendLastTrustedRootsUpdate(watcher);
+      }
+    }
+
+    @Override
+    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
+      this.spiffeTrustMap = spiffeTrustMap;
+      for (Watcher watcher : downstreamWatchers) {
+        sendLastSpiffeTrustMapUpdate(watcher);
       }
     }
 
@@ -147,7 +166,7 @@ public abstract class CertificateProvider implements Closeable {
   @Override
   public abstract void close();
 
-  /** Starts the cert refresh and watcher update cycle. */
+  /** Starts the async cert refresh and watcher update cycle. */
   public abstract void start();
 
   private final DistributorWatcher watcher;
