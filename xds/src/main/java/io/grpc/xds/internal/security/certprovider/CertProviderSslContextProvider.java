@@ -41,6 +41,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable protected PrivateKey savedKey;
   @Nullable protected List<X509Certificate> savedCertChain;
   @Nullable protected List<X509Certificate> savedTrustedRoots;
+  @Nullable protected Map<String, List<X509Certificate>> savedSpiffeTrustMap;
   private final boolean isUsingSystemRootCerts;
 
   protected CertProviderSslContextProvider(
@@ -152,14 +153,21 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     updateSslContextWhenReady();
   }
 
+  @Override
+  public final void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
+    savedSpiffeTrustMap = spiffeTrustMap;
+    updateSslContextWhenReady();
+  }
+
   private void updateSslContextWhenReady() {
     if (isMtls()) {
-      if (savedKey != null && (savedTrustedRoots != null || isUsingSystemRootCerts)) {
+      if (savedKey != null
+          && (savedTrustedRoots != null || isUsingSystemRootCerts || savedSpiffeTrustMap != null)) {
         updateSslContext();
         clearKeysAndCerts();
       }
     } else if (isClientSideTls()) {
-      if (savedTrustedRoots != null) {
+      if (savedTrustedRoots != null || savedSpiffeTrustMap != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
@@ -174,6 +182,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   private void clearKeysAndCerts() {
     savedKey = null;
     savedTrustedRoots = null;
+    savedSpiffeTrustMap = null;
     savedCertChain = null;
   }
 
