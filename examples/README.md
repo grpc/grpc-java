@@ -135,6 +135,28 @@ before trying out the examples.
 
 - [Keep Alive](src/main/java/io/grpc/examples/keepalive)
 
+- [Cancellation](src/main/java/io/grpc/examples/cancellation)
+
+- [Custom Load Balance](src/main/java/io/grpc/examples/customloadbalance)
+
+- [Deadline](src/main/java/io/grpc/examples/deadline)
+
+- [Error Details](src/main/java/io/grpc/examples/errordetails)
+
+- [Experimental](src/main/java/io/grpc/examples/experimental)
+
+- [GRPC Proxy](src/main/java/io/grpc/examples/grpcproxy)
+
+- [Header](src/main/java/io/grpc/examples/header)
+
+- [Load Balance](src/main/java/io/grpc/examples/loadbalance)
+
+- [Multiplex](src/main/java/io/grpc/examples/multiplex)
+
+- [Name Resolver](src/main/java/io/grpc/examples/nameresolve)
+
+- [Pre-Serialized](src/main/java/io/grpc/examples/preserialized)
+
 ### <a name="to-build-the-examples"></a> To build the examples
 
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
