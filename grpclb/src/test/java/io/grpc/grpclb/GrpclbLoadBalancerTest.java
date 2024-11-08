@@ -1780,30 +1780,15 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void grpclbBalancerStreamClosedAndRetried() throws Exception {
-    LoadBalanceRequest expectedInitialRequest =
-        LoadBalanceRequest.newBuilder()
-            .setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
-            .build();
+    LoadBalanceRequest expectedInitialRequest = getIntialLoadBalanceRequest();
+
     InOrder inOrder =
         inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1, backoffPolicy2, helper);
-    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
-    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
 
-    assertEquals(1, fakeOobChannels.size());
-    @SuppressWarnings("unused")
-    ManagedChannel oobChannel = fakeOobChannels.poll();
+    StreamObserver<LoadBalanceRequest> lbRequestObserver;
+    StreamObserver<LoadBalanceResponse> lbResponseObserver;
 
-    // First balancer RPC
-    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
-    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
-    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
-
-    // Balancer closes it immediately (erroneously)
-    lbResponseObserver.onCompleted();
+    getFirstBalancerRPC(expectedInitialRequest, inOrder);
 
     // Will start backoff sequence 1 (10ns)
     inOrder.verify(backoffPolicyProvider).get();
@@ -1811,17 +1796,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
     inOrder.verify(helper).refreshNameResolution();
 
-    // Fast-forward to a moment before the retry
-    fakeClock.forwardNanos(9);
-    verifyNoMoreInteractions(mockLbService);
-    // Then time for retry
-    fakeClock.forwardNanos(1);
-    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    lbRequestObserver = lbRequestObservers.poll();
-    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
-    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    lbResponseObserver = getFastForwardBeforeRetry(9, inOrder, expectedInitialRequest);
 
     // Balancer closes it with an error.
     lbResponseObserver.onError(Status.UNAVAILABLE.asException());
@@ -1832,16 +1807,7 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry
-    fakeClock.forwardNanos(100 - 1);
-    verifyNoMoreInteractions(mockLbService);
-    // Then time for retry
-    fakeClock.forwardNanos(1);
-    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    lbRequestObserver = lbRequestObservers.poll();
-    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
-    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    lbResponseObserver = getFastForwardBeforeRetry(100 - 1, inOrder, expectedInitialRequest);
 
     // Balancer sends initial response.
     lbResponseObserver.onNext(buildInitialResponse());
@@ -1868,21 +1834,58 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
-    fakeClock.forwardNanos(10 - 4 - 1);
-    verifyNoMoreInteractions(mockLbService);
-    // Then time for retry
-    fakeClock.forwardNanos(1);
-    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    assertEquals(1, lbRequestObservers.size());
-    lbRequestObserver = lbRequestObservers.poll();
-    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
-    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    getFastForwardBeforeRetry(10 -4 -1, inOrder, expectedInitialRequest);
 
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();
     verify(backoffPolicy1, times(2)).nextBackoffNanos();
     verify(backoffPolicy2, times(1)).nextBackoffNanos();
     verify(helper, times(4)).refreshNameResolution();
+  }
+
+  private StreamObserver<LoadBalanceResponse> getFastForwardBeforeRetry(int nanos, InOrder inOrder,
+      LoadBalanceRequest expectedInitialRequest) {
+    // Fast-forward to a moment before the retry
+    fakeClock.forwardNanos(nanos);
+    verifyNoMoreInteractions(mockLbService);
+    // Then time for retry
+    fakeClock.forwardNanos(1);
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    return lbResponseObserver;
+  }
+
+  private void getFirstBalancerRPC(LoadBalanceRequest expectedInitialRequest, InOrder inOrder) {
+    // First balancer RPC
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Balancer closes it immediately (erroneously)
+    lbResponseObserver.onCompleted();
+  }
+
+  private LoadBalanceRequest getIntialLoadBalanceRequest() {
+    LoadBalanceRequest expectedInitialRequest =
+        LoadBalanceRequest.newBuilder()
+            .setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build();
+
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
+
+    assertEquals(1, fakeOobChannels.size());
+    @SuppressWarnings("unused")
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+    return expectedInitialRequest;
   }
 
   @Test
