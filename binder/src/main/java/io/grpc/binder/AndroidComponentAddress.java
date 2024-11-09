@@ -25,6 +25,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.UserHandle;
 import com.google.common.base.Objects;
+import io.grpc.ExperimentalApi;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
 
@@ -214,6 +215,7 @@ public final class AndroidComponentAddress extends SocketAddress {
    * <p>Returns the {@link UserHandle}, or null which means that the Android user hosting the
    * current process will be used.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
   @Nullable
   public UserHandle getTargetUser() {
     return targetUser;
@@ -273,6 +275,7 @@ public final class AndroidComponentAddress extends SocketAddress {
     /**
      * See {@link AndroidComponentAddress#getTargetUser()}.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
     public Builder setTargetUser(@Nullable UserHandle targetUser) {
       this.targetUser = targetUser;
       return this;
