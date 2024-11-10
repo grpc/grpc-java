@@ -23,7 +23,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.util.MultiChildLoadBalancer.IS_PETIOLE_POLICY;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_RESET_HELPER;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.DO_NOT_VERIFY;
 import static io.grpc.xds.RingHashLoadBalancerTest.InitializationFlags.RESET_SUBCHANNEL_MOCKS;
@@ -48,6 +47,7 @@ import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
@@ -62,9 +62,11 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
+import io.grpc.internal.PickFirstLoadBalancerProviderAccessor;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.AbstractTestHelper;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -74,8 +76,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -115,6 +120,7 @@ public class RingHashLoadBalancerTest {
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private RingHashLoadBalancer loadBalancer;
+  private boolean defaultNewPickFirst = PickFirstLoadBalancerProvider.isEnabledNewPickFirst();
 
   @Before
   public void setUp() {
@@ -126,6 +132,7 @@ public class RingHashLoadBalancerTest {
 
   @After
   public void tearDown() {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(defaultNewPickFirst);
     loadBalancer.shutdown();
     for (Subchannel subchannel : subchannels.values()) {
       verify(subchannel).shutdown();
@@ -906,6 +913,74 @@ public class RingHashLoadBalancerTest {
     assertThat(description).contains("Address: FakeSocketAddress-server2, count: 3");
   }
 
+  @Test
+  public void subchannelHealthObserved() throws Exception {
+    // Only the new PF policy observes the new separate listener for health
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // PickFirst does most of this work. If the test fails, check IS_PETIOLE_POLICY
+    Map<Subchannel, LoadBalancer.SubchannelStateListener> healthListeners = new HashMap<>();
+    loadBalancer = new RingHashLoadBalancer(new ForwardingLoadBalancerHelper() {
+      @Override
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        Subchannel subchannel = super.createSubchannel(args.toBuilder()
+            .setAttributes(args.getAttributes().toBuilder()
+              .set(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY, true)
+              .build())
+            .build());
+        healthListeners.put(
+            subchannel, args.getOption(LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY));
+        return subchannel;
+      }
+
+      @Override
+      protected Helper delegate() {
+        return helper;
+      }
+    });
+
+    InOrder inOrder = Mockito.inOrder(helper);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
+    initializeLbSubchannels(new RingHashConfig(10, 100), servers);
+    Subchannel subchannel0 = subchannels.get(Collections.singletonList(servers.get(0)));
+    Subchannel subchannel1 = subchannels.get(Collections.singletonList(servers.get(1)));
+
+    // Subchannels go READY, but the LB waits for health
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    }
+    inOrder.verify(helper, times(0)).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+
+
+    healthListeners.get(subchannel0).onSubchannelState(
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("oh no")));
+
+    // Health results lets subchannels go READY
+    healthListeners.get(subchannel0).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    healthListeners.get(subchannel1).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    Random random = new Random(1);
+    Set<Subchannel> picks = new HashSet<>();
+    for (int i = 0; i < 10; i++) {
+      picks.add(
+          picker.pickSubchannel(getDefaultPickSubchannelArgs(random.nextLong())).getSubchannel());
+    }
+    assertThat(picks).containsExactly(subchannel0, subchannel1);
+
+    // Unhealthy subchannel skipped
+    healthListeners.get(subchannel0).onSubchannelState(
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("oh no")));
+    inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    picker = pickerCaptor.getValue();
+    random.setSeed(1);
+    picks.clear();
+    for (int i = 0; i < 10; i++) {
+      picks.add(
+          picker.pickSubchannel(getDefaultPickSubchannelArgs(random.nextLong())).getSubchannel());
+    }
+    assertThat(picks).containsExactly(subchannel1);
+  }
+
   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,
       List<EquivalentAddressGroup> servers, InitializationFlags... initFlags) {
 
@@ -950,8 +1025,6 @@ public class RingHashLoadBalancerTest {
     for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
       childLbState.getCurrentPicker()
           .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
-      assertThat(childLbState.getResolvedAddresses().getAttributes().get(IS_PETIOLE_POLICY))
-          .isTrue();
     }
 
     if (doVerifies) {
