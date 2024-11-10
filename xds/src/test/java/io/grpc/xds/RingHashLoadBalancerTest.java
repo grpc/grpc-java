@@ -177,13 +177,12 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
-    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
-    assertThat(subchannels.get(Collections.singletonList(childLbState.getEag()))).isNull();
+    assertThat(subchannels).isEmpty();
 
     // Picking subchannel triggers connection.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     pickerCaptor.getValue().pickSubchannel(args);
-    Subchannel subchannel = subchannels.get(Collections.singletonList(childLbState.getEag()));
+    Subchannel subchannel = subchannels.get(Collections.singletonList(servers.get(0)));
     InOrder inOrder = Mockito.inOrder(helper, subchannel);
     int expectedTimes = PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()
                             || !PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 2 : 1;
@@ -422,7 +421,7 @@ public class RingHashLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
     // Create subchannel for the first address
-    loadBalancer.getChildLbStateEag(servers.get(0)).getCurrentPicker()
+    loadBalancer.getChildLbStates().iterator().next().getCurrentPicker()
         .pickSubchannel(getDefaultPickSubchannelArgs(hashFunc.hashVoid()));
     verifyConnection(1);
 
