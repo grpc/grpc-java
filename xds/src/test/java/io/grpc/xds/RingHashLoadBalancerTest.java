@@ -950,10 +950,6 @@ public class RingHashLoadBalancerTest {
     }
     inOrder.verify(helper, times(0)).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
-
-    healthListeners.get(subchannel0).onSubchannelState(
-        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("oh no")));
-
     // Health results lets subchannels go READY
     healthListeners.get(subchannel0).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     healthListeners.get(subchannel1).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
