@@ -260,6 +260,7 @@ public final class XdsTestClient {
     }
   }
 
+  @SuppressWarnings("deprecation")
   private void run() {
     if (enableCsmObservability) {
       csmObservability = CsmObservability.newBuilder()

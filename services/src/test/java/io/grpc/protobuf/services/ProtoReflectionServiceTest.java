@@ -79,6 +79,7 @@ public class ProtoReflectionServiceTest {
   private ServerReflectionGrpc.ServerReflectionStub stub;
 
   @Before
+  @SuppressWarnings("deprecation")
   public void setUp() throws Exception {
     reflectionService = ProtoReflectionService.newInstance();
     Server server =

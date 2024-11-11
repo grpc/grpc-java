@@ -191,7 +191,7 @@ public final class XdsTestServer {
     }
   }
 
-  @SuppressWarnings("AddressSelection")
+  @SuppressWarnings({"AddressSelection", "deprecation"})
   void start() throws Exception {
     if (enableCsmObservability) {
       csmObservability = CsmObservability.newBuilder()
