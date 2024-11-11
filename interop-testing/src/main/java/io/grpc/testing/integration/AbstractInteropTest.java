@@ -1703,15 +1703,15 @@ public abstract class AbstractInteropTest {
 
 
   private static class ThreadResults {
-    private final AtomicInteger threadFailures = new AtomicInteger(0);
-    private final AtomicInteger iterationsDone = new AtomicInteger(0);
-    private final Histogram latencies = new Histogram(4);
+    private int threadFailures = 0;
+    private int iterationsDone = 0;
+    private Histogram latencies = new Histogram(4);
 
-    public AtomicInteger getThreadFailures() {
+    public int getThreadFailures() {
       return threadFailures;
     }
 
-    public AtomicInteger getIterationsDone() {
+    public int getIterationsDone() {
       return iterationsDone;
     }
 
@@ -1722,7 +1722,7 @@ public abstract class AbstractInteropTest {
 
   private SoakIterationResult performOneSoakIteration(
       TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize, int soakResponseSize)
-      throws Exception {
+      throws InterruptedException {
     long startNs = System.nanoTime();
     Status status = Status.OK;
     try {
@@ -1751,7 +1751,6 @@ public abstract class AbstractInteropTest {
    */
   public void performSoakTest(
       String serverUri,
-      // boolean resetChannelPerIteration,
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
@@ -1761,7 +1760,7 @@ public abstract class AbstractInteropTest {
       int soakResponseSize,
       int numThreads,
       Function<ManagedChannel, ManagedChannel> maybeCreateNewChannel)
-      throws Exception {
+      throws InterruptedException {
     if (soakIterations % numThreads != 0) {
       throw new IllegalArgumentException("soakIterations must be evenly divisible by numThreads.");
     }
@@ -1775,33 +1774,37 @@ public abstract class AbstractInteropTest {
     }
     for (int threadInd = 0; threadInd < numThreads; threadInd++) {
       final int currentThreadInd = threadInd;
-      threads[threadInd] = new Thread(() -> executeSoakTestInThreads(
-          soakIterationsPerThread,
-          startNs,
-          minTimeMsBetweenRpcs,
-          soakRequestSize,
-          soakResponseSize,
-          maxAcceptablePerIterationLatencyMs,
-          overallTimeoutSeconds,
-          serverUri,
-          threadResultsList.get(currentThreadInd),
-          sharedChannel,
-          maybeCreateNewChannel));
+      threads[threadInd] = new Thread(() -> {
+        try {
+          executeSoakTestInThreads(
+              soakIterationsPerThread,
+              startNs,
+              minTimeMsBetweenRpcs,
+              soakRequestSize,
+              soakResponseSize,
+              maxAcceptablePerIterationLatencyMs,
+              overallTimeoutSeconds,
+              serverUri,
+              threadResultsList.get(currentThreadInd),
+              sharedChannel,
+              maybeCreateNewChannel);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          System.err.println("Thread interrupted: " + e.getMessage());
+        }
+      });
       threads[threadInd].start();
     }
     for (Thread thread : threads) {
-        try {
           thread.join();
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-        }}
+    }
 
     int totalFailures = 0;
     AtomicInteger iterationsDone = new AtomicInteger(0);
     Histogram latencies = new Histogram(4);
     for (ThreadResults threadResult :threadResultsList) {
-      totalFailures += threadResult.getThreadFailures().get();
-      iterationsDone.addAndGet(threadResult.getIterationsDone().get());
+      totalFailures += threadResult.getThreadFailures();
+      iterationsDone.addAndGet(threadResult.getIterationsDone());
       latencies.add(threadResult.getLatencies());
     }
     System.err.println(
@@ -1838,17 +1841,14 @@ public abstract class AbstractInteropTest {
     shutdownChannel(sharedChannel);
   }
 
-  private void shutdownChannel(ManagedChannel channel) {
+  private void shutdownChannel(ManagedChannel channel) throws InterruptedException {
     if (channel != null) {
       channel.shutdownNow();
-      try {
-        channel.awaitTermination(10, TimeUnit.SECONDS);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
+      channel.awaitTermination(10, TimeUnit.SECONDS);
     }
   }
-  protected ManagedChannel maybeCreateNewChannel(ManagedChannel currentChannel, boolean resetChannel) {
+  protected ManagedChannel maybeCreateNewChannel(ManagedChannel currentChannel,
+      boolean resetChannel) throws InterruptedException {
     if (resetChannel) {
       shutdownChannel(currentChannel);
       return createChannel();
@@ -1867,9 +1867,9 @@ public abstract class AbstractInteropTest {
       String serverUri,
       ThreadResults threadResults,
       ManagedChannel sharedChannel,
-      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) {
+      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException{
     ManagedChannel currentChannel = sharedChannel;
-    TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
+    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc
         .newBlockingStub(currentChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
 
@@ -1879,22 +1879,12 @@ public abstract class AbstractInteropTest {
       }
       long earliestNextStartNs = System.nanoTime()
           + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-      ManagedChannel newChannel = maybeCreateChannel.apply(currentChannel);
-      if (newChannel != currentChannel) {
-        currentChannel = newChannel
-        currentStub = TestServiceGrpc
-            .newBlockingStub(currentChannel)
-            .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-      }
-      SoakIterationResult result;
-      try {
-        result = performOneSoakIteration(currentStub, soakRequestSize, soakResponseSize);
-      } catch (Exception e) {
-        threadResults.getThreadFailures().incrementAndGet();
-        System.err.println("Error during soak iteration: " + e.getMessage());
-        continue; // Skip to the next iteration
-      }
 
+      currentChannel = maybeCreateChannel.apply(currentChannel);
+      TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
+          .newBlockingStub(currentChannel).
+          withInterceptors(recordClientCallInterceptor(clientCallCapture));
+      SoakIterationResult result = performOneSoakIteration(currentStub, soakRequestSize, soakResponseSize);
       SocketAddress peer = clientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       StringBuilder logStr = new StringBuilder(
@@ -1903,25 +1893,21 @@ public abstract class AbstractInteropTest {
               "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s", Thread.currentThread().getId(),
               i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
       if (!result.getStatus().equals(Status.OK)) {
-        threadResults.getThreadFailures().incrementAndGet();
+        threadResults.threadFailures++;
         logStr.append(String.format(" failed: %s", result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
-        threadResults.getThreadFailures().incrementAndGet();
+        threadResults.threadFailures++;
         logStr.append(
             " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
       } else {
         logStr.append(" succeeded");
       }
       System.err.println(logStr.toString());
-      threadResults.getIterationsDone().incrementAndGet();
+      threadResults.iterationsDone++;
       threadResults.getLatencies().recordValue(result.getLatencyMs());
       long remainingNs = earliestNextStartNs - System.nanoTime();
       if (remainingNs > 0) {
-        try {
-          TimeUnit.NANOSECONDS.sleep(remainingNs);
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-        }
+        TimeUnit.NANOSECONDS.sleep(remainingNs);
       }
     }
   }
