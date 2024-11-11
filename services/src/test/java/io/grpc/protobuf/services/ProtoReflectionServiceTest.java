@@ -71,7 +71,8 @@ public class ProtoReflectionServiceTest {
 
   private static final String TEST_HOST = "localhost";
   private MutableHandlerRegistry handlerRegistry = new MutableHandlerRegistry();
-  private BindableService reflectionService;
+  @SuppressWarnings("deprecation")
+  BindableService reflectionService = ProtoReflectionService.newInstance();
   private ServerServiceDefinition dynamicService =
       new DynamicServiceGrpc.DynamicServiceImplBase() {}.bindService();
   private ServerServiceDefinition anotherDynamicService =
@@ -79,9 +80,7 @@ public class ProtoReflectionServiceTest {
   private ServerReflectionGrpc.ServerReflectionStub stub;
 
   @Before
-  @SuppressWarnings("deprecation")
   public void setUp() throws Exception {
-    reflectionService = ProtoReflectionService.newInstance();
     Server server =
         InProcessServerBuilder.forName("proto-reflection-test")
             .directExecutor()
