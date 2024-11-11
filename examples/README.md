@@ -27,6 +27,7 @@ before trying out the examples.
 
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
+
 - <details>
   <summary>Hedging</summary>
 
@@ -155,7 +156,7 @@ before trying out the examples.
 
 - [Name Resolver](src/main/java/io/grpc/examples/nameresolve)
 
-- [Pre-Serialized](src/main/java/io/grpc/examples/preserialized)
+- [Pre-Serialized Messages](src/main/java/io/grpc/examples/preserialized)
 
 ### <a name="to-build-the-examples"></a> To build the examples
 
