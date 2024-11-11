@@ -33,8 +33,10 @@ import io.grpc.reflection.v1.ServerReflectionResponse;
  * <p>Separately tracks mutable and immutable services. Throws an exception if either group of
  * services contains multiple Protobuf files with declarations of the same service, method, type, or
  * extension.
+ * @deprecated Use {@link ProtoReflectionServiceV1} instead.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
+@Deprecated
 public final class ProtoReflectionService implements BindableService {
 
   private ProtoReflectionService() {
