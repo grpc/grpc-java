@@ -27,7 +27,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Int64Value;
-import com.google.protobuf.Message;
+// import com.google.protobuf.Message;
+import com.google.protobuf.MessageLite;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ConnectivityState;
@@ -154,33 +155,44 @@ public final class ChannelzProtoUtilTest {
       .setData(serverData)
       .build();
 
-  private final SocketOption sockOptLingerDisabled = SocketOption
-      .newBuilder()
-      .setName("SO_LINGER")
-      .setAdditional(
-          Any.pack(SocketOptionLinger.getDefaultInstance()))
-      .build();
+  private final SocketOption sockOptLingerDisabled =
+      SocketOption.newBuilder()
+          .setName("SO_LINGER")
+          .setAdditional(
+              Any.newBuilder()
+                  .setTypeUrl("type.googleapis.com/grpc.channelz.v1.SocketOptionLinger")
+                  .setValue(SocketOptionLinger.getDefaultInstance().toByteString())
+                  .build())
+          .build();
 
-  private final SocketOption sockOptlinger10s = SocketOption
-      .newBuilder()
-      .setName("SO_LINGER")
-      .setAdditional(
-          Any.pack(SocketOptionLinger
-              .newBuilder()
-              .setActive(true)
-              .setDuration(Durations.fromSeconds(10))
-              .build()))
-      .build();
+  private final SocketOption sockOptlinger10s =
+      SocketOption.newBuilder()
+          .setName("SO_LINGER")
+          .setAdditional(
+              Any.newBuilder()
+                  .setTypeUrl("type.googleapis.com/grpc.channelz.v1.SocketOptionLinger")
+                  .setValue(
+                      SocketOptionLinger.newBuilder()
+                          .setActive(true)
+                          .setDuration(Durations.fromSeconds(10))
+                          .build()
+                          .toByteString())
+                  .build())
+          .build();
 
-  private final SocketOption sockOptTimeout200ms = SocketOption
-      .newBuilder()
-      .setName("SO_TIMEOUT")
-      .setAdditional(
-          Any.pack(SocketOptionTimeout
-          .newBuilder()
-          .setDuration(Durations.fromMillis(200))
-          .build())
-      ).build();
+  private final SocketOption sockOptTimeout200ms =
+      SocketOption.newBuilder()
+          .setName("SO_TIMEOUT")
+          .setAdditional(
+              Any.newBuilder()
+                  .setTypeUrl("type.googleapis.com/grpc.channelz.v1.SocketOptionTimeout")
+                  .setValue(
+                      SocketOptionTimeout.newBuilder()
+                          .setDuration(Durations.fromMillis(200))
+                          .build()
+                          .toByteString())
+                  .build())
+          .build();
 
   private final SocketOption sockOptAdditional = SocketOption
       .newBuilder()
@@ -221,43 +233,46 @@ public final class ChannelzProtoUtilTest {
       .setReordering(728)
       .build();
 
-  private final SocketOption socketOptionTcpInfo = SocketOption
-      .newBuilder()
-      .setName("TCP_INFO")
-      .setAdditional(
-          Any.pack(
-              SocketOptionTcpInfo.newBuilder()
-                  .setTcpiState(70)
-                  .setTcpiCaState(71)
-                  .setTcpiRetransmits(72)
-                  .setTcpiProbes(73)
-                  .setTcpiBackoff(74)
-                  .setTcpiOptions(75)
-                  .setTcpiSndWscale(76)
-                  .setTcpiRcvWscale(77)
-                  .setTcpiRto(78)
-                  .setTcpiAto(79)
-                  .setTcpiSndMss(710)
-                  .setTcpiRcvMss(711)
-                  .setTcpiUnacked(712)
-                  .setTcpiSacked(713)
-                  .setTcpiLost(714)
-                  .setTcpiRetrans(715)
-                  .setTcpiFackets(716)
-                  .setTcpiLastDataSent(717)
-                  .setTcpiLastAckSent(718)
-                  .setTcpiLastDataRecv(719)
-                  .setTcpiLastAckRecv(720)
-                  .setTcpiPmtu(721)
-                  .setTcpiRcvSsthresh(722)
-                  .setTcpiRtt(723)
-                  .setTcpiRttvar(724)
-                  .setTcpiSndSsthresh(725)
-                  .setTcpiSndCwnd(726)
-                  .setTcpiAdvmss(727)
-                  .setTcpiReordering(728)
-                  .build()))
-      .build();
+  private final SocketOption socketOptionTcpInfo =
+      SocketOption.newBuilder()
+          .setName("TCP_INFO")
+          .setAdditional(
+              Any.newBuilder()
+                  .setTypeUrl("type.googleapis.com/grpc.channelz.v1.SocketOptionTcpInfo")
+                  .setValue(
+                      SocketOptionTcpInfo.newBuilder()
+                          .setTcpiState(70)
+                          .setTcpiCaState(71)
+                          .setTcpiRetransmits(72)
+                          .setTcpiProbes(73)
+                          .setTcpiBackoff(74)
+                          .setTcpiOptions(75)
+                          .setTcpiSndWscale(76)
+                          .setTcpiRcvWscale(77)
+                          .setTcpiRto(78)
+                          .setTcpiAto(79)
+                          .setTcpiSndMss(710)
+                          .setTcpiRcvMss(711)
+                          .setTcpiUnacked(712)
+                          .setTcpiSacked(713)
+                          .setTcpiLost(714)
+                          .setTcpiRetrans(715)
+                          .setTcpiFackets(716)
+                          .setTcpiLastDataSent(717)
+                          .setTcpiLastAckSent(718)
+                          .setTcpiLastDataRecv(719)
+                          .setTcpiLastAckRecv(720)
+                          .setTcpiPmtu(721)
+                          .setTcpiRcvSsthresh(722)
+                          .setTcpiRtt(723)
+                          .setTcpiRttvar(724)
+                          .setTcpiSndSsthresh(725)
+                          .setTcpiSndCwnd(726)
+                          .setTcpiAdvmss(727)
+                          .setTcpiReordering(728)
+                          .build()
+                          .toByteString()))
+          .build();
 
   private final TestListenSocket listenSocket = new TestListenSocket();
   private final SocketRef listenSocketRef = SocketRef
@@ -346,7 +361,7 @@ public final class ChannelzProtoUtilTest {
     for (ConnectivityState connectivityState : ConnectivityState.values()) {
       assertEquals(
           connectivityState.name(),
-          ChannelzProtoUtil.toState(connectivityState).getValueDescriptor().getName());
+          ChannelzProtoUtil.toState(connectivityState).name()); // OK because test isn't proguarded.
     }
     assertEquals(State.UNKNOWN, ChannelzProtoUtil.toState(null));
   }
@@ -475,8 +490,12 @@ public final class ChannelzProtoUtilTest {
   @Test
   public void socketSecurityOther() throws Exception {
     // what is packed here is not important, just pick some proto message
-    Message contents = GetChannelRequest.newBuilder().setChannelId(1).build();
-    Any packed = Any.pack(contents);
+    MessageLite contents = GetChannelRequest.newBuilder().setChannelId(1).build();
+    Any packed =
+        Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/grpc.channelz.v1.GetChannelRequest")
+            .setValue(contents.toByteString())
+            .build();
     socket.security
         = new InternalChannelz.Security(
             new InternalChannelz.OtherSecurity("other_security", packed));
