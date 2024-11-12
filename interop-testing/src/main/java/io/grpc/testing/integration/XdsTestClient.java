@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
+import io.grpc.BindableService;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -273,11 +274,13 @@ public final class XdsTestClient {
           .build();
       csmObservability.registerGlobal();
     }
+    @SuppressWarnings("deprecation")
+    BindableService oldReflectionService = ProtoReflectionService.newInstance();
     statsServer =
         Grpc.newServerBuilderForPort(statsPort, InsecureServerCredentials.create())
             .addService(new XdsStatsImpl())
             .addService(new ConfigureUpdateServiceImpl())
-            .addService(ProtoReflectionService.newInstance())
+            .addService(oldReflectionService)
             .addService(ProtoReflectionServiceV1.newInstance())
             .addServices(AdminInterface.getStandardServices())
             .build();

@@ -186,8 +186,7 @@ public class LeastRequestLoadBalancerTest {
     Subchannel removedSubchannel = getSubchannel(removedEag);
     Subchannel oldSubchannel = getSubchannel(oldEag1);
     SubchannelStateListener removedListener =
-        testHelperInstance.getSubchannelStateListeners()
-            .get(testHelperInstance.getRealForMockSubChannel(removedSubchannel));
+        testHelperInstance.getSubchannelStateListener(removedSubchannel);
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
@@ -200,8 +199,6 @@ public class LeastRequestLoadBalancerTest {
 
     verify(removedSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).requestConnection();
-
-    assertThat(getChildEags(loadBalancer)).containsExactly(removedEag, oldEag1);
 
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
@@ -219,8 +216,6 @@ public class LeastRequestLoadBalancerTest {
     removedListener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
     deliverSubchannelState(newSubchannel, ConnectivityStateInfo.forNonError(READY));
 
-    assertThat(getChildEags(loadBalancer)).containsExactly(oldEag2, newEag);
-
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
 
@@ -233,28 +228,6 @@ public class LeastRequestLoadBalancerTest {
     return subchannels.get(Collections.singletonList(removedEag));
   }
 
-  private Subchannel getSubchannel(ChildLbState childLbState) {
-    return subchannels.get(Collections.singletonList(childLbState.getEag()));
-  }
-
-  private static List<Object> getChildEags(LeastRequestLoadBalancer loadBalancer) {
-    return loadBalancer.getChildLbStates().stream()
-        .map(ChildLbState::getEag)
-        // .map(EquivalentAddressGroup::getAddresses)
-        .collect(Collectors.toList());
-  }
-
-  private List<Subchannel> getSubchannels(LeastRequestLoadBalancer lb) {
-    return lb.getChildLbStates().stream()
-        .map(this::getSubchannel)
-        .collect(Collectors.toList());
-  }
-
-  private LeastRequestLbState getChildLbState(PickResult pickResult) {
-    EquivalentAddressGroup eag = pickResult.getSubchannel().getAddresses();
-    return (LeastRequestLbState) loadBalancer.getChildLbStateEag(eag);
-  }
-
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -263,7 +236,7 @@ public class LeastRequestLoadBalancerTest {
             .build());
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
-    Subchannel subchannel = getSubchannel(childLbState);
+    Subchannel subchannel = getSubchannel(servers.get(0));
 
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
     assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
@@ -331,8 +304,9 @@ public class LeastRequestLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
+    List<Subchannel> savedSubchannels = new ArrayList<>(subchannels.values());
     loadBalancer.shutdown();
-    for (Subchannel sc : getSubchannels(loadBalancer)) {
+    for (Subchannel sc : savedSubchannels) {
       verify(sc).shutdown();
       // When the subchannel is being shut down, a SHUTDOWN connectivity state is delivered
       // back to the subchannel state listener.
@@ -353,8 +327,10 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
     // Simulate state transitions for each subchannel individually.
-    for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
-      Subchannel sc = getSubchannel(childLbState);
+    List<ChildLbState> children = new ArrayList<>(loadBalancer.getChildLbStates());
+    for (int i = 0; i < children.size(); i++) {
+      ChildLbState childLbState = children.get(i);
+      Subchannel sc = getSubchannel(servers.get(i));
       Status error = Status.UNKNOWN.withDescription("connection broken");
       deliverSubchannelState(sc, ConnectivityStateInfo.forTransientFailure(error));
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(CONNECTING));
@@ -369,7 +345,7 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verifyNoMoreInteractions();
 
     ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
-    Subchannel subchannel = getSubchannel(childLbState);
+    Subchannel subchannel = getSubchannel(servers.get(0));
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     assertThat(childLbState.getCurrentState()).isEqualTo(READY);
     inOrder.verify(helper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
@@ -411,7 +387,7 @@ public class LeastRequestLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
 
     // Simulate state transitions for each subchannel individually.
-    for (Subchannel sc : getSubchannels(loadBalancer)) {
+    for (Subchannel sc : subchannels.values()) {
       verify(sc).requestConnection();
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(CONNECTING));
       Status error = Status.UNKNOWN.withDescription("connection broken");
@@ -449,8 +425,8 @@ public class LeastRequestLoadBalancerTest {
           ((LeastRequestLbState) childLbStates.get(i)).getActiveRequests());
     }
 
-    for (ChildLbState cs : childLbStates) {
-      deliverSubchannelState(getSubchannel(cs), ConnectivityStateInfo.forNonError(READY));
+    for (Subchannel sc : subchannels.values()) {
+      deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(READY));
     }
 
     // Capture the active ReadyPicker once all subchannels are READY
@@ -460,37 +436,37 @@ public class LeastRequestLoadBalancerTest {
 
     ReadyPicker picker = (ReadyPicker) pickerCaptor.getValue();
 
-    assertThat(picker.getChildEags())
-        .containsExactlyElementsIn(childLbStates.stream().map(ChildLbState::getEag).toArray());
+    assertThat(picker.getChildPickers()).containsExactlyElementsIn(
+        childLbStates.stream().map(ChildLbState::getCurrentPicker).toArray());
 
     // Make random return 0, then 2 for the sample indexes.
     when(mockRandom.nextInt(childLbStates.size())).thenReturn(0, 2);
     PickResult pickResult1 = picker.pickSubchannel(mockArgs);
     verify(mockRandom, times(choiceCount)).nextInt(childLbStates.size());
-    assertEquals(childLbStates.get(0), getChildLbState(pickResult1));
+    assertThat(pickResult1.getSubchannel()).isEqualTo(getSubchannel(servers.get(0)));
     // This simulates sending the actual RPC on the picked channel
     ClientStreamTracer streamTracer1 =
         pickResult1.getStreamTracerFactory()
             .newClientStreamTracer(StreamInfo.newBuilder().build(), new Metadata());
     streamTracer1.streamCreated(Attributes.EMPTY, new Metadata());
-    assertEquals(1, getChildLbState(pickResult1).getActiveRequests());
+    assertEquals(1, ((LeastRequestLbState) childLbStates.get(0)).getActiveRequests());
 
     // For the second pick it should pick the one with lower inFlight.
     when(mockRandom.nextInt(childLbStates.size())).thenReturn(0, 2);
     PickResult pickResult2 = picker.pickSubchannel(mockArgs);
     // Since this is the second pick we expect the total random samples to be choiceCount * 2
     verify(mockRandom, times(choiceCount * 2)).nextInt(childLbStates.size());
-    assertEquals(childLbStates.get(2), getChildLbState(pickResult2));
+    assertThat(pickResult2.getSubchannel()).isEqualTo(getSubchannel(servers.get(2)));
 
     // For the third pick we unavoidably pick subchannel with index 1.
     when(mockRandom.nextInt(childLbStates.size())).thenReturn(1, 1);
     PickResult pickResult3 = picker.pickSubchannel(mockArgs);
     verify(mockRandom, times(choiceCount * 3)).nextInt(childLbStates.size());
-    assertEquals(childLbStates.get(1), getChildLbState(pickResult3));
+    assertThat(pickResult3.getSubchannel()).isEqualTo(getSubchannel(servers.get(1)));
 
     // Finally ensure a finished RPC decreases inFlight
     streamTracer1.streamClosed(Status.OK);
-    assertEquals(0, getChildLbState(pickResult1).getActiveRequests());
+    assertEquals(0, ((LeastRequestLbState) childLbStates.get(0)).getActiveRequests());
   }
 
   @Test
@@ -648,8 +624,8 @@ public class LeastRequestLoadBalancerTest {
 
   private List<Subchannel> getList(SubchannelPicker picker) {
     if (picker instanceof ReadyPicker) {
-      return ((ReadyPicker) picker).getChildEags().stream()
-          .map(this::getSubchannel)
+      return ((ReadyPicker) picker).getChildPickers().stream()
+          .map((p) -> p.pickSubchannel(mockArgs).getSubchannel())
           .collect(Collectors.toList());
     } else {
       return Collections.emptyList();
