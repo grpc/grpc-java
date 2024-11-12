@@ -351,6 +351,16 @@ public final class ChannelzProtoUtilTest {
   }
 
   @Test
+  public void toSeverity() {
+    for (Severity severity : Severity.values()) {
+      assertEquals(
+          severity.name(),
+          ChannelzProtoUtil.toSeverity(severity).name()); // OK because test isn't proguarded.
+    }
+    assertEquals(ChannelTraceEvent.Severity.CT_UNKNOWN, ChannelzProtoUtil.toSeverity(null));
+  }
+
+  @Test
   public void toSocketRef() {
     assertEquals(socketRef, ChannelzProtoUtil.toSocketRef(socket));
   }

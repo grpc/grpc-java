@@ -394,7 +394,10 @@ final class ChannelzProtoUtil {
     return Collections.unmodifiableList(channelTraceEvents);
   }
 
-  private static Severity toSeverity(Event.Severity severity) {
+  static Severity toSeverity(Event.Severity severity) {
+    if (severity == null) {
+      return Severity.CT_UNKNOWN;
+    }
     switch (severity) {
       case CT_INFO:
         return Severity.CT_INFO;
