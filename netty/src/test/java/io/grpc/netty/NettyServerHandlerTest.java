@@ -1343,11 +1343,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   private ByteBuf emptyGrpcFrame(int streamId, boolean endStream) throws Exception {
     ByteBuf buf = NettyTestUtil.messageFrame("");
-    try {
-      return dataFrame(streamId, endStream, buf);
-    } finally {
-      buf.clear();
-    }
+    return dataFrame(streamId, endStream, buf);
   }
 
   @Override

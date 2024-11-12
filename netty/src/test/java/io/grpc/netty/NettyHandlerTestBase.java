@@ -284,10 +284,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
 
   protected final ByteBuf dataFrame(int streamId, boolean endStream, ByteBuf content) {
     ChannelHandlerContext ctx = newMockContext();
-    DefaultHttp2FrameWriter defaultHttp2FrameWriter = new DefaultHttp2FrameWriter();
-    defaultHttp2FrameWriter.writeData(ctx, streamId, content, 0, endStream, newPromise());
-    content.clear();
-    defaultHttp2FrameWriter.close();
+    new DefaultHttp2FrameWriter().writeData(ctx, streamId, content, 0, endStream, newPromise());
     return captureWrite(ctx);
   }
 
