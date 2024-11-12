@@ -28,11 +28,11 @@ import io.grpc.reflection.v1.ServerReflectionResponse;
 
 /**
  * Provides a reflection service for Protobuf services (including the reflection service itself).
- * Uses the deprecated v1alpha proto. New users should use ProtoReflectionServiceV1 instead.
  *
  * <p>Separately tracks mutable and immutable services. Throws an exception if either group of
  * services contains multiple Protobuf files with declarations of the same service, method, type, or
  * extension.
+ * Uses the deprecated v1alpha proto. New users should use {@link ProtoReflectionServiceV1} instead.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
 public final class ProtoReflectionService implements BindableService {
@@ -40,11 +40,13 @@ public final class ProtoReflectionService implements BindableService {
   private ProtoReflectionService() {
   }
 
+  @Deprecated
   public static BindableService newInstance() {
     return new ProtoReflectionService();
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public ServerServiceDefinition bindService() {
     ServerServiceDefinition serverServiceDefinitionV1 = ProtoReflectionServiceV1.newInstance()
         .bindService();

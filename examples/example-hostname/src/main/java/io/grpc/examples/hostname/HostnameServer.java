@@ -21,7 +21,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
-import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.services.HealthStatusManager;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -53,7 +53,7 @@ public final class HostnameServer {
     HealthStatusManager health = new HealthStatusManager();
     final Server server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new HostnameGreeter(hostname))
-        .addService(ProtoReflectionService.newInstance())
+        .addService(ProtoReflectionServiceV1.newInstance())
         .addService(health.getHealthService())
         .build()
         .start();
