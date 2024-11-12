@@ -16,6 +16,7 @@
 
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
@@ -23,7 +24,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import com.google.common.collect.Maps;
 import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
@@ -63,10 +63,8 @@ import org.mockito.InOrder;
  */
 public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
-  private final Map<Subchannel, Subchannel> mockToRealSubChannelMap = new HashMap<>();
+  private final Map<Subchannel, TestSubchannel> mockToRealSubChannelMap = new HashMap<>();
   protected final Map<Subchannel, Subchannel> realToMockSubChannelMap = new HashMap<>();
-  private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
-      Maps.newLinkedHashMap();
   private final FakeClock fakeClock;
   private final SynchronizationContext syncContext;
 
@@ -87,20 +85,12 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
     this.syncContext = syncContext;
   }
 
-  public Map<Subchannel, Subchannel> getMockToRealSubChannelMap() {
-    return mockToRealSubChannelMap;
-  }
-
-  public Subchannel getRealForMockSubChannel(Subchannel mock) {
-    Subchannel realSc = getMockToRealSubChannelMap().get(mock);
+  private TestSubchannel getRealForMockSubChannel(Subchannel mock) {
+    TestSubchannel realSc = mockToRealSubChannelMap.get(mock);
     if (realSc == null) {
-      realSc = mock;
+      realSc = (TestSubchannel) mock;
     }
     return realSc;
-  }
-
-  public Map<Subchannel, SubchannelStateListener> getSubchannelStateListeners() {
-    return subchannelStateListeners;
   }
 
   public static final FakeClock.TaskFilter NOT_START_NEXT_CONNECTION =
@@ -116,15 +106,15 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   }
 
   public void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    Subchannel realSc = getMockToRealSubChannelMap().get(subchannel);
-    if (realSc == null) {
-      realSc = subchannel;
-    }
-    SubchannelStateListener listener = getSubchannelStateListeners().get(realSc);
+    getSubchannelStateListener(subchannel).onSubchannelState(newState);
+  }
+
+  public SubchannelStateListener getSubchannelStateListener(Subchannel subchannel) {
+    SubchannelStateListener listener = getRealForMockSubChannel(subchannel).listener;
     if (listener == null) {
-      throw new IllegalArgumentException("subchannel does not have a matching listener");
+      throw new IllegalArgumentException("subchannel has not been started");
     }
-    listener.onSubchannelState(newState);
+    return listener;
   }
 
   @Override
@@ -144,7 +134,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
       TestSubchannel delegate = createRealSubchannel(args);
       subchannel = mock(Subchannel.class, delegatesTo(delegate));
       getSubchannelMap().put(args.getAddresses(), subchannel);
-      getMockToRealSubChannelMap().put(subchannel, delegate);
+      mockToRealSubChannelMap.put(subchannel, delegate);
       realToMockSubChannelMap.put(delegate, subchannel);
     }
 
@@ -161,7 +151,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
   }
 
   public void setChannel(Subchannel subchannel, Channel channel) {
-    ((TestSubchannel)subchannel).channel = channel;
+    getRealForMockSubChannel(subchannel).channel = channel;
   }
 
   @Override
@@ -208,6 +198,7 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
   protected class TestSubchannel extends ForwardingSubchannel {
     CreateSubchannelArgs args;
+    SubchannelStateListener listener;
     Channel channel;
 
     public TestSubchannel(CreateSubchannelArgs args) {
@@ -250,12 +241,11 @@ public abstract class AbstractTestHelper extends ForwardingLoadBalancerHelper {
 
     @Override
     public void start(SubchannelStateListener listener) {
-      getSubchannelStateListeners().put(this, listener);
+      this.listener = checkNotNull(listener, "listener");
     }
 
     @Override
     public void shutdown() {
-      getSubchannelStateListeners().remove(this);
       for (EquivalentAddressGroup eag : getAllAddresses()) {
         getSubchannelMap().remove(Collections.singletonList(eag));
       }
