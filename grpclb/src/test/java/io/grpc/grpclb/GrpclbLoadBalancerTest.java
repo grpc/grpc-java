@@ -1866,7 +1866,8 @@ public class GrpclbLoadBalancerTest {
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
   }
 
-  private StreamObserver<LoadBalanceResponse> getFirstBalancerRpc(LoadBalanceRequest expectedInitialRequest, InOrder inOrder) {
+  private StreamObserver<LoadBalanceResponse> getFirstBalancerRpc(LoadBalanceRequest
+      expectedInitialRequest, InOrder inOrder) {
     // First balancer RPC
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
