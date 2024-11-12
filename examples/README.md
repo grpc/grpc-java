@@ -144,17 +144,13 @@ before trying out the examples.
 
 - [Error Details](src/main/java/io/grpc/examples/errordetails)
 
-- [Experimental](src/main/java/io/grpc/examples/experimental)
-
 - [GRPC Proxy](src/main/java/io/grpc/examples/grpcproxy)
-
-- [Header](src/main/java/io/grpc/examples/header)
 
 - [Load Balance](src/main/java/io/grpc/examples/loadbalance)
 
 - [Multiplex](src/main/java/io/grpc/examples/multiplex)
 
-- [Name Resolver](src/main/java/io/grpc/examples/nameresolve)
+- [Name Resolve](src/main/java/io/grpc/examples/nameresolve)
 
 - [Pre-Serialized Messages](src/main/java/io/grpc/examples/preserialized)
 
