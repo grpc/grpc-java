@@ -90,11 +90,13 @@ import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient.ResourceCallback;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsClient.ServerConnectionCallback;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
@@ -294,7 +296,9 @@ public abstract class GrpcXdsClientImplTestBase {
   @Mock
   private XdsClientMetricReporter xdsClientMetricReporter;
   @Mock
-  private XdsClientMetricReporter.CallbackMetricReporter callbackMetricReporter;
+  private ResourceCallback resourceCallback;
+  @Mock
+  private ServerConnectionCallback serverConnectionCallback;
 
   private ManagedChannel channel;
   private ManagedChannel channelForCustomAuthority;
@@ -642,7 +646,7 @@ public abstract class GrpcXdsClientImplTestBase {
    */
   private void callback_ReportResourceCount() {
     try {
-      Future<Void> unused = xdsClient.reportResourceCounts(callbackMetricReporter);
+      Future<Void> unused = xdsClient.reportResourceCounts(resourceCallback);
     } catch (Exception e) {
       if (e instanceof InterruptedException) {
         Thread.currentThread().interrupt();
@@ -653,7 +657,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private void verifyResourceCountByCacheState(int times, long resourceCount,
       String cacheState, String resourceTypeUrl, String dataPlaneTarget) {
-    verify(callbackMetricReporter, times(times)).reportResourceCounts(
+    verify(resourceCallback, times(times)).reportResourceCountGauge(
         eq(resourceCount),
         eq(cacheState),
         eq(resourceTypeUrl),
@@ -666,7 +670,7 @@ public abstract class GrpcXdsClientImplTestBase {
    */
   private void callback_ReportServerConnection() {
     try {
-      Future<Void> unused = xdsClient.reportServerConnections(callbackMetricReporter);
+      Future<Void> unused = xdsClient.reportServerConnections(serverConnectionCallback);
     } catch (Exception e) {
       if (e instanceof InterruptedException) {
         Thread.currentThread().interrupt();
@@ -677,7 +681,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private void verifyServerConnection(int times, int isConnected, String dataPlaneTarget,
       String xdsServer) {
-    verify(callbackMetricReporter, times(times)).reportServerConnections(
+    verify(serverConnectionCallback, times(times)).reportServerConnectionGauge(
         eq(isConnected),
         eq(dataPlaneTarget),
         eq(xdsServer));
@@ -709,7 +713,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(1, 1, "does_not_exist", LDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -972,7 +975,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Verify {C.1} stays in the previous version VERSION_1, no matter {C} is deleted or not.
     verifyResourceMetadataAcked(RDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
         TIME_INCREMENT * 2);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1043,7 +1045,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(1, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1112,7 +1113,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceCountByCacheState(2, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
     assertThat(channelForCustomAuthority).isNull();
     assertThat(channelForEmptyAuthority).isNull();
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1151,7 +1151,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1233,7 +1232,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 1, "requested", LDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1416,7 +1414,6 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(faultConfig.faultAbort().percent().denominatorType())
         .isEqualTo(DenominatorType.MILLION);
     assertThat(faultConfig.maxActiveFaults()).isEqualTo(101);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1450,7 +1447,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(1, 1, "does_not_exist", LDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   /**
@@ -1504,7 +1500,6 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(3, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
     verifyNoMoreInteractions(ldsResourceWatcher);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1557,7 +1552,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(1, 2, "acked", LDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1668,7 +1662,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // The response is NACKed with the same error message.
     call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, errors);
     verify(rdsResourceWatcher, never()).onChanged(any(RdsUpdate.class));
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   /**
@@ -1752,7 +1745,6 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 3, "acked", RDS.typeUrl(), CHANNEL_TARGET);
     verifySubscribedResourcesMetadataSizes(0, 0, 3, 0);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1853,7 +1845,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 1, "acked", RDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1909,7 +1900,6 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(3, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(2, 1, "acked", RDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -1993,7 +1983,6 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(3, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(2, 1, "acked", RDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -2216,7 +2205,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(CDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
 
     call.verifyRequest(CDS, subscribedResourceNames, VERSION_3, "0002", NODE);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -2330,7 +2318,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Verify {C.1} stays in the previous version VERSION_1. {C1} deleted or not does not matter.
     verifyResourceMetadataAcked(EDS, "C.1", resourcesV11.get("C.1"), VERSION_1,
         TIME_INCREMENT * 2);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -2587,7 +2574,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 1, "requested", CDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   /**
@@ -2663,7 +2649,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(1, 1, "acked", CDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   /**
@@ -3183,7 +3168,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 1, "requested", EDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -3313,7 +3297,6 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 3, "acked", EDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -3453,7 +3436,6 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(3, 1, "acked", CDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(1, 1, "nacked", CDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   private Answer<Void> blockUpdate(CyclicBarrier barrier) {
@@ -3691,7 +3673,6 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(3, 2, "acked", CDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(2, 2, "acked", EDS.typeUrl(), CHANNEL_TARGET);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -3806,7 +3787,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
         "ADS stream closed with OK before receiving a response");
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -3985,7 +3965,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyServerConnection(5, 0, CHANNEL_TARGET, xdsServerInfo.target());
 
     inOrder.verifyNoMoreInteractions();
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -4039,7 +4018,7 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportServerConnection();
     verifyServerConnection(2, 1, CHANNEL_TARGET, xdsServerInfo.target());
 
-    verifyNoMoreInteractions(ldsResourceWatcher, rdsResourceWatcher, callbackMetricReporter);
+    verifyNoMoreInteractions(ldsResourceWatcher, rdsResourceWatcher);
   }
 
   @Test
@@ -4109,7 +4088,6 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   @Test
@@ -4320,8 +4298,6 @@ public abstract class GrpcXdsClientImplTestBase {
       callback_ReportResourceCount();
       verifyResourceCountByCacheState(1, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
       verifyResourceCountByCacheState(4, 1, "requested", CDS.typeUrl(), CHANNEL_TARGET);
-
-      verifyNoMoreInteractions(callbackMetricReporter);
     } catch (Throwable t) {
       throw t; // This allows putting a breakpoint here for debugging
     }
@@ -4593,7 +4569,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(LDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
     call.verifyRequest(LDS, subscribedResourceNames, VERSION_3, "0002", NODE);
     verifySubscribedResourcesMetadataSizes(3, 0, 0, 0);
-    verifyNoMoreInteractions(callbackMetricReporter);
   }
 
   private XdsClientImpl createXdsClient(String serverUri) {

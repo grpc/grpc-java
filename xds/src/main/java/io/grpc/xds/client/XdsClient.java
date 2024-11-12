@@ -29,7 +29,6 @@ import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.XdsClientMetricReporter.CallbackMetricReporter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -380,8 +379,20 @@ public abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
+  /** Callback used to report gauge metric value for resources. */
+  public interface ResourceCallback {
+    // TODO(@dnvindhya): include the "authority" label once xds.authority is available.
+    void reportResourceCountGauge(long resourceCount, String cacheState, String resourceType,
+        String target);
+  }
+
+  /** Callback used to report a gauge metric value for server connections. */
+  public interface ServerConnectionCallback {
+    void reportServerConnectionGauge(int isConnected, String target, String xdsServer);
+  }
+
   /**
-   * Reports the number of resources in each cache state through {@link CallbackMetricReporter}.
+   * Reports the number of resources in each cache state.
    *
    * <p>Cache state is determined by two factors:
    * <ul>
@@ -390,16 +401,14 @@ public abstract class XdsClient {
    *   resource.
    * </ul>
    */
-  public SettableFuture<Void> reportResourceCounts(CallbackMetricReporter callbackMetricReporter) {
+  public SettableFuture<Void> reportResourceCounts(ResourceCallback callback) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Reports whether xDS client has a working ADS stream to xDS server. Reporting is done through
-   * {@link CallbackMetricReporter}.
+   * Reports whether xDS client has a working ADS stream to xDS server.
    */
-  public SettableFuture<Void> reportServerConnections(
-      CallbackMetricReporter callbackMetricReporter) {
+  public SettableFuture<Void> reportServerConnections(ServerConnectionCallback callback) {
     throw new UnsupportedOperationException();
   }
 

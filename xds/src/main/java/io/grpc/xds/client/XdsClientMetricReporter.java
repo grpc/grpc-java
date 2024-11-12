@@ -47,20 +47,4 @@ public interface XdsClientMetricReporter {
   default void reportServerFailure(long serverFailure, String target, String xdsServer) {
   }
 
-  /**
-   * Interface for reporting metrics through callback.
-   *
-   */
-  interface CallbackMetricReporter {
-
-
-    // TODO(@dnvindhya): include the "authority" label once xds.authority is available.
-    default void reportResourceCounts(long resourceCount, String cacheState, String resourceType,
-        String target) {
-    }
-
-
-    default void reportServerConnections(int isConnected, String target, String xdsServer) {
-    }
-  }
 }
