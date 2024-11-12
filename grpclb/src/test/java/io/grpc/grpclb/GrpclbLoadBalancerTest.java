@@ -1787,7 +1787,6 @@ public class GrpclbLoadBalancerTest {
 
     StreamObserver<LoadBalanceRequest> lbRequestObserver;
     StreamObserver<LoadBalanceResponse> lbResponseObserver;
-
     lbResponseObserver = getFirstBalancerRpc(expectedInitialRequest, inOrder);
 
     // Balancer closes it immediately (erroneously)
