@@ -539,11 +539,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     syncContext.execute(() -> {
       serverCpClientMap.forEach((serverInfo, controlPlaneClient) ->
           callback.reportServerConnectionGauge(
-              controlPlaneClient.hasWorkingAdsStream() ? 1 : 0,
-              target,
-              serverInfo.target()));
+              controlPlaneClient.hasWorkingAdsStream(), target, serverInfo.target()));
+      future.set(null);
     });
-    future.set(null);
     return future;
   }
 
@@ -554,8 +552,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType =
           getResourceCountsByType();
       reportResourceCountsToCallback(callback, resourceCountsByType);
+      future.set(null);
     });
-    future.set(null);
     return future;
   }
 

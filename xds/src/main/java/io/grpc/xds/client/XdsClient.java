@@ -388,7 +388,7 @@ public abstract class XdsClient {
 
   /** Callback used to report a gauge metric value for server connections. */
   public interface ServerConnectionCallback {
-    void reportServerConnectionGauge(int isConnected, String target, String xdsServer);
+    void reportServerConnectionGauge(boolean isConnected, String target, String xdsServer);
   }
 
   /**
@@ -407,6 +407,9 @@ public abstract class XdsClient {
 
   /**
    * Reports whether xDS client has a working ADS stream to xDS server.
+   * The definition of a working stream is defined in gRFC A78.
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A78-grpc-metrics-wrr-pf-xds.md#xdsclient">
+   *   A78-grpc-metrics-wrr-pf-xds.md</a>
    */
   public SettableFuture<Void> reportServerConnections(ServerConnectionCallback callback) {
     throw new UnsupportedOperationException();

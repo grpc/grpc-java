@@ -162,8 +162,8 @@ public class XdsClientMetricReporterImplTest {
         .registerBatchCallback(gaugeBatchCallbackCaptor.capture(), any(), any());
     gaugeBatchCallbackCaptor.getValue().accept(mockBatchRecorder);
     // Verify that the xdsClient methods were called
-    verify(mockXdsClient).reportResourceCounts(any(ResourceCallback.class));
-    verify(mockXdsClient).reportServerConnections(any(ServerConnectionCallback.class));
+    verify(mockXdsClient).reportResourceCounts(any());
+    verify(mockXdsClient).reportServerConnections(any());
 
     assertThat(logs.size()).isEqualTo(1);
     assertThat(logs.get(0).getLevel()).isEqualTo(Level.WARNING);
@@ -204,7 +204,7 @@ public class XdsClientMetricReporterImplTest {
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"), eq(10L), any(),
             any());
-    callback.reportServerConnectionGauge(1, target, "xdsServer");
+    callback.reportServerConnectionGauge(true, target, "xdsServer");
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(eqMetricInstrumentName("grpc.xds_client.connected"), eq(1L), any(), any());
 
@@ -216,7 +216,7 @@ public class XdsClientMetricReporterImplTest {
     MetricReporterCallback callback =
         new MetricReporterCallback(mockBatchRecorder);
 
-    callback.reportServerConnectionGauge(1, target, server);
+    callback.reportServerConnectionGauge(true, target, server);
     verify(mockBatchRecorder, times(1)).recordLongGauge(
         eqMetricInstrumentName("grpc.xds_client.connected"), eq(1L),
         eq(Lists.newArrayList(target, server)),

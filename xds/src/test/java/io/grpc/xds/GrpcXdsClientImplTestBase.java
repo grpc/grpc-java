@@ -679,7 +679,7 @@ public abstract class GrpcXdsClientImplTestBase {
     }
   }
 
-  private void verifyServerConnection(int times, int isConnected, String dataPlaneTarget,
+  private void verifyServerConnection(int times, boolean isConnected, String dataPlaneTarget,
       String xdsServer) {
     verify(serverConnectionCallback, times(times)).reportServerConnectionGauge(
         eq(isConnected),
@@ -3774,12 +3774,12 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, true, CHANNEL_TARGET, xdsServerInfo.target());
     // Management server closes the RPC stream before sending any response.
     call.sendCompleted();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, false, CHANNEL_TARGET, xdsServerInfo.target());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
         .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
@@ -3797,7 +3797,7 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, true, CHANNEL_TARGET, xdsServerInfo.target());
     ScheduledTask ldsResourceTimeout =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
     ScheduledTask rdsResourceTimeout =
@@ -3805,7 +3805,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(2, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(2, true, CHANNEL_TARGET, xdsServerInfo.target());
     assertThat(ldsResourceTimeout.isCancelled()).isTrue();
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     assertThat(rdsResourceTimeout.isCancelled()).isTrue();
@@ -3813,7 +3813,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendCompleted();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(3, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(3, true, CHANNEL_TARGET, xdsServerInfo.target());
     verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
   }
@@ -3824,7 +3824,7 @@ public abstract class GrpcXdsClientImplTestBase {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, true, CHANNEL_TARGET, xdsServerInfo.target());
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
@@ -3849,7 +3849,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, false, CHANNEL_TARGET, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -3866,7 +3866,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(2, 0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(2, false, CHANNEL_TARGET, xdsServerInfo.target());
 
     // Management server becomes unreachable.
     String errorMsg = "my fault";
@@ -3882,7 +3882,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(3, 0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(3, false, CHANNEL_TARGET, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -3903,7 +3903,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(LDS, LDS_RESOURCE, "63", "3242", NODE);
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(2, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(2, true, CHANNEL_TARGET, xdsServerInfo.target());
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(2))));
@@ -3920,7 +3920,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(3, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(3, true, CHANNEL_TARGET, xdsServerInfo.target());
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -3946,7 +3946,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(4, 0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(4, false, CHANNEL_TARGET, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
@@ -3962,7 +3962,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(5, 0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(5, false, CHANNEL_TARGET, xdsServerInfo.target());
 
     inOrder.verifyNoMoreInteractions();
   }
@@ -3976,7 +3976,7 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, true, CHANNEL_TARGET, xdsServerInfo.target());
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
         .onError(errorCaptor.capture());
@@ -3989,7 +3989,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, false, CHANNEL_TARGET, xdsServerInfo.target());
 
     xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(),
         LDS_RESOURCE, ldsResourceWatcher);
@@ -4007,7 +4007,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(2,0, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(2,false, CHANNEL_TARGET, xdsServerInfo.target());
 
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
     List<Any> routeConfigs = ImmutableList.of(
@@ -4016,7 +4016,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(2, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(2, true, CHANNEL_TARGET, xdsServerInfo.target());
 
     verifyNoMoreInteractions(ldsResourceWatcher, rdsResourceWatcher);
   }
@@ -4031,7 +4031,7 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(1, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(1, true, CHANNEL_TARGET, xdsServerInfo.target());
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(1, 1, "requested", LDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(1, 1, "requested", RDS.typeUrl(), CHANNEL_TARGET);
@@ -4049,7 +4049,7 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(ldsResourceTimeout.isCancelled()).isTrue();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(2, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(2, true, CHANNEL_TARGET, xdsServerInfo.target());
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(1, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(2, 1, "requested", RDS.typeUrl(), CHANNEL_TARGET);
@@ -4060,7 +4060,7 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(rdsResourceTimeout.isCancelled()).isTrue();
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(3, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(3, true, CHANNEL_TARGET, xdsServerInfo.target());
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(2, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(1, 1, "acked", RDS.typeUrl(), CHANNEL_TARGET);
@@ -4076,7 +4076,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(edsResourceWatcher, never()).onError(errorCaptor.capture());
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(4, 1, CHANNEL_TARGET, xdsServerInfo.target());
+    verifyServerConnection(4, true, CHANNEL_TARGET, xdsServerInfo.target());
     callback_ReportResourceCount();
     verifyResourceCountByCacheState(3, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
     verifyResourceCountByCacheState(2, 1, "acked", RDS.typeUrl(), CHANNEL_TARGET);
@@ -4245,7 +4245,7 @@ public abstract class GrpcXdsClientImplTestBase {
       fakeClock.forwardTime(14, TimeUnit.SECONDS);
       // Check metric data.
       callback_ReportServerConnection();
-      verifyServerConnection(1, 0, CHANNEL_TARGET, xdsServerInfo.target());
+      verifyServerConnection(1, false, CHANNEL_TARGET, xdsServerInfo.target());
       callback_ReportResourceCount();
       verifyResourceCountByCacheState(1, 1, "unknown", LDS.typeUrl(), CHANNEL_TARGET);
       verifyResourceCountByCacheState(1, 1, "requested", CDS.typeUrl(), CHANNEL_TARGET);
@@ -4265,7 +4265,7 @@ public abstract class GrpcXdsClientImplTestBase {
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
       // Check metric data.
       callback_ReportServerConnection();
-      verifyServerConnection(2, 0, CHANNEL_TARGET, xdsServerInfo.target());
+      verifyServerConnection(2, false, CHANNEL_TARGET, xdsServerInfo.target());
       callback_ReportResourceCount();
       verifyResourceCountByCacheState(2, 1, "unknown", LDS.typeUrl(), CHANNEL_TARGET);
       verifyResourceCountByCacheState(2, 1, "requested", CDS.typeUrl(), CHANNEL_TARGET);
@@ -4276,7 +4276,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
       // Check metric data.
       callback_ReportServerConnection();
-      verifyServerConnection(3, 0, CHANNEL_TARGET, xdsServerInfo.target());
+      verifyServerConnection(3, false, CHANNEL_TARGET, xdsServerInfo.target());
       callback_ReportResourceCount();
       verifyResourceCountByCacheState(1, 1, "requested", LDS.typeUrl(), CHANNEL_TARGET);
       verifyResourceCountByCacheState(3, 1, "requested", CDS.typeUrl(), CHANNEL_TARGET);
@@ -4294,7 +4294,7 @@ public abstract class GrpcXdsClientImplTestBase {
       verifySubscribedResourcesMetadataSizes(1, 1, 0, 0);
       // Check metric data.
       callback_ReportServerConnection();
-      verifyServerConnection(1, 1, CHANNEL_TARGET, xdsServerInfo.target());
+      verifyServerConnection(1, true, CHANNEL_TARGET, xdsServerInfo.target());
       callback_ReportResourceCount();
       verifyResourceCountByCacheState(1, 1, "acked", LDS.typeUrl(), CHANNEL_TARGET);
       verifyResourceCountByCacheState(4, 1, "requested", CDS.typeUrl(), CHANNEL_TARGET);

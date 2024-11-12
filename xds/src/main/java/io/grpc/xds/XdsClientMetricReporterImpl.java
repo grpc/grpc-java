@@ -162,9 +162,9 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
 
     @Override
-    public void reportServerConnectionGauge(int isConnected, String target, String xdsServer) {
-      recorder.recordLongGauge(CONNECTED_GAUGE, isConnected, Arrays.asList(target, xdsServer),
-          Collections.emptyList());
+    public void reportServerConnectionGauge(boolean isConnected, String target, String xdsServer) {
+      recorder.recordLongGauge(CONNECTED_GAUGE, isConnected ? 1 : 0,
+          Arrays.asList(target, xdsServer), Collections.emptyList());
     }
   }
 }
