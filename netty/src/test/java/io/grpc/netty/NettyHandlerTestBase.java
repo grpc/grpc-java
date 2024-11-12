@@ -430,12 +430,10 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     int wireSize = data.length + 5; // 5 is the size of the header
     ByteBuf frame = grpcDataFrame(3, false, data);
     channelRead(frame);
-    channel().releaseOutbound();
     int accumulator = wireSize;
     // 40 is arbitrary, any number large enough to trigger a window update would work
     for (int i = 0; i < 40; i++) {
       channelRead(grpcDataFrame(3, false, data));
-      channel().releaseOutbound();
       accumulator += wireSize;
     }
     long pingData = handler.flowControlPing().payload();
