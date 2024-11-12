@@ -1788,7 +1788,10 @@ public class GrpclbLoadBalancerTest {
     StreamObserver<LoadBalanceRequest> lbRequestObserver;
     StreamObserver<LoadBalanceResponse> lbResponseObserver;
 
-    getFirstBalancerRpc(expectedInitialRequest, inOrder);
+    lbResponseObserver = getFirstBalancerRpc(expectedInitialRequest, inOrder);
+
+    // Balancer closes it immediately (erroneously)
+    lbResponseObserver.onCompleted();
 
     // Will start backoff sequence 1 (10ns)
     inOrder.verify(backoffPolicyProvider).get();
@@ -1796,7 +1799,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
     inOrder.verify(helper).refreshNameResolution();
 
-    lbResponseObserver = getFastForwardBeforeRetry(9, inOrder, expectedInitialRequest);
+    lbResponseObserver = fastForwardAndRetry(9, inOrder, expectedInitialRequest);
 
     // Balancer closes it with an error.
     lbResponseObserver.onError(Status.UNAVAILABLE.asException());
@@ -1807,7 +1810,7 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry
-    lbResponseObserver = getFastForwardBeforeRetry(100 - 1, inOrder, expectedInitialRequest);
+    lbResponseObserver = fastForwardAndRetry(100 - 1, inOrder, expectedInitialRequest);
 
     // Balancer sends initial response.
     lbResponseObserver.onNext(buildInitialResponse());
@@ -1834,7 +1837,7 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
-    getFastForwardBeforeRetry(10 - 4 - 1, inOrder, expectedInitialRequest);
+    fastForwardAndRetry(10 - 4 - 1, inOrder, expectedInitialRequest);
 
     // Wrapping up
     verify(backoffPolicyProvider, times(2)).get();
@@ -1843,7 +1846,7 @@ public class GrpclbLoadBalancerTest {
     verify(helper, times(4)).refreshNameResolution();
   }
 
-  private StreamObserver<LoadBalanceResponse> getFastForwardBeforeRetry(int nanos, InOrder inOrder,
+  private StreamObserver<LoadBalanceResponse> fastForwardAndRetry(int nanos, InOrder inOrder,
       LoadBalanceRequest expectedInitialRequest) {
     // Fast-forward to a moment before the retry
     fakeClock.forwardNanos(nanos);
@@ -1852,24 +1855,23 @@ public class GrpclbLoadBalancerTest {
     fakeClock.forwardNanos(1);
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
-    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
-    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    verifyRequestProcessed(expectedInitialRequest);
     return lbResponseObserver;
   }
 
-  private void getFirstBalancerRpc(LoadBalanceRequest expectedInitialRequest, InOrder inOrder) {
-    // First balancer RPC
-    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+  private void verifyRequestProcessed(LoadBalanceRequest expectedInitialRequest) {
     assertEquals(1, lbRequestObservers.size());
     StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+  }
 
-    // Balancer closes it immediately (erroneously)
-    lbResponseObserver.onCompleted();
+  private StreamObserver<LoadBalanceResponse> getFirstBalancerRpc(LoadBalanceRequest expectedInitialRequest, InOrder inOrder) {
+    // First balancer RPC
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    verifyRequestProcessed(expectedInitialRequest);
+    return lbResponseObserver;
   }
 
   private LoadBalanceRequest getIntialLoadBalanceRequest() {
