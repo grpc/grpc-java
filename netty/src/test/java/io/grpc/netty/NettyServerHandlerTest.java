@@ -1313,9 +1313,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     for (int period = 0; period < 3; period++) {
       for (int i = 0; i < burstSize; i++) {
         channelRead(headersFrame(streamId, headers));
-        channel().releaseOutbound();
         channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
-        channel().releaseOutbound();
         streamId += 2;
         fakeClock().forwardNanos(rpcTimeNanos);
       }
