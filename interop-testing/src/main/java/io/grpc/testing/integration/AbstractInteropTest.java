@@ -690,8 +690,7 @@ public abstract class AbstractInteropTest {
                     .setSize(31415))
             .addResponseParameters(
                 ResponseParameters.newBuilder()
-                    .setCompressed(BoolValue.newBuilder().setValue(false))
-                    .setSize(92653))
+                    .setCompressed(BoolValue.newBuilder().setValue(false)))
             .build();
     final List<StreamingOutputCallResponse> goldenResponses =
         Arrays.asList(
@@ -1776,7 +1775,7 @@ public abstract class AbstractInteropTest {
       final int currentThreadInd = threadInd;
       threads[threadInd] = new Thread(() -> {
         try {
-          executeSoakTestInThreads(
+          executeSoakTestInThread(
               soakIterationsPerThread,
               startNs,
               minTimeMsBetweenRpcs,
@@ -1791,6 +1790,7 @@ public abstract class AbstractInteropTest {
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           System.err.println("Thread interrupted: " + e.getMessage());
+          // throw new RuntimeException("Thread interrupted: " + e.getMessage());
         }
       });
       threads[threadInd].start();
@@ -1856,7 +1856,7 @@ public abstract class AbstractInteropTest {
     return currentChannel;
   }
 
-  private void executeSoakTestInThreads(
+  private void executeSoakTestInThread(
       int soakIterationsPerThread,
       long startNs,
       int minTimeMsBetweenRpcs,

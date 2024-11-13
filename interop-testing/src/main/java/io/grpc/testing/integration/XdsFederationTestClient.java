@@ -76,6 +76,7 @@ public final class XdsFederationTestClient {
   private int soakMinTimeMsBetweenRpcs = 0;
   private int soakRequestSize = 271828;
   private int soakResponseSize = 314159;
+  private int numThreads = 1;
   private String testCase = "rpc_soak";
   private final ArrayList<InnerClient> clients = new ArrayList<>();
 
@@ -127,8 +128,11 @@ public final class XdsFederationTestClient {
         case "soak_request_size":
           soakRequestSize = Integer.parseInt(value);
           break;
-        case "soak_response_size":
+        case "":
           soakResponseSize = Integer.parseInt(value);
+          break;
+        case "soak_num_threads":
+          numThreads = Integer.parseInt(value);
           break;
         default:
           System.err.println("Unknown argument: " + key);
@@ -191,6 +195,9 @@ public final class XdsFederationTestClient {
           + "                                          The response size in a soak RPC. Default"
           + " "
           + c.soakResponseSize
+          + "\n --soak_num_threads           The number of threads for concurrent execution of the "
+          + "\n                              soak tests (rpc_soak or channel_soak). Default "
+          + c.numThreads
       );
       System.exit(1);
     }
@@ -245,29 +252,53 @@ public final class XdsFederationTestClient {
     /**
      * Run the intended soak test.
      */
-    public void run() {
-      boolean resetChannelPerIteration;
-      switch (testCase) {
-        case "rpc_soak":
-          resetChannelPerIteration = false;
-          break;
-        case "channel_soak":
-          resetChannelPerIteration = true;
-          break;
-        default:
-          throw new RuntimeException("invalid testcase: " + testCase);
-      }
+    public void run() throws InterruptedException {
       try {
-        performSoakTest(
-            serverUri,
-            resetChannelPerIteration,
-            soakIterations,
-            soakMaxFailures,
-            soakPerIterationMaxAcceptableLatencyMs,
-            soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds,
-            soakRequestSize,
-            soakResponseSize);
+        switch (testCase) {
+          case "rpc_soak": {
+            performSoakTest(
+                serverUri,
+                soakIterations,
+                soakMaxFailures,
+                soakPerIterationMaxAcceptableLatencyMs,
+                soakMinTimeMsBetweenRpcs,
+                soakOverallTimeoutSeconds,
+                soakRequestSize,
+                soakResponseSize,
+                numThreads,
+                (currentChannel) -> {
+                  try {
+                    return maybeCreateNewChannel(currentChannel, false);
+                  } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                  }
+                });
+          }
+              break;
+          case "channel_soak":{
+            performSoakTest(
+                serverUri,
+                soakIterations,
+                soakMaxFailures,
+                soakPerIterationMaxAcceptableLatencyMs,
+                soakMinTimeMsBetweenRpcs,
+                soakOverallTimeoutSeconds,
+                soakRequestSize,
+                soakResponseSize,
+                numThreads,
+                (currentChannel) -> {
+                  try {
+                    return maybeCreateNewChannel(currentChannel, true);
+                  } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                  }
+                });
+          }
+            break;
+          default:
+            throw new RuntimeException("invalid testcase: " + testCase);
+        }
+
         logger.info("Test case: " + testCase + " done for server: " + serverUri);
         runSucceeded = true;
       } catch (Exception e) {
