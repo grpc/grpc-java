@@ -80,6 +80,8 @@ import java.util.logging.Logger;
 
 /**
  * A static utility class for turning internal data structures into protos.
+ *
+ * <p>Works with both regular and lite protos.
  */
 final class ChannelzProtoUtil {
   private static final Logger logger = Logger.getLogger(ChannelzProtoUtil.class.getName());
@@ -493,6 +495,7 @@ final class ChannelzProtoUtil {
     }
   }
 
+  // A version of Any.pack() that works with protolite.
   private static Any packToAny(String typeName, MessageLite value) {
     return Any.newBuilder()
         .setTypeUrl("type.googleapis.com/grpc.channelz.v1." + typeName)
