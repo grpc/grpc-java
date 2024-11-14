@@ -85,13 +85,13 @@ public class XdsClientMetricReporterImplTest {
 
   @Before
   public void setUp() {
-    reporter = new XdsClientMetricReporterImpl(mockMetricRecorder);
+    reporter = new XdsClientMetricReporterImpl(mockMetricRecorder, target);
   }
 
   @Test
   public void reportResourceUpdates() {
     // TODO(dnvindhya): add the "authority" label once available.
-    reporter.reportResourceUpdates(10, 5, target, server, resourceTypeUrl);
+    reporter.reportResourceUpdates(10, 5, server, resourceTypeUrl);
     verify(mockMetricRecorder).addLongCounter(
         eqMetricInstrumentName("grpc.xds_client.resource_updates_valid"), eq((long) 10),
         eq(Lists.newArrayList(target, server, resourceTypeUrl)),
@@ -105,7 +105,7 @@ public class XdsClientMetricReporterImplTest {
 
   @Test
   public void reportServerFailure() {
-    reporter.reportServerFailure(1, target, server);
+    reporter.reportServerFailure(1, server);
     verify(mockMetricRecorder).addLongCounter(
         eqMetricInstrumentName("grpc.xds_client.server_failure"), eq((long) 1),
         eq(Lists.newArrayList(target, server)),
@@ -200,11 +200,11 @@ public class XdsClientMetricReporterImplTest {
 
     // Verify that reportResourceCounts and reportServerConnections were called
     // with the captured callback
-    callback.reportResourceCountGauge(10, "acked", resourceTypeUrl, target);
+    callback.reportResourceCountGauge(10, "acked", resourceTypeUrl);
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"), eq(10L), any(),
             any());
-    callback.reportServerConnectionGauge(true, target, "xdsServer");
+    callback.reportServerConnectionGauge(true, "xdsServer");
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(eqMetricInstrumentName("grpc.xds_client.connected"), eq(1L), any(), any());
 
@@ -214,16 +214,16 @@ public class XdsClientMetricReporterImplTest {
   @Test
   public void metricReporterCallback() {
     MetricReporterCallback callback =
-        new MetricReporterCallback(mockBatchRecorder);
+        new MetricReporterCallback(mockBatchRecorder, target);
 
-    callback.reportServerConnectionGauge(true, target, server);
+    callback.reportServerConnectionGauge(true, server);
     verify(mockBatchRecorder, times(1)).recordLongGauge(
         eqMetricInstrumentName("grpc.xds_client.connected"), eq(1L),
         eq(Lists.newArrayList(target, server)),
         eq(Lists.newArrayList()));
 
     String cacheState = "requested";
-    callback.reportResourceCountGauge(10, cacheState, resourceTypeUrl, target);
+    callback.reportResourceCountGauge(10, cacheState, resourceTypeUrl);
     verify(mockBatchRecorder, times(1)).recordLongGauge(
         eqMetricInstrumentName("grpc.xds_client.resources"), eq(10L),
         eq(Arrays.asList(target, cacheState, resourceTypeUrl)),

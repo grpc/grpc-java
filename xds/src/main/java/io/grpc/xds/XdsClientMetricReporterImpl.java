@@ -52,6 +52,7 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   private static final LongGaugeMetricInstrument RESOURCES_GAUGE;
 
   private final MetricRecorder metricRecorder;
+  private final String target;
   @Nullable
   private Registration gaugeRegistration = null;
   @Nullable
@@ -90,13 +91,14 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
             "grpc.xds.resource_type"), Collections.emptyList(), false);
   }
 
-  XdsClientMetricReporterImpl(MetricRecorder metricRecorder) {
+  XdsClientMetricReporterImpl(MetricRecorder metricRecorder, String target) {
     this.metricRecorder = metricRecorder;
+    this.target = target;
   }
 
   @Override
   public void reportResourceUpdates(long validResourceCount, long invalidResourceCount,
-      String target, String xdsServer, String resourceType) {
+      String xdsServer, String resourceType) {
     metricRecorder.addLongCounter(RESOURCE_UPDATES_VALID_COUNTER, validResourceCount,
         Arrays.asList(target, xdsServer, resourceType), Collections.emptyList());
     metricRecorder.addLongCounter(RESOURCE_UPDATES_INVALID_COUNTER, invalidResourceCount,
@@ -104,7 +106,7 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   }
 
   @Override
-  public void reportServerFailure(long serverFailure, String target, String xdsServer) {
+  public void reportServerFailure(long serverFailure, String xdsServer) {
     metricRecorder.addLongCounter(SERVER_FAILURE_COUNTER, serverFailure,
         Arrays.asList(target, xdsServer), Collections.emptyList());
   }
@@ -127,7 +129,7 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   }
 
   void reportCallbackMetrics(BatchRecorder recorder) {
-    MetricReporterCallback callback = new MetricReporterCallback(recorder);
+    MetricReporterCallback callback = new MetricReporterCallback(recorder, target);
     try {
       SettableFuture<Void> reportResourceCountsCompleted = this.xdsClient.reportResourceCounts(
           callback);
@@ -148,21 +150,23 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   static final class MetricReporterCallback implements ResourceCallback,
       ServerConnectionCallback {
     private final BatchRecorder recorder;
+    private final String target;
 
-    MetricReporterCallback(BatchRecorder recorder) {
+    MetricReporterCallback(BatchRecorder recorder, String target) {
       this.recorder = recorder;
+      this.target = target;
     }
 
-    // TODO(@dnvindhya): include the "authority" label once xds.authority is available.
+    // TODO(dnvindhya): include the "authority" label once xds.authority is available.
     @Override
-    public void reportResourceCountGauge(long resourceCount, String cacheState, String resourceType,
-        String target) {
+    public void reportResourceCountGauge(long resourceCount, String cacheState,
+        String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
           Arrays.asList(target, cacheState, resourceType), Collections.emptyList());
     }
 
     @Override
-    public void reportServerConnectionGauge(boolean isConnected, String target, String xdsServer) {
+    public void reportServerConnectionGauge(boolean isConnected, String xdsServer) {
       recorder.recordLongGauge(CONNECTED_GAUGE, isConnected ? 1 : 0,
           Arrays.asList(target, xdsServer), Collections.emptyList());
     }

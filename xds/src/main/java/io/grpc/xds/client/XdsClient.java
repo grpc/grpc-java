@@ -381,14 +381,13 @@ public abstract class XdsClient {
 
   /** Callback used to report gauge metric value for resources. */
   public interface ResourceCallback {
-    // TODO(@dnvindhya): include the "authority" label once xds.authority is available.
-    void reportResourceCountGauge(long resourceCount, String cacheState, String resourceType,
-        String target);
+    // TODO(dnvindhya): include the "authority" label once xds.authority is available.
+    void reportResourceCountGauge(long resourceCount, String cacheState, String resourceType);
   }
 
   /** Callback used to report a gauge metric value for server connections. */
   public interface ServerConnectionCallback {
-    void reportServerConnectionGauge(boolean isConnected, String target, String xdsServer);
+    void reportServerConnectionGauge(boolean isConnected, String xdsServer);
   }
 
   /**

@@ -126,9 +126,9 @@ final class XdsNameResolver extends NameResolver {
   private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
+  private final MetricRecorder metricRecorder;
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
-  private volatile MetricRecorder metricRecorder;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;

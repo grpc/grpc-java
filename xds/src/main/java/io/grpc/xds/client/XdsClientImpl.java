@@ -101,7 +101,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   private final XdsLogger logger;
   private volatile boolean isShutdown;
   private final MessagePrettyPrinter messagePrinter;
-  private final String target;
   private final XdsClientMetricReporter metricReporter;
 
   public XdsClientImpl(
@@ -113,7 +112,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       TimeProvider timeProvider,
       MessagePrettyPrinter messagePrinter,
       Object securityConfig,
-      String target,
       XdsClientMetricReporter metricReporter) {
     this.xdsTransportFactory = xdsTransportFactory;
     this.bootstrapInfo = bootstrapInfo;
@@ -123,7 +121,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     this.timeProvider = timeProvider;
     this.messagePrinter = messagePrinter;
     this.securityConfig = securityConfig;
-    this.target = target;
     this.metricReporter = metricReporter;
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
@@ -148,7 +145,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     syncContext.throwIfNotInThisSynchronizationContext();
     cleanUpResourceTimers();
     if (!error.isOk()) {
-      metricReporter.reportServerFailure(1L, target, serverInfo.target());
+      metricReporter.reportServerFailure(1L, serverInfo.target());
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
@@ -474,7 +471,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     Map<String, ParsedResource<T>> parsedResources = result.parsedResources;
     Set<String> invalidResources = result.invalidResources;
     metricReporter.reportResourceUpdates(Long.valueOf(parsedResources.size()),
-        Long.valueOf(invalidResources.size()), target,
+        Long.valueOf(invalidResources.size()),
         args.getServerInfo().target(), xdsResourceType.typeUrl());
 
     List<String> errors = result.errors;
@@ -539,7 +536,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     syncContext.execute(() -> {
       serverCpClientMap.forEach((serverInfo, controlPlaneClient) ->
           callback.reportServerConnectionGauge(
-              controlPlaneClient.hasWorkingAdsStream(), target, serverInfo.target()));
+              controlPlaneClient.hasWorkingAdsStream(), serverInfo.target()));
       future.set(null);
     });
     return future;
@@ -549,9 +546,17 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   public SettableFuture<Void> reportResourceCounts(ResourceCallback callback) {
     SettableFuture<Void> future = SettableFuture.create();
     syncContext.execute(() -> {
-      Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType =
-          getResourceCountsByType();
-      reportResourceCountsToCallback(callback, resourceCountsByType);
+      for (XdsResourceType<? extends ResourceUpdate> resourceType : resourceSubscribers.keySet()) {
+        Map<String, Long> resourceCountsByState = new HashMap<>();
+        for (ResourceSubscriber<? extends ResourceUpdate> subscriber :
+            resourceSubscribers.get(resourceType).values()) {
+          String cacheState = cacheStateFromResourceStatus(subscriber.metadata,
+              subscriber.data != null);
+          resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
+        }
+        resourceCountsByState.forEach((cacheState, count) ->
+            callback.reportResourceCountGauge(count, cacheState, resourceType.typeUrl()));
+      }
       future.set(null);
     });
     return future;
@@ -562,36 +567,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     return metadata.getStatus() == ResourceMetadataStatus.NACKED && isResourceCached
         ? status + "_but_cached" : status;
   }
-
-  /** Calculates number of resources by ResourceType and ResourceSubscriber.metadata.status. */
-  Map<XdsResourceType<?>, Map<String, Long>> getResourceCountsByType() {
-    Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType = new HashMap<>();
-    for (XdsResourceType<? extends ResourceUpdate> resourceType : resourceSubscribers.keySet()) {
-      Map<String, Long> resourceCountsByState = new HashMap<>();
-      for (ResourceSubscriber<? extends ResourceUpdate> subscriber :
-          resourceSubscribers.get(resourceType).values()) {
-        String cacheState = cacheStateFromResourceStatus(subscriber.metadata,
-            subscriber.data != null);
-        resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
-      }
-      resourceCountsByType.put(resourceType, resourceCountsByState);
-    }
-    return resourceCountsByType;
-  }
-
-  /** Reports resource counts using the provided ResourceCallback. */
-  void reportResourceCountsToCallback(ResourceCallback callback,
-      Map<XdsResourceType<?>, Map<String, Long>> resourceCountsByType) {
-    for (Map.Entry<XdsResourceType<?>, Map<String, Long>> entry :
-        resourceCountsByType.entrySet()) {
-      XdsResourceType<?> resourceType = entry.getKey();
-      Map<String, Long> resourceCountsByState = entry.getValue();
-      // TODO(@dnvindhya): include the "authority" label once authority is available here.
-      resourceCountsByState.forEach((cacheState, count) ->
-          callback.reportResourceCountGauge(count, cacheState, resourceType.typeUrl(), target));
-    }
-  }
-
 
   /** Tracks a single subscribed resource. */
   private final class ResourceSubscriber<T extends ResourceUpdate> {

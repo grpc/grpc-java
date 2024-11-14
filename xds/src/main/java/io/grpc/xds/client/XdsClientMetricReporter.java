@@ -29,22 +29,20 @@ public interface XdsClientMetricReporter {
    *
    * @param validResourceCount Number of resources that were valid.
    * @param invalidResourceCount Number of resources that were invalid.
-   * @param target Target of the gRPC channel.
    * @param xdsServer Target URI of the xDS server with which the XdsClient is communicating.
    * @param resourceType Type of XDS resource (e.g., "envoy.config.listener.v3.Listener").
    */
   default void reportResourceUpdates(long validResourceCount, long invalidResourceCount,
-      String target, String xdsServer, String resourceType) {
+      String xdsServer, String resourceType) {
   }
 
   /**
    * Reports number of xDS servers going from healthy to unhealthy.
    *
    * @param serverFailure Number of xDS server failures.
-   * @param target Target of the gRPC channel.
    * @param xdsServer Target URI of the xDS server with which the XdsClient is communicating.
    */
-  default void reportServerFailure(long serverFailure, String target, String xdsServer) {
+  default void reportServerFailure(long serverFailure, String xdsServer) {
   }
 
 }

@@ -52,6 +52,8 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private static final boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
       System.getenv("GRPC_LOG_XDS_NODE_ID"));
   private static final Logger log = Logger.getLogger(XdsClientImpl.class.getName());
+  private static final ExponentialBackoffPolicy.Provider BACKOFF_POLICY_PROVIDER =
+      new ExponentialBackoffPolicy.Provider();
 
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
@@ -121,8 +123,6 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @VisibleForTesting
   protected class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
 
-    private final ExponentialBackoffPolicy.Provider backoffPolicyProvider =
-        new ExponentialBackoffPolicy.Provider();
     private final BootstrapInfo bootstrapInfo;
     private final String target; // The target associated with the xDS client.
     private final XdsClientMetricReporterImpl xdsClientMetricReporter;
@@ -139,7 +139,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         MetricRecorder metricRecorder) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
       this.target = target;
-      this.xdsClientMetricReporter = new XdsClientMetricReporterImpl(metricRecorder);
+      this.xdsClientMetricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
     }
 
     @Override
@@ -154,12 +154,11 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               DEFAULT_XDS_TRANSPORT_FACTORY,
               bootstrapInfo,
               scheduler,
-              backoffPolicyProvider,
+              BACKOFF_POLICY_PROVIDER,
               GrpcUtil.STOPWATCH_SUPPLIER,
               TimeProvider.SYSTEM_TIME_PROVIDER,
               MessagePrinter.INSTANCE,
               new TlsContextManagerImpl(bootstrapInfo),
-              getTarget(),
               xdsClientMetricReporter);
           xdsClientMetricReporter.setXdsClient(xdsClient);
         }

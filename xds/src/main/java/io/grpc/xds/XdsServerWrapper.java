@@ -172,6 +172,8 @@ final class XdsServerWrapper extends Server {
 
   private void internalStart() {
     try {
+      // TODO(dnvindhya): Add "#server" as "grpc.target" attribute value for
+      // xDS enabled servers.
       xdsClientPool = xdsClientPoolFactory.getOrCreate("", new MetricRecorder() {});
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
