@@ -1789,8 +1789,7 @@ public abstract class AbstractInteropTest {
               maybeCreateNewChannel);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
-          System.err.println("Thread interrupted: " + e.getMessage());
-          // throw new RuntimeException("Thread interrupted: " + e.getMessage());
+          throw new RuntimeException("Thread interrupted: " + e.getMessage(), e);
         }
       });
       threads[threadInd].start();
