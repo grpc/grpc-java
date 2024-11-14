@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Int64Value;
+import com.google.protobuf.MessageLite;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ConnectivityState;
@@ -79,6 +80,8 @@ import java.util.logging.Logger;
 
 /**
  * A static utility class for turning internal data structures into protos.
+ *
+ * <p>Works with both regular and lite protos.
  */
 final class ChannelzProtoUtil {
   private static final Logger logger = Logger.getLogger(ChannelzProtoUtil.class.getName());
@@ -254,22 +257,20 @@ final class ChannelzProtoUtil {
     } else {
       lingerOpt = SocketOptionLinger.getDefaultInstance();
     }
-    return SocketOption
-        .newBuilder()
+    return SocketOption.newBuilder()
         .setName(SO_LINGER)
-        .setAdditional(Any.pack(lingerOpt))
+        .setAdditional(packToAny("SocketOptionLinger", lingerOpt))
         .build();
   }
 
   static SocketOption toSocketOptionTimeout(String name, int timeoutMillis) {
     Preconditions.checkNotNull(name);
-    return SocketOption
-        .newBuilder()
+    return SocketOption.newBuilder()
         .setName(name)
         .setAdditional(
-            Any.pack(
-                SocketOptionTimeout
-                    .newBuilder()
+            packToAny(
+                "SocketOptionTimeout",
+                SocketOptionTimeout.newBuilder()
                     .setDuration(Durations.fromMillis(timeoutMillis))
                     .build()))
         .build();
@@ -307,10 +308,9 @@ final class ChannelzProtoUtil {
         .setTcpiAdvmss(i.advmss)
         .setTcpiReordering(i.reordering)
         .build();
-    return SocketOption
-        .newBuilder()
+    return SocketOption.newBuilder()
         .setName(TCP_INFO)
-        .setAdditional(Any.pack(tcpInfo))
+        .setAdditional(packToAny("SocketOptionTcpInfo", tcpInfo))
         .build();
   }
 
@@ -380,10 +380,11 @@ final class ChannelzProtoUtil {
   private static List<ChannelTraceEvent> toChannelTraceEvents(List<Event> events) {
     List<ChannelTraceEvent> channelTraceEvents = new ArrayList<>();
     for (Event event : events) {
-      ChannelTraceEvent.Builder builder = ChannelTraceEvent.newBuilder()
-          .setDescription(event.description)
-          .setSeverity(Severity.valueOf(event.severity.name()))
-          .setTimestamp(Timestamps.fromNanos(event.timestampNanos));
+      ChannelTraceEvent.Builder builder =
+          ChannelTraceEvent.newBuilder()
+              .setDescription(event.description)
+              .setSeverity(toSeverity(event.severity))
+              .setTimestamp(Timestamps.fromNanos(event.timestampNanos));
       if (event.channelRef != null) {
         builder.setChannelRef(toChannelRef(event.channelRef));
       }
@@ -395,14 +396,39 @@ final class ChannelzProtoUtil {
     return Collections.unmodifiableList(channelTraceEvents);
   }
 
+  static Severity toSeverity(Event.Severity severity) {
+    if (severity == null) {
+      return Severity.CT_UNKNOWN;
+    }
+    switch (severity) {
+      case CT_INFO:
+        return Severity.CT_INFO;
+      case CT_ERROR:
+        return Severity.CT_ERROR;
+      case CT_WARNING:
+        return Severity.CT_WARNING;
+      default:
+        return Severity.CT_UNKNOWN;
+    }
+  }
+
   static State toState(ConnectivityState state) {
     if (state == null) {
       return State.UNKNOWN;
     }
-    try {
-      return Enum.valueOf(State.class, state.name());
-    } catch (IllegalArgumentException e) {
-      return State.UNKNOWN;
+    switch (state) {
+      case IDLE:
+        return State.IDLE;
+      case READY:
+        return State.READY;
+      case CONNECTING:
+        return State.CONNECTING;
+      case SHUTDOWN:
+        return State.SHUTDOWN;
+      case TRANSIENT_FAILURE:
+        return State.TRANSIENT_FAILURE;
+      default:
+        return State.UNKNOWN;
     }
   }
 
@@ -467,5 +493,13 @@ final class ChannelzProtoUtil {
     } catch (ExecutionException e) {
       throw Status.INTERNAL.withCause(e).asRuntimeException();
     }
+  }
+
+  // A version of Any.pack() that works with protolite.
+  private static Any packToAny(String typeName, MessageLite value) {
+    return Any.newBuilder()
+        .setTypeUrl("type.googleapis.com/grpc.channelz.v1." + typeName)
+        .setValue(value.toByteString())
+        .build();
   }
 }
