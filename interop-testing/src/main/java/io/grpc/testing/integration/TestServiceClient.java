@@ -533,8 +533,7 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
-            (currentChannel) -> tester.maybeCreateNewChannel(currentChannel, false)
-        );
+            (currentChannel) -> currentChannel);
         break;
       }
 
@@ -549,8 +548,7 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
-            (currentChannel) -> tester.maybeCreateNewChannel(currentChannel, true)
-            );
+            (currentChannel) -> tester.createNewChannel(currentChannel));
         break;
       }
 

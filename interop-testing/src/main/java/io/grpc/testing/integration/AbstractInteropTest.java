@@ -1757,7 +1757,7 @@ public abstract class AbstractInteropTest {
       int soakRequestSize,
       int soakResponseSize,
       int numThreads,
-      Function<ManagedChannel, ManagedChannel> maybeCreateNewChannel)
+      Function<ManagedChannel, ManagedChannel> createNewChannel)
       throws InterruptedException {
     if (soakIterations % numThreads != 0) {
       throw new IllegalArgumentException("soakIterations must be evenly divisible by numThreads.");
@@ -1785,7 +1785,7 @@ public abstract class AbstractInteropTest {
               serverUri,
               threadResultsList.get(currentThreadInd),
               sharedChannel,
-              maybeCreateNewChannel);
+              createNewChannel);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           throw new RuntimeException("Thread interrupted: " + e.getMessage(), e);
@@ -1845,15 +1845,11 @@ public abstract class AbstractInteropTest {
       channel.awaitTermination(10, TimeUnit.SECONDS);
     }
   }
-  protected ManagedChannel maybeCreateNewChannel(ManagedChannel currentChannel,
-      boolean resetChannel) {
+  protected ManagedChannel createNewChannel(ManagedChannel currentChannel) {
     try {
-      if (resetChannel) {
         shutdownChannel(currentChannel);
         return createChannel();
-      }
-      return currentChannel;
-    } catch (InterruptedException e) {
+      } catch (InterruptedException e) {
       throw new RuntimeException("Interrupted while creating a new channel", e)
     }
   }
