@@ -1799,11 +1799,11 @@ public abstract class AbstractInteropTest {
     }
 
     int totalFailures = 0;
-    AtomicInteger iterationsDone = new AtomicInteger(0);
+    int iterationsDone = 0;
     Histogram latencies = new Histogram(4);
     for (ThreadResults threadResult :threadResultsList) {
       totalFailures += threadResult.getThreadFailures();
-      iterationsDone.addAndGet(threadResult.getIterationsDone());
+      iterationsDone += (threadResult.getIterationsDone());
       latencies.add(threadResult.getLatencies());
     }
     System.err.println(
@@ -1847,12 +1847,16 @@ public abstract class AbstractInteropTest {
     }
   }
   protected ManagedChannel maybeCreateNewChannel(ManagedChannel currentChannel,
-      boolean resetChannel) throws InterruptedException {
-    if (resetChannel) {
-      shutdownChannel(currentChannel);
-      return createChannel();
+      boolean resetChannel) {
+    try {
+      if (resetChannel) {
+        shutdownChannel(currentChannel);
+        return createChannel();
+      }
+      return currentChannel;
+    } catch (InterruptedException e) {
+      throw new RuntimeException("Interrupted while creating a new channel", e)
     }
-    return currentChannel;
   }
 
   private void executeSoakTestInThread(
