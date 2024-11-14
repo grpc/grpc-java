@@ -259,13 +259,8 @@ public final class XdsFederationTestClient {
                 soakRequestSize,
                 soakResponseSize,
                 1,
-                (currentChannel) -> {
-                  try {
-                    return maybeCreateNewChannel(currentChannel, false);
-                  } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                  }
-                });
+                (currentChannel) -> maybeCreateNewChannel(currentChannel, false)
+                );
           }
               break;
           case "channel_soak":{
@@ -279,13 +274,8 @@ public final class XdsFederationTestClient {
                 soakRequestSize,
                 soakResponseSize,
                 1,
-                (currentChannel) -> {
-                  try {
-                    return maybeCreateNewChannel(currentChannel, true);
-                  } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                  }
-                });
+                (currentChannel) -> maybeCreateNewChannel(currentChannel, true)
+                );
           }
             break;
           default:

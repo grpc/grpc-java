@@ -112,13 +112,11 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -690,7 +688,8 @@ public abstract class AbstractInteropTest {
                     .setSize(31415))
             .addResponseParameters(
                 ResponseParameters.newBuilder()
-                    .setCompressed(BoolValue.newBuilder().setValue(false)))
+                    .setCompressed(BoolValue.newBuilder().setValue(false))
+                    .setSize(92653))
             .build();
     final List<StreamingOutputCallResponse> goldenResponses =
         Arrays.asList(
