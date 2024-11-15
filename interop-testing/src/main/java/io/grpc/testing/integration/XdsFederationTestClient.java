@@ -307,7 +307,7 @@ public final class XdsFederationTestClient {
     }
   }
 
-  private void run() throws Exception {
+  private void run() throws InterruptedException {
     logger.info("Begin test case: " + testCase);
     ArrayList<Thread> threads = new ArrayList<>();
     for (InnerClient c : clients) {
