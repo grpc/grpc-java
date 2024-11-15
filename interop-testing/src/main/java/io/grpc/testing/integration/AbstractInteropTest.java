@@ -1850,7 +1850,7 @@ public abstract class AbstractInteropTest {
         shutdownChannel(currentChannel);
         return createChannel();
       } catch (InterruptedException e) {
-      throw new RuntimeException("Interrupted while creating a new channel", e)
+      throw new RuntimeException("Interrupted while creating a new channel", e);
     }
   }
 
