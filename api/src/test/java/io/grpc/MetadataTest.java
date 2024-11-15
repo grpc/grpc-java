@@ -478,6 +478,17 @@ public class MetadataTest {
     assertSame(anotherSalmon, h2.get(KEY_IMMUTABLE));
   }
 
+  @Test
+  public void failNonPrintableAsciiCharacters() {
+    String value = "José";
+
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("String \"" + value + "\" contains non-printable ASCII characters");
+
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("test-non-printable", Metadata.ASCII_STRING_MARSHALLER), value);
+  }
+
   private static final class Fish {
     private String name;
 
