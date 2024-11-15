@@ -127,7 +127,7 @@ public final class XdsFederationTestClient {
         case "soak_request_size":
           soakRequestSize = Integer.parseInt(value);
           break;
-        case "":
+        case "soak_response_size":
           soakResponseSize = Integer.parseInt(value);
           break;
         default:
