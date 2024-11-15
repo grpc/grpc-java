@@ -262,7 +262,7 @@ public final class XdsFederationTestClient {
                 (currentChannel) -> currentChannel);
           }
               break;
-          case "channel_soak":{
+          case "channel_soak": {
             performSoakTest(
                 serverUri,
                 soakIterations,
@@ -311,7 +311,14 @@ public final class XdsFederationTestClient {
     logger.info("Begin test case: " + testCase);
     ArrayList<Thread> threads = new ArrayList<>();
     for (InnerClient c : clients) {
-      Thread t = new Thread(c::run);
+      Thread t = new Thread(() -> {
+        try {
+          c.run();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt(); // Properly re-interrupt the thread
+          throw new RuntimeException("Thread was interrupted during execution", e);
+        }
+      });
       t.start();
       threads.add(t);
     }

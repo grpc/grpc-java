@@ -1794,7 +1794,7 @@ public abstract class AbstractInteropTest {
       threads[threadInd].start();
     }
     for (Thread thread : threads) {
-          thread.join();
+      thread.join();
     }
 
     int totalFailures = 0;
@@ -1802,7 +1802,7 @@ public abstract class AbstractInteropTest {
     Histogram latencies = new Histogram(4);
     for (ThreadResults threadResult :threadResultsList) {
       totalFailures += threadResult.getThreadFailures();
-      iterationsDone += (threadResult.getIterationsDone());
+      iterationsDone += threadResult.getIterationsDone();
       latencies.add(threadResult.getLatencies());
     }
     System.err.println(
@@ -1845,11 +1845,12 @@ public abstract class AbstractInteropTest {
       channel.awaitTermination(10, TimeUnit.SECONDS);
     }
   }
+
   protected ManagedChannel createNewChannel(ManagedChannel currentChannel) {
     try {
-        shutdownChannel(currentChannel);
-        return createChannel();
-      } catch (InterruptedException e) {
+      shutdownChannel(currentChannel);
+      return createChannel();
+    } catch (InterruptedException e) {
       throw new RuntimeException("Interrupted while creating a new channel", e);
     }
   }
@@ -1865,7 +1866,7 @@ public abstract class AbstractInteropTest {
       String serverUri,
       ThreadResults threadResults,
       ManagedChannel sharedChannel,
-      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException{
+      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException {
     ManagedChannel currentChannel = sharedChannel;
     TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc
         .newBlockingStub(currentChannel)
@@ -1880,15 +1881,17 @@ public abstract class AbstractInteropTest {
 
       currentChannel = maybeCreateChannel.apply(currentChannel);
       TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
-          .newBlockingStub(currentChannel).
-          withInterceptors(recordClientCallInterceptor(clientCallCapture));
-      SoakIterationResult result = performOneSoakIteration(currentStub, soakRequestSize, soakResponseSize);
+          .newBlockingStub(currentChannel)
+              .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+      SoakIterationResult result = performOneSoakIteration(currentStub,
+          soakRequestSize, soakResponseSize);
       SocketAddress peer = clientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       StringBuilder logStr = new StringBuilder(
           String.format(
               Locale.US,
-              "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s", Thread.currentThread().getId(),
+              "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+              Thread.currentThread().getId(),
               i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
       if (!result.getStatus().equals(Status.OK)) {
         threadResults.threadFailures++;
