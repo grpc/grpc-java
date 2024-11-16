@@ -1868,10 +1868,6 @@ public abstract class AbstractInteropTest {
       ManagedChannel sharedChannel,
       Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException {
     ManagedChannel currentChannel = sharedChannel;
-    TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc
-        .newBlockingStub(currentChannel)
-        .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-
     for (int i = 0; i < soakIterationsPerThread; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
