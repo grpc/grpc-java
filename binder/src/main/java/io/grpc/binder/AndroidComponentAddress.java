@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.UserHandle;
 import com.google.common.base.Objects;
 import io.grpc.ExperimentalApi;
@@ -225,56 +224,32 @@ public final class AndroidComponentAddress extends SocketAddress {
     return new Builder();
   }
 
-  /**
-   * Fluently builds instances of {@link AndroidComponentAddress}.
-   */
+  /** Fluently builds instances of {@link AndroidComponentAddress}. */
   public static class Builder {
     Intent bindIntent = new Intent(ApiConstants.ACTION_BIND);
     UserHandle targetUser;
 
     /**
-     * See {@link Intent#setPackage(String)}.
+     * Sets the binding {@link Intent} to one having the "filter matching" fields of 'intent'.
+     *
+     * <p>'intent' must be "explicit", i.e. having either a target component ({@link
+     * Intent#getComponent()}) or package restriction ({@link Intent#getPackage()}).
      */
-    public Builder setPackage(String pkg) {
-      bindIntent.setPackage(pkg);
+    public Builder setBindIntent(Intent intent) {
+      this.bindIntent = intent.cloneFilter();
       return this;
     }
 
     /**
-     * See {@link Intent#setComponent(ComponentName)}.
+     * Sets the binding {@link Intent} to one with the specified 'component' and default values for
+     * all other fields, for convenience.
      */
-    public Builder setComponent(ComponentName component) {
-      bindIntent.setComponent(component);
+    public Builder setBindIntentFromComponent(ComponentName component) {
+      this.bindIntent = new Intent(ApiConstants.ACTION_BIND).setComponent(component);
       return this;
     }
 
-    /**
-     * See {@link Intent#addCategory(String)}.
-     */
-    public Builder addCategory(String category) {
-      bindIntent.addCategory(category);
-      return this;
-    }
-
-    /**
-     * See {@link Intent#setAction(String)}.
-     */
-    public Builder setAction(String action) {
-      bindIntent.setAction(action);
-      return this;
-    }
-
-    /**
-     * See {@link Intent#setData(Uri)}.
-     */
-    public Builder setData(Uri data) {
-      bindIntent.setData(data);
-      return this;
-    }
-
-    /**
-     * See {@link AndroidComponentAddress#getTargetUser()}.
-     */
+    /** See {@link AndroidComponentAddress#getTargetUser()}. */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
     public Builder setTargetUser(@Nullable UserHandle targetUser) {
       this.targetUser = targetUser;
@@ -282,6 +257,8 @@ public final class AndroidComponentAddress extends SocketAddress {
     }
 
     public AndroidComponentAddress build() {
+      // We clone any incoming mutable intent in the setter, not here. AndroidComponentAddress
+      // itself is immutable so multiple instances built from here can safely share 'bindIntent'.
       return new AndroidComponentAddress(bindIntent, targetUser);
     }
   }

@@ -121,7 +121,7 @@ public final class AndroidComponentAddressTest {
             AndroidComponentAddress.forRemoteComponent(
                 appContext.getPackageName(), appContext.getClass().getName()),
             AndroidComponentAddress.newBuilder()
-                .setComponent(hostComponent)
+                .setBindIntentFromComponent(hostComponent)
                 .setTargetUser(null)
                 .build())
         .addEqualityGroup(
@@ -131,8 +131,7 @@ public final class AndroidComponentAddressTest {
             AndroidComponentAddress.forBindIntent(
                 new Intent().setAction("custom-action").setComponent(hostComponent)),
             AndroidComponentAddress.newBuilder()
-                .setAction("custom-action")
-                .setComponent(hostComponent)
+                .setBindIntent(new Intent().setAction("custom-action").setComponent(hostComponent))
                 .setTargetUser(null)
                 .build())
         .addEqualityGroup(
@@ -149,21 +148,23 @@ public final class AndroidComponentAddressTest {
     new EqualsTester()
         .addEqualityGroup(
             AndroidComponentAddress.newBuilder()
-                .setPackage("com.foo")
+                .setBindIntentFromComponent(hostComponent)
                 .setTargetUser(newUserHandle(10))
                 .build(),
             AndroidComponentAddress.newBuilder()
-                .setPackage("com.foo")
+                .setBindIntentFromComponent(hostComponent)
                 .setTargetUser(newUserHandle(10))
                 .build())
         .addEqualityGroup(
             AndroidComponentAddress.newBuilder()
-                .setPackage("com.foo")
+                .setBindIntentFromComponent(hostComponent)
                 .setTargetUser(newUserHandle(11))
                 .build())
         .addEqualityGroup(
-            AndroidComponentAddress.newBuilder().setPackage("com.foo").setTargetUser(null).build(),
-            AndroidComponentAddress.newBuilder().setPackage("com.foo").build())
+            AndroidComponentAddress.newBuilder()
+                .setBindIntentFromComponent(hostComponent)
+                .setTargetUser(null)
+                .build())
         .testEquals();
   }
 
