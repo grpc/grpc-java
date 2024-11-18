@@ -86,6 +86,23 @@ public final class AndroidComponentAddressTest {
   }
 
   @Test
+  public void testPostCreateIntentMutation() {
+    Intent bindIntent = new Intent().setAction("foo-action").setComponent(hostComponent);
+    AndroidComponentAddress addr = AndroidComponentAddress.forBindIntent(bindIntent);
+    bindIntent.setAction("bar-action");
+    assertThat(addr.asBindIntent().getAction()).isEqualTo("foo-action");
+  }
+
+  @Test
+  public void testPostBuildIntentMutation() {
+    Intent bindIntent = new Intent().setAction("foo-action").setComponent(hostComponent);
+    AndroidComponentAddress addr =
+        AndroidComponentAddress.newBuilder().setBindIntent(bindIntent).build();
+    bindIntent.setAction("bar-action");
+    assertThat(addr.asBindIntent().getAction()).isEqualTo("foo-action");
+  }
+
+  @Test
   @Config(sdk = 30)
   public void testAsAndroidAppUriSdk30() throws URISyntaxException {
     AndroidComponentAddress addr =
