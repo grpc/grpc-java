@@ -97,6 +97,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.TrustManagerFactory;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -687,16 +688,32 @@ public class XdsSecurityClientServerTest {
     return settableFuture;
   }
 
-  private void setTrustStoreSystemProperties(String trustStoreFilePath) {
+  private void setTrustStoreSystemProperties(String trustStoreFilePath) throws Exception {
     System.setProperty("javax.net.ssl.trustStore", trustStoreFilePath);
     System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
     System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+    createDefaultTrustManager();
   }
 
-  private void clearTrustStoreSystemProperties() {
+  private void clearTrustStoreSystemProperties() throws Exception {
     System.clearProperty("javax.net.ssl.trustStore");
     System.clearProperty("javax.net.ssl.trustStorePassword");
     System.clearProperty("javax.net.ssl.trustStoreType");
+    createDefaultTrustManager();
+  }
+
+  /**
+   * Workaround the JDK's TrustManagerStore race. TrustManagerStore has a cache for the default
+   * certs based on the system properties. But updating the cache is not thread-safe and can cause a
+   * half-updated cache to appear fully-updated. When both the client and server initialize their
+   * trust store simultaneously, one can see a half-updated value. Creating the trust manager here
+   * fixes the cache while no other threads are running and thus the client and server threads won't
+   * race to update it. See https://github.com/grpc/grpc-java/issues/11678.
+   */
+  private void createDefaultTrustManager() throws Exception {
+    TrustManagerFactory factory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    factory.init((KeyStore) null);
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
