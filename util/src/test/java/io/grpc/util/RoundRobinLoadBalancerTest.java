@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.util.MultiChildLoadBalancer.IS_PETIOLE_POLICY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
@@ -54,13 +53,15 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
+import io.grpc.internal.PickFirstLoadBalancerProviderAccessor;
 import io.grpc.internal.TestUtils;
-import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.util.RoundRobinLoadBalancer.ReadyPicker;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -104,6 +105,7 @@ public class RoundRobinLoadBalancerTest {
   private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   private TestHelper testHelperInst = new TestHelper();
   private Helper mockHelper = mock(Helper.class, delegatesTo(testHelperInst));
+  private boolean defaultNewPickFirst = PickFirstLoadBalancerProvider.isEnabledNewPickFirst();
 
   @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
   private PickSubchannelArgs mockArgs;
@@ -126,6 +128,7 @@ public class RoundRobinLoadBalancerTest {
 
   @After
   public void tearDown() throws Exception {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(defaultNewPickFirst);
     verifyNoMoreInteractions(mockArgs);
   }
 
@@ -200,12 +203,6 @@ public class RoundRobinLoadBalancerTest {
 
     verify(removedSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).requestConnection();
-
-    assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
-    for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
-      assertThat(childLbState.getResolvedAddresses().getAttributes().get(IS_PETIOLE_POLICY))
-          .isTrue();
-    }
 
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
@@ -462,6 +459,60 @@ public class RoundRobinLoadBalancerTest {
     verify(sc3, times(1)).requestConnection();
     assertThat(stateIterator.hasNext()).isFalse();
     assertThat(pickers.hasNext()).isFalse();
+  }
+
+  @Test
+  public void subchannelHealthObserved() throws Exception {
+    // Only the new PF policy observes the new separate listener for health
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // PickFirst does most of this work. If the test fails, check IS_PETIOLE_POLICY
+    Map<Subchannel, LoadBalancer.SubchannelStateListener> healthListeners = new HashMap<>();
+    loadBalancer = new RoundRobinLoadBalancer(new ForwardingLoadBalancerHelper() {
+      @Override
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        Subchannel subchannel = super.createSubchannel(args.toBuilder()
+            .setAttributes(args.getAttributes().toBuilder()
+              .set(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY, true)
+              .build())
+            .build());
+        healthListeners.put(
+            subchannel, args.getOption(LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY));
+        return subchannel;
+      }
+
+      @Override
+      protected Helper delegate() {
+        return mockHelper;
+      }
+    });
+
+    InOrder inOrder = inOrder(mockHelper);
+    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
+    Subchannel subchannel0 = subchannels.get(Arrays.asList(servers.get(0)));
+    Subchannel subchannel1 = subchannels.get(Arrays.asList(servers.get(1)));
+    Subchannel subchannel2 = subchannels.get(Arrays.asList(servers.get(2)));
+
+    // Subchannels go READY, but the LB waits for health
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    }
+    inOrder.verify(mockHelper, times(0))
+        .updateBalancingState(eq(READY), any(SubchannelPicker.class));
+
+    // Health results lets subchannels go READY
+    healthListeners.get(subchannel0).onSubchannelState(
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("oh no")));
+    healthListeners.get(subchannel1).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    healthListeners.get(subchannel2).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    List<Subchannel> picks = Arrays.asList(
+        picker.pickSubchannel(mockArgs).getSubchannel(),
+        picker.pickSubchannel(mockArgs).getSubchannel(),
+        picker.pickSubchannel(mockArgs).getSubchannel(),
+        picker.pickSubchannel(mockArgs).getSubchannel());
+    assertThat(picks).containsExactly(subchannel1, subchannel2, subchannel1, subchannel2);
   }
 
   @Test
