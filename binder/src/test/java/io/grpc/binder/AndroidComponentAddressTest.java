@@ -18,6 +18,7 @@ package io.grpc.binder;
 
 import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -100,6 +101,15 @@ public final class AndroidComponentAddressTest {
         AndroidComponentAddress.newBuilder().setBindIntent(bindIntent).build();
     bindIntent.setAction("bar-action");
     assertThat(addr.asBindIntent().getAction()).isEqualTo("foo-action");
+  }
+
+  @Test
+  public void testBuilderMissingRequired() {
+    IllegalStateException ise =
+        assertThrows(
+            IllegalStateException.class,
+            () -> AndroidComponentAddress.newBuilder().setTargetUser(newUserHandle(123)).build());
+    assertThat(ise.getMessage()).contains("bindIntent");
   }
 
   @Test

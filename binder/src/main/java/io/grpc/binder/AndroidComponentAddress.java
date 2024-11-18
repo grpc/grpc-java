@@ -18,6 +18,7 @@ package io.grpc.binder;
 
 import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -226,7 +227,7 @@ public final class AndroidComponentAddress extends SocketAddress {
 
   /** Fluently builds instances of {@link AndroidComponentAddress}. */
   public static class Builder {
-    Intent bindIntent = new Intent(ApiConstants.ACTION_BIND);
+    Intent bindIntent;
     UserHandle targetUser;
 
     /**
@@ -259,6 +260,7 @@ public final class AndroidComponentAddress extends SocketAddress {
     public AndroidComponentAddress build() {
       // We clone any incoming mutable intent in the setter, not here. AndroidComponentAddress
       // itself is immutable so multiple instances built from here can safely share 'bindIntent'.
+      checkState(bindIntent != null, "Required property 'bindIntent' unset");
       return new AndroidComponentAddress(bindIntent, targetUser);
     }
   }
