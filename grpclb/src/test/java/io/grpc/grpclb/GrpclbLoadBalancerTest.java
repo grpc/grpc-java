@@ -2024,9 +2024,9 @@ public class GrpclbLoadBalancerTest {
         .containsExactly(new ErrorEntry(GrpclbState.NO_AVAILABLE_BACKENDS_STATUS));
   }
 
-  private void connectingBalanceState(Subchannel subchannel, ConnectivityStateInfo CONNECTING,
+  private void connectingBalanceState(Subchannel subchannel, ConnectivityStateInfo connectingInfo,
       InOrder inOrder, ConnectivityState connecting, RoundRobinEntry bufferEntry) {
-    deliverSubchannelState(subchannel, CONNECTING);
+    deliverSubchannelState(subchannel, connectingInfo);
     inOrder.verify(helper).updateBalancingState(eq(connecting), pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker1.dropList).containsExactly(null, null);
@@ -2059,6 +2059,29 @@ public class GrpclbLoadBalancerTest {
         .containsExactly(
             new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
             new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
+  }
+
+  private List<ServerEntry> simulateReceivingLbResponse(InOrder inOrder,
+      StreamObserver<LoadBalanceResponse> lbResponseObserver, ServerEntry backend1a,
+      ServerEntry backend1b) {
+    List<ServerEntry> backends1 = Arrays.asList(backend1a, backend1b);
+    inOrder.verify(helper, never())
+        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+    logs.clear();
+    lbResponseObserver.onNext(buildInitialResponse());
+    assertThat(logs).containsExactly(
+        "INFO: [grpclb-<api.google.com>] Got an LB initial response: "
+            + buildInitialResponse());
+    logs.clear();
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    inOrder.verify(subchannelPool).takeOrCreateSubchannel(
+        eq(new EquivalentAddressGroup(backend1a.addr, LB_BACKEND_ATTRS)),
+        any(Attributes.class));
+    inOrder.verify(subchannelPool).takeOrCreateSubchannel(
+        eq(new EquivalentAddressGroup(backend1b.addr, LB_BACKEND_ATTRS)),
+        any(Attributes.class));
+    return backends1;
   }
 
   private StreamObserver<LoadBalanceResponse> getLoadBalanceResponseStreamObserver() {
@@ -2550,29 +2573,6 @@ public class GrpclbLoadBalancerTest {
     assertEquals(
         new EquivalentAddressGroup(backend1b.addr, LB_BACKEND_ATTRS),
         subchannel2.getAddresses());
-  }
-
-  private List<ServerEntry> simulateReceivingLbResponse(InOrder inOrder,
-      StreamObserver<LoadBalanceResponse> lbResponseObserver, ServerEntry backend1a,
-      ServerEntry backend1b) {
-    List<ServerEntry> backends1 = Arrays.asList(backend1a, backend1b);
-    inOrder.verify(helper, never())
-        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
-    logs.clear();
-    lbResponseObserver.onNext(buildInitialResponse());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Got an LB initial response: "
-            + buildInitialResponse());
-    logs.clear();
-    lbResponseObserver.onNext(buildLbResponse(backends1));
-
-    inOrder.verify(subchannelPool).takeOrCreateSubchannel(
-        eq(new EquivalentAddressGroup(backend1a.addr, LB_BACKEND_ATTRS)),
-        any(Attributes.class));
-    inOrder.verify(subchannelPool).takeOrCreateSubchannel(
-        eq(new EquivalentAddressGroup(backend1b.addr, LB_BACKEND_ATTRS)),
-        any(Attributes.class));
-    return backends1;
   }
 
   private void exitFallbackWithNewBackends(InOrder inOrder,
