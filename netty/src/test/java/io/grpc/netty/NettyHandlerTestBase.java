@@ -16,7 +16,6 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_WINDOW_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -242,7 +241,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   }
 
   protected final byte[] contentAsArray() {
-    return "hello world".getBytes(UTF_8);
+    return "hello world".getBytes();
   }
 
   protected final Http2FrameWriter verifyWrite() {
