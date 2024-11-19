@@ -611,7 +611,9 @@ public abstract class BinderTransport
               factory.sourceContext,
               factory.channelCredentials,
               targetAddress.asBindIntent(),
-              factory.targetUserHandle,
+              targetAddress.getTargetUser() != null
+                  ? targetAddress.getTargetUser()
+                  : factory.defaultTargetUserHandle,
               factory.bindServiceFlags.toInteger(),
               this);
     }
