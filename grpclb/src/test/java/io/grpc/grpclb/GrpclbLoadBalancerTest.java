@@ -945,13 +945,7 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     connectingBalanceState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING), inOrder,
         CONNECTING, BUFFER_ENTRY);
-    inOrder.verifyNoMoreInteractions();
-
-    assertThat(logs).containsExactly(
-            "DEBUG: [grpclb-<api.google.com>] Got an LB response: "
-                + buildLbResponse(backends1))
-        .inOrder();
-    logs.clear();
+    inOrderVerifySubchannel(inOrder, backends1);
 
     // Let subchannels be connected
     connectSubchannels(inOrder, subchannel1, subchannel2);
@@ -2458,6 +2452,9 @@ public class GrpclbLoadBalancerTest {
             .build()));
   }
 
+  ManagedChannel oobChannel;
+  StreamObserver<LoadBalanceResponse> lbResponseObserver;
+  StreamObserver<LoadBalanceRequest> lbRequestObserver;
   @Test
   public void grpclbWorking_lbSendsFallbackMessage() {
     InOrder inOrder = inOrder(helper, subchannelPool);
@@ -2466,20 +2463,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
     // Fallback timer is started as soon as the addresses are resolved.
-    assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
-    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
-        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
-    assertEquals(1, fakeOobChannels.size());
-    ManagedChannel oobChannel = fakeOobChannels.poll();
-    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
-    verify(lbRequestObserver).onNext(
-        eq(LoadBalanceRequest.newBuilder()
-            .setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
-            .build()));
+    initializeSubchannel(grpclbBalancerList);
 
     // Simulate receiving LB response
     ServerEntry backend1a = new ServerEntry("127.0.0.1", 2000, "token0001");
@@ -2496,14 +2480,7 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     connectingBalanceState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING), inOrder,
         CONNECTING, BUFFER_ENTRY);
-    inOrder.verifyNoMoreInteractions();
-
-    assertThat(logs)
-        .containsExactly(
-            "DEBUG: [grpclb-<api.google.com>] Got an LB response: "
-                + buildLbResponse(backends1))
-        .inOrder();
-    logs.clear();
+    inOrderVerifySubchannel(inOrder, backends1);
 
     // Let subchannels be connected
     connectSubchannels(inOrder, subchannel1, subchannel2);
@@ -2550,17 +2527,38 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(CONNECTING));
     connectingBalanceState(subchannel4, ConnectivityStateInfo.forNonError(CONNECTING), inOrder,
         CONNECTING, BUFFER_ENTRY);
+    inOrderVerifySubchannel(inOrder, backends2);
+
+    // Let new subchannels be connected
+    connectNewSubchannels(inOrder, subchannel3, subchannel4);
+  }
+
+  private void inOrderVerifySubchannel(InOrder inOrder, List<ServerEntry> backends1) {
     inOrder.verifyNoMoreInteractions();
 
     assertThat(logs)
         .containsExactly(
             "DEBUG: [grpclb-<api.google.com>] Got an LB response: "
-                + buildLbResponse(backends2))
+                + buildLbResponse(backends1))
         .inOrder();
     logs.clear();
+  }
 
-    // Let new subchannels be connected
-    connectNewSubchannels(inOrder, subchannel3, subchannel4);
+  private void initializeSubchannel(List<EquivalentAddressGroup> grpclbBalancerList) {
+    assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
+    assertEquals(1, fakeOobChannels.size());
+    oobChannel = fakeOobChannels.poll();
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder()
+            .setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
   }
 
   private static void verifySubchannelRequestConnection(ServerEntry backend1a,
