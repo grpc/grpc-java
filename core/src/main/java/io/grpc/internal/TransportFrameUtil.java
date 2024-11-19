@@ -24,7 +24,6 @@ import io.grpc.Metadata;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 
 /**
@@ -34,8 +33,6 @@ import javax.annotation.CheckReturnValue;
  * used for the contents of the transport frame.
  */
 public final class TransportFrameUtil {
-
-  private static final Logger logger = Logger.getLogger(TransportFrameUtil.class.getName());
 
   private static final byte[] binaryHeaderSuffixBytes =
       Metadata.BINARY_HEADER_SUFFIX.getBytes(US_ASCII);
@@ -57,26 +54,14 @@ public final class TransportFrameUtil {
     for (int i = 0; i < serializedHeaders.length; i += 2) {
       byte[] key = serializedHeaders[i];
       byte[] value = serializedHeaders[i + 1];
-      if (endsWith(key, binaryHeaderSuffixBytes)) {
-        // Binary header.
-        serializedHeaders[k] = key;
-        serializedHeaders[k + 1]
-            = InternalMetadata.BASE64_ENCODING_OMIT_PADDING.encode(value).getBytes(US_ASCII);
-        k += 2;
-      } else {
-        // Non-binary header.
-        // Filter out headers that contain non-spec-compliant ASCII characters.
-        // TODO(zhangkun83): only do such check in development mode since it's expensive
-        if (isSpecCompliantAscii(value)) {
-          serializedHeaders[k] = key;
-          serializedHeaders[k + 1] = value;
-          k += 2;
-        } else {
-          String keyString = new String(key, US_ASCII);
-          logger.warning("Metadata key=" + keyString + ", value=" + Arrays.toString(value)
-              + " contains invalid ASCII characters");
-        }
-      }
+      serializedHeaders[k] = key;
+      serializedHeaders[k + 1] =
+          endsWith(key, binaryHeaderSuffixBytes)
+              // Binary header.
+              ? InternalMetadata.BASE64_ENCODING_OMIT_PADDING.encode(value).getBytes(US_ASCII)
+              // Non-binary header.
+              : value;
+      k += 2;
     }
     // Fast path, everything worked out fine.
     if (k == serializedHeaders.length) {
@@ -157,19 +142,6 @@ public final class TransportFrameUtil {
     }
     for (int i = start; i < subject.length; i++) {
       if (subject[i] != suffix[i - start]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Returns {@code true} if {@code subject} contains only bytes that are spec-compliant ASCII
-   * characters and space.
-   */
-  private static boolean isSpecCompliantAscii(byte[] subject) {
-    for (byte b : subject) {
-      if (b < 32 || b > 126) {
         return false;
       }
     }

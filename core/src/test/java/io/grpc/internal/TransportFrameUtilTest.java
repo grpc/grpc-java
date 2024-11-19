@@ -71,7 +71,6 @@ public class TransportFrameUtilTest {
     Metadata headers = new Metadata();
     headers.put(PLAIN_STRING, COMPLIANT_ASCII_STRING);
     headers.put(BINARY_STRING, NONCOMPLIANT_ASCII_STRING);
-    headers.put(BINARY_STRING_WITHOUT_SUFFIX, NONCOMPLIANT_ASCII_STRING);
     byte[][] http2Headers = TransportFrameUtil.toHttp2Headers(headers);
     // BINARY_STRING_WITHOUT_SUFFIX should not get in because it contains non-compliant ASCII
     // characters but doesn't have "-bin" in the name.
@@ -96,7 +95,6 @@ public class TransportFrameUtilTest {
     Metadata headers = new Metadata();
     headers.put(PLAIN_STRING, COMPLIANT_ASCII_STRING);
     headers.put(BINARY_STRING, NONCOMPLIANT_ASCII_STRING);
-    headers.put(BINARY_STRING_WITHOUT_SUFFIX, NONCOMPLIANT_ASCII_STRING);
     byte[][] http2Headers = TransportFrameUtil.toHttp2Headers(headers);
     byte[][] rawSerialized = TransportFrameUtil.toRawSerializedHeaders(http2Headers);
     Metadata recoveredHeaders = InternalMetadata.newMetadata(rawSerialized);
