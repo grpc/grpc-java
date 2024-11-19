@@ -2246,20 +2246,6 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(same(subchannel2), eq(ConnectivityStateInfo.forNonError(IDLE)));
 
     // A new LB stream is created
-    createNewLbStream(lbResponseObserver, lbRequestObserver);
-
-    // Simulate receiving LB response
-    inOrder.verify(helper, never())
-        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
-    lbResponseObserver.onNext(buildInitialResponse());
-    lbResponseObserver.onNext(buildLbResponse(backends1));
-
-    // PICK_FIRST Subchannel
-    pickFirstSubchannel(inOrder, backends1);
-  }
-
-  private void createNewLbStream(StreamObserver<LoadBalanceResponse> lbResponseObserver,
-      StreamObserver<LoadBalanceRequest> lbRequestObserver) {
     assertEquals(1, fakeOobChannels.size());
     verify(mockLbService, times(2))
         .balanceLoad(lbResponseObserverCaptor.capture());
@@ -2270,6 +2256,15 @@ public class GrpclbLoadBalancerTest {
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
                 InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
+
+    // Simulate receiving LB response
+    inOrder.verify(helper, never())
+        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    // PICK_FIRST Subchannel
+    pickFirstSubchannel(inOrder, backends1);
   }
 
   private void pickFirstSubchannel(InOrder inOrder, List<ServerEntry> backends1) {
@@ -2372,7 +2367,16 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(same(subchannel2), eq(ConnectivityStateInfo.forNonError(IDLE)));
 
     // A new LB stream is created
-    createNewLbStream(lbResponseObserver, lbRequestObserver);
+    assertEquals(1, fakeOobChannels.size());
+    verify(mockLbService, times(2))
+        .balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
 
     // Simulate receiving LB response
     inOrder.verify(helper, never())
