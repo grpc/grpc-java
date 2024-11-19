@@ -2455,6 +2455,7 @@ public class GrpclbLoadBalancerTest {
   ManagedChannel oobChannel;
   StreamObserver<LoadBalanceResponse> lbResponseObserver;
   StreamObserver<LoadBalanceRequest> lbRequestObserver;
+  
   @Test
   public void grpclbWorking_lbSendsFallbackMessage() {
     InOrder inOrder = inOrder(helper, subchannelPool);
