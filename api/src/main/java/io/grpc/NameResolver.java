@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -374,10 +375,10 @@ public abstract class NameResolver {
      * Gets the value of an "extension" arg by key, or {@code null} if it's not set.
      *
      * <p>While ordinary {@link Args} should be universally useful and meaningful, extension
-     * arguments can apply just to resolvers of a certain URI scheme, just to resolvers producing
-     * a particular type of {@link java.net.SocketAddress}, or even an individual {@link
-     * NameResolver} subclass. Extension args are identified by an instance of {@link Args.Key}
-     * which should be defined in a java package and class appropriate to the argument's scope.
+     * arguments can apply just to resolvers of a certain URI scheme, just to resolvers producing a
+     * particular type of {@link java.net.SocketAddress}, or even an individual {@link NameResolver}
+     * subclass. Extension args are identified by an instance of {@link Args.Key} which should be
+     * defined in a java package and class appropriate to the argument's scope.
      *
      * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
      * the name to be resolved itself. However, there are rare cases where all or part of the target
@@ -575,17 +576,13 @@ public abstract class NameResolver {
         return this;
       }
 
-      /**
-       * See {@link Args#getExtension(Key)}.
-       */
+      /** See {@link Args#getExtension(Key)}. */
       public <T> Builder setExtension(Key<T> key, T value) {
         extensionsBuilder.set(key, value);
         return this;
       }
 
-      /**
-       * Copies each extension argument from 'extensions' into this Builder.
-       */
+      /** Copies each extension argument from 'extensions' into this Builder. */
       @Internal
       public Builder setAllExtensions(Extensions extensions) {
         extensionsBuilder.setAll(extensions);
@@ -662,6 +659,10 @@ public abstract class NameResolver {
         return (T) data.get(key);
       }
 
+      Set<Key<?>> keysForTest() {
+        return Collections.unmodifiableSet(data.keySet());
+      }
+
       /** Creates a new builder. */
       public static Builder newBuilder() {
         return new Builder(EMPTY);
@@ -708,9 +709,7 @@ public abstract class NameResolver {
           return this;
         }
 
-        /**
-         * Copies all entries from 'other' into this Builder.
-         */
+        /** Copies all entries from 'other' into this Builder. */
         public Builder setAll(Extensions other) {
           data(other.data.size()).putAll(other.data);
           return this;
