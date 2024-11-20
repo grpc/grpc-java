@@ -37,7 +37,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
-import java.io.File;
+import java.io.InputStream;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -218,9 +218,12 @@ public final class S2AHandshakerServiceChannelTest {
 
   private static Server createMtlsServer() throws Exception {
     SimpleServiceImpl service = new SimpleServiceImpl();
-    File serverCert = new File("src/test/resources/server_cert.pem");
-    File serverKey = new File("src/test/resources/server_key.pem");
-    File rootCert = new File("src/test/resources/root_cert.pem");
+    InputStream serverCert = S2AHandshakerServiceChannelTest.class
+        .getClassLoader().getResourceAsStream("server_cert.pem");
+    InputStream serverKey = S2AHandshakerServiceChannelTest.class
+        .getClassLoader().getResourceAsStream("server_key.pem");
+    InputStream rootCert = S2AHandshakerServiceChannelTest.class
+        .getClassLoader().getResourceAsStream("root_cert.pem");
     ServerCredentials creds =
         TlsServerCredentials.newBuilder()
             .keyManager(serverCert, serverKey)
@@ -238,9 +241,12 @@ public final class S2AHandshakerServiceChannelTest {
   }
 
   private static ChannelCredentials getTlsChannelCredentials() throws Exception {
-    File clientCert = new File("src/test/resources/client_cert.pem");
-    File clientKey = new File("src/test/resources/client_key.pem");
-    File rootCert = new File("src/test/resources/root_cert.pem");
+    InputStream clientCert = S2AHandshakerServiceChannelTest.class
+        .getClassLoader().getResourceAsStream("client_cert.pem");
+    InputStream clientKey = S2AHandshakerServiceChannelTest.class
+        .getClassLoader().getResourceAsStream("client_key.pem");
+    InputStream rootCert = S2AHandshakerServiceChannelTest.class
+        .getClassLoader().getResourceAsStream("root_cert.pem");
     return TlsChannelCredentials.newBuilder()
             .keyManager(clientCert, clientKey)
             .trustManager(rootCert)
