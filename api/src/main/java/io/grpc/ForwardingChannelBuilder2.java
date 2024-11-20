@@ -18,7 +18,6 @@ package io.grpc;
 
 import com.google.common.base.MoreObjects;
 import com.google.errorprone.annotations.DoNotCall;
-import io.grpc.NameResolver;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;

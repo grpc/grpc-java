@@ -279,7 +279,7 @@ public abstract class NameResolver {
    * <p>Args applicable to all {@link NameResolver}s are defined here using ordinary setters and
    * getters. This container can also hold externally-defined "extended" args that aren't so widely
    * useful or that would be inappropriate dependencies for this low level API. See {@link
-   * Args.Extensions} for more.
+   * Args#getExtension} for more.
    *
    * <p>Note this class overrides neither {@code equals()} nor {@code hashCode()}.
    *
@@ -303,7 +303,8 @@ public abstract class NameResolver {
       this.syncContext = checkNotNull(builder.syncContext, "syncContext not set");
       this.serviceConfigParser =
           checkNotNull(builder.serviceConfigParser, "serviceConfigParser not set");
-      this.extensions = checkNotNull(builder.extensions, "extensions not set");
+      this.extensions =
+          builder.extensionsBuilder != null ? builder.extensionsBuilder.build() : Extensions.EMPTY;
       this.scheduledExecutorService = builder.scheduledExecutorService;
       this.channelLogger = builder.channelLogger;
       this.executor = builder.executor;
@@ -314,10 +315,9 @@ public abstract class NameResolver {
      * The port number used in case the target or the underlying naming system doesn't provide a
      * port number.
      *
-     * <p>TODO: Only meaningful for InetSocketAddress producers. Move to {@link Extensions}?
-     *
      * @since 1.21.0
      */
+    // <p>TODO: Only meaningful for InetSocketAddress producers. Move to {@link Extensions}?
     public int getDefaultPort() {
       return defaultPort;
     }
@@ -371,9 +371,23 @@ public abstract class NameResolver {
     }
 
     /**
-     * Gets the value of an extended arg by key, or {@code null} if it's not set.
+     * Gets the value of an "extension" arg by key, or {@code null} if it's not set.
+     *
+     * <p>While ordinary {@link Args} should be universally useful and meaningful, extension
+     * arguments can apply just to resolvers of a certain URI scheme, just to resolvers producing
+     * a particular type of {@link java.net.SocketAddress}, or even an individual {@link
+     * NameResolver} subclass. Extension args are identified by an instance of {@link Args.Key}
+     * which should be defined in a java package and class appropriate to the argument's scope.
+     *
+     * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
+     * the name to be resolved itself. However, there are rare cases where all or part of the target
+     * name can't be represented by any standard URI scheme or can't be encoded as a String at all.
+     * Extension args, in contrast, can be an arbitrary Java type, making them a useful work around
+     * in these cases.
+     *
+     * <p>Extension args can also be used simply to avoid adding inappropriate deps to the low level
+     * io.grpc package.
      */
-    @SuppressWarnings("unchecked")
     @Nullable
     public <T> T getExtension(Key<T> key) {
       return extensions.get(key);
@@ -443,7 +457,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
-      builder.setExtensions(extensions);
+      builder.extensionsBuilder = extensions.toBuilder();
       builder.setScheduledExecutorService(scheduledExecutorService);
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
@@ -474,7 +488,7 @@ public abstract class NameResolver {
       private ChannelLogger channelLogger;
       private Executor executor;
       private String overrideAuthority;
-      private Extensions extensions = Extensions.EMPTY;
+      private Extensions.Builder extensionsBuilder = Extensions.newBuilder();
 
       Builder() {
       }
@@ -563,11 +577,18 @@ public abstract class NameResolver {
 
       /**
        * See {@link Args#getExtension(Key)}.
-       *
-       * <p>Optional, {@link Extensions#EMPTY} by default.
        */
-      public Builder setExtensions(Extensions extensions) {
-        this.extensions = extensions;
+      public <T> Builder setExtension(Key<T> key, T value) {
+        extensionsBuilder.set(key, value);
+        return this;
+      }
+
+      /**
+       * Copies each extension argument from 'extensions' into this Builder.
+       */
+      @Internal
+      public Builder setAllExtensions(Extensions extensions) {
+        extensionsBuilder.setAll(extensions);
         return this;
       }
 
@@ -617,31 +638,14 @@ public abstract class NameResolver {
     /**
      * An immutable type-safe container of externally-defined {@link NameResolver} arguments.
      *
-     * <p>While ordinary {@link Args} should be universally useful and meaningful, argument {@link
-     * Extensions} can apply just to resolvers of a certain URI scheme, just to resolvers producing
-     * a particular type of {@link java.net.SocketAddress}, or even an individual {@link
-     * NameResolver} subclass. Extended args are identified by an instance of {@link Args.Key} which
-     * should be defined in a java package and class appropriate to the argument's scope.
-     *
-     * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
-     * the name to be resolved itself. However, there are rare cases where all or part of the target
-     * name can't be represented by any standard URI scheme or can't be encoded as a String at all.
-     * Extensions, in contrast, can be an arbitrary Java type, making them a useful work around in
-     * these cases.
-     *
-     * <p>Extensions can also be used simply to avoid adding inappropriate deps to the low level
-     * io.grpc package.
-     *
      * <p>NB: This class overrides neither {@code equals()} nor {@code hashCode()}.
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     @Immutable
+    @Internal
     public static final class Extensions {
       private static final IdentityHashMap<Key<?>, Object> EMPTY_MAP = new IdentityHashMap<>();
 
-      /**
-       * The canonical empty instance.
-       */
+      /** The canonical empty instance. */
       public static final Extensions EMPTY = new Extensions(EMPTY_MAP);
 
       private final IdentityHashMap<Key<?>, Object> data;
@@ -651,24 +655,21 @@ public abstract class NameResolver {
         this.data = data;
       }
 
-      /**
-       * Gets the value for the key, or {@code null} if it's not present.
-       */
+      /** Gets the value for the key, or {@code null} if it's not present. */
       @SuppressWarnings("unchecked")
       @Nullable
       public <T> T get(Key<T> key) {
         return (T) data.get(key);
       }
 
-      /**
-       * Creates a new builder.
-       */
+      /** Creates a new builder. */
       public static Builder newBuilder() {
         return new Builder(EMPTY);
       }
 
       /**
        * Creates a new builder that is pre-populated with the content of this container.
+       *
        * @return a new builder.
        */
       public Builder toBuilder() {
@@ -680,9 +681,7 @@ public abstract class NameResolver {
         return data.toString();
       }
 
-      /**
-       * Fluently builds instances of {@link Extensions}.
-       */
+      /** Fluently builds instances of {@link Extensions}. */
       public static final class Builder {
         private Extensions base;
         private IdentityHashMap<Key<?>, Object> newdata;
@@ -709,9 +708,12 @@ public abstract class NameResolver {
           return this;
         }
 
-        /**
-         * Builds the extensions.
-         */
+        public Builder setAll(Extensions other) {
+          data(other.data.size()).putAll(other.data);
+          return this;
+        }
+
+        /** Builds the extensions. */
         public Extensions build() {
           if (newdata != null) {
             for (Map.Entry<Key<?>, Object> entry : base.data.entrySet()) {
