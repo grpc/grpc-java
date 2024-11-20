@@ -708,6 +708,9 @@ public abstract class NameResolver {
           return this;
         }
 
+        /**
+         * Copies all entries from 'other' into this Builder.
+         */
         public Builder setAll(Extensions other) {
           data(other.data.size()).putAll(other.data);
           return this;
