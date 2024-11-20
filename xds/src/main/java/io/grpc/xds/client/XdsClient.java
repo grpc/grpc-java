@@ -174,8 +174,8 @@ public abstract class XdsClient {
       return new ResourceMetadata(ResourceMetadataStatus.UNKNOWN, "", 0, false,null, null);
     }
 
-    public static ResourceMetadata newResourceMetadataRequested(boolean cached) {
-      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, cached, null, null);
+    public static ResourceMetadata newResourceMetadataRequested() {
+      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, false, null, null);
     }
 
     public static ResourceMetadata newResourceMetadataDoesNotExist() {

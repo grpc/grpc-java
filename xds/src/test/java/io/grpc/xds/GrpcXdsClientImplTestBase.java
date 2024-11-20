@@ -107,9 +107,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.BlockingDeque;
@@ -487,10 +485,11 @@ public abstract class GrpcXdsClientImplTestBase {
   private void verifyResourceMetadataNacked(
       XdsResourceType<?> type, String resourceName, Any rawResource, String versionInfo,
       long updateTime, String failedVersion, long failedUpdateTimeNanos,
-      List<String> failedDetails) {
+      List<String> failedDetails, boolean cached) {
     ResourceMetadata resourceMetadata =
         verifyResourceMetadata(type, resourceName, rawResource, ResourceMetadataStatus.NACKED,
             versionInfo, updateTime, true);
+    assertThat(resourceMetadata.isCached()).isEqualTo(cached);
 
     UpdateFailureState errorState = resourceMetadata.getErrorState();
     assertThat(errorState).isNotNull();
@@ -632,30 +631,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(xdsClientMetricReporter, times(times)).reportServerFailure(
         eq(serverFailureCount),
         eq(xdsServer));
-  }
-
-  private void verifyResourceCountByCacheState(XdsResourceType<?> type, String cacheState,
-      long resourceCount) {
-    Map<String, ResourceMetadata> metadataMap = awaitSubscribedResourcesMetadata().get(type);
-    assertThat(metadataMap).isNotNull();
-
-    // Calculate number of resources in cacheState
-    Map<String, Long> resourceCountsByState = new HashMap<>();
-    for (ResourceMetadata metadata : metadataMap.values()) {
-      String cacheStateFromResourceStatus = cacheStateFromResourceStatus(metadata.getStatus(),
-          metadata.isCached());
-      resourceCountsByState.compute(cacheStateFromResourceStatus,
-          (k, v) -> (v == null) ? 1 : v + 1);
-    }
-
-    assertThat(resourceCountsByState.get(cacheState)).isEqualTo(resourceCount);
-  }
-
-  private String cacheStateFromResourceStatus(ResourceMetadataStatus metadataStatus,
-      boolean isResourceCached) {
-    String status = metadataStatus.toString().toLowerCase(Locale.ROOT);
-    return metadataStatus == ResourceMetadataStatus.NACKED && isResourceCached
-        ? status + "_but_cached" : status;
   }
 
   /**
@@ -803,7 +778,7 @@ public abstract class GrpcXdsClientImplTestBase {
     List<String> errorsV2 = ImmutableList.of("LDS response Listener 'B' validation error: ");
     verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
     // Check metric data.
     verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), LDS.typeUrl());
     if (!ignoreResourceDeletion()) {
@@ -896,7 +871,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 3);
     verifyResourceMetadataNacked(
         LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT, VERSION_2, TIME_INCREMENT * 3,
-        errorsV2);
+        errorsV2, true);
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(LDS, "C");
     } else {
@@ -1579,7 +1554,7 @@ public abstract class GrpcXdsClientImplTestBase {
         ImmutableList.of("RDS response RouteConfiguration 'B' validation error: ");
     verifyResourceMetadataAcked(RDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(RDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
     verifyResourceMetadataAcked(RDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
     call.verifyRequestNack(RDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
 
@@ -1963,9 +1938,9 @@ public abstract class GrpcXdsClientImplTestBase {
     List<String> errorsV2 = ImmutableList.of("CDS response Cluster 'B' validation error: ");
     verifyResourceMetadataAcked(CDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
     if (!ignoreResourceDeletion()) {
-      verifyResourceMetadataDoesNotExist(CDS, "C");;
+      verifyResourceMetadataDoesNotExist(CDS, "C");
     } else {
       // When resource deletion is disabled, {C} stays ACKed in the previous version VERSION_1.
       verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
@@ -2068,7 +2043,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(CDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 3);
     verifyResourceMetadataNacked(
         CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT, VERSION_2, TIME_INCREMENT * 3,
-        errorsV2);
+        errorsV2, true);
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(CDS, "C");
     } else {
@@ -2991,7 +2966,7 @@ public abstract class GrpcXdsClientImplTestBase {
         ImmutableList.of("EDS response ClusterLoadAssignment 'B' validation error: ");
     verifyResourceMetadataAcked(EDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(EDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
     verifyResourceMetadataAcked(EDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
     call.verifyRequestNack(EDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
 
@@ -4125,90 +4100,6 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyServerFailureCount(3, 1, xdsServerInfo.target());
   }
 
-
-  @Test
-  public void testResourceCounts() {
-    List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "A", ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "B", ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "C", ldsResourceWatcher);
-    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
-    assertThat(call).isNotNull();
-    verifyResourceMetadataRequested(LDS, "A");
-    verifyResourceMetadataRequested(LDS, "B");
-    verifyResourceMetadataRequested(LDS, "C");
-    verifySubscribedResourcesMetadataSizes(3, 0, 0, 0);
-    // Check metric data.
-    verifyResourceCountByCacheState(LDS,"requested", 3);
-
-    // LDS -> {A, B, C}, version 1
-    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
-        "A", Any.pack(mf.buildListenerWithApiListenerForRds("A", "A.1")),
-        "B", Any.pack(mf.buildListenerWithApiListenerForRds("B", "B.1")),
-        "C", Any.pack(mf.buildListenerWithApiListenerForRds("C", "C.1")));
-    call.sendResponse(LDS, resourcesV1.values().asList(), VERSION_1, "0000");
-    // {A, B, C} -> ACK, version 1
-    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), LDS.typeUrl());
-    verifyResourceMetadataAcked(LDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
-    verifyResourceMetadataAcked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
-    verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
-    // Check metric data.
-    verifyResourceCountByCacheState(LDS, "acked",3);
-    call.verifyRequest(LDS, subscribedResourceNames, VERSION_1, "0000", NODE);
-
-    // LDS -> {A, B}, version 2
-    // Failed to parse endpoint B
-    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
-        "A", Any.pack(mf.buildListenerWithApiListenerForRds("A", "A.2")),
-        "B", Any.pack(mf.buildListenerWithApiListenerInvalid("B")));
-    call.sendResponse(LDS, resourcesV2.values().asList(), VERSION_2, "0001");
-    // {A} -> ACK, version 2
-    // {B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
-    // {C} -> does not exist
-    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), LDS.typeUrl());
-    List<String> errorsV2 = ImmutableList.of("LDS response Listener 'B' validation error: ");
-    verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
-    verifyResourceMetadataNacked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
-    if (!ignoreResourceDeletion()) {
-      verifyResourceMetadataDoesNotExist(LDS, "C");
-      // Check metric data.
-      verifyResourceCountByCacheState(LDS, "acked", 1);
-      verifyResourceCountByCacheState(LDS, "nacked_but_cached", 1);
-      verifyResourceCountByCacheState(LDS, "does_not_exist", 1);
-    } else {
-      // When resource deletion is disabled, {C} stays ACKed in the previous version VERSION_1.
-      verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
-      // Check metric data.
-      verifyResourceCountByCacheState(LDS, "acked", 2);
-      verifyResourceCountByCacheState(LDS, "nacked_but_cached", 1);
-    }
-    call.verifyRequestNack(LDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
-
-    // LDS -> {B, C} version 3
-    ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
-        "B", Any.pack(mf.buildListenerWithApiListenerForRds("B", "B.3")),
-        "C", Any.pack(mf.buildListenerWithApiListenerForRds("C", "C.3")));
-    call.sendResponse(LDS, resourcesV3.values().asList(), VERSION_3, "0002");
-    // {A} -> does not exist
-    // {B, C} -> ACK, version 3
-    verifyResourceValidInvalidCount(1, 2, 0, xdsServerInfo.target(), LDS.typeUrl());
-    if (!ignoreResourceDeletion()) {
-      verifyResourceMetadataDoesNotExist(LDS, "A");
-      // Check metric data.
-      verifyResourceCountByCacheState(LDS, "acked", 2);
-      verifyResourceCountByCacheState(LDS, "does_not_exist", 1);
-    } else {
-      // When resource deletion is disabled, {A} stays ACKed in the previous version VERSION_2.
-      verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
-      // Check metric data.
-      verifyResourceCountByCacheState(LDS, "acked", 3);
-    }
-    verifyResourceMetadataAcked(LDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
-    verifyResourceMetadataAcked(LDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
-    call.verifyRequest(LDS, subscribedResourceNames, VERSION_3, "0002", NODE);
-    verifySubscribedResourcesMetadataSizes(3, 0, 0, 0);
-  }
 
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);

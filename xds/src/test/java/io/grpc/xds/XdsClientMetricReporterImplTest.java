@@ -241,7 +241,7 @@ public class XdsClientMetricReporterImplTest {
 
     Map<String, ResourceMetadata> ldsResourceMetadataMap = new HashMap<>();
     ldsResourceMetadataMap.put("resource1",
-        ResourceMetadata.newResourceMetadataRequested(false));
+        ResourceMetadata.newResourceMetadataRequested());
     ResourceMetadata ackedLdsResource = ResourceMetadata.newResourceMetadataAcked(rawListener, "42",
         nanosLastUpdate);
     ldsResourceMetadataMap.put("resource2", ackedLdsResource);
@@ -252,8 +252,7 @@ public class XdsClientMetricReporterImplTest {
             "nacked after previous ack", true));
 
     Map<String, ResourceMetadata> rdsResourceMetadataMap = new HashMap<>();
-    ResourceMetadata requestedRdsResourceMetadata = ResourceMetadata.newResourceMetadataRequested(
-        false);
+    ResourceMetadata requestedRdsResourceMetadata = ResourceMetadata.newResourceMetadataRequested();
     rdsResourceMetadataMap.put("resource5",
         ResourceMetadata.newResourceMetadataNacked(requestedRdsResourceMetadata, "24",
             nanosLastUpdate, "nacked after request", false));

@@ -635,7 +635,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       }
 
       // Initial fetch scheduled or rescheduled, transition metadata state to REQUESTED.
-      metadata = ResourceMetadata.newResourceMetadataRequested(this.data != null);
+      metadata = ResourceMetadata.newResourceMetadataRequested();
 
       respTimer = syncContext.schedule(
           new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
