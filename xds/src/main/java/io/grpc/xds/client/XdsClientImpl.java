@@ -40,7 +40,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ResourceStore;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.URI;
@@ -48,7 +47,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -542,32 +540,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     return future;
   }
 
-  @Override
-  public SettableFuture<Void> reportResourceCounts(ResourceCallback callback) {
-    SettableFuture<Void> future = SettableFuture.create();
-    syncContext.execute(() -> {
-      for (XdsResourceType<? extends ResourceUpdate> resourceType : resourceSubscribers.keySet()) {
-        Map<String, Long> resourceCountsByState = new HashMap<>();
-        for (ResourceSubscriber<? extends ResourceUpdate> subscriber :
-            resourceSubscribers.get(resourceType).values()) {
-          String cacheState = cacheStateFromResourceStatus(subscriber.metadata,
-              subscriber.data != null);
-          resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
-        }
-        resourceCountsByState.forEach((cacheState, count) ->
-            callback.reportResourceCountGauge(count, cacheState, resourceType.typeUrl()));
-      }
-      future.set(null);
-    });
-    return future;
-  }
-
-  private String cacheStateFromResourceStatus(ResourceMetadata metadata, boolean isResourceCached) {
-    String status = metadata.getStatus().toString().toLowerCase(Locale.ROOT);
-    return metadata.getStatus() == ResourceMetadataStatus.NACKED && isResourceCached
-        ? status + "_but_cached" : status;
-  }
-
   /** Tracks a single subscribed resource. */
   private final class ResourceSubscriber<T extends ResourceUpdate> {
     @Nullable private final ServerInfo serverInfo;
@@ -663,7 +635,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       }
 
       // Initial fetch scheduled or rescheduled, transition metadata state to REQUESTED.
-      metadata = ResourceMetadata.newResourceMetadataRequested();
+      metadata = ResourceMetadata.newResourceMetadataRequested(this.data != null);
 
       respTimer = syncContext.schedule(
           new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
@@ -706,10 +678,10 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         respTimer.cancel();
         respTimer = null;
       }
-      this.metadata = ResourceMetadata
-          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       ResourceUpdate oldData = this.data;
       this.data = parsedResource.getResourceUpdate();
+      this.metadata = ResourceMetadata
+          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       absent = false;
       if (resourceDeletionIgnored) {
         logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
@@ -803,7 +775,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
     void onRejected(String rejectedVersion, long rejectedTime, String rejectedDetails) {
       metadata = ResourceMetadata
-          .newResourceMetadataNacked(metadata, rejectedVersion, rejectedTime, rejectedDetails);
+          .newResourceMetadataNacked(metadata, rejectedVersion, rejectedTime, rejectedDetails,
+              data != null);
     }
 
     private void notifyWatcher(ResourceWatcher<T> watcher, T update) {

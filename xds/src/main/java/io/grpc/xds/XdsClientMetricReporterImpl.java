@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Internal;
 import io.grpc.LongCounterMetricInstrument;
@@ -28,11 +29,19 @@ import io.grpc.MetricRecorder.BatchRecorder;
 import io.grpc.MetricRecorder.Registration;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceCallback;
+import io.grpc.xds.client.XdsClient.ResourceMetadata;
+import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ServerConnectionCallback;
 import io.grpc.xds.client.XdsClientMetricReporter;
+import io.grpc.xds.client.XdsResourceType;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -41,7 +50,7 @@ import javax.annotation.Nullable;
  * XdsClientMetricReporter implementation.
  */
 @Internal
-public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
+final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
 
   private static final Logger logger = Logger.getLogger(
       XdsClientMetricReporterImpl.class.getName());
@@ -55,8 +64,6 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   private final String target;
   @Nullable
   private Registration gaugeRegistration = null;
-  @Nullable
-  private XdsClient xdsClient = null;
 
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
@@ -111,13 +118,13 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
         Arrays.asList(target, xdsServer), Collections.emptyList());
   }
 
-  void setXdsClient(XdsClient client) {
-    this.xdsClient = client;
+  void setXdsClient(XdsClient xdsClient) {
+    assert gaugeRegistration == null;
     // register gauge here
     this.gaugeRegistration = metricRecorder.registerBatchCallback(new BatchCallback() {
       @Override
       public void accept(BatchRecorder recorder) {
-        reportCallbackMetrics(recorder);
+        reportCallbackMetrics(recorder, xdsClient);
       }
     }, CONNECTED_GAUGE, RESOURCES_GAUGE);
   }
@@ -125,25 +132,63 @@ public class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   void close() {
     if (gaugeRegistration != null) {
       gaugeRegistration.close();
+      gaugeRegistration = null;
     }
   }
 
-  void reportCallbackMetrics(BatchRecorder recorder) {
+  void reportCallbackMetrics(BatchRecorder recorder, XdsClient xdsClient) {
     MetricReporterCallback callback = new MetricReporterCallback(recorder, target);
     try {
-      SettableFuture<Void> reportResourceCountsCompleted = this.xdsClient.reportResourceCounts(
-          callback);
       SettableFuture<Void> reportServerConnectionsCompleted =
-          this.xdsClient.reportServerConnections(callback);
+          xdsClient.reportServerConnections(callback);
+
+      ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+          getResourceMetadataCompleted = xdsClient.getSubscribedResourcesMetadataSnapshot();
+
+      Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
+          getResourceMetadataCompleted.get(10, TimeUnit.SECONDS);
+
+      SettableFuture<Void> reportResourceCountsCompleted = computeAndReportResourceCounts(
+          metadataByType, callback);
+
       // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
-      Void unused1 = reportResourceCountsCompleted.get(5, TimeUnit.SECONDS);
-      Void unused2 = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
-    } catch (Exception e) {
+      Void unused1 = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
+      Void unused2 = reportResourceCountsCompleted.get(5, TimeUnit.SECONDS);
+    } catch (ExecutionException | TimeoutException | InterruptedException e) {
       if (e instanceof InterruptedException) {
         Thread.currentThread().interrupt(); // re-set the current thread's interruption state
       }
       logger.log(Level.WARNING, "Failed to report gauge metrics", e);
     }
+  }
+
+  private SettableFuture<Void> computeAndReportResourceCounts(
+      Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
+      MetricReporterCallback callback) {
+    SettableFuture<Void> future = SettableFuture.create();
+
+    for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry :
+        metadataByType.entrySet()) {
+      XdsResourceType<?> type = metadataByTypeEntry.getKey();
+
+      Map<String, Long> resourceCountsByState = new HashMap<>();
+      for (ResourceMetadata metadata : metadataByTypeEntry.getValue().values()) {
+        String cacheState = cacheStateFromResourceStatus(metadata.getStatus(), metadata.isCached());
+        resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
+      }
+
+      resourceCountsByState.forEach((cacheState, count) ->
+          callback.reportResourceCountGauge(count, cacheState, type.typeUrl()));
+    }
+    future.set(null);
+    return future;
+  }
+
+  private static String cacheStateFromResourceStatus(ResourceMetadataStatus metadataStatus,
+      boolean isResourceCached) {
+    String status = metadataStatus.toString().toLowerCase(Locale.ROOT);
+    return metadataStatus == ResourceMetadataStatus.NACKED && isResourceCached
+        ? status + "_but_cached" : status;
   }
 
   @VisibleForTesting

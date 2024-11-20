@@ -24,10 +24,17 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.protobuf.Any;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricRecorder.BatchCallback;
@@ -35,12 +42,15 @@ import io.grpc.MetricRecorder.BatchRecorder;
 import io.grpc.MetricSink;
 import io.grpc.xds.XdsClientMetricReporterImpl.MetricReporterCallback;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsClient.ResourceCallback;
+import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ServerConnectionCallback;
+import io.grpc.xds.client.XdsResourceType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -116,8 +126,8 @@ public class XdsClientMetricReporterImplTest {
   public void setXdsClient_reportMetrics() throws Exception {
     SettableFuture<Void> future = SettableFuture.create();
     future.set(null);
-    when(mockXdsClient.reportResourceCounts(any(ResourceCallback.class)))
-        .thenReturn(future);
+    when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
+        ImmutableMap.of()));
     when(mockXdsClient.reportServerConnections(any(ServerConnectionCallback.class)))
         .thenReturn(future);
     reporter.setXdsClient(mockXdsClient);
@@ -125,49 +135,38 @@ public class XdsClientMetricReporterImplTest {
         eqMetricInstrumentName("grpc.xds_client.connected"),
         eqMetricInstrumentName("grpc.xds_client.resources"));
     gaugeBatchCallbackCaptor.getValue().accept(mockBatchRecorder);
-    verify(mockXdsClient).reportResourceCounts(any(ResourceCallback.class));
     verify(mockXdsClient).reportServerConnections(any(ServerConnectionCallback.class));
   }
 
   @Test
   public void setXdsClient_reportCallbackMetrics_resourceCountsFails() {
-    List<LogRecord> logs = new ArrayList<>();
-    Handler testLogHandler = new Handler() {
-      @Override
-      public void publish(LogRecord record) {
-        logs.add(record);
-      }
-
-      @Override
-      public void close() {}
-
-      @Override
-      public void flush() {}
-    };
+    TestlogHandler testLogHandler = new TestlogHandler();
     Logger logger = Logger.getLogger(XdsClientMetricReporterImpl.class.getName());
     logger.addHandler(testLogHandler);
 
-    // Create a future that will throw an exception
-    SettableFuture<Void> resourceCountsFuture = SettableFuture.create();
-    resourceCountsFuture.setException(new Exception("test"));
-    when(mockXdsClient.reportResourceCounts(any())).thenReturn(resourceCountsFuture);
+    // For reporting resource counts connections, return a normally completed future
+    SettableFuture<Void> future = SettableFuture.create();
+    future.set(null);
+    when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
+        ImmutableMap.of()));
 
-    // For server connections, return a normally completed future
-    SettableFuture<Void> serverConnectionsFuture = SettableFuture.create();
-    serverConnectionsFuture.set(null);
-    when(mockXdsClient.reportServerConnections(any())).thenReturn(serverConnectionsFuture);
+    // Create a future that will throw an exception
+    SettableFuture<Void> serverConnectionsFeature = SettableFuture.create();
+    serverConnectionsFeature.setException(new Exception("test"));
+    when(mockXdsClient.reportServerConnections(any())).thenReturn(serverConnectionsFeature);
 
     reporter.setXdsClient(mockXdsClient);
     verify(mockMetricRecorder)
         .registerBatchCallback(gaugeBatchCallbackCaptor.capture(), any(), any());
     gaugeBatchCallbackCaptor.getValue().accept(mockBatchRecorder);
     // Verify that the xdsClient methods were called
-    verify(mockXdsClient).reportResourceCounts(any());
+    // verify(mockXdsClient).reportResourceCounts(any());
     verify(mockXdsClient).reportServerConnections(any());
 
-    assertThat(logs.size()).isEqualTo(1);
-    assertThat(logs.get(0).getLevel()).isEqualTo(Level.WARNING);
-    assertThat(logs.get(0).getMessage()).isEqualTo("Failed to report gauge metrics");
+    assertThat(testLogHandler.getLogs().size()).isEqualTo(1);
+    assertThat(testLogHandler.getLogs().get(0).getLevel()).isEqualTo(Level.WARNING);
+    assertThat(testLogHandler.getLogs().get(0).getMessage()).isEqualTo(
+        "Failed to report gauge metrics");
     logger.removeHandler(testLogHandler);
   }
 
@@ -175,8 +174,8 @@ public class XdsClientMetricReporterImplTest {
   public void metricGauges() {
     SettableFuture<Void> future = SettableFuture.create();
     future.set(null);
-    when(mockXdsClient.reportResourceCounts(any(ResourceCallback.class)))
-        .thenReturn(future);
+    when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
+        ImmutableMap.of()));
     when(mockXdsClient.reportServerConnections(any(ServerConnectionCallback.class)))
         .thenReturn(future);
     reporter.setXdsClient(mockXdsClient);
@@ -188,15 +187,14 @@ public class XdsClientMetricReporterImplTest {
     // Trigger the internal call to reportCallbackMetrics()
     gaugeBatchCallback.accept(mockBatchRecorder);
 
-    ArgumentCaptor<ResourceCallback> resourceCallbackCaptor =
-        ArgumentCaptor.forClass(ResourceCallback.class);
     ArgumentCaptor<ServerConnectionCallback> serverConnectionCallbackCaptor =
         ArgumentCaptor.forClass(ServerConnectionCallback.class);
-    verify(mockXdsClient).reportResourceCounts(resourceCallbackCaptor.capture());
+    // verify(mockXdsClient).reportResourceCounts(resourceCallbackCaptor.capture());
     verify(mockXdsClient).reportServerConnections(serverConnectionCallbackCaptor.capture());
 
     // Get the captured callback
-    MetricReporterCallback callback = (MetricReporterCallback) resourceCallbackCaptor.getValue();
+    MetricReporterCallback callback = (MetricReporterCallback)
+        serverConnectionCallbackCaptor.getValue();
 
     // Verify that reportResourceCounts and reportServerConnections were called
     // with the captured callback
@@ -231,6 +229,127 @@ public class XdsClientMetricReporterImplTest {
   }
 
   @Test
+  public void reportCallbackMetrics_computeAndReportResourceCounts() {
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType = new HashMap<>();
+    XdsResourceType<?> listenerResource = XdsListenerResource.getInstance();
+    XdsResourceType<?> routeConfigResource = XdsRouteConfigureResource.getInstance();
+    XdsResourceType<?> clusterResource = XdsClusterResource.getInstance();
+
+    Any rawListener =
+        Any.pack(Listener.newBuilder().setName("listener.googleapis.com").build());
+    long nanosLastUpdate = 1577923199_606042047L;
+
+    Map<String, ResourceMetadata> ldsResourceMetadataMap = new HashMap<>();
+    ldsResourceMetadataMap.put("resource1",
+        ResourceMetadata.newResourceMetadataRequested(false));
+    ResourceMetadata ackedLdsResource = ResourceMetadata.newResourceMetadataAcked(rawListener, "42",
+        nanosLastUpdate);
+    ldsResourceMetadataMap.put("resource2", ackedLdsResource);
+    ldsResourceMetadataMap.put("resource3",
+        ResourceMetadata.newResourceMetadataAcked(rawListener, "43", nanosLastUpdate));
+    ldsResourceMetadataMap.put("resource4",
+        ResourceMetadata.newResourceMetadataNacked(ackedLdsResource, "44", nanosLastUpdate,
+            "nacked after previous ack", true));
+
+    Map<String, ResourceMetadata> rdsResourceMetadataMap = new HashMap<>();
+    ResourceMetadata requestedRdsResourceMetadata = ResourceMetadata.newResourceMetadataRequested(
+        false);
+    rdsResourceMetadataMap.put("resource5",
+        ResourceMetadata.newResourceMetadataNacked(requestedRdsResourceMetadata, "24",
+            nanosLastUpdate, "nacked after request", false));
+    rdsResourceMetadataMap.put("resource6",
+        ResourceMetadata.newResourceMetadataDoesNotExist());
+
+    Map<String, ResourceMetadata> cdsResourceMetadataMap = new HashMap<>();
+    cdsResourceMetadataMap.put("resource7", ResourceMetadata.newResourceMetadataUnknown());
+
+    metadataByType.put(listenerResource, ldsResourceMetadataMap);
+    metadataByType.put(routeConfigResource, rdsResourceMetadataMap);
+    metadataByType.put(clusterResource, cdsResourceMetadataMap);
+
+    SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
+    reportServerConnectionsCompleted.set(null);
+    when(mockXdsClient.reportServerConnections(any(MetricReporterCallback.class)))
+        .thenReturn(reportServerConnectionsCompleted);
+
+    ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+        getResourceMetadataCompleted = Futures.immediateFuture(metadataByType);
+    when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
+        .thenReturn(getResourceMetadataCompleted);
+
+    reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
+
+    // LDS resource requested
+    verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
+        eq(1L), eq(Arrays.asList(target, "requested", listenerResource.typeUrl())), any());
+    // LDS resources acked
+    verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
+        eq(2L), eq(Arrays.asList(target, "acked", listenerResource.typeUrl())), any());
+    // LDS resource nacked but cached
+    verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
+        eq(1L), eq(Arrays.asList(target, "nacked_but_cached", listenerResource.typeUrl())), any());
+
+    // RDS resource nacked
+    verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
+        eq(1L), eq(Arrays.asList(target, "nacked", routeConfigResource.typeUrl())), any());
+    // RDS resource does not exist
+    verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
+        eq(1L), eq(Arrays.asList(target, "does_not_exist", routeConfigResource.typeUrl())), any());
+
+    // CDS resource unknown
+    verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
+        eq(1L), eq(Arrays.asList(target, "unknown", clusterResource.typeUrl())), any());
+    verifyNoMoreInteractions(mockBatchRecorder);
+  }
+
+  @Test
+  public void reportCallbackMetrics_computeAndReportResourceCounts_emptyResources() {
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType = new HashMap<>();
+    XdsResourceType<?> listenerResource = XdsListenerResource.getInstance();
+    metadataByType.put(listenerResource, Collections.emptyMap());
+
+    SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
+    reportServerConnectionsCompleted.set(null);
+    when(mockXdsClient.reportServerConnections(any(MetricReporterCallback.class)))
+        .thenReturn(reportServerConnectionsCompleted);
+
+    ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+        getResourceMetadataCompleted = Futures.immediateFuture(metadataByType);
+    when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
+        .thenReturn(getResourceMetadataCompleted);
+
+    reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
+
+    // Verify that reportResourceCountGauge is never called
+    verifyNoInteractions(mockBatchRecorder);
+  }
+
+  @Test
+  public void reportCallbackMetrics_computeAndReportResourceCounts_nullMetadata() {
+    TestlogHandler testLogHandler = new TestlogHandler();
+    Logger logger = Logger.getLogger(XdsClientMetricReporterImpl.class.getName());
+    logger.addHandler(testLogHandler);
+
+    SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
+    reportServerConnectionsCompleted.set(null);
+    when(mockXdsClient.reportServerConnections(any(MetricReporterCallback.class)))
+        .thenReturn(reportServerConnectionsCompleted);
+
+    ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
+        getResourceMetadataCompleted = Futures.immediateFailedFuture(
+            new Exception("Error generating metadata snapshot"));
+    when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
+        .thenReturn(getResourceMetadataCompleted);
+
+    reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
+    assertThat(testLogHandler.getLogs().size()).isEqualTo(1);
+    assertThat(testLogHandler.getLogs().get(0).getLevel()).isEqualTo(Level.WARNING);
+    assertThat(testLogHandler.getLogs().get(0).getMessage()).isEqualTo(
+        "Failed to report gauge metrics");
+    logger.removeHandler(testLogHandler);
+  }
+
+  @Test
   public void close_closesGaugeRegistration() {
     MetricSink.Registration mockRegistration = mock(MetricSink.Registration.class);
     when(mockMetricRecorder.registerBatchCallback(any(MetricRecorder.BatchCallback.class),
@@ -253,4 +372,24 @@ public class XdsClientMetricReporterImplTest {
       }
     });
   }
+
+  static class TestlogHandler extends Handler {
+    List<LogRecord> logs = new ArrayList<>();
+
+    @Override
+    public void publish(LogRecord record) {
+      logs.add(record);
+    }
+
+    @Override
+    public void close() {}
+
+    @Override
+    public void flush() {}
+
+    public List<LogRecord> getLogs() {
+      return logs;
+    }
+  }
+
 }

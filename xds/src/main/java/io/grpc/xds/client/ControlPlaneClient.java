@@ -234,13 +234,7 @@ final class ControlPlaneClient {
    */
   // Must be synchronized
   boolean hasWorkingAdsStream() {
-    if (streamClosedNoResponse || shutdown) {
-      return false;
-    }
-    if (adsStream == null) {
-      return true;
-    }
-    return adsStream.responseReceived || !adsStream.closed;
+    return !streamClosedNoResponse;
   }
 
 

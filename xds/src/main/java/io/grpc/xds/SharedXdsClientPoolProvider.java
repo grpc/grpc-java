@@ -121,11 +121,11 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
 
   @ThreadSafe
   @VisibleForTesting
-  protected class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
+  class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
 
     private final BootstrapInfo bootstrapInfo;
     private final String target; // The target associated with the xDS client.
-    private final XdsClientMetricReporterImpl xdsClientMetricReporter;
+    private final MetricRecorder metricRecorder;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -133,13 +133,15 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private XdsClient xdsClient;
     @GuardedBy("lock")
     private int refCount;
+    @GuardedBy("lock")
+    private XdsClientMetricReporterImpl metricReporter;
 
     @VisibleForTesting
     RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target,
         MetricRecorder metricRecorder) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
       this.target = target;
-      this.xdsClientMetricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
+      this.metricRecorder = metricRecorder;
     }
 
     @Override
@@ -150,6 +152,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
             log.log(Level.INFO, "xDS node ID: {0}", bootstrapInfo.node().getId());
           }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
+          metricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
           xdsClient = new XdsClientImpl(
               DEFAULT_XDS_TRANSPORT_FACTORY,
               bootstrapInfo,
@@ -159,8 +162,8 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               TimeProvider.SYSTEM_TIME_PROVIDER,
               MessagePrinter.INSTANCE,
               new TlsContextManagerImpl(bootstrapInfo),
-              xdsClientMetricReporter);
-          xdsClientMetricReporter.setXdsClient(xdsClient);
+              metricReporter);
+          metricReporter.setXdsClient(xdsClient);
         }
         refCount++;
         return xdsClient;
@@ -174,7 +177,8 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         if (refCount == 0) {
           xdsClient.shutdown();
           xdsClient = null;
-          xdsClientMetricReporter.close();
+          metricReporter.close();
+          metricReporter = null;
           targetToXdsClientMap.remove(target);
           scheduler = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
         }
