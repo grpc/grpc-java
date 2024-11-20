@@ -20,11 +20,11 @@ import static io.grpc.s2a.internal.handshaker.TLSVersion.TLS_VERSION_1_2;
 import static io.grpc.s2a.internal.handshaker.TLSVersion.TLS_VERSION_1_3;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.io.CharStreams;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.ByteString;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.CertificateUtils;
-import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -73,15 +73,7 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   private PrivateKey privateKey;
 
   public static String convertInputStreamToString(InputStream is) throws IOException {
-    BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(
-        is, StandardCharsets.UTF_8));
-    StringBuilder stringBuilder = new StringBuilder();
-    String line;
-    while ((line = bufferedReader.readLine()) != null) {
-      stringBuilder.append(line).append("\n");
-    }
-    bufferedReader.close();
-    return stringBuilder.toString();
+    return CharStreams.toString(new InputStreamReader(is, StandardCharsets.UTF_8));
   }
 
   @CanIgnoreReturnValue
