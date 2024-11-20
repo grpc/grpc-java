@@ -124,12 +124,10 @@ public final class S2AChannelCredentialsTest {
   }
 
   private static ChannelCredentials getTlsChannelCredentials() throws Exception {
-    InputStream privateKey = S2AChannelCredentialsTest.class
-        .getClassLoader().getResourceAsStream("client_key.pem");
-    InputStream certChain = S2AChannelCredentialsTest.class
-        .getClassLoader().getResourceAsStream("client_cert.pem");
-    InputStream trustBundle = S2AChannelCredentialsTest.class
-        .getClassLoader().getResourceAsStream("root_cert.pem");
+    ClassLoader classLoader = S2AChannelCredentialsTest.class.getClassLoader();
+    InputStream privateKey = classLoader.getResourceAsStream("client_key.pem");
+    InputStream certChain = classLoader.getResourceAsStream("client_cert.pem");
+    InputStream trustBundle = classLoader.getResourceAsStream("root_cert.pem");
     return TlsChannelCredentials.newBuilder()
       .keyManager(certChain, privateKey)
       .trustManager(trustBundle)

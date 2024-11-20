@@ -162,12 +162,10 @@ public final class IntegrationTest {
 
   @Test
   public void clientCommunicateUsingMtlsToS2ACredentials_succeeds() throws Exception {
-    InputStream privateKey = IntegrationTest.class.getClassLoader()
-        .getResourceAsStream("client_key.pem");
-    InputStream certChain = IntegrationTest.class.getClassLoader()
-        .getResourceAsStream("client_cert.pem");
-    InputStream trustBundle = IntegrationTest.class.getClassLoader()
-        .getResourceAsStream("root_cert.pem");
+    ClassLoader classLoader = IntegrationTest.class.getClassLoader();
+    InputStream privateKey = classLoader.getResourceAsStream("client_key.pem");
+    InputStream certChain = classLoader.getResourceAsStream("client_cert.pem");
+    InputStream trustBundle = classLoader.getResourceAsStream("root_cert.pem");
     ChannelCredentials s2aChannelCredentials =
         TlsChannelCredentials.newBuilder()
           .keyManager(certChain, privateKey)
@@ -219,12 +217,10 @@ public final class IntegrationTest {
   }
 
   private static SslContext buildSslContext() throws SSLException {
-    InputStream privateKey =
-        IntegrationTest.class.getClassLoader().getResourceAsStream("leaf_key_ec.pem");
-    InputStream rootCert =
-        IntegrationTest.class.getClassLoader().getResourceAsStream("root_cert_ec.pem");
-    InputStream certChain =
-        IntegrationTest.class.getClassLoader().getResourceAsStream("cert_chain_ec.pem");
+    ClassLoader classLoader = IntegrationTest.class.getClassLoader();
+    InputStream privateKey = classLoader.getResourceAsStream("leaf_key_ec.pem");
+    InputStream rootCert = classLoader.getResourceAsStream("root_cert_ec.pem");
+    InputStream certChain = classLoader.getResourceAsStream("cert_chain_ec.pem");
     SslContextBuilder sslServerContextBuilder =
           SslContextBuilder.forServer(certChain, privateKey);
     SslContext sslServerContext =

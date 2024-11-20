@@ -54,6 +54,7 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     FAILURE
   }
 
+  private static final ClassLoader classLoader = FakeWriter.class.getClassLoader();
   private static final ImmutableMap<SignatureAlgorithm, String>
       ALGORITHM_TO_SIGNATURE_INSTANCE_IDENTIFIER =
           ImmutableMap.of(
@@ -110,8 +111,7 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   @CanIgnoreReturnValue
   FakeWriter initializePrivateKey() throws InvalidKeySpecException, NoSuchAlgorithmException,
                     IOException, FileNotFoundException, UnsupportedEncodingException {
-    InputStream keyInputStream = 
-        FakeWriter.class.getClassLoader().getResourceAsStream("leaf_key_ec.pem");
+    InputStream keyInputStream = classLoader.getResourceAsStream("leaf_key_ec.pem");
     try {
       privateKey = CertificateUtils.getPrivateKey(keyInputStream);
     } finally {
@@ -142,12 +142,9 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     InputStream cert2 = null;
     InputStream cert1 = null;
     try {
-      leafCert =
-        FakeWriter.class.getClassLoader().getResourceAsStream("leaf_cert_ec.pem");
-      cert2 = 
-          FakeWriter.class.getClassLoader().getResourceAsStream("int_cert2_ec.pem");
-      cert1 = 
-          FakeWriter.class.getClassLoader().getResourceAsStream("int_cert1_ec.pem");
+      leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+      cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+      cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
       leafCertString = convertInputStreamToString(leafCert);
       cert2String = convertInputStreamToString(cert2);
       cert1String = convertInputStreamToString(cert1);
@@ -223,12 +220,9 @@ final class FakeWriter implements StreamObserver<SessionReq> {
         InputStream cert2 = null;
         InputStream cert1 = null;
         try {
-          leafCert =
-            FakeWriter.class.getClassLoader().getResourceAsStream("leaf_cert_ec.pem");
-          cert2 = 
-              FakeWriter.class.getClassLoader().getResourceAsStream("int_cert2_ec.pem");
-          cert1 = 
-              FakeWriter.class.getClassLoader().getResourceAsStream("int_cert1_ec.pem");
+          leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+          cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+          cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
           leafCertString = convertInputStreamToString(leafCert);
           cert2String = convertInputStreamToString(cert2);
           cert1String = convertInputStreamToString(cert1);
@@ -301,12 +295,9 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     InputStream cert2 = null;
     InputStream cert1 = null;
     try {
-      leafCert =
-        FakeWriter.class.getClassLoader().getResourceAsStream("leaf_cert_ec.pem");
-      cert2 = 
-          FakeWriter.class.getClassLoader().getResourceAsStream("int_cert2_ec.pem");
-      cert1 = 
-          FakeWriter.class.getClassLoader().getResourceAsStream("int_cert1_ec.pem");
+      leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+      cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+      cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
       leafCertString = convertInputStreamToString(leafCert);
       cert2String = convertInputStreamToString(cert2);
       cert1String = convertInputStreamToString(cert1);

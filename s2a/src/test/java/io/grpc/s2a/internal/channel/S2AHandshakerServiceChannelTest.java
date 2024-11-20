@@ -218,12 +218,10 @@ public final class S2AHandshakerServiceChannelTest {
 
   private static Server createMtlsServer() throws Exception {
     SimpleServiceImpl service = new SimpleServiceImpl();
-    InputStream serverCert = S2AHandshakerServiceChannelTest.class
-        .getClassLoader().getResourceAsStream("server_cert.pem");
-    InputStream serverKey = S2AHandshakerServiceChannelTest.class
-        .getClassLoader().getResourceAsStream("server_key.pem");
-    InputStream rootCert = S2AHandshakerServiceChannelTest.class
-        .getClassLoader().getResourceAsStream("root_cert.pem");
+    ClassLoader classLoader = S2AHandshakerServiceChannelTest.class.getClassLoader();
+    InputStream serverCert = classLoader.getResourceAsStream("server_cert.pem");
+    InputStream serverKey = classLoader.getResourceAsStream("server_key.pem");
+    InputStream rootCert = classLoader.getResourceAsStream("root_cert.pem");
     ServerCredentials creds =
         TlsServerCredentials.newBuilder()
             .keyManager(serverCert, serverKey)
@@ -241,12 +239,10 @@ public final class S2AHandshakerServiceChannelTest {
   }
 
   private static ChannelCredentials getTlsChannelCredentials() throws Exception {
-    InputStream clientCert = S2AHandshakerServiceChannelTest.class
-        .getClassLoader().getResourceAsStream("client_cert.pem");
-    InputStream clientKey = S2AHandshakerServiceChannelTest.class
-        .getClassLoader().getResourceAsStream("client_key.pem");
-    InputStream rootCert = S2AHandshakerServiceChannelTest.class
-        .getClassLoader().getResourceAsStream("root_cert.pem");
+    ClassLoader classLoader = S2AHandshakerServiceChannelTest.class.getClassLoader();
+    InputStream clientCert = classLoader.getResourceAsStream("client_cert.pem");
+    InputStream clientKey = classLoader.getResourceAsStream("client_key.pem");
+    InputStream rootCert = classLoader.getResourceAsStream("root_cert.pem");
     return TlsChannelCredentials.newBuilder()
             .keyManager(clientCert, clientKey)
             .trustManager(rootCert)

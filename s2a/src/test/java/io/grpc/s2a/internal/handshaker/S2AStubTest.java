@@ -83,12 +83,10 @@ public class S2AStubTest {
     InputStream cert2 = null;
     InputStream cert1 = null;
     try {
-      leafCert =
-          S2AStubTest.class.getClassLoader().getResourceAsStream("leaf_cert_ec.pem");
-      cert2 = 
-          S2AStubTest.class.getClassLoader().getResourceAsStream("int_cert2_ec.pem");
-      cert1 = 
-          S2AStubTest.class.getClassLoader().getResourceAsStream("int_cert1_ec.pem");
+      ClassLoader classLoader = S2AStubTest.class.getClassLoader();
+      leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+      cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+      cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
       leafCertString = FakeWriter.convertInputStreamToString(leafCert);
       cert2String = FakeWriter.convertInputStreamToString(cert2);
       cert1String = FakeWriter.convertInputStreamToString(cert1);

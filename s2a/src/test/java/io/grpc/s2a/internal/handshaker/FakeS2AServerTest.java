@@ -125,12 +125,10 @@ public final class FakeS2AServerTest {
     InputStream cert2 = null;
     InputStream cert1 = null;
     try {
-      leafCert =
-          FakeS2AServerTest.class.getClassLoader().getResourceAsStream("leaf_cert_ec.pem");
-      cert2 = 
-          FakeS2AServerTest.class.getClassLoader().getResourceAsStream("int_cert2_ec.pem");
-      cert1 = 
-          FakeS2AServerTest.class.getClassLoader().getResourceAsStream("int_cert1_ec.pem");
+      ClassLoader classLoader = FakeS2AServerTest.class.getClassLoader();
+      leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+      cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+      cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
       leafCertString = FakeWriter.convertInputStreamToString(leafCert);
       cert2String = FakeWriter.convertInputStreamToString(cert2);
       cert1String = FakeWriter.convertInputStreamToString(cert1);
