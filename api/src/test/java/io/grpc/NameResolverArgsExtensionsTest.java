@@ -28,40 +28,60 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link NameResolver.Args.Extensions}. */
 @RunWith(JUnit4.class)
 public class NameResolverArgsExtensionsTest {
-  private static final Args.Key<String> YOLO_KEY = Args.Key.create("yolo");
+  private static final Args.Key<String> FOO_KEY = Args.Key.create("foo");
+  private static final Args.Key<String> BAR_KEY = Args.Key.create("bar");
+  private static final Args.Key<String> QUX_KEY = Args.Key.create("qux");
 
   @Test
   public void buildExtensions() {
-    Extensions attrs = Extensions.newBuilder().set(YOLO_KEY, "To be, or not to be?").build();
-    assertSame("To be, or not to be?", attrs.get(YOLO_KEY));
-    assertThat(attrs.keysForTest()).hasSize(1);
+    Extensions exts = Extensions.newBuilder().set(FOO_KEY, "To be, or not to be?").build();
+    assertSame("To be, or not to be?", exts.get(FOO_KEY));
+    assertThat(exts.keysForTest()).hasSize(1);
   }
 
   @Test
   public void duplicates() {
-    Extensions attrs =
+    Extensions exts =
         Extensions.newBuilder()
-            .set(YOLO_KEY, "To be?")
-            .set(YOLO_KEY, "Or not to be?")
+            .set(FOO_KEY, "To be?")
+            .set(FOO_KEY, "Or not to be?")
             .set(Args.Key.create("yolo"), "I'm not a duplicate")
             .build();
-    assertThat(attrs.get(YOLO_KEY)).isEqualTo("Or not to be?");
-    assertThat(attrs.keysForTest()).hasSize(2);
+    assertThat(exts.get(FOO_KEY)).isEqualTo("Or not to be?");
+    assertThat(exts.keysForTest()).hasSize(2);
   }
 
   @Test
   public void toBuilder() {
-    Extensions attrs =
-        Extensions.newBuilder().set(YOLO_KEY, "To be?").build().toBuilder()
-            .set(YOLO_KEY, "Or not to be?")
+    Extensions exts =
+        Extensions.newBuilder().set(FOO_KEY, "To be?").build().toBuilder()
+            .set(FOO_KEY, "Or not to be?")
             .set(Args.Key.create("yolo"), "I'm not a duplicate")
             .build();
-    assertThat(attrs.get(YOLO_KEY)).isEqualTo("Or not to be?");
-    assertThat(attrs.keysForTest()).hasSize(2);
+    assertThat(exts.get(FOO_KEY)).isEqualTo("Or not to be?");
+    assertThat(exts.keysForTest()).hasSize(2);
   }
 
   @Test
   public void empty() {
     assertThat(Extensions.EMPTY.keysForTest()).isEmpty();
+  }
+
+  @Test
+  public void setAll() {
+    Extensions newExts =
+        Extensions.newBuilder()
+            .set(FOO_KEY, "foo-orig")
+            .set(BAR_KEY, "bar-orig")
+            .setAll(
+                Extensions.newBuilder()
+                    .set(FOO_KEY, "foo-updated")
+                    .set(QUX_KEY, "qux-updated")
+                    .build())
+            .build();
+    assertThat(newExts.get(FOO_KEY)).isEqualTo("foo-updated");
+    assertThat(newExts.get(BAR_KEY)).isEqualTo("bar-orig");
+    assertThat(newExts.get(QUX_KEY)).isEqualTo("qux-updated");
+    assertThat(newExts.keysForTest()).hasSize(3);
   }
 }
