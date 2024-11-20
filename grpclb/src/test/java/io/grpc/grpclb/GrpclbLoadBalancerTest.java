@@ -1044,7 +1044,8 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(same(subchannel3), any(ConnectivityStateInfo.class));
 
     // Update backends, with no entry
-    updateBackendWithNoEntry(inOrder, oobChannel, lbResponseObserver, lbRequestObserver, subchannel2, subchannel3);
+    updateBackendWithNoEntry(inOrder, oobChannel, lbResponseObserver, lbRequestObserver,
+        subchannel2, subchannel3);
 
     // Load reporting was not requested, thus never scheduled
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
@@ -1474,7 +1475,6 @@ public class GrpclbLoadBalancerTest {
     // Attempted to connect to balancer
     StreamObserver<LoadBalanceResponse> lbResponseObserver = getLoadBalanceResponseStreamObserver(
         loadReportIntervalMillis, inOrder);
-    StreamObserver<LoadBalanceRequest> lbRequestObserver;
 
     inOrder.verifyNoMoreInteractions();
 
@@ -1494,7 +1494,6 @@ public class GrpclbLoadBalancerTest {
       inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
       lbResponseObserver = lbResponseObserverCaptor.getValue();
       assertEquals(1, lbRequestObservers.size());
-      lbRequestObserver = lbRequestObservers.poll();
       inOrder.verify(helper).refreshNameResolution();
     }
     if (allSubchannelsBroken) {
@@ -1585,6 +1584,25 @@ public class GrpclbLoadBalancerTest {
     balancerRequestFallbackErrorStatus(inOrder, error);
   }
 
+  private StreamObserver<LoadBalanceResponse> getLoadBalanceResponseStreamObserver() {
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(
+        Collections.<EquivalentAddressGroup>emptyList(),
+        grpclbBalancerList,
+        GrpclbConfig.create(Mode.PICK_FIRST));
+
+    assertEquals(1, fakeOobChannels.size());
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+    return lbResponseObserver;
+  }
+
   private StreamObserver<LoadBalanceResponse> getLoadBalanceResponseStreamObserver(
       long loadReportIntervalMillis, InOrder inOrder) {
     assertEquals(1, fakeOobChannels.size());
@@ -1596,8 +1614,8 @@ public class GrpclbLoadBalancerTest {
     return lbResponseObserver;
   }
 
-  private StreamObserver<LoadBalanceRequest> verifyLbRequestObserver(long loadReportIntervalMillis, InOrder inOrder,
-      StreamObserver<LoadBalanceResponse> lbResponseObserver) {
+  private StreamObserver<LoadBalanceRequest> verifyLbRequestObserver(long loadReportIntervalMillis,
+      InOrder inOrder, StreamObserver<LoadBalanceResponse> lbResponseObserver) {
     StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
 
     verify(lbRequestObserver).onNext(
@@ -2055,25 +2073,6 @@ public class GrpclbLoadBalancerTest {
         eq(new EquivalentAddressGroup(backend1b.addr, LB_BACKEND_ATTRS)),
         any(Attributes.class));
     return backends1;
-  }
-
-  private StreamObserver<LoadBalanceResponse> getLoadBalanceResponseStreamObserver() {
-    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
-    deliverResolvedAddresses(
-        Collections.<EquivalentAddressGroup>emptyList(),
-        grpclbBalancerList,
-        GrpclbConfig.create(Mode.PICK_FIRST));
-
-    assertEquals(1, fakeOobChannels.size());
-    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
-    verify(lbRequestObserver).onNext(
-        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
-            .build()));
-    return lbResponseObserver;
   }
 
   @Test
