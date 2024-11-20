@@ -398,7 +398,7 @@ public abstract class XdsClient {
   }
 
   /**
-   * Reports whether xDS client has a working ADS stream to xDS server.
+   * Reports whether xDS client has a "working" ADS stream to xDS server.
    * The definition of a working stream is defined in gRFC A78.
    * @see <a href="https://github.com/grpc/proposal/blob/master/A78-grpc-metrics-wrr-pf-xds.md#xdsclient">
    *   A78-grpc-metrics-wrr-pf-xds.md</a>
