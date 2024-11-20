@@ -79,21 +79,15 @@ public class S2AStubTest {
     String leafCertString = "";
     String cert2String = "";
     String cert1String = "";
-    InputStream leafCert = null;
-    InputStream cert2 = null;
-    InputStream cert1 = null;
-    try {
-      ClassLoader classLoader = S2AStubTest.class.getClassLoader();
-      leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
-      cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
-      cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ClassLoader classLoader = S2AStubTest.class.getClassLoader();
+    try (
+        InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+        InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+        InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ) {
       leafCertString = FakeWriter.convertInputStreamToString(leafCert);
       cert2String = FakeWriter.convertInputStreamToString(cert2);
       cert1String = FakeWriter.convertInputStreamToString(cert1);
-    } finally {
-      leafCert.close();
-      cert2.close();
-      cert1.close();
     }
 
     SessionResp expected =

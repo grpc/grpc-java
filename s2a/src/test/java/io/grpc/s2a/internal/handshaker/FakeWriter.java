@@ -111,11 +111,10 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   @CanIgnoreReturnValue
   FakeWriter initializePrivateKey() throws InvalidKeySpecException, NoSuchAlgorithmException,
                     IOException, FileNotFoundException, UnsupportedEncodingException {
-    InputStream keyInputStream = classLoader.getResourceAsStream("leaf_key_ec.pem");
-    try {
+    try (
+        InputStream keyInputStream = classLoader.getResourceAsStream("leaf_key_ec.pem");
+    ) {
       privateKey = CertificateUtils.getPrivateKey(keyInputStream);
-    } finally {
-      keyInputStream.close();
     }
     return this;
   }
@@ -138,26 +137,16 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     String leafCertString = "";
     String cert2String = "";
     String cert1String = "";
-    InputStream leafCert = null;
-    InputStream cert2 = null;
-    InputStream cert1 = null;
-    try {
-      leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
-      cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
-      cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
-      leafCertString = convertInputStreamToString(leafCert);
-      cert2String = convertInputStreamToString(cert2);
-      cert1String = convertInputStreamToString(cert1);
+    try (
+        InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+        InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+        InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ) {
+      leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+      cert2String = FakeWriter.convertInputStreamToString(cert2);
+      cert1String = FakeWriter.convertInputStreamToString(cert1);
     } catch (IOException e) {
       reader.onError(e);
-    } finally {
-      try {
-        leafCert.close();
-        cert2.close();
-        cert1.close();
-      } catch (IOException e) {
-        reader.onError(e);
-      }
     }
     reader.onNext(
         SessionResp.newBuilder()
@@ -216,26 +205,16 @@ final class FakeWriter implements StreamObserver<SessionReq> {
         String leafCertString = "";
         String cert2String = "";
         String cert1String = "";
-        InputStream leafCert = null;
-        InputStream cert2 = null;
-        InputStream cert1 = null;
-        try {
-          leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
-          cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
-          cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
-          leafCertString = convertInputStreamToString(leafCert);
-          cert2String = convertInputStreamToString(cert2);
-          cert1String = convertInputStreamToString(cert1);
+        try (
+            InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+            InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+            InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+        ) {
+          leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+          cert2String = FakeWriter.convertInputStreamToString(cert2);
+          cert1String = FakeWriter.convertInputStreamToString(cert1);
         } catch (IOException e) {
           reader.onError(e);
-        } finally {
-          try {
-            leafCert.close();
-            cert2.close();
-            cert1.close();
-          } catch (IOException e) {
-            reader.onError(e);
-          }
         }
         reader.onNext(
             SessionResp.newBuilder()
@@ -291,26 +270,16 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     String leafCertString = "";
     String cert2String = "";
     String cert1String = "";
-    InputStream leafCert = null;
-    InputStream cert2 = null;
-    InputStream cert1 = null;
-    try {
-      leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
-      cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
-      cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
-      leafCertString = convertInputStreamToString(leafCert);
-      cert2String = convertInputStreamToString(cert2);
-      cert1String = convertInputStreamToString(cert1);
+    try (
+        InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+        InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+        InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ) {
+      leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+      cert2String = FakeWriter.convertInputStreamToString(cert2);
+      cert1String = FakeWriter.convertInputStreamToString(cert1);
     } catch (IOException e) {
       reader.onError(e);
-    } finally {
-      try {
-        leafCert.close();
-        cert2.close();
-        cert1.close();
-      } catch (IOException e) {
-        reader.onError(e);
-      }
     }
     return SessionResp.newBuilder()
         .setGetTlsConfigurationResp(

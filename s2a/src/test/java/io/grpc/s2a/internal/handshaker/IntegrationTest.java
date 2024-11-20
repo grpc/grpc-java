@@ -75,13 +75,10 @@ public final class IntegrationTest {
     int s2aPort = s2aServer.getPort();
     s2aAddress = "localhost:" + s2aPort;
     logger.info("S2A service listening on localhost:" + s2aPort);
-
-    InputStream s2aCert = IntegrationTest.class
-        .getClassLoader().getResourceAsStream("server_cert.pem");
-    InputStream s2aKey = IntegrationTest.class
-        .getClassLoader().getResourceAsStream("server_key.pem");
-    InputStream rootCert = IntegrationTest.class
-        .getClassLoader().getResourceAsStream("root_cert.pem");
+    ClassLoader classLoader = IntegrationTest.class.getClassLoader();
+    InputStream s2aCert = classLoader.getResourceAsStream("server_cert.pem");
+    InputStream s2aKey = classLoader.getResourceAsStream("server_key.pem");
+    InputStream rootCert = classLoader.getResourceAsStream("root_cert.pem");
     ServerCredentials s2aCreds =
         TlsServerCredentials.newBuilder()
             .keyManager(s2aCert, s2aKey)
