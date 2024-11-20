@@ -132,7 +132,7 @@ public class SharedXdsClientPoolProviderTest {
         provider.new RefCountedXdsClientObjectPool(bootstrapInfo, DUMMY_TARGET, metricRecorder);
     XdsClient xdsClient1 = xdsClientPool.getObject();
     assertThat(xdsClientPool.returnObject(xdsClient1)).isNull();
-    assertThat(xdsClient1.isShutDogit wn()).isTrue();
+    assertThat(xdsClient1.isShutDown()).isTrue();
 
     XdsClient xdsClient2 = xdsClientPool.getObject();
     assertThat(xdsClient2).isNotSameInstanceAs(xdsClient1);
