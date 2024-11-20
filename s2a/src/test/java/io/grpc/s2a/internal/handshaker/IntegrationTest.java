@@ -60,13 +60,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class IntegrationTest {
   private static final Logger logger = Logger.getLogger(FakeS2AServer.class.getName());
-
-  public static final InputStream privateKey =
-      IntegrationTest.class.getClassLoader().getResourceAsStream("leaf_key_ec.pem");
-  public static final InputStream rootCert =
-      IntegrationTest.class.getClassLoader().getResourceAsStream("root_cert_ec.pem");
-  public static final InputStream certChain =
-      IntegrationTest.class.getClassLoader().getResourceAsStream("cert_chain_ec.pem");
   private String s2aAddress;
   private Server s2aServer;
   private String s2aDelayAddress;
@@ -226,6 +219,12 @@ public final class IntegrationTest {
   }
 
   private static SslContext buildSslContext() throws SSLException {
+    InputStream privateKey =
+        IntegrationTest.class.getClassLoader().getResourceAsStream("leaf_key_ec.pem");
+    InputStream rootCert =
+        IntegrationTest.class.getClassLoader().getResourceAsStream("root_cert_ec.pem");
+    InputStream certChain =
+        IntegrationTest.class.getClassLoader().getResourceAsStream("cert_chain_ec.pem");
     SslContextBuilder sslServerContextBuilder =
           SslContextBuilder.forServer(certChain, privateKey);
     SslContext sslServerContext =
