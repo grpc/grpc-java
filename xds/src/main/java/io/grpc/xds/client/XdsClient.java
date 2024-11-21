@@ -24,7 +24,6 @@ import com.google.common.base.Splitter;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
@@ -37,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
@@ -386,24 +386,20 @@ public abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  /** Callback used to report gauge metric value for resources. */
-  public interface ResourceCallback {
-    // TODO(dnvindhya): include the "authority" label once xds.authority is available.
-    void reportResourceCountGauge(long resourceCount, String cacheState, String resourceType);
-  }
-
   /** Callback used to report a gauge metric value for server connections. */
   public interface ServerConnectionCallback {
     void reportServerConnectionGauge(boolean isConnected, String xdsServer);
   }
 
   /**
-   * Reports whether xDS client has a "working" ADS stream to xDS server.
-   * The definition of a working stream is defined in gRFC A78.
-   * @see <a href="https://github.com/grpc/proposal/blob/master/A78-grpc-metrics-wrr-pf-xds.md#xdsclient">
-   *   A78-grpc-metrics-wrr-pf-xds.md</a>
+   * Reports whether xDS client has a "working" ADS stream to xDS server. The definition of a
+   * working stream is defined in gRFC A78.
+   *
+   * @see <a
+   *     href="https://github.com/grpc/proposal/blob/master/A78-grpc-metrics-wrr-pf-xds.md#xdsclient">
+   *     A78-grpc-metrics-wrr-pf-xds.md</a>
    */
-  public SettableFuture<Void> reportServerConnections(ServerConnectionCallback callback) {
+  public Future<Void> reportServerConnections(ServerConnectionCallback callback) {
     throw new UnsupportedOperationException();
   }
 

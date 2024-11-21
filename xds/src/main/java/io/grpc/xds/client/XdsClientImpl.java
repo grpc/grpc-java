@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -529,7 +530,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   }
 
   @Override
-  public SettableFuture<Void> reportServerConnections(ServerConnectionCallback callback) {
+  public Future<Void> reportServerConnections(ServerConnectionCallback callback) {
     SettableFuture<Void> future = SettableFuture.create();
     syncContext.execute(() -> {
       serverCpClientMap.forEach((serverInfo, controlPlaneClient) ->

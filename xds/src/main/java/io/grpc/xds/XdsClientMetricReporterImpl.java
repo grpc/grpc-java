@@ -18,8 +18,6 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.Internal;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
@@ -28,7 +26,6 @@ import io.grpc.MetricRecorder.BatchCallback;
 import io.grpc.MetricRecorder.BatchRecorder;
 import io.grpc.MetricRecorder.Registration;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsClient.ResourceCallback;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ServerConnectionCallback;
@@ -37,9 +34,9 @@ import io.grpc.xds.client.XdsResourceType;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
@@ -49,7 +46,6 @@ import javax.annotation.Nullable;
 /**
  * XdsClientMetricReporter implementation.
  */
-@Internal
 final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
 
   private static final Logger logger = Logger.getLogger(
@@ -139,8 +135,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
   void reportCallbackMetrics(BatchRecorder recorder, XdsClient xdsClient) {
     MetricReporterCallback callback = new MetricReporterCallback(recorder, target);
     try {
-      SettableFuture<Void> reportServerConnectionsCompleted =
-          xdsClient.reportServerConnections(callback);
+      Future<Void> reportServerConnectionsCompleted = xdsClient.reportServerConnections(callback);
 
       ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
           getResourceMetadataCompleted = xdsClient.getSubscribedResourcesMetadataSnapshot();
@@ -148,12 +143,10 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
           getResourceMetadataCompleted.get(10, TimeUnit.SECONDS);
 
-      SettableFuture<Void> reportResourceCountsCompleted = computeAndReportResourceCounts(
-          metadataByType, callback);
+      computeAndReportResourceCounts(metadataByType, callback);
 
       // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
-      Void unused1 = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
-      Void unused2 = reportResourceCountsCompleted.get(5, TimeUnit.SECONDS);
+      Void unused = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
     } catch (ExecutionException | TimeoutException | InterruptedException e) {
       if (e instanceof InterruptedException) {
         Thread.currentThread().interrupt(); // re-set the current thread's interruption state
@@ -162,11 +155,9 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
   }
 
-  private SettableFuture<Void> computeAndReportResourceCounts(
+  private void computeAndReportResourceCounts(
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
       MetricReporterCallback callback) {
-    SettableFuture<Void> future = SettableFuture.create();
-
     for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry :
         metadataByType.entrySet()) {
       XdsResourceType<?> type = metadataByTypeEntry.getKey();
@@ -180,20 +171,26 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       resourceCountsByState.forEach((cacheState, count) ->
           callback.reportResourceCountGauge(count, cacheState, type.typeUrl()));
     }
-    future.set(null);
-    return future;
   }
 
   private static String cacheStateFromResourceStatus(ResourceMetadataStatus metadataStatus,
       boolean isResourceCached) {
-    String status = metadataStatus.toString().toLowerCase(Locale.ROOT);
-    return metadataStatus == ResourceMetadataStatus.NACKED && isResourceCached
-        ? status + "_but_cached" : status;
+    switch (metadataStatus) {
+      case REQUESTED:
+        return "requested";
+      case DOES_NOT_EXIST:
+        return "does_not_exist";
+      case ACKED:
+        return "acked";
+      case NACKED:
+        return isResourceCached ? "nacked_but_cached" : "nacked";
+      default:
+        return "unknown";
+    }
   }
 
   @VisibleForTesting
-  static final class MetricReporterCallback implements ResourceCallback,
-      ServerConnectionCallback {
+  static final class MetricReporterCallback implements ServerConnectionCallback {
     private final BatchRecorder recorder;
     private final String target;
 
@@ -203,7 +200,6 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
 
     // TODO(dnvindhya): include the "authority" label once xds.authority is available.
-    @Override
     public void reportResourceCountGauge(long resourceCount, String cacheState,
         String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
