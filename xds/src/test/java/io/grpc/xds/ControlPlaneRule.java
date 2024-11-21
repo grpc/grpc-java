@@ -89,11 +89,15 @@ public class ControlPlaneRule extends TestWatcher {
   private XdsTestControlPlaneService controlPlaneService;
   private XdsTestLoadReportingService loadReportingService;
   private XdsNameResolverProvider nameResolverProvider;
-  private int port; // Only change from 0 to actual port used in the server.
+  private final int port;
 
   public ControlPlaneRule() {
+    this(0);
+  }
+
+  public ControlPlaneRule(int port) {
     serverHostName = "test-server";
-    this.port = 0;
+    this.port = port;
   }
 
   public ControlPlaneRule setServerHostName(String serverHostName) {
@@ -149,9 +153,9 @@ public class ControlPlaneRule extends TestWatcher {
    * Will shutdown existing server if needed.
    * Then creates a new server in the same way as {@link #starting(Description)} and starts it.
    */
-  public void restartXdsServer() {
+  public void restartTdServer() {
 
-    if (getServer() != null && !getServer().isTerminated()) {
+    if (getServer() != null && !getServer().isShutdown()) {
       getServer().shutdownNow();
       try {
         if (!getServer().awaitTermination(5, TimeUnit.SECONDS)) {
@@ -175,10 +179,6 @@ public class ControlPlaneRule extends TestWatcher {
         .addService(loadReportingService)
         .build()
         .start();
-
-    if (port == 0) {
-      port = server.getPort();
-    }
   }
 
   /**

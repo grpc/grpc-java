@@ -3599,12 +3599,17 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(RDS, RDS_RESOURCE, "5", "6764", NODE);
 
     call.sendError(Status.DEADLINE_EXCEEDED.asException());
+    fakeClock.forwardNanos(100L);
+    call = resourceDiscoveryCalls.poll();
+    call.sendError(Status.DEADLINE_EXCEEDED.asException());
+
+    // Already received LDS and RDS, so they only error twice.
     verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
-    verify(edsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
+    verify(cdsResourceWatcher, times(3)).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
+    verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
 
     // Check metric data.
     callback_ReportServerConnection();
@@ -3612,11 +3617,10 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
-    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    inOrder.verify(backoffPolicy2, times(2)).nextBackoffNanos();
     retryTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
-    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(20L);
-    fakeClock.forwardNanos(20L);
+    fakeClock.forwardNanos(retryTask.getDelay(TimeUnit.NANOSECONDS));
     call = resourceDiscoveryCalls.poll();
     call.verifyRequest(LDS, LDS_RESOURCE, "63", "", NODE);
     call.verifyRequest(RDS, RDS_RESOURCE, "5", "", NODE);
@@ -3627,9 +3631,9 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher, times(3)).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher, times(4)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
+    verify(edsResourceWatcher, times(4)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
 
     // Check metric data.
@@ -3710,7 +3714,8 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
-  public void streamClosedAndRetryRestartsResourceInitialFetchTimerForUnresolvedResources() {
+  public void streamClosedAndRetryRestartsResourceInitialFetchTimerForUnresolvedResources()
+      throws InterruptedException {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
@@ -3746,10 +3751,23 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(cdsResourceWatcher, never()).onError(errorCaptor.capture());
-    verify(edsResourceWatcher, never()).onError(errorCaptor.capture());
+
     // Check metric data.
     callback_ReportServerConnection();
     verifyServerConnection(4, true, xdsServerInfo.target());
+    verify(cdsResourceWatcher, never()).onError(errorCaptor.capture()); // We had a response
+
+    fakeClock.forwardTime(5, TimeUnit.SECONDS);
+    DiscoveryRpcCall call2 = resourceDiscoveryCalls.poll();
+    call2.sendError(Status.UNAVAILABLE.asException());
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+    verify(edsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
+
+    fakeClock.forwardTime(5, TimeUnit.SECONDS);
+    DiscoveryRpcCall call3 = resourceDiscoveryCalls.poll();
+    assertThat(call3).isNotNull();
 
     fakeClock.forwardNanos(10L);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
