@@ -540,15 +540,8 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
-            (currentChannel) -> {
-              try {
-                return tester.maybeCreateNewChannel(currentChannel, false);
-              } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-              }
-            },
             testType
-        );
+            (currentChannel) -> currentChannel);
         break;
       }
 
@@ -563,15 +556,8 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
-            (currentChannel) -> {
-              try {
-                return tester.maybeCreateNewChannel(currentChannel, true);
-              } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-              }
-            },
             testType
-        );
+            (currentChannel) -> tester.createNewChannel(currentChannel));
         break;
       }
 

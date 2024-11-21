@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=ab911ac2ff971f805ec822ad4d4ff6b42a61cc7c
+VERSION=742a3b02e3b2a9dfb877a7e378607c6ed0c2aa53
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
@@ -75,6 +75,7 @@ envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
 envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
+envoy/extensions/filters/http/gcp_authn/v3/gcp_authn.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
 envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto

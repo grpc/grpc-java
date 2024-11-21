@@ -137,7 +137,7 @@ import org.junit.rules.Timeout;
 /**
  * Abstract base class for all GRPC transport tests.
  *
- * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
+ * <p>New tests should avoid using Mockito to support running on AppEngine.
  */
 public abstract class AbstractInteropTest {
   private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());
@@ -1720,6 +1720,7 @@ public abstract class AbstractInteropTest {
       return latencies;
     }
   }
+
   private SoakIterationResult performOneSoakIteration(
       TestServiceGrpc.TestServiceBlockingStub blockingStub,
       TestServiceGrpc.TestServiceStub nonBlockingStub,
@@ -1891,11 +1892,7 @@ public abstract class AbstractInteropTest {
     long elapsedNs = System.nanoTime() - startNs;
     return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
   }
-//------------
-  /**
-   * Runs large unary RPCs in a loop with configurable failure thresholds
-   * and channel creation behavior.(TODO:description needs to be revised)
-   */
+
   public void performSoakTest(
       String serverUri,
       int soakIterations,
@@ -1906,8 +1903,8 @@ public abstract class AbstractInteropTest {
       int soakRequestSize,
       int soakResponseSize,
       int numThreads,
-      Function<ManagedChannel, ManagedChannel> maybeCreateNewChannel,
-      String testType)
+      String testType,
+      Function<ManagedChannel, ManagedChannel> createNewChannel)
       throws InterruptedException {
     if (soakIterations % numThreads != 0) {
       throw new IllegalArgumentException("soakIterations must be evenly divisible by numThreads.");
@@ -1924,7 +1921,7 @@ public abstract class AbstractInteropTest {
       final int currentThreadInd = threadInd;
       threads[threadInd] = new Thread(() -> {
         try {
-          executeSoakTestInThreads(
+          executeSoakTestInThread(
               soakIterationsPerThread,
               startNs,
               minTimeMsBetweenRpcs,
@@ -1935,25 +1932,25 @@ public abstract class AbstractInteropTest {
               serverUri,
               threadResultsList.get(currentThreadInd),
               sharedChannel,
-              maybeCreateNewChannel,
-              testType);
-        } catch (Exception e) {
+              testType,
+              createNewChannel);
+        } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
-          System.err.println("Thread interrupted: " + e.getMessage());
+          throw new RuntimeException("Thread interrupted: " + e.getMessage(), e);
         }
       });
       threads[threadInd].start();
     }
     for (Thread thread : threads) {
-          thread.join();
+      thread.join();
     }
-
+    
     int totalFailures = 0;
-    AtomicInteger iterationsDone = new AtomicInteger(0);
+    int iterationsDone = 0;
     Histogram latencies = new Histogram(4);
     for (ThreadResults threadResult :threadResultsList) {
       totalFailures += threadResult.getThreadFailures();
-      iterationsDone.addAndGet(threadResult.getIterationsDone());
+      iterationsDone += threadResult.getIterationsDone();
       latencies.add(threadResult.getLatencies());
     }
     System.err.println(
@@ -1996,16 +1993,17 @@ public abstract class AbstractInteropTest {
       channel.awaitTermination(10, TimeUnit.SECONDS);
     }
   }
-  protected ManagedChannel maybeCreateNewChannel(ManagedChannel currentChannel,
-      boolean resetChannel) throws InterruptedException {
-    if (resetChannel) {
+
+  protected ManagedChannel createNewChannel(ManagedChannel currentChannel) {
+    try {
       shutdownChannel(currentChannel);
       return createChannel();
+    } catch (InterruptedException e) {
+      throw new RuntimeException("Interrupted while creating a new channel", e);
     }
-    return currentChannel;
   }
 
-  private void executeSoakTestInThreads(
+  private void executeSoakTestInThread(
       int soakIterationsPerThread,
       long startNs,
       int minTimeMsBetweenRpcs,
@@ -2016,14 +2014,13 @@ public abstract class AbstractInteropTest {
       String serverUri,
       ThreadResults threadResults,
       ManagedChannel sharedChannel,
-      Function<ManagedChannel, ManagedChannel> maybeCreateChannel,
-      String testType) throws Exception {
+      String testType,
+      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException {
     ManagedChannel currentChannel = sharedChannel;
     TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(currentChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
     TestServiceGrpc.TestServiceStub nonBlockingStub = TestServiceGrpc.newStub(currentChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-
     for (int i = 0; i < soakIterationsPerThread; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
@@ -2051,7 +2048,8 @@ public abstract class AbstractInteropTest {
       StringBuilder logStr = new StringBuilder(
           String.format(
               Locale.US,
-              "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s", Thread.currentThread().getId(),
+              "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+              Thread.currentThread().getId(),
               i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
       if (!result.getStatus().equals(Status.OK)) {
         threadResults.threadFailures++;

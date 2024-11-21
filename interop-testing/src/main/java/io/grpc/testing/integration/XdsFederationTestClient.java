@@ -245,29 +245,41 @@ public final class XdsFederationTestClient {
     /**
      * Run the intended soak test.
      */
-    public void run() {
-      boolean resetChannelPerIteration;
-      switch (testCase) {
-        case "rpc_soak":
-          resetChannelPerIteration = false;
-          break;
-        case "channel_soak":
-          resetChannelPerIteration = true;
-          break;
-        default:
-          throw new RuntimeException("invalid testcase: " + testCase);
-      }
+    public void run() throws InterruptedException {
       try {
-        performSoakTest(
-            serverUri,
-            resetChannelPerIteration,
-            soakIterations,
-            soakMaxFailures,
-            soakPerIterationMaxAcceptableLatencyMs,
-            soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds,
-            soakRequestSize,
-            soakResponseSize);
+        switch (testCase) {
+          case "rpc_soak": {
+            performSoakTest(
+                serverUri,
+                soakIterations,
+                soakMaxFailures,
+                soakPerIterationMaxAcceptableLatencyMs,
+                soakMinTimeMsBetweenRpcs,
+                soakOverallTimeoutSeconds,
+                soakRequestSize,
+                soakResponseSize,
+                1,
+                (currentChannel) -> currentChannel);
+          }
+              break;
+          case "channel_soak": {
+            performSoakTest(
+                serverUri,
+                soakIterations,
+                soakMaxFailures,
+                soakPerIterationMaxAcceptableLatencyMs,
+                soakMinTimeMsBetweenRpcs,
+                soakOverallTimeoutSeconds,
+                soakRequestSize,
+                soakResponseSize,
+                1,
+                (currentChannel) -> createNewChannel(currentChannel));
+          }
+            break;
+          default:
+            throw new RuntimeException("invalid testcase: " + testCase);
+        }
+
         logger.info("Test case: " + testCase + " done for server: " + serverUri);
         runSucceeded = true;
       } catch (Exception e) {
@@ -295,11 +307,18 @@ public final class XdsFederationTestClient {
     }
   }
 
-  private void run() throws Exception {
+  private void run() throws InterruptedException {
     logger.info("Begin test case: " + testCase);
     ArrayList<Thread> threads = new ArrayList<>();
     for (InnerClient c : clients) {
-      Thread t = new Thread(c::run);
+      Thread t = new Thread(() -> {
+        try {
+          c.run();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt(); // Properly re-interrupt the thread
+          throw new RuntimeException("Thread was interrupted during execution", e);
+        }
+      });
       t.start();
       threads.add(t);
     }

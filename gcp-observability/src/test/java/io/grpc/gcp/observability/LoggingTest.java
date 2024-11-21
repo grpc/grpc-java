@@ -73,7 +73,7 @@ public class LoggingTest {
   /**
    * Cloud logging test using global interceptors.
    *
-   * <p> Ignoring test, because it calls external Cloud Logging APIs.
+   * <p>Ignoring test, because it calls external Cloud Logging APIs.
    * To test cloud logging setup locally,
    * 1. Set up Cloud auth credentials
    * 2. Assign permissions to service account to write logs to project specified by

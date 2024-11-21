@@ -7,7 +7,7 @@ import io.grpc.Server;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -26,7 +26,7 @@ public class ReflectionServer {
     int port = 50051;
     server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
-        .addService(ProtoReflectionService.newInstance()) // add reflection service
+        .addService(ProtoReflectionServiceV1.newInstance()) // add reflection service
         .build()
         .start();
     logger.info("Server started, listening on " + port);

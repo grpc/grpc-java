@@ -705,7 +705,7 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
 
     @Override
     protected Message buildLbEndpoint(String address, int port, String healthStatus,
-        int lbWeight) {
+        int lbWeight, String endpointHostname) {
       HealthStatus status;
       switch (healthStatus) {
         case "unknown":
@@ -733,7 +733,8 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
           .setEndpoint(
               Endpoint.newBuilder().setAddress(
                   Address.newBuilder().setSocketAddress(
-                      SocketAddress.newBuilder().setAddress(address).setPortValue(port))))
+                      SocketAddress.newBuilder().setAddress(address).setPortValue(port)))
+                  .setHostname(endpointHostname))
           .setHealthStatus(status)
           .setLoadBalancingWeight(UInt32Value.of(lbWeight))
           .build();

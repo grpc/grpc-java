@@ -18,8 +18,10 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.TimeUtils.convertToNanos;
 
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -162,6 +164,12 @@ public final class SynchronizationContext implements Executor {
     return new ScheduledHandle(runnable, future);
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  public final ScheduledHandle schedule(
+      final Runnable task, Duration delay, ScheduledExecutorService timerService) {
+    return schedule(task, convertToNanos(delay), TimeUnit.NANOSECONDS, timerService);
+  }
+
   /**
    * Schedules a task to be added and run via {@link #execute} after an initial delay and then
    * repeated after the delay until cancelled.
@@ -191,6 +199,14 @@ public final class SynchronizationContext implements Executor {
       }
     }, initialDelay, delay, unit);
     return new ScheduledHandle(runnable, future);
+  }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  public final ScheduledHandle scheduleWithFixedDelay(
+      final Runnable task, Duration initialDelay, Duration delay,
+      ScheduledExecutorService timerService) {
+    return scheduleWithFixedDelay(task, convertToNanos(initialDelay), convertToNanos(delay),
+        TimeUnit.NANOSECONDS, timerService);
   }
 
 
