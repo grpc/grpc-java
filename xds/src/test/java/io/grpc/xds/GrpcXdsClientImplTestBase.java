@@ -1667,6 +1667,36 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  public void rdsResourceInvalid() {
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "A", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "B", rdsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(RDS, "A");
+    verifyResourceMetadataRequested(RDS, "B");
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
+
+    // RDS -> {A, B}, version 1
+    // Failed to parse endpoint B
+    List<Message> vhostsV1 = mf.buildOpaqueVirtualHosts(1);
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildRouteConfiguration("A", vhostsV1)),
+        "B", Any.pack(mf.buildRouteConfigurationInvalid("B")));
+    call.sendResponse(RDS, resourcesV1.values().asList(), VERSION_1, "0000");
+
+    // {A} -> ACK, version 1
+    // {B} -> NACK, version 1, rejected version 1, rejected reason: Failed to parse B
+    List<String> errorsV1 =
+        ImmutableList.of("RDS response RouteConfiguration 'B' validation error: ");
+    verifyResourceMetadataAcked(RDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataNacked(RDS, "B", null, "", 0,
+        VERSION_1, TIME_INCREMENT, errorsV1, false);
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), RDS.typeUrl());
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
+  }
+
+  @Test
   public void rdsResourceDeletedByLdsApiListener() {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);

@@ -200,7 +200,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
 
     // TODO(dnvindhya): include the "authority" label once xds.authority is available.
-    public void reportResourceCountGauge(long resourceCount, String cacheState,
+    void reportResourceCountGauge(long resourceCount, String cacheState,
         String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
           Arrays.asList(target, cacheState, resourceType), Collections.emptyList());
