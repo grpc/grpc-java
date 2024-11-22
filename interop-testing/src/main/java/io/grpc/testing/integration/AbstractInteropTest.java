@@ -110,6 +110,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1726,7 +1727,7 @@ public abstract class AbstractInteropTest {
       TestServiceGrpc.TestServiceStub nonBlockingStub,
       int soakRequestSize,
       int soakResponseSize,
-      String testType) throws Exception {
+      String testType) throws InterruptedException {
     switch (testType) {
       case "largeUnary":
         return performOneSoakIterationLargeUnary(blockingStub, soakRequestSize, soakResponseSize);
@@ -1767,7 +1768,7 @@ public abstract class AbstractInteropTest {
 
   private SoakIterationResult performOneSoakIterationClientStreaming(
       TestServiceGrpc.TestServiceStub soakStub, int soakRequestSize)
-      throws Exception {
+      throws InterruptedException {
     long startNs = System.nanoTime();
     Status status = Status.OK;
     final int numRequests = 3; // need to be discussed
@@ -1794,6 +1795,10 @@ public abstract class AbstractInteropTest {
       assertThat(responseObserver.getValues()).hasSize(1);
     } catch (StatusRuntimeException e) {
       status = e.getStatus();
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
     long elapsedNs = System.nanoTime() - startNs;
     return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
@@ -1801,7 +1806,7 @@ public abstract class AbstractInteropTest {
 
   private SoakIterationResult performOneSoakIterationServerStreaming(
       TestServiceGrpc.TestServiceStub soakStub, int soakResponseSize)
-      throws Exception {
+      throws InterruptedException {
     long startNs = System.nanoTime();
     Status status = Status.OK;
     final int numResponses = 3; // need to be discussed
@@ -1828,6 +1833,8 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException e) {
       status = e.getStatus();
       System.err.println("Error occurred during Server streaming: " + status);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
     long elapsedNs = System.nanoTime() - startNs;
     return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
@@ -1835,7 +1842,7 @@ public abstract class AbstractInteropTest {
 
   private SoakIterationResult performOneSoakIterationPingPong(
       TestServiceGrpc.TestServiceStub soakStub, int soakRequestSize, int soakResponseSize)
-      throws Exception {
+      throws InterruptedException {
     long startNs = System.nanoTime();
     Status status = Status.OK;
     final int numRequests = 3;
