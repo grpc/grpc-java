@@ -78,7 +78,6 @@ final class ControlPlaneClient {
 
   private boolean shutdown;
   private boolean streamClosedNoResponse;
-  private boolean lastStateWasReady;
   private boolean inError;
 
   @Nullable
@@ -158,7 +157,7 @@ final class ControlPlaneClient {
     }
 
     // We will do the rest of the method as part of the readyHandler when the stream is ready.
-    if (!lastStateWasReady) {
+    if (!isConnected()) {
       return;
     }
 
@@ -220,12 +219,8 @@ final class ControlPlaneClient {
         && adsStream.call.isReady() && !adsStream.closed;
   }
 
-  boolean isResponseReceived() {
-    return adsStream != null && adsStream.responseReceived;
-  }
-
   boolean isConnected() {
-    return lastStateWasReady;
+    return adsStream != null && adsStream.lastStateWasReady;
   }
 
   boolean isInError() {
@@ -238,21 +233,13 @@ final class ControlPlaneClient {
    * has been waiting for the channel to get ready.
    */
   // Must be synchronized.
-  void readyHandler() {
-    if (!isReady()) {
-      logger.log(XdsLogLevel.DEBUG, "ADS stream ready handler called, but not ready {0}", logId);
-      return;
-    }
-
-    logger.log(XdsLogLevel.DEBUG, "ADS stream ready {0}", logId);
-
+  void readyHandler(boolean switchingToReady) {
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
       rpcRetryTimer = null;
     }
 
-    if (!lastStateWasReady) {
-      lastStateWasReady = true;
+    if (switchingToReady) {
       xdsResponseHandler.handleStreamRestarted(serverInfo);
     }
   }
@@ -333,6 +320,7 @@ final class ControlPlaneClient {
 
   private class AdsStream implements XdsTransportFactory.EventHandler<DiscoveryResponse> {
     private boolean responseReceived;
+    private boolean lastStateWasReady;
     private boolean closed;
     // Response nonce for the most recently received discovery responses of each resource type.
     // Client initiated requests start response nonce with empty string.
@@ -396,7 +384,19 @@ final class ControlPlaneClient {
 
     @Override
     public void onReady() {
-      syncContext.execute(ControlPlaneClient.this::readyHandler);
+      syncContext.execute(() -> {
+        if (!isReady()) {
+          logger.log(XdsLogLevel.DEBUG,
+              "ADS stream ready handler called, but not ready {0}", logId);
+          return;
+        }
+
+        logger.log(XdsLogLevel.DEBUG, "ADS stream ready {0}", logId);
+
+        boolean wasReady = lastStateWasReady;
+        lastStateWasReady = true;
+        readyHandler(!wasReady);
+      });
     }
 
     @Override
@@ -453,10 +453,6 @@ final class ControlPlaneClient {
     }
 
     private void handleRpcStreamClosed(Status status) {
-      if (this == adsStream || adsStream == null) {
-        lastStateWasReady = false;
-      }
-
       if (closed) {
         return;
       }
@@ -522,6 +518,7 @@ final class ControlPlaneClient {
     private void cleanUp() {
       if (adsStream == this) {
         adsStream = null;
+        lastStateWasReady = false;
       }
     }
   }
