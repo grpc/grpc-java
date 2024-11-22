@@ -1818,8 +1818,8 @@ public abstract class AbstractInteropTest {
     for (int i = 0; i < numResponses; i++) {
       goldenResponses.add(
           StreamingOutputCallResponse.newBuilder()
-              .setPayload(Payload.newBuilder().
-                  setBody(ByteString.copyFrom(new byte[soakResponseSize])))
+              .setPayload(Payload.newBuilder()
+                      .setBody(ByteString.copyFrom(new byte[soakResponseSize])))
               .build()
       );
     }

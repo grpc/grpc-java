@@ -301,7 +301,8 @@ public class TestServiceClient {
             + c.numThreads
           + "\n --test_type"
           + "\n                              Specifies the type of RPC soak test to run"
-          + "\n                              (largeUnary,clientStreaming,serverStreaming or pingPong)."
+          + "\n                              (largeUnary,clientStreaming,serverStreaming "
+          + "or pingPong)."
           + "\n                              Default " + c.testType
           + "\n --additional_metadata "
           + "\n                              Additional metadata to send in each request, as a "
