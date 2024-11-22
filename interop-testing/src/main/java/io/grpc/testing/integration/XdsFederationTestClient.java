@@ -196,16 +196,17 @@ public final class XdsFederationTestClient {
           + " "
           + c.soakResponseSize
           + " --test_type \n"
-          + "                                          This option specifies the type of RPC test to"
-          + "run during a soak test. The available test types are:\n"
+          + "                                          This option specifies the type of RPC test "
+          + "to run during a soak test. The available test types are:\n"
           + "                                          \n"
-          + "                                          largeUnary: A single large request and response.\n"
+          + "                                          largeUnary: A single large request and "
+          + "response.\n"
           + "                                          clientStreaming: A test where the client "
           + "streams data to the server.\n"
           + "                                          serverStreaming: A test where the server "
           + "streams data to the client.\n"
-          + "                                          pingPong: A test where the client and server "
-          + "exchange small messages back and forth .\n"
+          + "                                          pingPong: A test where the client and "
+          + "server exchange small messages back and forth .\n"
           + "                                          Default value: 'largeUnary'\n"
           + c.testType
       );

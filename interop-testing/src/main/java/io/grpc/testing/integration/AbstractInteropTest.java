@@ -36,7 +36,6 @@ import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.StringValue;
-import com.sun.tools.javac.comp.Todo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -114,13 +113,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -1741,6 +1738,7 @@ public abstract class AbstractInteropTest {
         throw new IllegalArgumentException("Invalid test type: " + testType);
     }
   }
+
   private SoakIterationResult performOneSoakIterationLargeUnary(
       TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize, int soakResponseSize)
       throws InterruptedException {
@@ -1772,7 +1770,7 @@ public abstract class AbstractInteropTest {
     long startNs = System.nanoTime();
     Status status = Status.OK;
     final int numRequests = 3; // need to be discussed
-    final List<StreamingInputCallRequest> requests= new ArrayList<>(numRequests);
+    final List<StreamingInputCallRequest> requests = new ArrayList<>(numRequests);
     for (int i = 0; i < numRequests; i++) {
       requests.add(StreamingInputCallRequest.newBuilder()
           .setPayload(Payload.newBuilder()
@@ -1820,12 +1818,13 @@ public abstract class AbstractInteropTest {
     for (int i = 0; i < numResponses; i++) {
       goldenResponses.add(
           StreamingOutputCallResponse.newBuilder()
-              .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[soakResponseSize])))
+              .setPayload(Payload.newBuilder().
+                  setBody(ByteString.copyFrom(new byte[soakResponseSize])))
               .build()
       );
     }
     StreamRecorder<StreamingOutputCallResponse> recorder = StreamRecorder.create();
-    try{
+    try {
       soakStub.streamingOutputCall(request, recorder);
       recorder.awaitCompletion();
       assertSuccess(recorder);
@@ -1880,7 +1879,7 @@ public abstract class AbstractInteropTest {
           }
         });
     try {
-      for(int i = 0; i <numRequests; i++) {
+      for (int i = 0; i < numRequests; i++) {
         assertNull(queue.peek());
         requestsObserver.onNext(requests.get(i));
         Object actualResponse = queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
@@ -2024,7 +2023,8 @@ public abstract class AbstractInteropTest {
       String testType,
       Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException {
     ManagedChannel currentChannel = sharedChannel;
-    TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(currentChannel)
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc
+        .newBlockingStub(currentChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
     TestServiceGrpc.TestServiceStub nonBlockingStub = TestServiceGrpc.newStub(currentChannel)
         .withInterceptors(recordClientCallInterceptor(clientCallCapture));
@@ -2039,14 +2039,14 @@ public abstract class AbstractInteropTest {
       SoakIterationResult result;
       if (testType.equals("largeUnary")) {
         TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
-            .newBlockingStub(currentChannel).
-            withInterceptors(recordClientCallInterceptor(clientCallCapture));
+            .newBlockingStub(currentChannel)
+                .withInterceptors(recordClientCallInterceptor(clientCallCapture));
         result = performOneSoakIteration(currentStub, nonBlockingStub, soakRequestSize,
             soakResponseSize, testType);
       } else {
         TestServiceGrpc.TestServiceStub currentStub = TestServiceGrpc
-            .newStub(currentChannel).
-            withInterceptors(recordClientCallInterceptor(clientCallCapture));
+            .newStub(currentChannel)
+                .withInterceptors(recordClientCallInterceptor(clientCallCapture));
         result = performOneSoakIteration(blockingStub, currentStub, soakRequestSize,
             soakResponseSize, testType);
       }
