@@ -25,4 +25,3 @@ gRPC uses predefined status codes to represent the outcome of an RPC call. These
 Each status code is accompanied by a human-readable description(Please refer https://github.com/grpc/grpc-java/blob/master/api/src/main/java/io/grpc/Status.java)
 
 You can refer the gRPC documentation for more details on Error Handling https://grpc.io/docs/guides/error/
-

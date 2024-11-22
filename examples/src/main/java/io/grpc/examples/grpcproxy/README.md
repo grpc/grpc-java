@@ -20,5 +20,3 @@ Route guide has unary and streaming RPCs which makes it a nice showcase, and we 
 ./build/install/examples/bin/route-guide-client localhost:8981
 
 you can verify the proxy is being used by shutting down the proxy and seeing the client fail.
-
-

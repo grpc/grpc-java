@@ -11,4 +11,3 @@ gRPC allows asymmetrically compressed communication, whereby a response may be c
 or not compressed at all.
 
 You can refer the gRPC documentation for more details on Compression https://grpc.io/docs/guides/compression/
-

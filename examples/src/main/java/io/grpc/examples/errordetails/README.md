@@ -14,4 +14,3 @@ If an error occurs, gRPC returns one of its error status codes with error messag
 You can refer the below links for more details on error details and status codes  
 - https://grpc.io/docs/guides/error/
 - https://github.com/grpc/grpc-java/blob/master/api/src/main/java/io/grpc/Status.java
-

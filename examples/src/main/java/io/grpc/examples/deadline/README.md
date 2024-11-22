@@ -13,4 +13,3 @@ A timeout can be converted to a deadline by adding the timeout to the current ti
 This Example gives usage and implementation of Deadline on Server, Client and Propagation.
 
 You can refer the gRPC documentation for more details on Deadlines https://grpc.io/docs/guides/deadlines/
-
