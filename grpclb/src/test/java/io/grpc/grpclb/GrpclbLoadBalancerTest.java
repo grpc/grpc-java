@@ -546,7 +546,8 @@ public class GrpclbLoadBalancerTest {
   }
 
   private void createNewStream() {
-    verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
+    verify(mockLbService, times(2))
+        .balanceLoad(lbResponseObserverCaptor.capture());
     lbResponseObserver = lbResponseObserverCaptor.getValue();
     assertEquals(1, lbRequestObservers.size());
     lbRequestObserver = lbRequestObservers.poll();
