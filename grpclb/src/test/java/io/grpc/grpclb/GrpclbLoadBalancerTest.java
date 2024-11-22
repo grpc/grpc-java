@@ -407,6 +407,14 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel).requestConnection();
   }
 
+  StreamObserver<LoadBalanceResponse> lbResponseObserver;
+  StreamObserver<LoadBalanceRequest> lbRequestObserver;
+  InOrder inOrder;
+  InOrder helperInOrder;
+  Subchannel subchannel1;
+  Subchannel subchannel2;
+  RoundRobinPicker picker;
+
   @Test
   public void loadReporting() {
     Metadata headers = new Metadata();
@@ -418,20 +426,7 @@ public class GrpclbLoadBalancerTest {
     deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
 
     // Fallback timer is started as soon as address is resolved.
-    assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
-
-    assertEquals(1, fakeOobChannels.size());
-    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
-    InOrder inOrder = inOrder(lbRequestObserver);
-    InOrder helperInOrder = inOrder(helper, subchannelPool);
-
-    inOrder.verify(lbRequestObserver).onNext(
-        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
-            .build()));
+    startFallbackTimer();
 
     // Simulate receiving LB response
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
@@ -447,88 +442,138 @@ public class GrpclbLoadBalancerTest {
         new ServerEntry("127.0.0.1", 2010, "token0002"),
         new ServerEntry("token0003"));  // drop
 
-    lbResponseObserver.onNext(buildLbResponse(backends));
-
-    assertEquals(2, mockSubchannels.size());
-    Subchannel subchannel1 = mockSubchannels.poll();
-    Subchannel subchannel2 = mockSubchannels.poll();
-    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
-    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
-    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
-    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
-
-    helperInOrder.verify(helper, atLeast(1))
-        .updateBalancingState(eq(READY), pickerCaptor.capture());
-    RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker.dropList).containsExactly(
-        null,
-        new DropEntry(getLoadRecorder(), "token0001"),
-        null,
-        new DropEntry(getLoadRecorder(), "token0003")).inOrder();
-    assertThat(picker.pickList).containsExactly(
-        new BackendEntry(subchannel1, getLoadRecorder(), "token0001"),
-        new BackendEntry(subchannel2, getLoadRecorder(), "token0002")).inOrder();
+    scheduleLoadReporting(backends);
 
     // Report, no data
-    assertNextReport(
-        inOrder, lbRequestObserver, loadReportIntervalMillis,
-        ClientStats.newBuilder().build());
-
-    PickResult pick1 = picker.pickSubchannel(args);
-    assertSame(subchannel1, pick1.getSubchannel());
-    assertSame(getLoadRecorder(), pick1.getStreamTracerFactory());
+    PickResult pick1 = getPickResult(loadReportIntervalMillis,
+        ClientStats.newBuilder(), args, subchannel1);
 
     // Merely the pick will not be recorded as upstart.
-    assertNextReport(
-        inOrder, lbRequestObserver, loadReportIntervalMillis,
-        ClientStats.newBuilder().build());
-
-    ClientStreamTracer tracer1 =
-        pick1.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
-    tracer1.streamCreated(Attributes.EMPTY, new Metadata());
-
-    PickResult pick2 = picker.pickSubchannel(args);
-    assertNull(pick2.getSubchannel());
-    assertSame(DROP_PICK_RESULT, pick2);
+    ClientStreamTracer tracer1 = getClientStreamTracer(args, loadReportIntervalMillis, pick1);
 
     // Report includes upstart of pick1 and the drop of pick2
-    assertNextReport(
-        inOrder, lbRequestObserver, loadReportIntervalMillis,
-        ClientStats.newBuilder()
-            .setNumCallsStarted(2)
-            .setNumCallsFinished(1)  // pick2
-            .addCallsFinishedWithDrop(
-                ClientStatsPerToken.newBuilder()
-                    .setLoadBalanceToken("token0001")
-                    .setNumCalls(1)          // pick2
-                    .build())
-            .build());
-
-    PickResult pick3 = picker.pickSubchannel(args);
-    assertSame(subchannel2, pick3.getSubchannel());
-    assertSame(getLoadRecorder(), pick3.getStreamTracerFactory());
-    ClientStreamTracer tracer3 =
-        pick3.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
-    tracer3.streamCreated(Attributes.EMPTY, new Metadata());
+    ClientStreamTracer tracer3 = getClientStreamTracer(args, loadReportIntervalMillis);
 
     // pick3 has sent out headers
     tracer3.outboundHeaders();
 
     // 3rd report includes pick3's upstart
+    pickReportUpstart(args, loadReportIntervalMillis);
+
+    // pick1 ended without sending anything
+    tracer1.streamClosed(Status.CANCELLED);
+
+    // 4th report includes end of pick1 and drop of pick4
+    ClientStreamTracer tracer5 = getStreamTracer(args, loadReportIntervalMillis, pick1);
+
+    // pick3 ended without receiving response headers
+    tracer3.streamClosed(Status.DEADLINE_EXCEEDED);
+
+    // pick5 sent and received headers
+    tracer5.outboundHeaders();
+    tracer5.inboundHeaders();
+
+    // 5th report includes pick3's end and pick5's upstart
+    upstartPick5(loadReportIntervalMillis);
+
+    // pick5 ends
+    tracer5.streamClosed(Status.OK);
+
+    // 6th report includes pick5's end
+    includePick5(loadReportIntervalMillis);
+
+    // New stream created
+    createNewStream();
+
+    // Load reporting is also requested
+    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
+
+    // No picker created because balancer is still using the results from the last stream
+    helperInOrder.verify(helper, never())
+        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+
+    // Make a new pick on that picker.  It will not show up on the report of the new stream, because
+    // that picker is associated with the previous stream.
+    newPicker(args, loadReportIntervalMillis);
+
+    // New stream got the list update
+    lbResponseObserver.onNext(buildLbResponse(backends));
+
+    // Same backends, thus no new subchannels
+    helperInOrder.verify(subchannelPool, never()).takeOrCreateSubchannel(
+        any(EquivalentAddressGroup.class), any(Attributes.class));
+    // But the new RoundRobinEntries have a new loadRecorder, thus considered different from
+    // the previous list, thus a new picker is created
+    newRoundRobinEntries(args, loadReportIntervalMillis);
+  }
+
+  private void upstartPick5(long loadReportIntervalMillis) {
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsStarted(1)  // pick5
+            .setNumCallsFinished(1)  // pick3
+            .build());
+  }
+
+  private void newPicker(PickSubchannelArgs args, long loadReportIntervalMillis) {
+    PickResult pick6 = picker.pickSubchannel(args);
+    assertNull(pick6.getSubchannel());
+    assertSame(DROP_PICK_RESULT, pick6);
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder().build());
+  }
+
+  private void newRoundRobinEntries(PickSubchannelArgs args, long loadReportIntervalMillis) {
+    helperInOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    picker = (RoundRobinPicker) pickerCaptor.getValue();
+
+    PickResult pick1p = picker.pickSubchannel(args);
+    assertSame(subchannel1, pick1p.getSubchannel());
+    assertSame(getLoadRecorder(), pick1p.getStreamTracerFactory());
+    pick1p.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    // The pick from the new stream will be included in the report
     assertNextReport(
         inOrder, lbRequestObserver, loadReportIntervalMillis,
         ClientStats.newBuilder()
             .setNumCallsStarted(1)
             .build());
 
-    PickResult pick4 = picker.pickSubchannel(args);
-    assertNull(pick4.getSubchannel());
-    assertSame(DROP_PICK_RESULT, pick4);
+    verify(args, atLeast(0)).getHeaders();
+    verifyNoMoreInteractions(args);
+  }
 
-    // pick1 ended without sending anything
-    tracer1.streamClosed(Status.CANCELLED);
+  private void createNewStream() {
+    verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    inOrder = inOrder(lbRequestObserver);
 
-    // 4th report includes end of pick1 and drop of pick4
+    inOrder.verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+  }
+
+  private void includePick5(long loadReportIntervalMillis) {
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsFinished(1)
+            .setNumCallsFinishedKnownReceived(1)
+            .build());
+
+    assertEquals(1, fakeClock.numPendingTasks());
+    // Balancer closes the stream, scheduled reporting task cancelled
+    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    assertEquals(0, fakeClock.numPendingTasks());
+  }
+
+  private ClientStreamTracer getStreamTracer(PickSubchannelArgs args, long loadReportIntervalMillis,
+      PickResult pick1) {
     assertNextReport(
         inOrder, lbRequestObserver, loadReportIntervalMillis,
         ClientStats.newBuilder()
@@ -548,91 +593,105 @@ public class GrpclbLoadBalancerTest {
     ClientStreamTracer tracer5 =
         pick5.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
     tracer5.streamCreated(Attributes.EMPTY, new Metadata());
+    return tracer5;
+  }
 
-    // pick3 ended without receiving response headers
-    tracer3.streamClosed(Status.DEADLINE_EXCEEDED);
-
-    // pick5 sent and received headers
-    tracer5.outboundHeaders();
-    tracer5.inboundHeaders();
-
-    // 5th report includes pick3's end and pick5's upstart
-    assertNextReport(
-        inOrder, lbRequestObserver, loadReportIntervalMillis,
-        ClientStats.newBuilder()
-            .setNumCallsStarted(1)  // pick5
-            .setNumCallsFinished(1)  // pick3
-            .build());
-
-    // pick5 ends
-    tracer5.streamClosed(Status.OK);
-
-    // 6th report includes pick5's end
-    assertNextReport(
-        inOrder, lbRequestObserver, loadReportIntervalMillis,
-        ClientStats.newBuilder()
-            .setNumCallsFinished(1)
-            .setNumCallsFinishedKnownReceived(1)
-            .build());
-
-    assertEquals(1, fakeClock.numPendingTasks());
-    // Balancer closes the stream, scheduled reporting task cancelled
-    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
-    assertEquals(0, fakeClock.numPendingTasks());
-
-    // New stream created
-    verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
-    lbResponseObserver = lbResponseObserverCaptor.getValue();
-    assertEquals(1, lbRequestObservers.size());
-    lbRequestObserver = lbRequestObservers.poll();
-    inOrder = inOrder(lbRequestObserver);
-
-    inOrder.verify(lbRequestObserver).onNext(
-        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
-                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
-            .build()));
-
-    // Load reporting is also requested
-    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
-
-    // No picker created because balancer is still using the results from the last stream
-    helperInOrder.verify(helper, never())
-        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
-
-    // Make a new pick on that picker.  It will not show up on the report of the new stream, because
-    // that picker is associated with the previous stream.
-    PickResult pick6 = picker.pickSubchannel(args);
-    assertNull(pick6.getSubchannel());
-    assertSame(DROP_PICK_RESULT, pick6);
-    assertNextReport(
-        inOrder, lbRequestObserver, loadReportIntervalMillis,
-        ClientStats.newBuilder().build());
-
-    // New stream got the list update
-    lbResponseObserver.onNext(buildLbResponse(backends));
-
-    // Same backends, thus no new subchannels
-    helperInOrder.verify(subchannelPool, never()).takeOrCreateSubchannel(
-        any(EquivalentAddressGroup.class), any(Attributes.class));
-    // But the new RoundRobinEntries have a new loadRecorder, thus considered different from
-    // the previous list, thus a new picker is created
-    helperInOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    picker = (RoundRobinPicker) pickerCaptor.getValue();
-
-    PickResult pick1p = picker.pickSubchannel(args);
-    assertSame(subchannel1, pick1p.getSubchannel());
-    assertSame(getLoadRecorder(), pick1p.getStreamTracerFactory());
-    pick1p.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
-
-    // The pick from the new stream will be included in the report
+  private void pickReportUpstart(PickSubchannelArgs args, long loadReportIntervalMillis) {
     assertNextReport(
         inOrder, lbRequestObserver, loadReportIntervalMillis,
         ClientStats.newBuilder()
             .setNumCallsStarted(1)
             .build());
 
-    verify(args, atLeast(0)).getHeaders();
-    verifyNoMoreInteractions(args);
+    PickResult pick4 = picker.pickSubchannel(args);
+    assertNull(pick4.getSubchannel());
+    assertSame(DROP_PICK_RESULT, pick4);
+  }
+
+  private ClientStreamTracer getClientStreamTracer(PickSubchannelArgs args,
+      long loadReportIntervalMillis, PickResult pick1) {
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        ClientStats.newBuilder().build());
+
+    ClientStreamTracer tracer1 =
+        pick1.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer1.streamCreated(Attributes.EMPTY, new Metadata());
+
+    PickResult pick2 = picker.pickSubchannel(args);
+    assertNull(pick2.getSubchannel());
+    assertSame(DROP_PICK_RESULT, pick2);
+    return tracer1;
+  }
+
+  private ClientStreamTracer getClientStreamTracer(PickSubchannelArgs args,
+      long loadReportIntervalMillis) {
+    PickResult pick3 = getPickResult(loadReportIntervalMillis,
+        ClientStats.newBuilder()
+            .setNumCallsStarted(2)
+            .setNumCallsFinished(1)  // pick2
+            .addCallsFinishedWithDrop(
+                ClientStatsPerToken.newBuilder()
+                    .setLoadBalanceToken("token0001")
+                    .setNumCalls(1)          // pick2
+                    .build()), args, subchannel2);
+    ClientStreamTracer tracer3 =
+        pick3.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer3.streamCreated(Attributes.EMPTY, new Metadata());
+    return tracer3;
+  }
+
+  private PickResult getPickResult(long loadReportIntervalMillis, ClientStats.Builder newBuilder,
+      PickSubchannelArgs args, Subchannel subchannel1) {
+    assertNextReport(
+        inOrder, lbRequestObserver, loadReportIntervalMillis,
+        newBuilder.build());
+
+    PickResult pick1 = picker.pickSubchannel(args);
+    assertSame(subchannel1, pick1.getSubchannel());
+    assertSame(getLoadRecorder(), pick1.getStreamTracerFactory());
+    return pick1;
+  }
+
+  private void scheduleLoadReporting(List<ServerEntry> backends) {
+    lbResponseObserver.onNext(buildLbResponse(backends));
+
+    assertEquals(2, mockSubchannels.size());
+    subchannel1 = mockSubchannels.poll();
+    subchannel2 = mockSubchannels.poll();
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
+
+    helperInOrder.verify(helper, atLeast(1))
+        .updateBalancingState(eq(READY), pickerCaptor.capture());
+    picker = (RoundRobinPicker) pickerCaptor.getValue();
+    assertThat(picker.dropList).containsExactly(
+        null,
+        new DropEntry(getLoadRecorder(), "token0001"),
+        null,
+        new DropEntry(getLoadRecorder(), "token0003")).inOrder();
+    assertThat(picker.pickList).containsExactly(
+        new BackendEntry(subchannel1, getLoadRecorder(), "token0001"),
+        new BackendEntry(subchannel2, getLoadRecorder(), "token0002")).inOrder();
+  }
+
+  private void startFallbackTimer() {
+    assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+
+    assertEquals(1, fakeOobChannels.size());
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    inOrder = inOrder(lbRequestObserver);
+    helperInOrder = inOrder(helper, subchannelPool);
+
+    inOrder.verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
   }
 
   @Test
@@ -2205,10 +2264,6 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
-
-  Subchannel subchannel1;
-  Subchannel subchannel2;
-
   @Test
   public void switchMode() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -2461,8 +2516,6 @@ public class GrpclbLoadBalancerTest {
   }
 
   ManagedChannel oobChannel;
-  StreamObserver<LoadBalanceResponse> lbResponseObserver;
-  StreamObserver<LoadBalanceRequest> lbRequestObserver;
 
   @Test
   public void grpclbWorking_lbSendsFallbackMessage() {
