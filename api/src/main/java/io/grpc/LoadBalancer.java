@@ -157,15 +157,14 @@ public abstract class LoadBalancer {
 
   /**
    * Handles newly resolved addresses and metadata attributes from name resolution system.
-   * Addresses in {@link EquivalentAddressGroup} should be considered equivalent but may be flattened
-   * into a single list if needed.
+   * Addresses in {@link EquivalentAddressGroup} should be considered equivalent but may be
+   * flattened into a single list if needed.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
    *
-   * @deprecated  As of release 1.69.0,
-   * use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
-   *
+   * @deprecated  As of release 1.69.0, use instead
+   *     {@link #acceptResolvedAddresses(ResolvedAddresses)}
    */
   @Deprecated
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
