@@ -17,4 +17,4 @@ you can implement your own custom load balance [Custom Load Balance](src/main/ja
 
 gRPC supports both client side and server side load balancing but by default gRPC uses client side load balancing.
 
-You can refer the gRPC documentation for more details on Load Balancing https://grpc.io/blog/grpc-load-balancing/
+Refer the gRPC documentation for more details on Load Balancing https://grpc.io/blog/grpc-load-balancing/

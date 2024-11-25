@@ -10,4 +10,4 @@ can be enabled or disabled based on call or message level for all languages.
 gRPC allows asymmetrically compressed communication, whereby a response may be compressed differently with the request, 
 or not compressed at all.
 
-You can refer the gRPC documentation for more details on Compression https://grpc.io/docs/guides/compression/
+Refer the gRPC documentation for more details on Compression https://grpc.io/docs/guides/compression/

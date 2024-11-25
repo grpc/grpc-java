@@ -11,6 +11,6 @@ gRPC allows detailed error information to be encapsulated in protobuf messages, 
 
 If an error occurs, gRPC returns one of its error status codes with error message that provides further error details about what happened.
 
-You can refer the below links for more details on error details and status codes  
+Refer the below links for more details on error details and status codes  
 - https://grpc.io/docs/guides/error/
 - https://github.com/grpc/grpc-java/blob/master/api/src/main/java/io/grpc/Status.java
