@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.util.MultiChildLoadBalancer.IS_PETIOLE_POLICY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
@@ -54,8 +53,9 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
+import io.grpc.internal.PickFirstLoadBalancerProviderAccessor;
 import io.grpc.internal.TestUtils;
-import io.grpc.util.MultiChildLoadBalancer.ChildLbState;
 import io.grpc.util.RoundRobinLoadBalancer.ReadyPicker;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -105,6 +105,7 @@ public class RoundRobinLoadBalancerTest {
   private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   private TestHelper testHelperInst = new TestHelper();
   private Helper mockHelper = mock(Helper.class, delegatesTo(testHelperInst));
+  private boolean defaultNewPickFirst = PickFirstLoadBalancerProvider.isEnabledNewPickFirst();
 
   @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
   private PickSubchannelArgs mockArgs;
@@ -127,6 +128,7 @@ public class RoundRobinLoadBalancerTest {
 
   @After
   public void tearDown() throws Exception {
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(defaultNewPickFirst);
     verifyNoMoreInteractions(mockArgs);
   }
 
@@ -202,16 +204,6 @@ public class RoundRobinLoadBalancerTest {
     verify(removedSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).requestConnection();
 
-    assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
-    for (ChildLbState childLbState : loadBalancer.getChildLbStates()) {
-      assertThat(childLbState.getResolvedAddresses().getAttributes().get(IS_PETIOLE_POLICY))
-          .isTrue();
-    }
-    assertThat(loadBalancer.getChildLbStateEag(removedEag).getCurrentPicker().pickSubchannel(null)
-        .getSubchannel()).isEqualTo(removedSubchannel);
-    assertThat(loadBalancer.getChildLbStateEag(oldEag1).getCurrentPicker().pickSubchannel(null)
-        .getSubchannel()).isEqualTo(oldSubchannel);
-
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
 
@@ -225,12 +217,6 @@ public class RoundRobinLoadBalancerTest {
 
     deliverSubchannelState(newSubchannel, ConnectivityStateInfo.forNonError(READY));
 
-    assertThat(loadBalancer.getChildLbStates().size()).isEqualTo(2);
-    assertThat(loadBalancer.getChildLbStateEag(newEag).getCurrentPicker()
-        .pickSubchannel(null).getSubchannel()).isEqualTo(newSubchannel);
-    assertThat(loadBalancer.getChildLbStateEag(oldEag2).getCurrentPicker()
-        .pickSubchannel(null).getSubchannel()).isEqualTo(oldSubchannel);
-
     verify(mockHelper, times(6)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(mockHelper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
 
@@ -243,35 +229,35 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
-    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    Status addressesAcceptanceStatus =
+        acceptAddresses(Arrays.asList(servers.get(0)), Attributes.EMPTY);
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
+    inOrder.verify(mockHelper).createSubchannel(any(CreateSubchannelArgs.class));
 
     // TODO figure out if this method testing the right things
 
-    ChildLbState childLbState = loadBalancer.getChildLbStates().iterator().next();
-    Subchannel subchannel = subchannels.get(Arrays.asList(childLbState.getEag()));
+    assertThat(subchannels).hasSize(1);
+    Subchannel subchannel = subchannels.values().iterator().next();
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
-    assertThat(childLbState.getCurrentState()).isEqualTo(CONNECTING);
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
-    assertThat(childLbState.getCurrentState()).isEqualTo(READY);
 
     Status error = Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯");
     deliverSubchannelState(subchannel,
         ConnectivityStateInfo.forTransientFailure(error));
-    assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
-    AbstractTestHelper.refreshInvokedAndUpdateBS(inOrder, CONNECTING, mockHelper, pickerCaptor);
-    assertThat(pickerCaptor.getValue()).isEqualTo(EMPTY_PICKER);
+    AbstractTestHelper.refreshInvokedAndUpdateBS(
+        inOrder, TRANSIENT_FAILURE, mockHelper, pickerCaptor);
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus()).isEqualTo(error);
 
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
     inOrder.verify(mockHelper).refreshNameResolution();
-    assertThat(childLbState.getCurrentState()).isEqualTo(TRANSIENT_FAILURE);
+    inOrder.verify(mockHelper, never())
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
     verify(subchannel, atLeastOnce()).requestConnection();
-    verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
 
@@ -282,10 +268,10 @@ public class RoundRobinLoadBalancerTest {
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
+    List<Subchannel> savedSubchannels = new ArrayList<>(subchannels.values());
     loadBalancer.shutdown();
-    for (ChildLbState child : loadBalancer.getChildLbStates()) {
-      Subchannel sc = child.getCurrentPicker().pickSubchannel(null).getSubchannel();
-      verify(child).shutdown();
+    for (Subchannel sc : savedSubchannels) {
+      verify(sc).shutdown();
       // When the subchannel is being shut down, a SHUTDOWN connectivity state is delivered
       // back to the subchannel state listener.
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(SHUTDOWN));
@@ -300,34 +286,27 @@ public class RoundRobinLoadBalancerTest {
     Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
     assertThat(addressesAcceptanceStatus.isOk()).isTrue();
 
+    inOrder.verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
-    Map<ChildLbState, Subchannel> childToSubChannelMap = new HashMap<>();
     // Simulate state transitions for each subchannel individually.
-    for ( ChildLbState child : loadBalancer.getChildLbStates()) {
-      Subchannel sc = subchannels.get(Arrays.asList(child.getEag()));
-      childToSubChannelMap.put(child, sc);
+    for (Subchannel sc : subchannels.values()) {
       Status error = Status.UNKNOWN.withDescription("connection broken");
       deliverSubchannelState(
           sc,
           ConnectivityStateInfo.forTransientFailure(error));
-      assertEquals(TRANSIENT_FAILURE, child.getCurrentState());
       deliverSubchannelState(
           sc,
           ConnectivityStateInfo.forNonError(CONNECTING));
-      assertEquals(TRANSIENT_FAILURE, child.getCurrentState());
     }
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), isA(ReadyPicker.class));
     inOrder.verify(mockHelper, atLeast(0)).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
 
-    ChildLbState child = loadBalancer.getChildLbStates().iterator().next();
-    Subchannel subchannel = childToSubChannelMap.get(child);
+    Subchannel subchannel = subchannels.values().iterator().next();
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    assertThat(child.getCurrentState()).isEqualTo(READY);
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), isA(ReadyPicker.class));
 
-    verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     inOrder.verify(mockHelper, atLeast(0)).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
   }
@@ -342,8 +321,7 @@ public class RoundRobinLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), eq(EMPTY_PICKER));
 
     // Simulate state transitions for each subchannel individually.
-    for (ChildLbState child : loadBalancer.getChildLbStates()) {
-      Subchannel sc = subchannels.get(Arrays.asList(child.getEag()));
+    for (Subchannel sc : subchannels.values()) {
       verify(sc).requestConnection();
       deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(CONNECTING));
       Status error = Status.UNKNOWN.withDescription("connection broken");
@@ -481,6 +459,60 @@ public class RoundRobinLoadBalancerTest {
     verify(sc3, times(1)).requestConnection();
     assertThat(stateIterator.hasNext()).isFalse();
     assertThat(pickers.hasNext()).isFalse();
+  }
+
+  @Test
+  public void subchannelHealthObserved() throws Exception {
+    // Only the new PF policy observes the new separate listener for health
+    PickFirstLoadBalancerProviderAccessor.setEnableNewPickFirst(true);
+    // PickFirst does most of this work. If the test fails, check IS_PETIOLE_POLICY
+    Map<Subchannel, LoadBalancer.SubchannelStateListener> healthListeners = new HashMap<>();
+    loadBalancer = new RoundRobinLoadBalancer(new ForwardingLoadBalancerHelper() {
+      @Override
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        Subchannel subchannel = super.createSubchannel(args.toBuilder()
+            .setAttributes(args.getAttributes().toBuilder()
+              .set(LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY, true)
+              .build())
+            .build());
+        healthListeners.put(
+            subchannel, args.getOption(LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY));
+        return subchannel;
+      }
+
+      @Override
+      protected Helper delegate() {
+        return mockHelper;
+      }
+    });
+
+    InOrder inOrder = inOrder(mockHelper);
+    Status addressesAcceptanceStatus = acceptAddresses(servers, Attributes.EMPTY);
+    assertThat(addressesAcceptanceStatus.isOk()).isTrue();
+    Subchannel subchannel0 = subchannels.get(Arrays.asList(servers.get(0)));
+    Subchannel subchannel1 = subchannels.get(Arrays.asList(servers.get(1)));
+    Subchannel subchannel2 = subchannels.get(Arrays.asList(servers.get(2)));
+
+    // Subchannels go READY, but the LB waits for health
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    }
+    inOrder.verify(mockHelper, times(0))
+        .updateBalancingState(eq(READY), any(SubchannelPicker.class));
+
+    // Health results lets subchannels go READY
+    healthListeners.get(subchannel0).onSubchannelState(
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("oh no")));
+    healthListeners.get(subchannel1).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    healthListeners.get(subchannel2).onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    List<Subchannel> picks = Arrays.asList(
+        picker.pickSubchannel(mockArgs).getSubchannel(),
+        picker.pickSubchannel(mockArgs).getSubchannel(),
+        picker.pickSubchannel(mockArgs).getSubchannel(),
+        picker.pickSubchannel(mockArgs).getSubchannel());
+    assertThat(picks).containsExactly(subchannel1, subchannel2, subchannel1, subchannel2);
   }
 
   @Test

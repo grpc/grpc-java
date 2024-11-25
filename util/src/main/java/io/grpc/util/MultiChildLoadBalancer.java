@@ -24,7 +24,6 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -192,6 +191,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       }
       newChildLbStates.add(childLbState);
       if (entry.getValue() != null) {
+        childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
         childLbState.setResolvedAddresses(entry.getValue()); // update child
         childLbState.lb.acceptResolvedAddresses(entry.getValue()); // update child LB
       }
@@ -237,21 +237,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     return childLbStates;
   }
 
-  @VisibleForTesting
-  public final ChildLbState getChildLbState(Object key) {
-    for (ChildLbState state : childLbStates) {
-      if (Objects.equal(state.getKey(), key)) {
-        return state;
-      }
-    }
-    return null;
-  }
-
-  @VisibleForTesting
-  public final ChildLbState getChildLbStateEag(EquivalentAddressGroup eag) {
-    return getChildLbState(new Endpoint(eag));
-  }
-
   /**
    * Filters out non-ready child load balancers (subchannels).
    */
@@ -278,8 +263,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
    */
   public class ChildLbState {
     private final Object key;
-    private ResolvedAddresses resolvedAddresses;
-
     private final LoadBalancer lb;
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
@@ -335,23 +318,6 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
     protected final void setCurrentPicker(SubchannelPicker newPicker) {
       currentPicker = newPicker;
-    }
-
-    public final EquivalentAddressGroup getEag() {
-      if (resolvedAddresses == null || resolvedAddresses.getAddresses().isEmpty()) {
-        return null;
-      }
-      return resolvedAddresses.getAddresses().get(0);
-    }
-
-    protected final void setResolvedAddresses(ResolvedAddresses newAddresses) {
-      checkNotNull(newAddresses, "Missing address list for child");
-      resolvedAddresses = newAddresses;
-    }
-
-    @VisibleForTesting
-    public final ResolvedAddresses getResolvedAddresses() {
-      return resolvedAddresses;
     }
 
     /**

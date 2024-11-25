@@ -20,7 +20,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
-import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.services.HealthStatusManager;
 import io.grpc.xds.XdsServerBuilder;
 import io.grpc.xds.XdsServerCredentials;
@@ -66,7 +66,7 @@ public class XdsHelloWorldServer {
     final HealthStatusManager health = new HealthStatusManager();
     final Server server = XdsServerBuilder.forPort(port, credentials)
         .addService(new HostnameGreeter(hostname))
-        .addService(ProtoReflectionService.newInstance()) // convenient for command line tools
+        .addService(ProtoReflectionServiceV1.newInstance()) // convenient for command line tools
         .addService(health.getHealthService()) // allow management servers to monitor health
         .build()
         .start();

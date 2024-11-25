@@ -72,8 +72,8 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
     long cacheSize = 10;
     // Validate cache_config
-    TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
-    if (cacheConfig != null) {
+    if (gcpAuthnProto.hasCacheConfig()) {
+      TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
       cacheSize = cacheConfig.getCacheSize().getValue();
       if (cacheSize == 0) {
         return ConfigOrError.fromError(

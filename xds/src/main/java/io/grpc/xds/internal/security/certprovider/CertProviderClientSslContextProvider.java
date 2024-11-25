@@ -58,15 +58,21 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
     // Null rootCertInstance implies hasSystemRootCerts because of the check in
     // CertProviderClientSslContextProviderFactory.
     if (rootCertInstance != null) {
-      sslContextBuilder.trustManager(
+      if (savedSpiffeTrustMap != null) {
+        sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
-              savedTrustedRoots.toArray(new X509Certificate[0]),
+              savedSpiffeTrustMap,
               certificateValidationContextdationContext));
+      } else {
+        sslContextBuilder = sslContextBuilder.trustManager(
+            new XdsTrustManagerFactory(
+                savedTrustedRoots.toArray(new X509Certificate[0]),
+                certificateValidationContextdationContext));
+      }
     }
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }
     return sslContextBuilder;
   }
-
 }

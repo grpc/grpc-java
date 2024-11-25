@@ -10,9 +10,9 @@ proto-based services.
 ## Enable Server Reflection
 
 gRPC-Java Server Reflection is implemented by
-`io.grpc.protobuf.services.ProtoReflectionService` in the `grpc-services`
+`io.grpc.protobuf.services.ProtoReflectionServiceV1` in the `grpc-services`
 package. To enable server reflection, you need to add the
-`ProtoReflectionService` to your gRPC server.
+`ProtoReflectionServiceV1` to your gRPC server.
 
 For example, to enable server reflection in
 `examples/src/main/java/io/grpc/examples/helloworld/HelloWorldServer.java`, we
@@ -35,7 +35,7 @@ need to make the following changes:
  
  import io.grpc.Server;
  import io.grpc.ServerBuilder;
-+import io.grpc.protobuf.services.ProtoReflectionService;
++import io.grpc.protobuf.services.ProtoReflectionServiceV1;
  import io.grpc.stub.StreamObserver;
  import java.io.IOException;
  import java.util.logging.Logger;
@@ -43,7 +43,7 @@ need to make the following changes:
      int port = 50051;
      server = ServerBuilder.forPort(port)
          .addService(new GreeterImpl())
-+        .addService(ProtoReflectionService.newInstance())
++        .addService(ProtoReflectionServiceV1.newInstance())
          .build()
          .start();
      logger.info("Server started, listening on " + port);
