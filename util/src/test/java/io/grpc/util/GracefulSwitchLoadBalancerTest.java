@@ -125,17 +125,17 @@ public class GracefulSwitchLoadBalancerTest {
     helper0.updateBalancingState(READY, picker);
 
     ResolvedAddresses addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses);
-    verify(lb0).acceptResolvedAddresses(addresses);
+    gracefulSwitchLb.handleResolvedAddresses(addresses);
+    verify(lb0).handleResolvedAddresses(addresses);
     gracefulSwitchLb.handleNameResolutionError(Status.DATA_LOSS);
     verify(lb0).handleNameResolutionError(Status.DATA_LOSS);
 
     gracefulSwitchLb.switchTo(lbPolicies[1]);
     LoadBalancer lb1 = balancers.get(lbPolicies[1]);
     addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses);
-    verify(lb0, never()).acceptResolvedAddresses(addresses);
-    verify(lb1).acceptResolvedAddresses(addresses);
+    gracefulSwitchLb.handleResolvedAddresses(addresses);
+    verify(lb0, never()).handleResolvedAddresses(addresses);
+    verify(lb1).handleResolvedAddresses(addresses);
     gracefulSwitchLb.handleNameResolutionError(Status.ALREADY_EXISTS);
     verify(lb0, never()).handleNameResolutionError(Status.ALREADY_EXISTS);
     verify(lb1).handleNameResolutionError(Status.ALREADY_EXISTS);
@@ -144,10 +144,10 @@ public class GracefulSwitchLoadBalancerTest {
     verify(lb1).shutdown();
     LoadBalancer lb2 = balancers.get(lbPolicies[2]);
     addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses);
-    verify(lb0, never()).acceptResolvedAddresses(addresses);
-    verify(lb1, never()).acceptResolvedAddresses(addresses);
-    verify(lb2).acceptResolvedAddresses(addresses);
+    gracefulSwitchLb.handleResolvedAddresses(addresses);
+    verify(lb0, never()).handleResolvedAddresses(addresses);
+    verify(lb1, never()).handleResolvedAddresses(addresses);
+    verify(lb2).handleResolvedAddresses(addresses);
     gracefulSwitchLb.handleNameResolutionError(Status.CANCELLED);
     verify(lb0, never()).handleNameResolutionError(Status.CANCELLED);
     verify(lb1, never()).handleNameResolutionError(Status.CANCELLED);
@@ -591,11 +591,11 @@ public class GracefulSwitchLoadBalancerTest {
   public void handleResolvedAddressesAndNameResolutionErrorForwardedToLatestPolicy() {
     ResolvedAddresses addresses = newFakeAddresses();
     Object child0Config = new Object();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses.toBuilder()
+    gracefulSwitchLb.handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(createConfig(lbPolicies[0], child0Config))
         .build());
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
-    verify(lb0).acceptResolvedAddresses(addresses.toBuilder()
+    verify(lb0).handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(child0Config)
         .build());
     Helper helper0 = helpers.get(lb0);
@@ -606,14 +606,14 @@ public class GracefulSwitchLoadBalancerTest {
 
     Object child1Config = new Object();
     addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses.toBuilder()
+    gracefulSwitchLb.handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(createConfig(lbPolicies[1], child1Config))
         .build());
     LoadBalancer lb1 = balancers.get(lbPolicies[1]);
-    verify(lb0, never()).acceptResolvedAddresses(addresses.toBuilder()
+    verify(lb0, never()).handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(child1Config)
         .build());
-    verify(lb1).acceptResolvedAddresses(addresses.toBuilder()
+    verify(lb1).handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(child1Config)
         .build());
     gracefulSwitchLb.handleNameResolutionError(Status.ALREADY_EXISTS);
@@ -622,18 +622,18 @@ public class GracefulSwitchLoadBalancerTest {
 
     Object child2Config = new Object();
     addresses = newFakeAddresses();
-    gracefulSwitchLb.acceptResolvedAddresses(addresses.toBuilder()
+    gracefulSwitchLb.handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(createConfig(lbPolicies[2], child2Config))
         .build());
     verify(lb1).shutdown();
     LoadBalancer lb2 = balancers.get(lbPolicies[2]);
-    verify(lb0, never()).acceptResolvedAddresses(addresses.toBuilder()
+    verify(lb0, never()).handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(child2Config)
         .build());
-    verify(lb1, never()).acceptResolvedAddresses(addresses.toBuilder()
+    verify(lb1, never()).handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(child2Config)
         .build());
-    verify(lb2).acceptResolvedAddresses(addresses.toBuilder()
+    verify(lb2).handleResolvedAddresses(addresses.toBuilder()
         .setLoadBalancingPolicyConfig(child2Config)
         .build());
     gracefulSwitchLb.handleNameResolutionError(Status.CANCELLED);

@@ -56,7 +56,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
-    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       //  Most LB policies using this class will receive child policy configuration within the
       //  service config, so they are naturally calling switchTo() just before
       //  handleResolvedAddresses(), within their own handleResolvedAddresses(). If switchTo() is
@@ -112,6 +112,30 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     this.helper = checkNotNull(helper, "helper");
   }
 
+  /**
+   * @deprecated  As of release 1.69.0,
+   * use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
+   */
+  @Deprecated
+  @Override
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    if (switchToCalled) {
+      delegate().handleResolvedAddresses(resolvedAddresses);
+      return;
+    }
+    Config config = (Config) resolvedAddresses.getLoadBalancingPolicyConfig();
+    switchToInternal(config.childFactory);
+    delegate().handleResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(config.childConfig)
+          .build());
+  }
+
+  /**
+   *
+   * @param resolvedAddresses the resolved server addresses, attributes, and config.
+   * @return
+   */
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (switchToCalled) {

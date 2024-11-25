@@ -29,6 +29,16 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
    */
   protected abstract LoadBalancer delegate();
 
+  /**
+   * @deprecated  As of release 1.69.0,
+   * use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
+   */
+  @Deprecated
+  @Override
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    delegate().handleResolvedAddresses(resolvedAddresses);
+  }
+
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     return delegate().acceptResolvedAddresses(resolvedAddresses);
