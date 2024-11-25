@@ -55,6 +55,11 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe // Must be accessed in SynchronizationContext
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
+    /**
+     * @deprecated  As of release 1.69.0,
+     * use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
+     */
+    @Deprecated
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       //  Most LB policies using this class will receive child policy configuration within the
@@ -131,11 +136,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
           .build());
   }
 
-  /**
-   *
-   * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return
-   */
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (switchToCalled) {
