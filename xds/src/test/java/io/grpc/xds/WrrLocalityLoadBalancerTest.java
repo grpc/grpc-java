@@ -107,8 +107,9 @@ public class WrrLocalityLoadBalancerTest {
     loadBalancer = new WrrLocalityLoadBalancer(mockHelper, lbRegistry);
   }
 
+  @Deprecated
   @Test
-  public void acceptResolvedAddresses() {
+  public void handleResolvedAddresses() {
     // A two locality cluster with a mock child LB policy.
     String localityOne = "localityOne";
     String localityTwo = "localityTwo";
@@ -124,7 +125,7 @@ public class WrrLocalityLoadBalancerTest {
 
     // Assert that the child policy and the locality weights were correctly mapped to a
     // WeightedTargetConfig.
-    verify(mockWeightedTargetLb).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(mockWeightedTargetLb).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     Object config = resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig();
     assertThat(config).isInstanceOf(WeightedTargetConfig.class);
     WeightedTargetConfig wtConfig = (WeightedTargetConfig) config;
@@ -173,6 +174,7 @@ public class WrrLocalityLoadBalancerTest {
     verify(mockWeightedTargetLb).handleNameResolutionError(status);
   }
 
+  @Deprecated
   @Test
   public void localityWeightAttributeNotPropagated() {
     Object childPolicy = newChildConfig(mockChildProvider, null);
@@ -182,7 +184,7 @@ public class WrrLocalityLoadBalancerTest {
 
     // Assert that the child policy and the locality weights were correctly mapped to a
     // WeightedTargetConfig.
-    verify(mockWeightedTargetLb).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(mockWeightedTargetLb).handleResolvedAddresses(resolvedAddressesCaptor.capture());
 
     //assertThat(resolvedAddressesCaptor.getValue().getAttributes()
     //    .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).isNull();
@@ -212,8 +214,9 @@ public class WrrLocalityLoadBalancerTest {
     return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
   }
 
+  @Deprecated
   private void deliverAddresses(WrrLocalityConfig config, List<EquivalentAddressGroup> addresses) {
-    loadBalancer.acceptResolvedAddresses(
+    loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(addresses).setLoadBalancingPolicyConfig(config)
             .build());
   }

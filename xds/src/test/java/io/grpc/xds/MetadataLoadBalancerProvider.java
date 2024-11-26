@@ -107,12 +107,19 @@ public class MetadataLoadBalancerProvider extends LoadBalancerProvider {
       return delegateLb;
     }
 
+    /**
+     * Handles newly resolved addresses and metadata attributes from name resolution system.
+     *
+     * @deprecated  As of release 1.69.0,
+     *     use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
+     */
+    @Deprecated
     @Override
-    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       MetadataLoadBalancerConfig config
           = (MetadataLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       helper.setMetadata(config.metadataKey, config.metadataValue);
-      return delegateLb.acceptResolvedAddresses(resolvedAddresses);
+      delegateLb.handleResolvedAddresses(resolvedAddresses);
     }
   }
 
