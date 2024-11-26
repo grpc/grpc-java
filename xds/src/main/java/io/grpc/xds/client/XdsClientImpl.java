@@ -41,7 +41,6 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient.ResourceStore;
-import io.grpc.xds.client.XdsClient.XdsResponseHandler;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.URI;
 import java.util.Collection;
@@ -52,6 +51,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -60,7 +60,7 @@ import javax.annotation.Nullable;
  * XdsClient implementation.
  */
 @Internal
-public final class XdsClientImpl extends XdsClient implements XdsResponseHandler, ResourceStore {
+public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -100,6 +100,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
   private final XdsLogger logger;
   private volatile boolean isShutdown;
   private final MessagePrettyPrinter messagePrinter;
+  private final XdsClientMetricReporter metricReporter;
 
   public XdsClientImpl(
       XdsTransportFactory xdsTransportFactory,
@@ -109,7 +110,8 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
       Supplier<Stopwatch> stopwatchSupplier,
       TimeProvider timeProvider,
       MessagePrettyPrinter messagePrinter,
-      Object securityConfig) {
+      Object securityConfig,
+      XdsClientMetricReporter metricReporter) {
     this.xdsTransportFactory = xdsTransportFactory;
     this.bootstrapInfo = bootstrapInfo;
     this.timeService = timeService;
@@ -118,13 +120,13 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     this.timeProvider = timeProvider;
     this.messagePrinter = messagePrinter;
     this.securityConfig = securityConfig;
+    this.metricReporter = metricReporter;
     logId = InternalLogId.allocate("xds-client", null);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
-  @Override
-  public void handleResourceResponse(
+  private void handleResourceResponse(
       XdsResourceType<?> xdsResourceType, ServerInfo serverInfo, String versionInfo,
       List<Any> resources, String nonce, ProcessingTracker processingTracker) {
     checkNotNull(xdsResourceType, "xdsResourceType");
@@ -138,11 +140,11 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     handleResourceUpdate(args, resources, xdsResourceType, processingTracker);
   }
 
-  @Override
-  public void handleStreamClosed(Status error) {
+  private void handleStreamClosed(Status error, ServerInfo serverInfo) {
     syncContext.throwIfNotInThisSynchronizationContext();
     cleanUpResourceTimers();
     if (!error.isOk()) {
+      metricReporter.reportServerFailure(1L, serverInfo.target());
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
@@ -154,8 +156,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     }
   }
 
-  @Override
-  public void handleStreamRestarted(ServerInfo serverInfo) {
+  private void handleStreamRestarted(ServerInfo serverInfo) {
     syncContext.throwIfNotInThisSynchronizationContext();
     for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
         resourceSubscribers.values()) {
@@ -394,7 +395,27 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
         xdsTransport,
         serverInfo,
         bootstrapInfo.node(),
-        this,
+        new XdsResponseHandler() {
+
+          @Override
+          public void handleResourceResponse(
+              XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
+              List<Any> resources, String nonce, ProcessingTracker processingTracker) {
+            XdsClientImpl.this.handleResourceResponse(resourceType, serverInfo, versionInfo,
+                resources, nonce,
+                processingTracker);
+          }
+
+          @Override
+          public void handleStreamClosed(Status error) {
+            XdsClientImpl.this.handleStreamClosed(error, serverInfo);
+          }
+
+          @Override
+          public void handleStreamRestarted(ServerInfo serverInfo) {
+            XdsClientImpl.this.handleStreamRestarted(serverInfo);
+          }
+        },
         this,
         timeService,
         syncContext,
@@ -448,6 +469,10 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
          xdsResourceType.typeName(), args.versionInfo, args.nonce, result.unpackedResources);
     Map<String, ParsedResource<T>> parsedResources = result.parsedResources;
     Set<String> invalidResources = result.invalidResources;
+    metricReporter.reportResourceUpdates(Long.valueOf(parsedResources.size()),
+        Long.valueOf(invalidResources.size()),
+        args.getServerInfo().target(), xdsResourceType.typeUrl());
+
     List<String> errors = result.errors;
     String errorDetail = null;
     if (errors.isEmpty()) {
@@ -504,9 +529,19 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
     }
   }
 
-  /**
-   * Tracks a single subscribed resource.
-   */
+  @Override
+  public Future<Void> reportServerConnections(ServerConnectionCallback callback) {
+    SettableFuture<Void> future = SettableFuture.create();
+    syncContext.execute(() -> {
+      serverCpClientMap.forEach((serverInfo, controlPlaneClient) ->
+          callback.reportServerConnectionGauge(
+              controlPlaneClient.hasWorkingAdsStream(), serverInfo.target()));
+      future.set(null);
+    });
+    return future;
+  }
+
+  /** Tracks a single subscribed resource. */
   private final class ResourceSubscriber<T extends ResourceUpdate> {
     @Nullable private final ServerInfo serverInfo;
     @Nullable private final ControlPlaneClient controlPlaneClient;
@@ -644,10 +679,10 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
         respTimer.cancel();
         respTimer = null;
       }
-      this.metadata = ResourceMetadata
-          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       ResourceUpdate oldData = this.data;
       this.data = parsedResource.getResourceUpdate();
+      this.metadata = ResourceMetadata
+          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       absent = false;
       if (resourceDeletionIgnored) {
         logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
@@ -741,7 +776,8 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
 
     void onRejected(String rejectedVersion, long rejectedTime, String rejectedDetails) {
       metadata = ResourceMetadata
-          .newResourceMetadataNacked(metadata, rejectedVersion, rejectedTime, rejectedDetails);
+          .newResourceMetadataNacked(metadata, rejectedVersion, rejectedTime, rejectedDetails,
+              data != null);
     }
 
     private void notifyWatcher(ResourceWatcher<T> watcher, T update) {
