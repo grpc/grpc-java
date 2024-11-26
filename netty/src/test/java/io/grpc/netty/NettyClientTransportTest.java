@@ -346,7 +346,7 @@ public class NettyClientTransportTest {
         .trustManager(caCert)
         .keyManager(clientCert, clientKey)
         .build();
-    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext);
+    ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, null);
     final NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -803,7 +803,7 @@ public class NettyClientTransportTest {
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool,
-        Optional.empty());
+        Optional.empty(), null);
     // after starting the client, the Executor in the client pool should be used
     assertEquals(true, clientExecutorPool.isInUse());
     final NettyClientTransport transport = newTransport(negotiator);
@@ -827,7 +827,7 @@ public class NettyClientTransportTest {
   private ProtocolNegotiator newNegotiator() throws IOException {
     InputStream caCert = TlsTesting.loadCert("ca.pem");
     SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert).build();
-    return ProtocolNegotiators.tls(clientContext);
+    return ProtocolNegotiators.tls(clientContext, null);
   }
 
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator) {

@@ -45,6 +45,7 @@ import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
+import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
@@ -60,15 +61,20 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.security.cert.CertificateException;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLPeerUnverifiedException;
 
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
+  private static final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -193,6 +199,23 @@ class NettyClientTransport implements ConnectionClientTransport {
     Preconditions.checkNotNull(headers, "headers");
     if (channel == null) {
       return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
+    }
+    if (negotiator instanceof ClientTlsProtocolNegotiator && callOptions.getAuthority() != null) {
+      ClientTlsProtocolNegotiator clientTlsProtocolNegotiator =
+          (ClientTlsProtocolNegotiator) negotiator;
+      if (!clientTlsProtocolNegotiator.canVerifyAuthorityOverride()) {
+        return new FailingClientStream(Status.INTERNAL.withDescription(
+            "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
+            tracers);
+      }
+      try {
+        clientTlsProtocolNegotiator.verifyAuthorityAllowedForPeerCert(callOptions.getAuthority());
+      } catch (SSLPeerUnverifiedException | CertificateException e) {
+        logger.log(Level.FINE, "Peer hostname verification failed for authority '{}'.",
+            callOptions.getAuthority());
+        return new FailingClientStream(Status.INTERNAL.withDescription(
+            "Peer hostname verification failed for authority"), tracers);
+      }
     }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
