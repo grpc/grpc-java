@@ -690,6 +690,30 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void metricRecorder_fromNameResolverArgs_recordsToMetricSink() {
+    MetricSink mockSink1 = mock(MetricSink.class);
+    MetricSink mockSink2 = mock(MetricSink.class);
+    channelBuilder.addMetricSink(mockSink1);
+    channelBuilder.addMetricSink(mockSink2);
+    createChannel();
+
+    LongCounterMetricInstrument counter = metricInstrumentRegistry.registerLongCounter(
+        "test_counter", "Time taken by metric recorder", "s",
+        ImmutableList.of("grpc.method"), Collections.emptyList(), false);
+    List<String> requiredLabelValues = ImmutableList.of("testMethod");
+    List<String> optionalLabelValues = Collections.emptyList();
+
+    NameResolver.Args args = helper.getNameResolverArgs();
+    assertThat(args.getMetricRecorder()).isNotNull();
+    args.getMetricRecorder()
+        .addLongCounter(counter, 10, requiredLabelValues, optionalLabelValues);
+    verify(mockSink1).addLongCounter(eq(counter), eq(10L), eq(requiredLabelValues),
+        eq(optionalLabelValues));
+    verify(mockSink2).addLongCounter(eq(counter), eq(10L), eq(requiredLabelValues),
+        eq(optionalLabelValues));
+  }
+
+  @Test
   public void shutdownWithNoTransportsEverCreated() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
@@ -2242,6 +2266,7 @@ public class ManagedChannelImplTest {
     assertThat(args.getSynchronizationContext())
         .isSameInstanceAs(helper.getSynchronizationContext());
     assertThat(args.getServiceConfigParser()).isNotNull();
+    assertThat(args.getMetricRecorder()).isNotNull();
   }
 
   @Test

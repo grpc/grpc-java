@@ -22,7 +22,9 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.protobuf.Any;
+import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -159,7 +161,7 @@ public class ControlPlaneRule extends TestWatcher {
                 "channel_creds", Collections.singletonList(
                     ImmutableMap.of("type", "insecure")
                 ),
-                "server_features", Collections.singletonList("xds_v3")
+                "server_features", Lists.newArrayList("xds_v3", "trusted_xds_server")
             )
         ),
         "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT
@@ -197,7 +199,9 @@ public class ControlPlaneRule extends TestWatcher {
                 .setMatch(
                     RouteMatch.newBuilder().setPrefix("/").build())
                 .setRoute(
-                    RouteAction.newBuilder().setCluster(CLUSTER_NAME).build()).build()).build();
+                    RouteAction.newBuilder().setCluster(CLUSTER_NAME)
+                        .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
+                        .build()).build()).build();
     return RouteConfiguration.newBuilder().setName(RDS_NAME).addVirtualHosts(virtualHost).build();
   }
 
@@ -223,7 +227,8 @@ public class ControlPlaneRule extends TestWatcher {
   /**
    * Builds a new default EDS configuration.
    */
-  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, int port) {
+  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, String endpointHostname,
+      int port) {
     Address address = Address.newBuilder()
         .setSocketAddress(
             SocketAddress.newBuilder().setAddress(hostName).setPortValue(port).build()).build();
@@ -233,7 +238,8 @@ public class ControlPlaneRule extends TestWatcher {
         .addLbEndpoints(
             LbEndpoint.newBuilder()
                 .setEndpoint(
-                    Endpoint.newBuilder().setAddress(address).build())
+                    Endpoint.newBuilder()
+                        .setAddress(address).setHostname(endpointHostname).build())
                 .setHealthStatus(HealthStatus.HEALTHY)
                 .build()).build();
     return ClusterLoadAssignment.newBuilder()

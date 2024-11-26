@@ -17,6 +17,7 @@
 package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.InternalTimeUtils.convert;
 
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
@@ -26,6 +27,7 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
@@ -147,6 +149,11 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    */
   public final S withDeadlineAfter(long duration, TimeUnit unit) {
     return build(channel, callOptions.withDeadlineAfter(duration, unit));
+  }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  public final S withDeadlineAfter(Duration duration) {
+    return withDeadlineAfter(convert(duration), TimeUnit.NANOSECONDS);
   }
 
   /**

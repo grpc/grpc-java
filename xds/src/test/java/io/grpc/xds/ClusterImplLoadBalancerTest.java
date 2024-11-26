@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.xds.XdsNameResolver.AUTO_HOST_REWRITE_KEY;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -36,6 +37,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
@@ -749,6 +751,106 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
+  public void
+        endpointsWithAuthorityHostname_autoHostRewriteEnabled_pickResultHasAuthorityHostname() {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", "true");
+    try {
+      LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
+      WeightedTargetConfig weightedTargetConfig =
+          buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
+      ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
+          null, Collections.<DropOverload>emptyList(),
+          GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+              weightedTargetProvider, weightedTargetConfig),
+          null, Collections.emptyMap());
+      EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality,
+          "authority-host-name");
+      deliverAddressesAndConfig(Arrays.asList(endpoint1), config);
+      assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
+      FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+      assertThat(leafBalancer.name).isEqualTo("round_robin");
+
+      // Simulates leaf load balancer creating subchannels.
+      CreateSubchannelArgs args =
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(leafBalancer.addresses)
+              .build();
+      Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
+      subchannel.start(infoObject -> {
+        if (infoObject.getState() == ConnectivityState.READY) {
+          helper.updateBalancingState(
+              ConnectivityState.READY,
+              new FixedResultPicker(PickResult.withSubchannel(subchannel)));
+        }
+      });
+      assertThat(subchannel.getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(
+          "authority-host-name");
+      for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME))
+            .isEqualTo("authority-host-name");
+      }
+
+      leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+      assertThat(currentState).isEqualTo(ConnectivityState.READY);
+      PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+      pickSubchannelArgs = new PickSubchannelArgsImpl(
+          TestMethodDescriptors.voidMethod(), new Metadata(),
+          CallOptions.DEFAULT.withOption(AUTO_HOST_REWRITE_KEY, true), detailsConsumer);
+      PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
+      assertThat(result.getAuthorityOverride()).isEqualTo("authority-host-name");
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
+    }
+  }
+
+  @Test
+  public void
+        endpointWithAuthorityHostname_autoHostRewriteNotEnabled_pickResultNoAuthorityHostname() {
+    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
+    WeightedTargetConfig weightedTargetConfig =
+        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr1", locality,
+        "authority-host-name");
+    deliverAddressesAndConfig(Arrays.asList(endpoint1), config);
+    assertThat(downstreamBalancers).hasSize(1);  // one leaf balancer
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    assertThat(leafBalancer.name).isEqualTo("round_robin");
+
+    // Simulates leaf load balancer creating subchannels.
+    CreateSubchannelArgs args =
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(leafBalancer.addresses)
+            .build();
+    Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
+    subchannel.start(infoObject -> {
+      if (infoObject.getState() == ConnectivityState.READY) {
+        helper.updateBalancingState(
+            ConnectivityState.READY,
+            new FixedResultPicker(PickResult.withSubchannel(subchannel)));
+      }
+    });
+    // Sub Channel wrapper args won't have the address name although addresses will.
+    assertThat(subchannel.getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME)).isNull();
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME))
+          .isEqualTo("authority-host-name");
+    }
+
+    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    pickSubchannelArgs = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT, detailsConsumer);
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
+    assertThat(result.getAuthorityOverride()).isNull();
+  }
+
+  @Test
   public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
@@ -848,6 +950,11 @@ public class ClusterImplLoadBalancerTest {
    * Create a locality-labeled address.
    */
   private static EquivalentAddressGroup makeAddress(final String name, Locality locality) {
+    return makeAddress(name, locality, null);
+  }
+
+  private static EquivalentAddressGroup makeAddress(final String name, Locality locality,
+      String authorityHostname) {
     class FakeSocketAddress extends SocketAddress {
       private final String name;
 
@@ -878,12 +985,15 @@ public class ClusterImplLoadBalancerTest {
       }
     }
 
+    Attributes.Builder attributes = Attributes.newBuilder()
+        .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
+        // Unique but arbitrary string
+        .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, locality.toString());
+    if (authorityHostname != null) {
+      attributes.set(InternalXdsAttributes.ATTR_ADDRESS_NAME, authorityHostname);
+    }
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
-        Attributes.newBuilder()
-          .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
-          // Unique but arbitrary string
-          .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, locality.toString())
-          .build());
+        attributes.build());
     return AddressFilter.setPathFilter(eag, Collections.singletonList(locality.toString()));
   }
 
@@ -946,6 +1056,16 @@ public class ClusterImplLoadBalancerTest {
     @Override
     public void shutdown() {
       downstreamBalancers.remove(this);
+    }
+
+    void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
+      SubchannelPicker picker = new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          return PickResult.withSubchannel(subchannel);
+        }
+      };
+      helper.updateBalancingState(state, picker);
     }
 
     Subchannel createSubChannel() {
@@ -1078,6 +1198,7 @@ public class ClusterImplLoadBalancerTest {
   }
 
   private final class FakeXdsClient extends XdsClient {
+
     @Override
     public ClusterDropStats addClusterDropStats(
         ServerInfo lrsServerInfo, String clusterName, @Nullable String edsServiceName) {

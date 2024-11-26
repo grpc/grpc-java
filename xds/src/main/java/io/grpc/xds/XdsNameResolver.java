@@ -41,6 +41,7 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -96,6 +97,8 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
+  static final CallOptions.Key<Boolean> AUTO_HOST_REWRITE_KEY =
+      CallOptions.Key.create("io.grpc.xds.AUTO_HOST_REWRITE_KEY");
   @VisibleForTesting
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
@@ -123,6 +126,7 @@ final class XdsNameResolver extends NameResolver {
   private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
+  private final MetricRecorder metricRecorder;
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
@@ -138,10 +142,12 @@ final class XdsNameResolver extends NameResolver {
       URI targetUri, String name, @Nullable String overrideAuthority,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
-      @Nullable Map<String, ?> bootstrapOverride) {
+      @Nullable Map<String, ?> bootstrapOverride,
+      MetricRecorder metricRecorder) {
     this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
-        ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride);
+        ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
+        metricRecorder);
   }
 
   @VisibleForTesting
@@ -150,7 +156,8 @@ final class XdsNameResolver extends NameResolver {
       @Nullable String overrideAuthority, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
-      FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
+      FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride,
+      MetricRecorder metricRecorder) {
     this.targetAuthority = targetAuthority;
     target = targetUri.toString();
 
@@ -168,6 +175,7 @@ final class XdsNameResolver extends NameResolver {
     this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
+    this.metricRecorder = metricRecorder;
     randomChannelId = random.nextLong();
     logId = InternalLogId.allocate("xds-resolver", name);
     logger = XdsLogger.withLogId(logId);
@@ -183,7 +191,7 @@ final class XdsNameResolver extends NameResolver {
   public void start(Listener2 listener) {
     this.listener = checkNotNull(listener, "listener");
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate(target);
+      xdsClientPool = xdsClientPoolFactory.getOrCreate(target, metricRecorder);
     } catch (Exception e) {
       listener.onError(
           Status.UNAVAILABLE.withDescription("Failed to initialize xDS").withCause(e));
@@ -217,6 +225,7 @@ final class XdsNameResolver extends NameResolver {
     ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState(ldsResourceName);
+
     resolveState.start();
   }
 
@@ -465,14 +474,18 @@ final class XdsNameResolver extends NameResolver {
       }
       final String finalCluster = cluster;
       final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), headers);
+      Route finalSelectedRoute = selectedRoute;
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
             final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions,
             final Channel next) {
-          final CallOptions callOptionsForCluster =
+          CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
                   .withOption(RPC_HASH_KEY, hash);
+          if (finalSelectedRoute.routeAction().autoHostRewrite()) {
+            callOptionsForCluster = callOptionsForCluster.withOption(AUTO_HOST_REWRITE_KEY, true);
+          }
           return new SimpleForwardingClientCall<ReqT, RespT>(
               next.newCall(method, callOptionsForCluster)) {
             @Override

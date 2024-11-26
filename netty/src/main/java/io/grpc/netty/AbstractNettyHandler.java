@@ -42,7 +42,8 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
 
   private final int initialConnectionWindow;
   private final FlowControlPinger flowControlPing;
-
+  protected final int maxHeaderListSize;
+  protected final int softLimitHeaderListSize;
   private boolean autoTuneFlowControlOn;
   private ChannelHandlerContext ctx;
   private boolean initialWindowSent = false;
@@ -58,7 +59,9 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       ChannelLogger negotiationLogger,
       boolean autoFlowControl,
       PingLimiter pingLimiter,
-      Ticker ticker) {
+      Ticker ticker,
+      int maxHeaderListSize,
+      int softLimitHeaderListSize) {
     super(channelUnused, decoder, encoder, initialSettings, negotiationLogger);
 
     // During a graceful shutdown, wait until all streams are closed.
@@ -73,6 +76,8 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     }
     this.flowControlPing = new FlowControlPinger(pingLimiter);
     this.ticker = checkNotNull(ticker, "ticker");
+    this.maxHeaderListSize = maxHeaderListSize;
+    this.softLimitHeaderListSize = softLimitHeaderListSize;
   }
 
   @Override

@@ -27,9 +27,7 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":envoy_service_discovery_v2_java_grpc",
         ":envoy_service_discovery_v3_java_grpc",
-        ":envoy_service_load_stats_v2_java_grpc",
         ":envoy_service_load_stats_v3_java_grpc",
         ":envoy_service_status_v3_java_grpc",
         ":orca",
@@ -37,6 +35,7 @@ java_library(
         "//:auto_value_annotations",
         "//alts",
         "//api",
+        "//auth",
         "//context",
         "//core:internal",
         "//netty",
@@ -47,6 +46,7 @@ java_library(
         "@com_google_googleapis//google/rpc:rpc_java_proto",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
+        "@maven//:com_google_auth_google_auth_library_oauth2_http",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.code.gson:gson"),
         artifact("com.google.errorprone:error_prone_annotations"),
@@ -64,26 +64,18 @@ java_proto_library(
     name = "xds_protos_java",
     deps = [
         "@com_github_cncf_xds//udpa/type/v1:pkg",
-        "@com_github_cncf_xds//xds/data/orca/v3:pkg",
-        "@com_github_cncf_xds//xds/service/orca/v3:pkg",
         "@com_github_cncf_xds//xds/type/v3:pkg",
         "@envoy_api//envoy/admin/v3:pkg",
-        "@envoy_api//envoy/api/v2:pkg",
-        "@envoy_api//envoy/api/v2/core:pkg",
-        "@envoy_api//envoy/api/v2/endpoint:pkg",
-        "@envoy_api//envoy/config/cluster/aggregate/v2alpha:pkg",
         "@envoy_api//envoy/config/cluster/v3:pkg",
         "@envoy_api//envoy/config/core/v3:pkg",
         "@envoy_api//envoy/config/endpoint/v3:pkg",
-        "@envoy_api//envoy/config/filter/http/fault/v2:pkg",
-        "@envoy_api//envoy/config/filter/http/router/v2:pkg",
-        "@envoy_api//envoy/config/filter/network/http_connection_manager/v2:pkg",
         "@envoy_api//envoy/config/listener/v3:pkg",
         "@envoy_api//envoy/config/rbac/v3:pkg",
         "@envoy_api//envoy/config/route/v3:pkg",
         "@envoy_api//envoy/extensions/clusters/aggregate/v3:pkg",
         "@envoy_api//envoy/extensions/filters/common/fault/v3:pkg",
         "@envoy_api//envoy/extensions/filters/http/fault/v3:pkg",
+        "@envoy_api//envoy/extensions/filters/http/gcp_authn/v3:pkg",
         "@envoy_api//envoy/extensions/filters/http/rbac/v3:pkg",
         "@envoy_api//envoy/extensions/filters/http/router/v3:pkg",
         "@envoy_api//envoy/extensions/filters/network/http_connection_manager/v3:pkg",
@@ -94,9 +86,7 @@ java_proto_library(
         "@envoy_api//envoy/extensions/load_balancing_policies/round_robin/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/wrr_locality/v3:pkg",
         "@envoy_api//envoy/extensions/transport_sockets/tls/v3:pkg",
-        "@envoy_api//envoy/service/discovery/v2:pkg",
         "@envoy_api//envoy/service/discovery/v3:pkg",
-        "@envoy_api//envoy/service/load_stats/v2:pkg",
         "@envoy_api//envoy/service/load_stats/v3:pkg",
         "@envoy_api//envoy/service/status/v3:pkg",
         "@envoy_api//envoy/type/matcher/v3:pkg",
@@ -105,20 +95,8 @@ java_proto_library(
 )
 
 java_grpc_library(
-    name = "envoy_service_discovery_v2_java_grpc",
-    srcs = ["@envoy_api//envoy/service/discovery/v2:pkg"],
-    deps = [":xds_protos_java"],
-)
-
-java_grpc_library(
     name = "envoy_service_discovery_v3_java_grpc",
     srcs = ["@envoy_api//envoy/service/discovery/v3:pkg"],
-    deps = [":xds_protos_java"],
-)
-
-java_grpc_library(
-    name = "envoy_service_load_stats_v2_java_grpc",
-    srcs = ["@envoy_api//envoy/service/load_stats/v2:pkg"],
     deps = [":xds_protos_java"],
 )
 

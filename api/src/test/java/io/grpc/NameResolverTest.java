@@ -66,6 +66,7 @@ public class NameResolverTest {
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
   private final Executor executor = Executors.newSingleThreadExecutor();
   private final String overrideAuthority = "grpc.io";
+  private final MetricRecorder metricRecorder = new MetricRecorder() {};
   private final int extensionArgValue = 42;
   @Mock NameResolver.Listener mockListener;
 
@@ -80,6 +81,7 @@ public class NameResolverTest {
     assertThat(args.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
+    assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
     assertThat(args.getExtension(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
 
     NameResolver.Args args2 = args.toBuilder().build();
@@ -91,6 +93,7 @@ public class NameResolverTest {
     assertThat(args2.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
+    assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
     assertThat(args.getExtension(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
 
     assertThat(args2).isNotSameInstanceAs(args);
@@ -107,6 +110,7 @@ public class NameResolverTest {
         .setChannelLogger(channelLogger)
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
+        .setMetricRecorder(metricRecorder)
         .setExtension(EXT_ARG_KEY, extensionArgValue)
         .build();
   }

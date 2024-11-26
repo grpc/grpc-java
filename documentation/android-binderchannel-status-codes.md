@@ -27,9 +27,9 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
    <td><a href="https://developer.android.com/training/package-visibility">Server app not visible</a>.
    </td>
-   <td rowspan="6" >bindService() returns false
+   <td rowspan="7" >bindService() returns false
    </td>
-   <td rowspan="9" ><p>UNIMPLEMENTED<p>“The operation is not implemented or is not supported / enabled in this service.”
+   <td rowspan="10" ><p>UNIMPLEMENTED<p>“The operation is not implemented or is not supported / enabled in this service.”
    </td>
    <td>Give up - This is an error in the client manifest.
    </td>
@@ -37,7 +37,8 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
   <tr>
    <td>1
    </td>
-   <td>Server app not installed
+   <td>
+   <a href="https://developer.android.com/about/versions/15/behavior-changes-15#safer-intents">Safer Intents</a> violation.
    </td>
    <td rowspan="8" >Direct the user to install/reinstall the server app.
    </td>
@@ -45,29 +46,35 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
   <tr>
    <td>2
    </td>
-   <td>Old version of the server app doesn’t declare the target android.app.Service in its manifest.
+   <td>Server app not installed
    </td>
   </tr>
   <tr>
    <td>3
    </td>
-   <td>Target android.app.Service is disabled
+   <td>Old version of the server app doesn’t declare the target android.app.Service in its manifest.
    </td>
   </tr>
   <tr>
    <td>4
    </td>
-   <td>The whole server app is disabled
+   <td>Target android.app.Service is disabled
    </td>
   </tr>
   <tr>
    <td>5
    </td>
-   <td>Server app predates <a href="https://developer.android.com/guide/topics/permissions/overview">the Android M permissions model</a> and the user must review and approve some newly requested permissions before it can run.
+   <td>The whole server app is disabled
    </td>
   </tr>
   <tr>
    <td>6
+   </td>
+   <td>Server app predates <a href="https://developer.android.com/guide/topics/permissions/overview">the Android M permissions model</a> and the user must review and approve some newly requested permissions before it can run.
+   </td>
+  </tr>
+  <tr>
+   <td>7
    </td>
    <td>Target android.app.Service doesn’t recognize grpc binding Intent (old version of server app?)
    </td>
@@ -75,7 +82,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>7
+   <td>8
    </td>
    <td>Method not found on the io.grpc.Server (old version of server app?)
    </td>
@@ -83,13 +90,13 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>8
+   <td>9
    </td>
    <td>Request cardinality violation (old version of server app expects unary rather than streaming, say)
    </td>
   </tr>
   <tr>
-   <td>9
+   <td>10
    </td>
    <td>Old version of the server app exposes target android.app.Service but doesn’t android:export it.
    </td>
@@ -102,7 +109,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>10
+   <td>11
    </td>
    <td>Target android.app.Service requires an &lt;android:permission&gt; that client doesn’t hold. 
    </td>
@@ -110,7 +117,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>11
+   <td>12
    </td>
    <td>Violations of the security policy for miscellaneous Android features like android:isolatedProcess, android:externalService, android:singleUser, instant apps, BIND_TREAT_LIKE_ACTIVITY, etc, 
    </td>
@@ -118,7 +125,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>12
+   <td>13
    </td>
    <td>Calling Android UID not allowed by ServerSecurityPolicy 
    </td>
@@ -126,13 +133,13 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>13
+   <td>14
    </td>
    <td>Server Android UID not allowed by client’s SecurityPolicy
    </td>
   </tr>
   <tr>
-   <td rowspan="3" >14
+   <td rowspan="3" >15
    </td>
    <td rowspan="3" >Server process crashed or killed with request in flight.
    </td>
@@ -154,7 +161,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>15
+   <td>16
    </td>
    <td>Server app is currently being upgraded to a new version
    </td>
@@ -162,13 +169,13 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>16
+   <td>17
    </td>
    <td>The whole server app or the target android.app.Service was disabled
    </td>
   </tr>
   <tr>
-   <td>17
+   <td>18
    </td>
    <td>Binder transaction buffer overflow
    </td>
@@ -176,7 +183,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>18
+   <td>19
    </td>
    <td>Source Context for bindService() is destroyed with a request in flight
    </td>
@@ -188,11 +195,11 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
    <td rowspan="2" >Give up for now.
 <p>
-(Re. 18: The caller can try  again later when the user opens the source Activity or restarts the source Service) 
+(Re. 19: The caller can try again later when the user opens the source Activity or restarts the source Service) 
    </td>
   </tr>
   <tr>
-   <td>19
+   <td>20
    </td>
    <td>Client application cancelled the request
    </td>
@@ -200,7 +207,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td rowspan="2" >19
+   <td rowspan="2" >21
    </td>
    <td rowspan="2" >Bug in Android itself or the way the io.grpc.binder transport uses it.
    </td>
@@ -218,7 +225,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>20
+   <td>22
    </td>
    <td>Flow-control protocol violation
    </td>
@@ -226,7 +233,7 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
    </td>
   </tr>
   <tr>
-   <td>21
+   <td>23
    </td>
    <td>Can’t parse request/response proto
    </td>
@@ -236,27 +243,27 @@ Consider the table that follows as an BinderChannel-specific addendum to the “
 
 ### Ambiguity
 
-We say a status code is ambiguous if it maps to two error cases that reasonable clients want to handle differently. For instance, a client may have good reasons to handle error cases 9 and 10 above differently. But they can’t do so based on status code alone because those error cases map to the same one. 
+We say a status code is ambiguous if it maps to two error cases that reasonable clients want to handle differently. For instance, a client may have good reasons to handle error cases 10 and 11 above differently. But they can’t do so based on status code alone because those error cases map to the same one. 
 
-In contrast, for example, even though error case 18 and 19 both map to the status code (`CANCELLED`), they are not ambiguous because we see no reason that clients would want to distinguish them. In both cases, clients will simply give up on the request.
+In contrast, for example, even though error case 19 and 20 both map to the status code (`CANCELLED`), they are not ambiguous because we see no reason that clients would want to distinguish them. In both cases, clients will simply give up on the request.
 
 
 #### Ambiguity of PERMISSION_DENIED and Mitigations
 
 The mapping above has only one apparently ambiguous status code: `PERMISSION_DENIED`. However, this isn’t so bad because of the following:
 
-The use of `<android:permission>`s for inter-app IPC access control (error case 10) is uncommon. Instead, we recommend that server apps only allow IPC from a limited set of client apps known in advance and identified by signature.
+The use of `<android:permission>`s for inter-app IPC access control (error case 11) is uncommon. Instead, we recommend that server apps only allow IPC from a limited set of client apps known in advance and identified by signature.
 
-However, there may be gRPC server apps that want to use custom &lt;android:permission&gt;’s to let the end user decide which arbitrary other apps can make use of its gRPC services. In that case, clients should preempt error case 10 simply by [checking whether they hold the required permissions](https://developer.android.com/training/permissions/requesting) before sending a request.
+However, there may be gRPC server apps that want to use custom &lt;android:permission&gt;’s to let the end user decide which arbitrary other apps can make use of its gRPC services. In that case, clients should preempt error case 11 simply by [checking whether they hold the required permissions](https://developer.android.com/training/permissions/requesting) before sending a request.
 
-Server apps can avoid error case 9 by never reusing an android.app.Service as a gRPC host if it has ever been android:exported=false in some previous app version. Instead they should simply create a new android.app.Service for this purpose.
+Server apps can avoid error case 10 by never reusing an android.app.Service as a gRPC host if it has ever been android:exported=false in some previous app version. Instead they should simply create a new android.app.Service for this purpose.
 
-Only error cases 11 - 13 remain, making `PERMISSION_DENIED` unambiguous for the purpose of error handling. Reasonable client apps can handle it in a generic way by displaying an error message and/or proceeding with degraded functionality.
+Only error cases 12 - 14 remain, making `PERMISSION_DENIED` unambiguous for the purpose of error handling. Reasonable client apps can handle it in a generic way by displaying an error message and/or proceeding with degraded functionality.
 
 
 #### Non-Ambiguity of UNIMPLEMENTED
 
-The `UNIMPLEMENTED` status code corresponds to quite a few different problems with the server app: It’s either not installed, too old, or disabled in whole or in part. Despite the diversity of underlying error cases, we believe most client apps will and should handle `UNIMPLEMENTED` in the same way: by sending the user to the app store to (re)install the server app. Reinstalling might be overkill for the disabled cases but most end users don't know what it means to enable/disable an app and there’s neither enough space in a UI dialog nor enough reader attention to explain it. Reinstalling is something users likely already understand and very likely to cure problems 1-8.
+The `UNIMPLEMENTED` status code corresponds to quite a few different problems with the server app: It’s either not installed, too old, misconfigured, or disabled in whole or in part. Despite the diversity of underlying error cases, we believe most client apps will and should handle `UNIMPLEMENTED` in the same way: by sending the user to the app store to (re)install the server app. Reinstalling might be overkill for the disabled cases but most end users don't know what it means to enable/disable an app and there’s neither enough space in a UI dialog nor enough reader attention to explain it. Reinstalling is something users likely already understand and likely to cure problems 0-9 (once a fixed version of the server is available).
 
 
 ## Detailed Discussion of Binder Failure Modes
@@ -326,6 +333,7 @@ According to a review of the AOSP source code, there are in fact several cases:
 2. The target package is installed but does not declare the target Service in its manifest.
 3. The target package requests dangerous permissions but targets sdk &lt;= M and therefore requires a permissions review, but the caller is not running in the foreground and so it would be inappropriate to launch the review UI.
 4. The target package is not visible to the client due to [Android 11 package visibility rules](https://developer.android.com/training/package-visibility).
+5. One of the new [Safer Intents](https://developer.android.com/about/versions/15/behavior-changes-15#safer-intents) rules is violated. Most commonly, the bind `Intent` specifies a `ComponentName` explicitly but doesn't match any of its &lt;intent-filter&gt;s. 
 
 Status code mapping: **UNIMPLEMENTED**
 
@@ -333,7 +341,7 @@ Status code mapping: **UNIMPLEMENTED**
 
 Unfortunately `UNIMPLEMENTED` doesn’t capture (3) but none of the other canonical status codes do either and we expect this case to be extremely rare.
 
-(4) is intentially indistinguishable from (1) by Android design so we can't handle it differently. However, as a client manifest error, it's not something reasonable apps would handle at runtime anyway.
+(4) and (5) are intentially indistinguishable from (1) by Android design so we can't handle them differently. However, as an error in its own manifest, (4) isn't something a reasonable client would handle at runtime anyway. (5) is an error in the server manifest and so, just like the other cases, the best practice for handling it is to send the user to the app store in the hope that the server can be updated with a fix.
 
 ### bindService() throws SecurityException
 

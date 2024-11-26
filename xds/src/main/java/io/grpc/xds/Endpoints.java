@@ -61,17 +61,19 @@ final class Endpoints {
     // Whether the endpoint is healthy.
     abstract boolean isHealthy();
 
+    abstract String hostname();
+
     static LbEndpoint create(EquivalentAddressGroup eag, int loadBalancingWeight,
-        boolean isHealthy) {
-      return new AutoValue_Endpoints_LbEndpoint(eag, loadBalancingWeight, isHealthy);
+        boolean isHealthy, String hostname) {
+      return new AutoValue_Endpoints_LbEndpoint(eag, loadBalancingWeight, isHealthy, hostname);
     }
 
     // Only for testing.
     @VisibleForTesting
     static LbEndpoint create(
-        String address, int port, int loadBalancingWeight, boolean isHealthy) {
+        String address, int port, int loadBalancingWeight, boolean isHealthy, String hostname) {
       return LbEndpoint.create(new EquivalentAddressGroup(new InetSocketAddress(address, port)),
-          loadBalancingWeight, isHealthy);
+          loadBalancingWeight, isHealthy, hostname);
     }
   }
 

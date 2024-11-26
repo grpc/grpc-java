@@ -589,6 +589,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             builder.maxHedgedAttempts,
             loadBalancerFactory);
     this.authorityOverride = builder.authorityOverride;
+    this.metricRecorder = new MetricRecorderImpl(builder.metricSinks,
+        MetricInstrumentRegistry.getDefaultRegistry());
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
@@ -598,6 +600,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setServiceConfigParser(serviceConfigParser)
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
+            .setMetricRecorder(this.metricRecorder)
             .setOverrideAuthority(this.authorityOverride)
             .setAllExtensions(builder.nameResolverArgsExtBuilder.build())
             .build();
@@ -672,8 +675,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
       serviceConfigUpdated = true;
     }
-    this.metricRecorder = new MetricRecorderImpl(builder.metricSinks,
-        MetricInstrumentRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting

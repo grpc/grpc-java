@@ -95,7 +95,9 @@ import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.client.XdsClient.ServerConnectionCallback;
 import io.grpc.xds.client.XdsClientImpl;
+import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.client.XdsTransportFactory;
@@ -112,6 +114,7 @@ import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -142,6 +145,7 @@ import org.mockito.verification.VerificationMode;
 // The base class was used to test both xds v2 and v3. V2 is dropped now so the base class is not
 // necessary. Still keep it for future version usage. Remove if too much trouble to maintain.
 public abstract class GrpcXdsClientImplTestBase {
+
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
@@ -249,7 +253,7 @@ public abstract class GrpcXdsClientImplTestBase {
   // EDS test resources.
   private final Message lbEndpointHealthy =
       mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
-          mf.buildLbEndpoint("192.168.0.1", 8080, "healthy", 2), 1, 0);
+          mf.buildLbEndpoint("192.168.0.1", 8080, "healthy", 2, "endpoint-host-name"), 1, 0);
   // Locality with 0 endpoints
   private final Message lbEndpointEmpty =
       mf.buildLocalityLbEndpoints("region3", "zone3", "subzone3",
@@ -257,7 +261,7 @@ public abstract class GrpcXdsClientImplTestBase {
   // Locality with 0-weight endpoint
   private final Message lbEndpointZeroWeight =
       mf.buildLocalityLbEndpoints("region4", "zone4", "subzone4",
-          mf.buildLbEndpoint("192.168.142.5", 80, "unknown", 5), 0, 2);
+          mf.buildLbEndpoint("192.168.142.5", 80, "unknown", 5, "endpoint-host-name"), 0, 2);
   private final Any testClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
       ImmutableList.of(lbEndpointHealthy, lbEndpointEmpty, lbEndpointZeroWeight),
       ImmutableList.of(mf.buildDropOverload("lb", 200), mf.buildDropOverload("throttle", 1000))));
@@ -287,6 +291,10 @@ public abstract class GrpcXdsClientImplTestBase {
   private ResourceWatcher<CdsUpdate> cdsResourceWatcher;
   @Mock
   private ResourceWatcher<EdsUpdate> edsResourceWatcher;
+  @Mock
+  private XdsClientMetricReporter xdsClientMetricReporter;
+  @Mock
+  private ServerConnectionCallback serverConnectionCallback;
 
   private ManagedChannel channel;
   private ManagedChannel channelForCustomAuthority;
@@ -340,7 +348,8 @@ public abstract class GrpcXdsClientImplTestBase {
       }
     };
 
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion());
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -368,7 +377,8 @@ public abstract class GrpcXdsClientImplTestBase {
             fakeClock.getStopwatchSupplier(),
             timeProvider,
             MessagePrinter.INSTANCE,
-            new TlsContextManagerImpl(bootstrapInfo));
+            new TlsContextManagerImpl(bootstrapInfo),
+            xdsClientMetricReporter);
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -475,10 +485,11 @@ public abstract class GrpcXdsClientImplTestBase {
   private void verifyResourceMetadataNacked(
       XdsResourceType<?> type, String resourceName, Any rawResource, String versionInfo,
       long updateTime, String failedVersion, long failedUpdateTimeNanos,
-      List<String> failedDetails) {
+      List<String> failedDetails, boolean cached) {
     ResourceMetadata resourceMetadata =
         verifyResourceMetadata(type, resourceName, rawResource, ResourceMetadataStatus.NACKED,
             versionInfo, updateTime, true);
+    assertThat(resourceMetadata.isCached()).isEqualTo(cached);
 
     UpdateFailureState errorState = resourceMetadata.getErrorState();
     assertThat(errorState).isNotNull();
@@ -595,9 +606,52 @@ public abstract class GrpcXdsClientImplTestBase {
         .containsExactly(
             Locality.create("region1", "zone1", "subzone1"),
             LocalityLbEndpoints.create(
-                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+                ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true,
+                    "endpoint-host-name")), 1, 0),
             Locality.create("region3", "zone3", "subzone3"),
             LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
+  }
+
+  /**
+   * Verifies that the {@link XdsClientMetricReporter#reportResourceUpdates} method has been called
+   * the expected number of times with the expected values for valid resource count, invalid
+   * resource count, and corresponding metric labels.
+   */
+  private void verifyResourceValidInvalidCount(int times, long validResourceCount,
+      long invalidResourceCount, String xdsServerTargetLabel,
+      String resourceType) {
+    verify(xdsClientMetricReporter, times(times)).reportResourceUpdates(
+        eq(validResourceCount),
+        eq(invalidResourceCount),
+        eq(xdsServerTargetLabel),
+        eq(resourceType));
+  }
+
+  private void verifyServerFailureCount(int times, long serverFailureCount, String xdsServer) {
+    verify(xdsClientMetricReporter, times(times)).reportServerFailure(
+        eq(serverFailureCount),
+        eq(xdsServer));
+  }
+
+  /**
+   * Invokes the callback, which will be called by {@link XdsClientMetricReporter} to record
+   * whether XdsClient has a working ADS stream.
+   */
+  private void callback_ReportServerConnection() {
+    try {
+      Future<Void> unused = xdsClient.reportServerConnections(serverConnectionCallback);
+    } catch (Exception e) {
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
+      throw new AssertionError(e);
+    }
+  }
+
+  private void verifyServerConnection(int times, boolean isConnected, String xdsServer) {
+    verify(serverConnectionCallback, times(times)).reportServerConnectionGauge(
+        eq(isConnected),
+        eq(xdsServer));
   }
 
   @Test
@@ -619,6 +673,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
+    // Check metric data.
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
@@ -626,7 +681,7 @@ public abstract class GrpcXdsClientImplTestBase {
   public void ldsResourceUpdated_withXdstpResourceName_withUnknownAuthority() {
     String ldsResourceName =
         "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),ldsResourceName,
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
     verify(ldsResourceWatcher).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -634,7 +689,7 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(error.getDescription()).isEqualTo(
         "Wrong configuration: xds server does not exist for resource " + ldsResourceName);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
-    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(),ldsResourceName,
+    xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
@@ -680,15 +735,16 @@ public abstract class GrpcXdsClientImplTestBase {
   /**
    * Tests a subscribed LDS resource transitioned to and from the invalid state.
    *
-   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>
+   * @see <a
+   *     href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   *     A40-csds-support.md</a>
    */
   @Test
   public void ldsResponseErrorHandling_subscribedResourceInvalid() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),"A", ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),"B", ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),"C", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "A", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "B", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "C", ldsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
     verifyResourceMetadataRequested(LDS, "A");
@@ -706,6 +762,8 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(LDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), LDS.typeUrl());
     call.verifyRequest(LDS, subscribedResourceNames, VERSION_1, "0000", NODE);
 
     // LDS -> {A, B}, version 2
@@ -720,7 +778,9 @@ public abstract class GrpcXdsClientImplTestBase {
     List<String> errorsV2 = ImmutableList.of("LDS response Listener 'B' validation error: ");
     verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), LDS.typeUrl());
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(LDS, "C");
     } else {
@@ -736,6 +796,8 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(LDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> does not exist
     // {B, C} -> ACK, version 3
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 2, 0, xdsServerInfo.target(), LDS.typeUrl());
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(LDS, "A");
     } else {
@@ -751,12 +813,12 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void ldsResponseErrorHandling_subscribedResourceInvalid_withRdsSubscription() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),"A", ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),"A.1", rdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),"B", ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),"B.1", rdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),"C", ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),"C.1", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "A", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "A.1", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "B", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "B.1", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "C", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "C.1", rdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
     verifyResourceMetadataRequested(LDS, "A");
@@ -774,6 +836,7 @@ public abstract class GrpcXdsClientImplTestBase {
         "C", Any.pack(mf.buildListenerWithApiListenerForRds("C", "C.1")));
     call.sendResponse(LDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A, B, C} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), LDS.typeUrl());
     verifyResourceMetadataAcked(LDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
@@ -790,6 +853,8 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(RDS, "A.1", resourcesV11.get("A.1"), VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(RDS, "B.1", resourcesV11.get("B.1"), VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(RDS, "C.1", resourcesV11.get("C.1"), VERSION_1, TIME_INCREMENT * 2);
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), RDS.typeUrl());
 
     // LDS -> {A, B}, version 2
     // Failed to parse endpoint B
@@ -800,11 +865,13 @@ public abstract class GrpcXdsClientImplTestBase {
     // {A} -> ACK, version 2
     // {B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {C} -> does not exist
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), LDS.typeUrl());
     List<String> errorsV2 = ImmutableList.of("LDS response Listener 'B' validation error: ");
     verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 3);
     verifyResourceMetadataNacked(
         LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT, VERSION_2, TIME_INCREMENT * 3,
-        errorsV2);
+        errorsV2, true);
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(LDS, "C");
     } else {
@@ -858,11 +925,11 @@ public abstract class GrpcXdsClientImplTestBase {
         ldsResourceWatcher);
 
     Any innerResource = Any.pack(mf.buildListenerWithApiListener("random_name" /* name */,
-            mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
 
     // Client sends an ACK LDS request.
     call.sendResponse(LDS, mf.buildWrappedResourceWithName(innerResource, LDS_RESOURCE), VERSION_1,
-            "0000");
+        "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
@@ -897,7 +964,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
 
     ResourceWatcher<LdsUpdate> watcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, watcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, watcher);
     verify(watcher).onChanged(ldsUpdateCaptor.capture());
     verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
@@ -914,7 +981,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     // Add another watcher.
     ResourceWatcher<LdsUpdate> watcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, watcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(LDS_RESOURCE);
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
@@ -1046,7 +1113,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequestNack(
         LDS, ldsResourceName, "", "0000", NODE,
         ImmutableList.of(
-            "Unsupported resource name: " +  ldsResourceNameWithWrongType + " for type: LDS"));
+            "Unsupported resource name: " + ldsResourceNameWithWrongType + " for type: LDS"));
   }
 
   @Test
@@ -1072,7 +1139,7 @@ public abstract class GrpcXdsClientImplTestBase {
   public void rdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
     String rdsResourceName =
         "xdstp://unknown.example.com/envoy.config.route.v3.RouteConfiguration/route1";
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),rdsResourceName,
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), rdsResourceName,
         rdsResourceWatcher);
     verify(rdsResourceWatcher).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -1081,7 +1148,7 @@ public abstract class GrpcXdsClientImplTestBase {
         "Wrong configuration: xds server does not exist for resource " + rdsResourceName);
     assertThat(resourceDiscoveryCalls.size()).isEqualTo(0);
     xdsClient.cancelXdsResourceWatch(
-        XdsRouteConfigureResource.getInstance(),rdsResourceName, rdsResourceWatcher);
+        XdsRouteConfigureResource.getInstance(), rdsResourceName, rdsResourceWatcher);
     assertThat(resourceDiscoveryCalls.size()).isEqualTo(0);
   }
 
@@ -1107,7 +1174,7 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void cdsResourceUpdated_withXdstpResourceName_unknownAuthority() {
     String cdsResourceName = "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1";
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),cdsResourceName,
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), cdsResourceName,
         cdsResourceWatcher);
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -1115,7 +1182,7 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(error.getDescription()).isEqualTo(
         "Wrong configuration: xds server does not exist for resource " + cdsResourceName);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
-    xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(),cdsResourceName,
+    xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), cdsResourceName,
         cdsResourceWatcher);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
@@ -1134,7 +1201,7 @@ public abstract class GrpcXdsClientImplTestBase {
         edsResourceNameWithWrongType,
         ImmutableList.of(mf.buildLocalityLbEndpoints(
             "region2", "zone2", "subzone2",
-            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 0)),
         ImmutableList.of()));
     call.sendResponse(EDS, testEdsConfig, VERSION_1, "0000");
     call.verifyRequestNack(
@@ -1252,7 +1319,7 @@ public abstract class GrpcXdsClientImplTestBase {
   /**
    * When ignore_resource_deletion server feature is on, xDS client should keep the deleted listener
    * on empty response, and resume the normal work when LDS contains the listener again.
-   * */
+   */
   @Test
   public void ldsResourceDeleted_ignoreResourceDeletion() {
     Assume.assumeTrue(ignoreResourceDeletion());
@@ -1296,9 +1363,9 @@ public abstract class GrpcXdsClientImplTestBase {
     String ldsResourceTwo = "bar.googleapis.com";
     ResourceWatcher<LdsUpdate> watcher1 = mock(ResourceWatcher.class);
     ResourceWatcher<LdsUpdate> watcher2 = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),ldsResourceTwo, watcher1);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),ldsResourceTwo, watcher2);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceTwo, watcher1);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(LDS, ImmutableList.of(LDS_RESOURCE, ldsResourceTwo), "", "", NODE);
     // Both LDS resources were requested.
@@ -1338,7 +1405,7 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
         RDS_RESOURCE, rdsResourceWatcher);
     Any routeConfig = Any.pack(mf.buildRouteConfiguration("route-bar.googleapis.com",
-            mf.buildOpaqueVirtualHosts(2)));
+        mf.buildOpaqueVirtualHosts(2)));
     call.sendResponse(RDS, routeConfig, VERSION_1, "0000");
 
     // Client sends an ACK RDS request.
@@ -1440,15 +1507,16 @@ public abstract class GrpcXdsClientImplTestBase {
   /**
    * Tests a subscribed RDS resource transitioned to and from the invalid state.
    *
-   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>
+   * @see <a
+   *     href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   *     A40-csds-support.md</a>
    */
   @Test
   public void rdsResponseErrorHandling_subscribedResourceInvalid() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),"A", rdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),"B", rdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),"C", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "A", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "B", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "C", rdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
     verifyResourceMetadataRequested(RDS, "A");
@@ -1467,6 +1535,8 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(RDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(RDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(RDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), RDS.typeUrl());
     call.verifyRequest(RDS, subscribedResourceNames, VERSION_1, "0000", NODE);
 
     // RDS -> {A, B}, version 2
@@ -1478,11 +1548,13 @@ public abstract class GrpcXdsClientImplTestBase {
     // {A} -> ACK, version 2
     // {B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {C} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(),
+        RDS.typeUrl());
     List<String> errorsV2 =
         ImmutableList.of("RDS response RouteConfiguration 'B' validation error: ");
     verifyResourceMetadataAcked(RDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(RDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
     verifyResourceMetadataAcked(RDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
     call.verifyRequestNack(RDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
 
@@ -1494,6 +1566,8 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(RDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> ACK, version 2
     // {B, C} -> ACK, version 3
+    verifyResourceValidInvalidCount(1, 2, 0, xdsServerInfo.target(),
+        RDS.typeUrl());
     verifyResourceMetadataAcked(RDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(RDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
     verifyResourceMetadataAcked(RDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
@@ -1542,7 +1616,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
 
     ResourceWatcher<RdsUpdate> watcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE, watcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, watcher);
     verify(watcher).onChanged(rdsUpdateCaptor.capture());
     verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
@@ -1559,7 +1633,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     // Add another watcher.
     ResourceWatcher<RdsUpdate> watcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE, watcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(RDS_RESOURCE);
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
@@ -1590,14 +1664,43 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, routeConfigUpdated, VERSION_2,
         TIME_INCREMENT * 2);
-    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+  }
+
+  @Test
+  public void rdsResourceInvalid() {
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "A", rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), "B", rdsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(RDS, "A");
+    verifyResourceMetadataRequested(RDS, "B");
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
+
+    // RDS -> {A, B}, version 1
+    // Failed to parse endpoint B
+    List<Message> vhostsV1 = mf.buildOpaqueVirtualHosts(1);
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildRouteConfiguration("A", vhostsV1)),
+        "B", Any.pack(mf.buildRouteConfigurationInvalid("B")));
+    call.sendResponse(RDS, resourcesV1.values().asList(), VERSION_1, "0000");
+
+    // {A} -> ACK, version 1
+    // {B} -> NACK, version 1, rejected version 1, rejected reason: Failed to parse B
+    List<String> errorsV1 =
+        ImmutableList.of("RDS response RouteConfiguration 'B' validation error: ");
+    verifyResourceMetadataAcked(RDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataNacked(RDS, "B", null, "", 0,
+        VERSION_1, TIME_INCREMENT, errorsV1, false);
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), RDS.typeUrl());
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
   }
 
   @Test
   public void rdsResourceDeletedByLdsApiListener() {
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE,
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
     verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
@@ -1705,10 +1808,10 @@ public abstract class GrpcXdsClientImplTestBase {
     String rdsResourceTwo = "route-bar.googleapis.com";
     ResourceWatcher<RdsUpdate> watcher1 = mock(ResourceWatcher.class);
     ResourceWatcher<RdsUpdate> watcher2 = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),rdsResourceTwo, watcher1);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),rdsResourceTwo, watcher2);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), rdsResourceTwo, watcher1);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), rdsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(RDS, Arrays.asList(RDS_RESOURCE, rdsResourceTwo), "", "", NODE);
     // Both RDS resources were requested.
@@ -1812,15 +1915,16 @@ public abstract class GrpcXdsClientImplTestBase {
   /**
    * Tests a subscribed CDS resource transitioned to and from the invalid state.
    *
-   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>
+   * @see <a
+   *     href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   *     A40-csds-support.md</a>
    */
   @Test
   public void cdsResponseErrorHandling_subscribedResourceInvalid() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),"A", cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),"B", cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),"C", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "A", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "B", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "C", cdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
     verifyResourceMetadataRequested(CDS, "A");
@@ -1841,6 +1945,8 @@ public abstract class GrpcXdsClientImplTestBase {
         )));
     call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A, B, C} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(),
+        CDS.typeUrl());
     verifyResourceMetadataAcked(CDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
@@ -1857,10 +1963,12 @@ public abstract class GrpcXdsClientImplTestBase {
     // {A} -> ACK, version 2
     // {B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {C} -> does not exist
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(),
+        CDS.typeUrl());
     List<String> errorsV2 = ImmutableList.of("CDS response Cluster 'B' validation error: ");
     verifyResourceMetadataAcked(CDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(CDS, "C");
     } else {
@@ -1880,6 +1988,8 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(CDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> does not exit
     // {B, C} -> ACK, version 3
+    verifyResourceValidInvalidCount(1, 2, 0, xdsServerInfo.target(),
+        CDS.typeUrl());
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(CDS, "A");
     } else {
@@ -1888,18 +1998,19 @@ public abstract class GrpcXdsClientImplTestBase {
     }
     verifyResourceMetadataAcked(CDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
     verifyResourceMetadataAcked(CDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
+
     call.verifyRequest(CDS, subscribedResourceNames, VERSION_3, "0002", NODE);
   }
 
   @Test
   public void cdsResponseErrorHandling_subscribedResourceInvalid_withEdsSubscription() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),"A", cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),"A.1", edsResourceWatcher);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),"B", cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),"B.1", edsResourceWatcher);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),"C", cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),"C.1", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "A", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "B", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "B.1", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "C", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "C.1", edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
     verifyResourceMetadataRequested(CDS, "A");
@@ -1923,6 +2034,8 @@ public abstract class GrpcXdsClientImplTestBase {
         )));
     call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A, B, C} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(),
+        CDS.typeUrl());
     verifyResourceMetadataAcked(CDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
@@ -1937,6 +2050,8 @@ public abstract class GrpcXdsClientImplTestBase {
         "C.1", Any.pack(mf.buildClusterLoadAssignment("C.1", endpointsV1, dropOverloads)));
     call.sendResponse(EDS, resourcesV11.values().asList(), VERSION_1, "0000");
     // {A.1, B.1, C.1} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(),
+        EDS.typeUrl());
     verifyResourceMetadataAcked(EDS, "A.1", resourcesV11.get("A.1"), VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(EDS, "B.1", resourcesV11.get("B.1"), VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(EDS, "C.1", resourcesV11.get("C.1"), VERSION_1, TIME_INCREMENT * 2);
@@ -1952,11 +2067,13 @@ public abstract class GrpcXdsClientImplTestBase {
     // {A} -> ACK, version 2
     // {B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {C} -> does not exist
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), CDS.typeUrl());
     List<String> errorsV2 = ImmutableList.of("CDS response Cluster 'B' validation error: ");
     verifyResourceMetadataAcked(CDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 3);
     verifyResourceMetadataNacked(
         CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT, VERSION_2, TIME_INCREMENT * 3,
-        errorsV2);
+        errorsV2, true);
     if (!ignoreResourceDeletion()) {
       verifyResourceMetadataDoesNotExist(CDS, "C");
     } else {
@@ -2142,7 +2259,7 @@ public abstract class GrpcXdsClientImplTestBase {
             "envoy.transport_sockets.tls", null, null));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
-            "dns-service-bar.googleapis.com", 443, "round_robin", null, null,false, null, null)),
+            "dns-service-bar.googleapis.com", 443, "round_robin", null, null, false, null, null)),
         clusterEds,
         Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, null,
             false, null, "envoy.transport_sockets.tls", null, null)));
@@ -2174,7 +2291,7 @@ public abstract class GrpcXdsClientImplTestBase {
     // Management server sends back CDS response with UpstreamTlsContext.
     Any clusterEds =
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
-            null, null,true,
+            null, null, true,
             mf.buildNewUpstreamTlsContext("cert-instance-name", "cert1"),
             "envoy.transport_sockets.tls", null, null));
     List<Any> clusters = ImmutableList.of(
@@ -2215,9 +2332,10 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // The response NACKed with errors indicating indices of the failed resources.
     String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
-            + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
-            + "io.grpc.xds.client.XdsResourceType$ResourceInvalidException: "
-            + "ca_certificate_provider_instance is required in upstream-tls-context";
+        + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
+        + "io.grpc.xds.client.XdsResourceType$ResourceInvalidException: "
+        + "ca_certificate_provider_instance or system_root_certs is required in "
+        + "upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     verify(cdsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
@@ -2254,7 +2372,7 @@ public abstract class GrpcXdsClientImplTestBase {
             "envoy.transport_sockets.tls", null, outlierDetectionXds));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
-            "dns-service-bar.googleapis.com", 443, "round_robin", null, null,false, null, null)),
+            "dns-service-bar.googleapis.com", 443, "round_robin", null, null, false, null, null)),
         clusterEds,
         Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, null,
             false, null, "envoy.transport_sockets.tls", null, outlierDetectionXds)));
@@ -2313,7 +2431,7 @@ public abstract class GrpcXdsClientImplTestBase {
             "envoy.transport_sockets.tls", null, outlierDetectionXds));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
-            "dns-service-bar.googleapis.com", 443, "round_robin", null, null,false, null, null)),
+            "dns-service-bar.googleapis.com", 443, "round_robin", null, null, false, null, null)),
         clusterEds,
         Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, null,
             false, null, "envoy.transport_sockets.tls", null, outlierDetectionXds)));
@@ -2433,8 +2551,7 @@ public abstract class GrpcXdsClientImplTestBase {
         ));
     final Any okClusterRoundRobin =
         Any.pack(mf.buildEdsCluster(cdsResourceName, "eds-service-bar.googleapis.com",
-            "round_robin", null,null, false, null, "envoy.transport_sockets.tls", null, null));
-
+            "round_robin", null, null, false, null, "envoy.transport_sockets.tls", null, null));
 
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(),
         cdsResourceName, cdsResourceWatcher);
@@ -2480,7 +2597,7 @@ public abstract class GrpcXdsClientImplTestBase {
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     ResourceWatcher<CdsUpdate> watcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),CDS_RESOURCE, watcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(CDS_RESOURCE);
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
@@ -2617,7 +2734,7 @@ public abstract class GrpcXdsClientImplTestBase {
   /**
    * When ignore_resource_deletion server feature is on, xDS client should keep the deleted cluster
    * on empty response, and resume the normal work when CDS contains the cluster again.
-   * */
+   */
   @Test
   public void cdsResourceDeleted_ignoreResourceDeletion() {
     Assume.assumeTrue(ignoreResourceDeletion());
@@ -2663,9 +2780,9 @@ public abstract class GrpcXdsClientImplTestBase {
     String cdsResourceTwo = "cluster-bar.googleapis.com";
     ResourceWatcher<CdsUpdate> watcher1 = mock(ResourceWatcher.class);
     ResourceWatcher<CdsUpdate> watcher2 = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),CDS_RESOURCE, cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),cdsResourceTwo, watcher1);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),cdsResourceTwo, watcher2);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), cdsResourceTwo, watcher1);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), cdsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(CDS, Arrays.asList(CDS_RESOURCE, cdsResourceTwo), "", "", NODE);
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
@@ -2771,7 +2888,7 @@ public abstract class GrpcXdsClientImplTestBase {
     List<Message> dropOverloads = ImmutableList.of();
     List<Message> endpointsV1 = ImmutableList.of(lbEndpointHealthy);
     ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
-            "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)));
+        "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)));
     call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A.1} -> ACK, version 1
     call.verifyRequest(EDS, "A.1", VERSION_1, "0000", NODE);
@@ -2832,21 +2949,21 @@ public abstract class GrpcXdsClientImplTestBase {
   /**
    * Tests a subscribed EDS resource transitioned to and from the invalid state.
    *
-   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
-   * A40-csds-support.md</a>
+   * @see <a
+   *     href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   *     A40-csds-support.md</a>
    */
   @Test
   public void edsResponseErrorHandling_subscribedResourceInvalid() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),"A", edsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),"B", edsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),"C", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "B", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "C", edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     assertThat(call).isNotNull();
     verifyResourceMetadataRequested(EDS, "A");
     verifyResourceMetadataRequested(EDS, "B");
     verifyResourceMetadataRequested(EDS, "C");
-    verifySubscribedResourcesMetadataSizes(0, 0, 0, 3);
 
     // EDS -> {A, B, C}, version 1
     List<Message> dropOverloads = ImmutableList.of(mf.buildDropOverload("lb", 200));
@@ -2857,6 +2974,7 @@ public abstract class GrpcXdsClientImplTestBase {
         "C", Any.pack(mf.buildClusterLoadAssignment("C", endpointsV1, dropOverloads)));
     call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A, B, C} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), EDS.typeUrl());
     verifyResourceMetadataAcked(EDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(EDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(EDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
@@ -2872,11 +2990,13 @@ public abstract class GrpcXdsClientImplTestBase {
     // {A} -> ACK, version 2
     // {B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {C} -> ACK, version 1
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), EDS.typeUrl());
     List<String> errorsV2 =
         ImmutableList.of("EDS response ClusterLoadAssignment 'B' validation error: ");
     verifyResourceMetadataAcked(EDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataNacked(EDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
-        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
     verifyResourceMetadataAcked(EDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
     call.verifyRequestNack(EDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
 
@@ -2889,6 +3009,8 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(EDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> ACK, version 2
     // {B, C} -> ACK, version 3
+    // Check metric data.
+    verifyResourceValidInvalidCount(1, 2, 0, xdsServerInfo.target(), EDS.typeUrl());
     verifyResourceMetadataAcked(EDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(EDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
     verifyResourceMetadataAcked(EDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
@@ -2937,7 +3059,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
     // Add another watcher.
     ResourceWatcher<EdsUpdate> watcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),EDS_RESOURCE, watcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, watcher);
     verify(watcher).onChanged(edsUpdateCaptor.capture());
     validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
@@ -2954,7 +3076,7 @@ public abstract class GrpcXdsClientImplTestBase {
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     ResourceWatcher<EdsUpdate> watcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),EDS_RESOURCE, watcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(EDS_RESOURCE);
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
@@ -3048,7 +3170,7 @@ public abstract class GrpcXdsClientImplTestBase {
     // Updated EDS response.
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
         ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 0)),
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, VERSION_2, "0001");
     // message not processed due to flow control
@@ -3109,7 +3231,7 @@ public abstract class GrpcXdsClientImplTestBase {
     // Updated EDS response.
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
         ImmutableList.of(mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 0)),
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, VERSION_2, "0001");
 
@@ -3122,7 +3244,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
         TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -3138,9 +3260,9 @@ public abstract class GrpcXdsClientImplTestBase {
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
         ImmutableList.of(
             mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-              mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 1),
+              mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3, "endpoint-host-name"), 2, 1),
             mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                mf.buildLbEndpoint("172.44.2.3", 8080, "healthy", 10), 2, 1)
+                mf.buildLbEndpoint("172.44.2.3", 8080, "healthy", 10, "endpoint-host-name"), 2, 1)
             ),
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, "0", "0001");
@@ -3158,10 +3280,10 @@ public abstract class GrpcXdsClientImplTestBase {
     String resource = "backend-service.googleapis.com";
     ResourceWatcher<CdsUpdate> cdsWatcher = mock(ResourceWatcher.class);
     ResourceWatcher<EdsUpdate> edsWatcher = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),resource, cdsWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),resource, edsWatcher);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),CDS_RESOURCE, cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),EDS_RESOURCE, edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), resource, cdsWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), resource, edsWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
     verifyResourceMetadataRequested(CDS, resource);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
@@ -3201,7 +3323,8 @@ public abstract class GrpcXdsClientImplTestBase {
                 mf.buildClusterLoadAssignment(resource,
                     ImmutableList.of(
                         mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                            mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3), 1, 0)),
+                            mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3,
+                                "endpoint-host-name"), 1, 0)),
                     ImmutableList.of(mf.buildDropOverload("lb", 100)))));
     call.sendResponse(EDS, clusterLoadAssignments, VERSION_1, "0000");
     verify(edsWatcher).onChanged(edsUpdateCaptor.capture());
@@ -3238,7 +3361,6 @@ public abstract class GrpcXdsClientImplTestBase {
         EDS, resource, clusterLoadAssignments.get(1), VERSION_1, TIME_INCREMENT * 2);  // no change
     verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_2, TIME_INCREMENT * 3);
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusters.get(1), VERSION_2, TIME_INCREMENT * 3);
-    verifySubscribedResourcesMetadataSizes(0, 2, 0, 2);
   }
 
   @Test
@@ -3247,9 +3369,9 @@ public abstract class GrpcXdsClientImplTestBase {
     String edsResourceTwo = "cluster-load-assignment-bar.googleapis.com";
     ResourceWatcher<EdsUpdate> watcher1 = mock(ResourceWatcher.class);
     ResourceWatcher<EdsUpdate> watcher2 = mock(ResourceWatcher.class);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),EDS_RESOURCE, edsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),edsResourceTwo, watcher1);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),edsResourceTwo, watcher2);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), edsResourceTwo, watcher1);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), edsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(EDS, Arrays.asList(EDS_RESOURCE, edsResourceTwo), "", "", NODE);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
@@ -3278,7 +3400,8 @@ public abstract class GrpcXdsClientImplTestBase {
         mf.buildClusterLoadAssignment(edsResourceTwo,
             ImmutableList.of(
                 mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                    mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 3), 2, 0)),
+                    mf.buildLbEndpoint("172.44.2.2", 8000, "healthy", 3, "endpoint-host-name"),
+                    2, 0)),
             ImmutableList.<Message>of()));
     call.sendResponse(EDS, clusterLoadAssignmentTwo, VERSION_2, "0001");
 
@@ -3291,7 +3414,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResourceTwo);
@@ -3301,7 +3424,7 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
     verifyNoMoreInteractions(edsResourceWatcher);
     verifyResourceMetadataAcked(
         EDS, edsResourceTwo, clusterLoadAssignmentTwo, VERSION_2, TIME_INCREMENT * 2);
@@ -3333,12 +3456,18 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void streamClosedWithNoResponse() {
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, true, xdsServerInfo.target());
     // Management server closes the RPC stream before sending any response.
     call.sendCompleted();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, false, xdsServerInfo.target());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
         .onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
@@ -3350,20 +3479,29 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Test
   public void streamClosedAfterSendingResponses() {
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, true, xdsServerInfo.target());
     ScheduledTask ldsResourceTimeout =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
     ScheduledTask rdsResourceTimeout =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(2, true, xdsServerInfo.target());
     assertThat(ldsResourceTimeout.isCancelled()).isTrue();
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     assertThat(rdsResourceTimeout.isCancelled()).isTrue();
     // Management server closes the RPC stream after sending responses.
     call.sendCompleted();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(3, true, xdsServerInfo.target());
     verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
   }
@@ -3371,11 +3509,14 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void streamClosedAndRetryWithBackoff() {
     InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
-    xdsClient.watchXdsResource(XdsListenerResource.getInstance(),LDS_RESOURCE, ldsResourceWatcher);
-    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),RDS_RESOURCE,
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, true, xdsServerInfo.target());
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsClusterResource.getInstance(),CDS_RESOURCE, cdsResourceWatcher);
-    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),EDS_RESOURCE, edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(LDS, LDS_RESOURCE, "", "", NODE);
     call.verifyRequest(RDS, RDS_RESOURCE, "", "", NODE);
@@ -3394,6 +3535,10 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(edsResourceWatcher).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
 
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, false, xdsServerInfo.target());
+
     // Retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -3407,6 +3552,10 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(2, false, xdsServerInfo.target());
+
     // Management server becomes unreachable.
     String errorMsg = "my fault";
     call.sendError(Status.UNAVAILABLE.withDescription(errorMsg).asException());
@@ -3418,6 +3567,10 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
     verify(edsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
+
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(3, false, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -3436,6 +3589,9 @@ public abstract class GrpcXdsClientImplTestBase {
             mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(2)))));
     call.sendResponse(LDS, listeners, "63", "3242");
     call.verifyRequest(LDS, LDS_RESOURCE, "63", "3242", NODE);
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(2, true, xdsServerInfo.target());
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(2))));
@@ -3449,6 +3605,10 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
     verify(edsResourceWatcher, times(2)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
+
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(3, true, xdsServerInfo.target());
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -3472,6 +3632,10 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
 
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(4, false, xdsServerInfo.target());
+
     // Retry after backoff.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     retryTask =
@@ -3484,6 +3648,10 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(5, false, xdsServerInfo.target());
+
     inOrder.verifyNoMoreInteractions();
   }
 
@@ -3494,6 +3662,9 @@ public abstract class GrpcXdsClientImplTestBase {
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
         RDS_RESOURCE, rdsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, true, xdsServerInfo.target());
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
         .onError(errorCaptor.capture());
@@ -3503,6 +3674,10 @@ public abstract class GrpcXdsClientImplTestBase {
     ScheduledTask retryTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
     assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(10L);
+
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, false, xdsServerInfo.target());
 
     xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(),
         LDS_RESOURCE, ldsResourceWatcher);
@@ -3518,10 +3693,18 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
     call.verifyNoMoreRequest();
 
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(2,false, xdsServerInfo.target());
+
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
     call.sendResponse(RDS, routeConfigs, VERSION_1, "0000");
+
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(2, true, xdsServerInfo.target());
 
     verifyNoMoreInteractions(ldsResourceWatcher, rdsResourceWatcher);
   }
@@ -3534,6 +3717,9 @@ public abstract class GrpcXdsClientImplTestBase {
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(1, true, xdsServerInfo.target());
     ScheduledTask ldsResourceTimeout =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
     ScheduledTask rdsResourceTimeout =
@@ -3544,9 +3730,15 @@ public abstract class GrpcXdsClientImplTestBase {
         Iterables.getOnlyElement(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
     assertThat(ldsResourceTimeout.isCancelled()).isTrue();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(2, true, xdsServerInfo.target());
 
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     assertThat(rdsResourceTimeout.isCancelled()).isTrue();
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(3, true, xdsServerInfo.target());
 
     call.sendError(Status.UNAVAILABLE.asException());
     assertThat(cdsResourceTimeout.isCancelled()).isTrue();
@@ -3555,6 +3747,9 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(cdsResourceWatcher, never()).onError(errorCaptor.capture());
     verify(edsResourceWatcher, never()).onError(errorCaptor.capture());
+    // Check metric data.
+    callback_ReportServerConnection();
+    verifyServerConnection(4, true, xdsServerInfo.target());
 
     fakeClock.forwardNanos(10L);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(0);
@@ -3573,13 +3768,13 @@ public abstract class GrpcXdsClientImplTestBase {
 
     lrsCall.sendResponse(Collections.singletonList(clusterName), 1000L);
     fakeClock.forwardNanos(1000L);
-    lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
+    lrsCall.verifyNextReportClusters(Collections.singletonList(new String[]{clusterName, null}));
 
     dropStats.release();
     fakeClock.forwardNanos(1000L);
     // In case of having unreported cluster stats, one last report will be sent after corresponding
     // stats object released.
-    lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
+    lrsCall.verifyNextReportClusters(Collections.singletonList(new String[]{clusterName, null}));
 
     fakeClock.forwardNanos(1000L);
     // Currently load reporting continues (with empty stats) even if all stats objects have been
@@ -3653,18 +3848,18 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void serverSideListenerResponseErrorHandling_badDownstreamTlsContext() {
     GrpcXdsClientImplTestBase.DiscoveryRpcCall call =
-            startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
-                ldsResourceWatcher);
+        startResourceWatcher(XdsListenerResource.getInstance(), LISTENER_RESOURCE,
+            ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-            "route-foo.googleapis.com", null,
+        "route-foo.googleapis.com", null,
         Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-            null, null,false);
+        null, null, false);
     Message filterChain = mf.buildFilterChain(
-            Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
+        Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
         hcmFilter);
     Message listener =
-            mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
+        mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
@@ -3685,7 +3880,7 @@ public abstract class GrpcXdsClientImplTestBase {
         "route-foo.googleapis.com", null,
         Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-        "cert1", "cert2",false);
+        "cert1", "cert2", false);
     Message filterChain = mf.buildFilterChain(
         Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.bad1",
         hcmFilter);
@@ -3716,6 +3911,9 @@ public abstract class GrpcXdsClientImplTestBase {
       xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
           ldsResourceWatcher);
       fakeClock.forwardTime(14, TimeUnit.SECONDS);
+      // Check metric data.
+      callback_ReportServerConnection();
+      verifyServerConnection(1, false, xdsServerInfo.target());
 
       // Restart the server
       xdsServer = cleanupRule.register(
@@ -3730,10 +3928,17 @@ public abstract class GrpcXdsClientImplTestBase {
       verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
       fakeClock.forwardTime(20, TimeUnit.SECONDS); // Trigger rpcRetryTimer
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
+      // Check metric data.
+      callback_ReportServerConnection();
+      verifyServerConnection(2, false, xdsServerInfo.target());
       if (call == null) { // The first rpcRetry may have happened before the channel was ready
         fakeClock.forwardTime(50, TimeUnit.SECONDS);
         call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
       }
+
+      // Check metric data.
+      callback_ReportServerConnection();
+      verifyServerConnection(3, false, xdsServerInfo.target());
 
       // NOTE:  There is a ScheduledExecutorService that may get involved due to the reconnect
       // so you cannot rely on the logic being single threaded.  The timeout() in verifyRequest
@@ -3746,6 +3951,9 @@ public abstract class GrpcXdsClientImplTestBase {
       assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
       verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
       verifySubscribedResourcesMetadataSizes(1, 1, 0, 0);
+      // Check metric data.
+      callback_ReportServerConnection();
+      verifyServerConnection(1, true, xdsServerInfo.target());
     } catch (Throwable t) {
       throw t; // This allows putting a breakpoint here for debugging
     }
@@ -3777,6 +3985,152 @@ public abstract class GrpcXdsClientImplTestBase {
     client.shutdown();
   }
 
+  @Test
+  public void validAndInvalidResourceMetricReport() {
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "A", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "B", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "B.1", edsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), "C", cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "C.1", edsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+
+    // CDS -> {A, B, C}, version 1
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, null, false, null,
+            "envoy.transport_sockets.tls", null, null
+        )),
+        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, null, false, null,
+            "envoy.transport_sockets.tls", null, null
+        )),
+        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, null, false, null,
+            "envoy.transport_sockets.tls", null, null
+        )));
+    call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A, B, C} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), CDS.typeUrl());
+
+    // EDS -> {A.1, B.1, C.1}, version 1
+    List<Message> dropOverloads = ImmutableList.of();
+    List<Message> endpointsV1 = ImmutableList.of(lbEndpointHealthy);
+    ImmutableMap<String, Any> resourcesV11 = ImmutableMap.of(
+        "A.1", Any.pack(mf.buildClusterLoadAssignment("A.1", endpointsV1, dropOverloads)),
+        "B.1", Any.pack(mf.buildClusterLoadAssignment("B.1", endpointsV1, dropOverloads)),
+        "C.1", Any.pack(mf.buildClusterLoadAssignment("C.1", endpointsV1, dropOverloads)));
+    call.sendResponse(EDS, resourcesV11.values().asList(), VERSION_1, "0000");
+    // {A.1, B.1, C.1} -> ACK, version 1
+    verifyResourceValidInvalidCount(1, 3, 0, xdsServerInfo.target(), EDS.typeUrl());
+
+    // CDS -> {A, B}, version 2
+    // Failed to parse endpoint B
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, null, false, null,
+            "envoy.transport_sockets.tls", null, null
+        )),
+        "B", Any.pack(mf.buildClusterInvalid("B")));
+    call.sendResponse(CDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    // {A} -> ACK, version 2
+    // {B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {C} -> does not exist
+    verifyResourceValidInvalidCount(1, 1, 1, xdsServerInfo.target(), CDS.typeUrl());
+  }
+
+  @Test
+  public void serverFailureMetricReport() {
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
+        rdsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    // Management server closes the RPC stream before sending any response.
+    call.sendCompleted();
+    verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
+        .onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
+        "ADS stream closed with OK before receiving a response");
+    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
+        "ADS stream closed with OK before receiving a response");
+    verifyServerFailureCount(1, 1, xdsServerInfo.target());
+  }
+
+  @Test
+  public void serverFailureMetricReport_forRetryAndBackoff() {
+    InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
+        rdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
+    xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, edsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+
+    // Management server closes the RPC stream with an error.
+    call.sendError(Status.UNKNOWN.asException());
+    verifyServerFailureCount(1, 1, xdsServerInfo.target());
+
+    // Retry after backoff.
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    ScheduledTask retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(10L);
+    fakeClock.forwardNanos(10L);
+    call = resourceDiscoveryCalls.poll();
+
+    // Management server becomes unreachable.
+    String errorMsg = "my fault";
+    call.sendError(Status.UNAVAILABLE.withDescription(errorMsg).asException());
+    verifyServerFailureCount(2, 1, xdsServerInfo.target());
+
+    // Retry after backoff.
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(100L);
+    fakeClock.forwardNanos(100L);
+    call = resourceDiscoveryCalls.poll();
+
+    List<Any> resources = ImmutableList.of(FAILING_ANY, testListenerRds, FAILING_ANY);
+    call.sendResponse(LDS, resources, "63", "3242");
+
+    List<Any> routeConfigs = ImmutableList.of(FAILING_ANY, testRouteConfig, FAILING_ANY);
+    call.sendResponse(RDS, routeConfigs, "5", "6764");
+
+    call.sendError(Status.DEADLINE_EXCEEDED.asException());
+    // Server Failure metric will not be reported, as stream is closed with an error after receiving
+    // a response
+    verifyServerFailureCount(2, 1, xdsServerInfo.target());
+
+    // Reset backoff sequence and retry after backoff.
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(20L);
+    fakeClock.forwardNanos(20L);
+    call = resourceDiscoveryCalls.poll();
+
+    // Management server becomes unreachable again.
+    call.sendError(Status.UNAVAILABLE.asException());
+    verifyServerFailureCount(3, 1, xdsServerInfo.target());
+
+    // Retry after backoff.
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(200L);
+    fakeClock.forwardNanos(200L);
+    call = resourceDiscoveryCalls.poll();
+
+    List<Any> clusters = ImmutableList.of(FAILING_ANY, testClusterRoundRobin);
+    call.sendResponse(CDS, clusters, VERSION_1, "0000");
+    call.sendCompleted();
+    // Server Failure metric will not be reported once again, as stream is closed after receiving a
+    // response
+    verifyServerFailureCount(3, 1, xdsServerInfo.target());
+  }
+
+
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
@@ -3787,13 +4141,14 @@ public abstract class GrpcXdsClientImplTestBase {
         fakeClock.getStopwatchSupplier(),
         timeProvider,
         MessagePrinter.INSTANCE,
-        new TlsContextManagerImpl(bootstrapInfo));
+        new TlsContextManagerImpl(bootstrapInfo),
+        xdsClientMetricReporter);
   }
 
-  private  BootstrapInfo buildBootStrap(String serverUri) {
+  private BootstrapInfo buildBootStrap(String serverUri) {
 
     ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
-        ignoreResourceDeletion());
+        ignoreResourceDeletion(), true);
 
     return Bootstrapper.BootstrapInfo.builder()
         .servers(Collections.singletonList(xdsServerInfo))
@@ -3897,7 +4252,7 @@ public abstract class GrpcXdsClientImplTestBase {
     }
 
     protected void sendResponse(XdsResourceType<?> type, Any resource, String versionInfo,
-                                String nonce) {
+        String nonce) {
       sendResponse(type, ImmutableList.of(resource), versionInfo, nonce);
     }
 
@@ -3929,6 +4284,7 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   protected abstract static class MessageFactory {
+
     /** Throws {@link InvalidProtocolBufferException} on {@link Any#unpack(Class)}. */
     protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
 
@@ -4012,7 +4368,7 @@ public abstract class GrpcXdsClientImplTestBase {
     }
 
     protected abstract Message buildLbEndpoint(String address, int port, String healthStatus,
-        int lbWeight);
+        int lbWeight, String endpointHostname);
 
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
 

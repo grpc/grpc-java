@@ -20,6 +20,7 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.ByteString;
+import io.grpc.BindableService;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
@@ -212,6 +213,8 @@ public final class XdsTestServer {
       throw new RuntimeException(e);
     }
     health = new HealthStatusManager();
+    @SuppressWarnings("deprecation")
+    BindableService oldReflectionService = ProtoReflectionService.newInstance();
     if (secureMode) {
       if (addressType != Util.AddressType.IPV4_IPV6) {
         throw new IllegalArgumentException("Secure mode only supports IPV4_IPV6 address type");
@@ -220,7 +223,7 @@ public final class XdsTestServer {
           Grpc.newServerBuilderForPort(maintenancePort, InsecureServerCredentials.create())
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
-              .addService(ProtoReflectionService.newInstance())
+              .addService(oldReflectionService)
               .addService(ProtoReflectionServiceV1.newInstance())
               .addServices(AdminInterface.getStandardServices())
               .build();
@@ -272,7 +275,7 @@ public final class XdsTestServer {
                       new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
-              .addService(ProtoReflectionService.newInstance())
+              .addService(oldReflectionService)
               .addService(ProtoReflectionServiceV1.newInstance())
               .addServices(AdminInterface.getStandardServices())
               .build();

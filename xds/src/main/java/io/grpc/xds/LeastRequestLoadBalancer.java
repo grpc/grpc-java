@@ -32,7 +32,6 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
@@ -155,7 +154,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   static final class ReadyPicker extends SubchannelPicker {
     private final List<SubchannelPicker> childPickers; // non-empty
     private final List<AtomicInteger> childInFlights; // 1:1 with childPickers
-    private final List<EquivalentAddressGroup> childEags; // 1:1 with childPickers
     private final int choiceCount;
     private final ThreadSafeRandom random;
     private final int hashCode;
@@ -164,11 +162,9 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
       checkArgument(!childLbStates.isEmpty(), "empty list");
       this.childPickers = new ArrayList<>(childLbStates.size());
       this.childInFlights = new ArrayList<>(childLbStates.size());
-      this.childEags = new ArrayList<>(childLbStates.size());
       for (ChildLbState state : childLbStates) {
         childPickers.add(state.getCurrentPicker());
         childInFlights.add(getInFlights(state));
-        childEags.add(state.getEag());
       }
       this.choiceCount = choiceCount;
       this.random = checkNotNull(random, "random");
@@ -222,11 +218,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     @VisibleForTesting
     List<SubchannelPicker> getChildPickers() {
       return childPickers;
-    }
-
-    @VisibleForTesting
-    List<EquivalentAddressGroup> getChildEags() {
-      return childEags;
     }
 
     @Override

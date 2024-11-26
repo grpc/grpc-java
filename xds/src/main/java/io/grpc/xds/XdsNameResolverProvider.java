@@ -81,7 +81,8 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetUri, name, args.getOverrideAuthority(),
           args.getServiceConfigParser(), args.getSynchronizationContext(),
           args.getScheduledExecutorService(),
-          bootstrapOverride);
+          bootstrapOverride,
+          args.getMetricRecorder());
     }
     return null;
   }

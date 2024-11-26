@@ -222,13 +222,15 @@ public abstract class NameResolver {
     @Override
     @Deprecated
     @InlineMe(
-        replacement = "this.onResult2(ResolutionResult.newBuilder().setAddressesOrError("
+        replacement = "this.onResult(ResolutionResult.newBuilder().setAddressesOrError("
             + "StatusOr.fromValue(servers)).setAttributes(attributes).build())",
         imports = {"io.grpc.NameResolver.ResolutionResult", "io.grpc.StatusOr"})
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
       // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
-      onResult2(
+      // Calling onResult and not onResult2 because onResult2 can only be called from a
+      // synchronization context.
+      onResult(
           ResolutionResult.newBuilder().setAddressesOrError(
               StatusOr.fromValue(servers)).setAttributes(attributes).build());
     }
@@ -297,6 +299,7 @@ public abstract class NameResolver {
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
+    @Nullable private final MetricRecorder metricRecorder;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -310,6 +313,7 @@ public abstract class NameResolver {
       this.channelLogger = builder.channelLogger;
       this.executor = builder.executor;
       this.overrideAuthority = builder.overrideAuthority;
+      this.metricRecorder = builder.metricRecorder;
     }
 
     /**
@@ -431,6 +435,14 @@ public abstract class NameResolver {
       return overrideAuthority;
     }
 
+    /**
+     * Returns the {@link MetricRecorder} that the channel uses to record metrics.
+     */
+    @Nullable
+    public MetricRecorder getMetricRecorder() {
+      return metricRecorder;
+    }
+
 
     @Override
     public String toString() {
@@ -444,6 +456,7 @@ public abstract class NameResolver {
           .add("channelLogger", channelLogger)
           .add("executor", executor)
           .add("overrideAuthority", overrideAuthority)
+          .add("metricRecorder", metricRecorder)
           .toString();
     }
 
@@ -463,6 +476,7 @@ public abstract class NameResolver {
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
       builder.setOverrideAuthority(overrideAuthority);
+      builder.setMetricRecorder(metricRecorder);
       return builder;
     }
 
@@ -489,6 +503,7 @@ public abstract class NameResolver {
       private ChannelLogger channelLogger;
       private Executor executor;
       private String overrideAuthority;
+      private MetricRecorder metricRecorder;
       private Extensions.Builder extensionsBuilder = Extensions.newBuilder();
 
       Builder() {
@@ -586,6 +601,14 @@ public abstract class NameResolver {
       @Internal
       public Builder setAllExtensions(Extensions extensions) {
         extensionsBuilder.setAll(extensions);
+        return this;
+      }
+
+      /**
+       * See {@link Args#getMetricRecorder()}. This is an optional field.
+       */
+      public Builder setMetricRecorder(MetricRecorder metricRecorder) {
+        this.metricRecorder = metricRecorder;
         return this;
       }
 

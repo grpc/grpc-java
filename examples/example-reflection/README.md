@@ -1,7 +1,7 @@
 gRPC Reflection Example
 ================
 
-The reflection example has a Hello World server with `ProtoReflectionService` registered. 
+The reflection example has a Hello World server with `ProtoReflectionServiceV1` registered. 
 
 ### Build the example
 
