@@ -78,6 +78,7 @@ final class ControlPlaneClient {
   private final Map<XdsResourceType<?>, String> versions = new HashMap<>();
 
   private boolean shutdown;
+  private boolean streamClosedNoResponse;
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -225,6 +226,19 @@ final class ControlPlaneClient {
   }
 
   /**
+   * Indicates whether there is an active ADS stream.
+   *
+   * <p>Return {@code true} when the {@code AdsStream} is created.
+   * {@code false} when the ADS stream fails without a response. Resets to true
+   * upon receiving the first response on a new ADS stream.
+   */
+  // Must be synchronized
+  boolean hasWorkingAdsStream() {
+    return !streamClosedNoResponse;
+  }
+
+
+  /**
    * Establishes the RPC connection by creating a new RPC stream on the given channel for
    * xDS protocol communication.
    */
@@ -332,6 +346,8 @@ final class ControlPlaneClient {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
+          // Reset flag as message has been received on a stream
+          streamClosedNoResponse = false;
           XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
           if (logger.isLoggable(XdsLogLevel.DEBUG)) {
             logger.log(
@@ -408,6 +424,7 @@ final class ControlPlaneClient {
               "ADS stream closed by server after a response was received");
         }
       } else {
+        streamClosedNoResponse = true;
         // If the ADS stream is closed without ever having received a response from the server, then
         // the XdsClient should consider that a connectivity error (see gRFC A57).
         if (status.isOk()) {
