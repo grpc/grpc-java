@@ -79,7 +79,7 @@ java_library(
 )
 
 java_library(
-    name = "s2av2_credentials",
+    name = "s2a",
     srcs = ["src/main/java/io/grpc/s2a/S2AChannelCredentials.java"],
     visibility = ["//visibility:public"],
     deps = [
