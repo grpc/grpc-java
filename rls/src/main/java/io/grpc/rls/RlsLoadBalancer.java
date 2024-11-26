@@ -50,7 +50,6 @@ final class RlsLoadBalancer extends LoadBalancer {
 
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    logger.log(ChannelLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     LbPolicyConfiguration lbPolicyConfiguration =
         (LbPolicyConfiguration) resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbPolicyConfiguration, "Missing RLS LB config");
@@ -80,22 +79,18 @@ final class RlsLoadBalancer extends LoadBalancer {
       //  not required.
       this.lbPolicyConfiguration = lbPolicyConfiguration;
     }
-    logger.log(ChannelLogLevel.DEBUG, "RLS LB accepted resolved addresses successfully");
     return Status.OK;
   }
 
   @Override
   public void requestConnection() {
-    logger.log(ChannelLogLevel.DEBUG, "connection requested from RLS LB");
     if (routeLookupClient != null) {
-      logger.log(ChannelLogLevel.DEBUG, "requesting a connection from the routeLookupClient");
       routeLookupClient.requestConnection();
     }
   }
 
   @Override
   public void handleNameResolutionError(final Status error) {
-    logger.log(ChannelLogLevel.DEBUG, "Received resolution error: {0}", error);
     class ErrorPicker extends SubchannelPicker {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
@@ -116,14 +111,11 @@ final class RlsLoadBalancer extends LoadBalancer {
       routeLookupClient = null;
       lbPolicyConfiguration = null;
     }
-    logger.log(ChannelLogLevel.DEBUG,
-        "Updating balancing state to TRANSIENT_FAILURE with an error picker");
     helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker());
   }
 
   @Override
   public void shutdown() {
-    logger.log(ChannelLogLevel.DEBUG, "Rls lb shutdown");
     if (routeLookupClient != null) {
       logger.log(ChannelLogLevel.DEBUG, "closing the routeLookupClient because of RLS LB shutdown");
       routeLookupClient.close();
