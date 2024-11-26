@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelLogger;
 import io.grpc.InternalServiceProviders;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
@@ -57,6 +58,7 @@ public class XdsNameResolverProviderTest {
       .setServiceConfigParser(mock(ServiceConfigParser.class))
       .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
       .setChannelLogger(mock(ChannelLogger.class))
+      .setMetricRecorder(mock(MetricRecorder.class))
       .build();
 
   private XdsNameResolverProvider provider = new XdsNameResolverProvider();
