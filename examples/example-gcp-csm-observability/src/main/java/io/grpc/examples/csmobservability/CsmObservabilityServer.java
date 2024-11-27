@@ -24,6 +24,8 @@ import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.gcp.csm.observability.CsmObservability;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.XdsServerBuilder;
+import io.grpc.xds.XdsServerCredentials;
 import io.opentelemetry.exporter.prometheus.PrometheusHttpServer;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
@@ -40,10 +42,12 @@ public class CsmObservabilityServer {
 
   private Server server;
   private void start(int port) throws IOException {
-    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
-        .addService(new GreeterImpl())
-        .build()
-        .start();
+    server =
+        XdsServerBuilder.forPort(
+                port, XdsServerCredentials.create(InsecureServerCredentials.create()))
+            .addService(new GreeterImpl())
+            .build()
+            .start();
     logger.info("Server started, listening on " + port);
   }
 
