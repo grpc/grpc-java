@@ -30,8 +30,8 @@ import io.grpc.ServerBuilder;
 import io.grpc.s2a.internal.handshaker.ValidatePeerCertificateChainReq.VerificationMode;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -118,18 +118,29 @@ public final class FakeS2AServerTest {
       executor.awaitTermination(1, SECONDS);
     }
 
+    String leafCertString = "";
+    String cert2String = "";
+    String cert1String = "";
+    ClassLoader classLoader = FakeS2AServerTest.class.getClassLoader();
+    try (
+        InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+        InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+        InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ) {
+      leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+      cert2String = FakeWriter.convertInputStreamToString(cert2);
+      cert1String = FakeWriter.convertInputStreamToString(cert1);
+    }
+
     SessionResp expected =
         SessionResp.newBuilder()
             .setGetTlsConfigurationResp(
                 GetTlsConfigurationResp.newBuilder()
                     .setClientTlsConfiguration(
                         GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                            .addCertificateChain(new String(Files.readAllBytes(
-                              FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
-                            .addCertificateChain(new String(Files.readAllBytes(
-                              FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
-                            .addCertificateChain(new String(Files.readAllBytes(
-                              FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
+                            .addCertificateChain(leafCertString)
+                            .addCertificateChain(cert1String)
+                            .addCertificateChain(cert2String)
                             .setMinTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .setMaxTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .addCiphersuites(

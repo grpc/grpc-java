@@ -46,7 +46,7 @@ import io.netty.handler.ssl.OpenSslSessionContext;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
-import java.io.File;
+import java.io.InputStream;
 import java.util.concurrent.FutureTask;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLException;
@@ -60,13 +60,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class IntegrationTest {
   private static final Logger logger = Logger.getLogger(FakeS2AServer.class.getName());
-
-  public static final File privateKeyFile =
-      new File("src/test/resources/leaf_key_ec.pem");
-  public static final File rootCertFile =
-      new File("src/test/resources/root_cert_ec.pem");
-  public static final File certChainFile =
-      new File("src/test/resources/cert_chain_ec.pem");
   private String s2aAddress;
   private Server s2aServer;
   private String s2aDelayAddress;
@@ -82,10 +75,10 @@ public final class IntegrationTest {
     int s2aPort = s2aServer.getPort();
     s2aAddress = "localhost:" + s2aPort;
     logger.info("S2A service listening on localhost:" + s2aPort);
-
-    File s2aCert = new File("src/test/resources/server_cert.pem");
-    File s2aKey = new File("src/test/resources/server_key.pem");
-    File rootCert = new File("src/test/resources/root_cert.pem");
+    ClassLoader classLoader = IntegrationTest.class.getClassLoader();
+    InputStream s2aCert = classLoader.getResourceAsStream("server_cert.pem");
+    InputStream s2aKey = classLoader.getResourceAsStream("server_key.pem");
+    InputStream rootCert = classLoader.getResourceAsStream("root_cert.pem");
     ServerCredentials s2aCreds =
         TlsServerCredentials.newBuilder()
             .keyManager(s2aCert, s2aKey)
@@ -166,16 +159,14 @@ public final class IntegrationTest {
 
   @Test
   public void clientCommunicateUsingMtlsToS2ACredentials_succeeds() throws Exception {
-    String privateKeyPath = "src/test/resources/client_key.pem";
-    String certChainPath = "src/test/resources/client_cert.pem";
-    String trustBundlePath = "src/test/resources/root_cert.pem";
-    File privateKeyFile = new File(privateKeyPath);
-    File certChainFile = new File(certChainPath);
-    File trustBundleFile = new File(trustBundlePath);
+    ClassLoader classLoader = IntegrationTest.class.getClassLoader();
+    InputStream privateKey = classLoader.getResourceAsStream("client_key.pem");
+    InputStream certChain = classLoader.getResourceAsStream("client_cert.pem");
+    InputStream trustBundle = classLoader.getResourceAsStream("root_cert.pem");
     ChannelCredentials s2aChannelCredentials =
         TlsChannelCredentials.newBuilder()
-          .keyManager(certChainFile, privateKeyFile)
-          .trustManager(trustBundleFile)
+          .keyManager(certChain, privateKey)
+          .trustManager(trustBundle)
           .build();
 
     ChannelCredentials credentials =
@@ -223,12 +214,16 @@ public final class IntegrationTest {
   }
 
   private static SslContext buildSslContext() throws SSLException {
+    ClassLoader classLoader = IntegrationTest.class.getClassLoader();
+    InputStream privateKey = classLoader.getResourceAsStream("leaf_key_ec.pem");
+    InputStream rootCert = classLoader.getResourceAsStream("root_cert_ec.pem");
+    InputStream certChain = classLoader.getResourceAsStream("cert_chain_ec.pem");
     SslContextBuilder sslServerContextBuilder =
-          SslContextBuilder.forServer(certChainFile, privateKeyFile);
+          SslContextBuilder.forServer(certChain, privateKey);
     SslContext sslServerContext =
         GrpcSslContexts.configure(sslServerContextBuilder, SslProvider.OPENSSL)
             .protocols("TLSv1.3", "TLSv1.2")
-            .trustManager(rootCertFile)
+            .trustManager(rootCert)
             .clientAuth(ClientAuth.REQUIRE)
             .build();
 

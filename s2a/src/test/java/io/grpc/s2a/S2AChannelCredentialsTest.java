@@ -22,7 +22,7 @@ import static org.junit.Assert.assertThrows;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
-import java.io.File;
+import java.io.InputStream;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -124,15 +124,13 @@ public final class S2AChannelCredentialsTest {
   }
 
   private static ChannelCredentials getTlsChannelCredentials() throws Exception {
-    String privateKeyPath = "src/test/resources/client_key.pem";
-    String certChainPath = "src/test/resources/client_cert.pem";
-    String trustBundlePath = "src/test/resources/root_cert.pem";
-    File privateKeyFile = new File(privateKeyPath);
-    File certChainFile = new File(certChainPath);
-    File trustBundleFile = new File(trustBundlePath);
+    ClassLoader classLoader = S2AChannelCredentialsTest.class.getClassLoader();
+    InputStream privateKey = classLoader.getResourceAsStream("client_key.pem");
+    InputStream certChain = classLoader.getResourceAsStream("client_cert.pem");
+    InputStream trustBundle = classLoader.getResourceAsStream("root_cert.pem");
     return TlsChannelCredentials.newBuilder()
-      .keyManager(certChainFile, privateKeyFile)
-      .trustManager(trustBundleFile)
+      .keyManager(certChain, privateKey)
+      .trustManager(trustBundle)
       .build();
   }
 }
