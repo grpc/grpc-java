@@ -602,7 +602,6 @@ final class ProtocolNegotiators {
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
 
     private SSLEngine sslEngine;
-    private SSLSession sslHandshakeSession;
 
     public ClientTlsProtocolNegotiator(SslContext sslContext,
         ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
@@ -664,7 +663,6 @@ final class ProtocolNegotiators {
 
     public void setSslEngine(SSLEngine sslEngine) {
       this.sslEngine = sslEngine;
-      this.sslHandshakeSession = sslEngine.getHandshakeSession();
     }
   }
 
@@ -1223,13 +1221,7 @@ final class ProtocolNegotiators {
 
     @Override
     public SSLSession getHandshakeSession() {
-      List<byte[]> statusResponses;
-      if (sslEngine.getHandshakeSession() instanceof ExtendedSSLSession) {
-        statusResponses = ((ExtendedSSLSession) sslEngine.getHandshakeSession()).getStatusResponses();
-      } else {
-        statusResponses = Collections.<byte[]>emptyList();
-      }
-      return new FakeExtendedSSLSession(peerHost, statusResponses);
+      return new FakeSSLSession(peerHost);
     }
 
     @Override
@@ -1360,42 +1352,11 @@ final class ProtocolNegotiators {
     }
   }
 
-  static class FakeExtendedSSLSession extends ExtendedSSLSession {
+  static class FakeSSLSession implements SSLSession {
     private final String peerHost;
-    private final List<byte[]> statusResponses;
 
-    FakeExtendedSSLSession(String peerHost, List<byte[]> statusResponses) {
+    FakeSSLSession(String peerHost) {
       this.peerHost = peerHost;
-      this.statusResponses = statusResponses;
-    }
-
-    @Override
-    public String getPeerHost() {
-      return peerHost;
-    }
-
-    @Override
-    public List<SNIServerName> getRequestedServerNames() {
-      return Collections.<SNIServerName>emptyList();
-    }
-
-    public List<byte[]> getStatusResponses() {
-      return statusResponses;
-    }
-
-    @Override
-    public javax.security.cert.X509Certificate[] getPeerCertificateChain() throws SSLPeerUnverifiedException {
-      throw new UnsupportedOperationException("This method is deprecated and marked for removal. Use the getPeerCertificates() method instead.");
-    }
-
-    @Override
-    public String[] getLocalSupportedSignatureAlgorithms() {
-      return new String[0];
-    }
-
-    @Override
-    public String[] getPeerSupportedSignatureAlgorithms() {
-      return new String[0];
     }
 
     @Override
@@ -1406,6 +1367,11 @@ final class ProtocolNegotiators {
     @Override
     public SSLSessionContext getSessionContext() {
       return null;
+    }
+
+    @Override
+    public javax.security.cert.X509Certificate[] getPeerCertificateChain() throws SSLPeerUnverifiedException {
+      throw new UnsupportedOperationException("This method is deprecated and marked for removal. Use the getPeerCertificates() method instead.");
     }
 
     @Override
@@ -1476,6 +1442,11 @@ final class ProtocolNegotiators {
     @Override
     public String getProtocol() {
       return null;
+    }
+
+    @Override
+    public String getPeerHost() {
+      return peerHost;
     }
 
     @Override

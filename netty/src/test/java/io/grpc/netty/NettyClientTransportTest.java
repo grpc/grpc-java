@@ -951,7 +951,7 @@ public class NettyClientTransportTest {
 
     Rpc(NettyClientTransport transport, Metadata headers) {
       stream = transport.newStream(
-          METHOD, headers, CallOptions.DEFAULT,
+          METHOD, headers, CallOptions.DEFAULT.withAuthority("wrong-authority"),
           new ClientStreamTracer[]{ new ClientStreamTracer() {} });
       stream.start(listener);
       stream.request(1);
