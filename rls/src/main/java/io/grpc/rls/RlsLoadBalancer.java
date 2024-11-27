@@ -54,7 +54,7 @@ final class RlsLoadBalancer extends LoadBalancer {
         (LbPolicyConfiguration) resolvedAddresses.getLoadBalancingPolicyConfig();
     checkNotNull(lbPolicyConfiguration, "Missing RLS LB config");
     if (!lbPolicyConfiguration.equals(this.lbPolicyConfiguration)) {
-      logger.log(ChannelLogLevel.DEBUG, "A new RLS LB config received");
+      logger.log(ChannelLogLevel.DEBUG, "A new RLS LB config received: {0}", lbPolicyConfiguration);
       boolean needToConnect = this.lbPolicyConfiguration == null
           || !this.lbPolicyConfiguration.getRouteLookupConfig().lookupService().equals(
           lbPolicyConfiguration.getRouteLookupConfig().lookupService());
