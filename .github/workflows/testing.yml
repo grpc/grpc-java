@@ -77,8 +77,15 @@ jobs:
 
   bazel:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - bazel: 6.0.0
+            bzlmod: false
+          - bazel: 7.0.0
+            bzlmod: true
     env:
-      USE_BAZEL_VERSION: 6.0.0
+      USE_BAZEL_VERSION: ${{ matrix.bazel }}
 
     steps:
     - uses: actions/checkout@v4
@@ -97,19 +104,8 @@ jobs:
         key: ${{ runner.os }}-bazel-${{ env.USE_BAZEL_VERSION }}-${{ hashFiles('WORKSPACE', 'repositories.bzl') }}
 
     - name: Run bazel build
-      run: bazelisk build //... --enable_bzlmod=false
+      run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}
 
     - name: Run example bazel build
-      run: bazelisk build //... --enable_bzlmod=false
-      working-directory: ./examples
-
-    - name: Run bazel build (bzlmod)
-      env:
-        USE_BAZEL_VERSION: 7.0.0
-      run: bazelisk build //... --enable_bzlmod=true
-
-    - name: Run example bazel build (bzlmod)
-      env:
-        USE_BAZEL_VERSION: 7.0.0
-      run: bazelisk build //... --enable_bzlmod=true
+      run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}
       working-directory: ./examples
