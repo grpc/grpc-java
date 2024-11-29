@@ -360,6 +360,10 @@ public final class ManagedChannelImplBuilder
     InternalConfiguratorRegistry.configureChannelBuilder(this);
   }
 
+  public ChannelCredentials getChannelCredentials() {
+    return channelCredentials;
+  }
+
   @Override
   public ManagedChannelImplBuilder directExecutor() {
     return executor(MoreExecutors.directExecutor());

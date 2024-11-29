@@ -47,6 +47,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
+import io.grpc.internal.TransportTracer.Factory;
 import io.grpc.okhttp.internal.CipherSuite;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Platform;
@@ -536,7 +537,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         keepAliveWithoutCalls,
         maxInboundMetadataSize,
         transportTracerFactory,
-        useGetForSafeMethods);
+        useGetForSafeMethods,
+        managedChannelImplBuilder.getChannelCredentials());
   }
 
   OkHttpChannelBuilder disableCheckAuthority() {
@@ -799,6 +801,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     private final boolean keepAliveWithoutCalls;
     final int maxInboundMetadataSize;
     final boolean useGetForSafeMethods;
+    private final ChannelCredentials channelCredentials;
     private boolean closed;
 
     private OkHttpTransportFactory(
@@ -815,8 +818,9 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         int flowControlWindow,
         boolean keepAliveWithoutCalls,
         int maxInboundMetadataSize,
-        TransportTracer.Factory transportTracerFactory,
-        boolean useGetForSafeMethods) {
+        Factory transportTracerFactory,
+        boolean useGetForSafeMethods,
+        ChannelCredentials channelCredentials) {
       this.executorPool = executorPool;
       this.executor = executorPool.getObject();
       this.scheduledExecutorServicePool = scheduledExecutorServicePool;
@@ -834,6 +838,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
       this.useGetForSafeMethods = useGetForSafeMethods;
+      this.channelCredentials = channelCredentials;
 
       this.transportTracerFactory =
           Preconditions.checkNotNull(transportTracerFactory, "transportTracerFactory");
@@ -861,7 +866,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
           options.getUserAgent(),
           options.getEagAttributes(),
           options.getHttpConnectProxiedSocketAddress(),
-          tooManyPingsRunnable);
+          tooManyPingsRunnable,
+          channelCredentials);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);
@@ -897,7 +903,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
           keepAliveWithoutCalls,
           maxInboundMetadataSize,
           transportTracerFactory,
-          useGetForSafeMethods);
+          useGetForSafeMethods, managedChannelImplBuilder.getChannelCredentials());
       return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 

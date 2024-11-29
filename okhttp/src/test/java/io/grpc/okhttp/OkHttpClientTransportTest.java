@@ -241,7 +241,7 @@ public class OkHttpClientTransportTest {
         /*userAgent=*/ null,
         EAG_ATTRS,
         NO_PROXY,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
     String s = clientTransport.toString();
     assertTrue("Unexpected: " + s, s.contains("OkHttpClientTransport"));
     assertTrue("Unexpected: " + s, s.contains(address.toString()));
@@ -259,7 +259,7 @@ public class OkHttpClientTransportTest {
         null,
         EAG_ATTRS,
         NO_PROXY,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
     clientTransport.start(transportListener);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture());
@@ -1726,7 +1726,7 @@ public class OkHttpClientTransportTest {
         "userAgent",
         EAG_ATTRS,
         NO_PROXY,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
 
     String host = clientTransport.getOverridenHost();
     int port = clientTransport.getOverridenPort();
@@ -1744,7 +1744,7 @@ public class OkHttpClientTransportTest {
         "userAgent",
         EAG_ATTRS,
         NO_PROXY,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
@@ -1774,7 +1774,7 @@ public class OkHttpClientTransportTest {
             "userAgent",
             EAG_ATTRS,
             NO_PROXY,
-            tooManyPingsRunnable);
+            tooManyPingsRunnable, channelCredentials);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
@@ -1799,7 +1799,7 @@ public class OkHttpClientTransportTest {
             .setTargetAddress(targetAddress)
             .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
             .build(),
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1848,7 +1848,7 @@ public class OkHttpClientTransportTest {
             .setTargetAddress(targetAddress)
             .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
             .build(),
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1896,7 +1896,7 @@ public class OkHttpClientTransportTest {
             .setTargetAddress(targetAddress)
             .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
             .build(),
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1927,7 +1927,7 @@ public class OkHttpClientTransportTest {
             .setTargetAddress(targetAddress)
             .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
             .build(),
-        tooManyPingsRunnable);
+        tooManyPingsRunnable, channelCredentials);
     clientTransport.proxySocketTimeout = 10;
     clientTransport.start(transportListener);
 

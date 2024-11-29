@@ -29,6 +29,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Grpc;
 import io.grpc.HttpConnectProxiedSocketAddress;
@@ -42,6 +43,8 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
@@ -54,6 +57,7 @@ import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
+import io.grpc.okhttp.OkHttpChannelBuilder.OkHttpTransportFactory;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Credentials;
 import io.grpc.okhttp.internal.StatusLine;
@@ -82,6 +86,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
@@ -99,6 +104,7 @@ import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -114,6 +120,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       OutboundFlowController.Transport {
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
+  private final ChannelCredentials channelCredentials;
 
   private static Map<ErrorCode, Status> buildErrorCodeToStatusMap() {
     Map<ErrorCode, Status> errorToStatus = new EnumMap<>(ErrorCode.class);
@@ -205,6 +212,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
+  private Optional<X509ExtendedTrustManager> x509ExtendedTrustManager;
+
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
       new InUseStateAggregator<OkHttpClientStream>() {
@@ -233,13 +242,14 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   SettableFuture<Void> connectedFuture;
 
   public OkHttpClientTransport(
-      OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
+      OkHttpTransportFactory transportFactory,
       InetSocketAddress address,
       String authority,
       @Nullable String userAgent,
       Attributes eagAttrs,
       @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
-      Runnable tooManyPingsRunnable) {
+      Runnable tooManyPingsRunnable,
+      ChannelCredentials channelCredentials) {
     this(
         transportFactory,
         address,
@@ -249,11 +259,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         GrpcUtil.STOPWATCH_SUPPLIER,
         new Http2(),
         proxiedAddr,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable,
+        channelCredentials);
   }
 
   private OkHttpClientTransport(
-      OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
+      OkHttpTransportFactory transportFactory,
       InetSocketAddress address,
       String authority,
       @Nullable String userAgent,
@@ -261,7 +272,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       Supplier<Stopwatch> stopwatchFactory,
       Variant variant,
       @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
-      Runnable tooManyPingsRunnable) {
+      Runnable tooManyPingsRunnable,
+      ChannelCredentials channelCredentials) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = transportFactory.maxMessageSize;
@@ -291,6 +303,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
     this.useGetForSafeMethods = transportFactory.useGetForSafeMethods;
+    this.channelCredentials = channelCredentials;
     initTransportTracer();
   }
 
@@ -316,7 +329,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         stopwatchFactory,
         variant,
         null,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable,
+        null);
     this.connectingCallback = connectingCallback;
     this.connectedFuture = Preconditions.checkNotNull(connectedFuture, "connectedFuture");
   }
@@ -389,13 +403,18 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @Override
-  public OkHttpClientStream newStream(
+  public ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
       ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
     StatsTraceContext statsTraceContext =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
+    if (callOptions.getAuthority() != null && channelCredentials instanceof TlsChannelCredentials) {
+      if (x509ExtendedTrustManager == null) {
+
+      }
+    }
     // FIXME: it is likely wrong to pass the transportTracer here as it'll exit the lock's scope
     synchronized (lock) { // to make @GuardedBy linter happy
       return new OkHttpClientStream(
