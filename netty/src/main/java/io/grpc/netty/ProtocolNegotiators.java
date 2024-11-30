@@ -81,17 +81,13 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.net.ssl.ExtendedSSLSession;
-import javax.net.ssl.SNIServerName;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLEngineResult.HandshakeStatus;
@@ -197,28 +193,6 @@ final class ProtocolNegotiators {
     }
   }
 
-  private static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
-      throws GeneralSecurityException {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    try {
-      ks.load(null, null);
-    } catch (IOException ex) {
-      // Shouldn't really happen, as we're not loading any data.
-      throw new GeneralSecurityException(ex);
-    }
-    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
-    for (X509Certificate cert : certs) {
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
-    }
-
-    TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init(ks);
-    return Arrays.stream(trustManagerFactory.getTrustManagers())
-        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
-  }
-
   public static FromServerCredentialsResult from(ServerCredentials creds) {
     if (creds instanceof TlsServerCredentials) {
       TlsServerCredentials tlsCreds = (TlsServerCredentials) creds;
@@ -295,6 +269,28 @@ final class ProtocolNegotiators {
       return FromServerCredentialsResult.error(
           "Unsupported credential type: " + creds.getClass().getName());
     }
+  }
+
+  private static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
+      throws GeneralSecurityException {
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    try {
+      ks.load(null, null);
+    } catch (IOException ex) {
+      // Shouldn't really happen, as we're not loading any data.
+      throw new GeneralSecurityException(ex);
+    }
+    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
+    for (X509Certificate cert : certs) {
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    }
+
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(ks);
+    return Arrays.stream(trustManagerFactory.getTrustManagers())
+        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
   }
 
   public static final class FromChannelCredentialsResult {
@@ -650,7 +646,7 @@ final class ProtocolNegotiators {
 
     public void verifyAuthorityAllowedForPeerCert(String authority)
         throws SSLPeerUnverifiedException, CertificateException {
-      SSLEngine sslEngineWrapper = new SSLEngineWrapper(sslEngine, authority);
+      SSLEngine sslEngineWrapper = new SslEngineWrapper(sslEngine, authority);
       // The typecasting of Certificate to X509Certificate should work because this method will only
       // be called when there is a X509ExtendedTrustManager available.
       Certificate[] peerCertificates = sslEngine.getSession().getPeerCertificates();
@@ -663,6 +659,11 @@ final class ProtocolNegotiators {
 
     public void setSslEngine(SSLEngine sslEngine) {
       this.sslEngine = sslEngine;
+    }
+
+    @VisibleForTesting
+    boolean hasX509ExtendedTrustManager() {
+      return x509ExtendedTrustManager != null;
     }
   }
 
@@ -1204,12 +1205,12 @@ final class ProtocolNegotiators {
     }
   }
 
-  static final class SSLEngineWrapper extends SSLEngine {
+  static final class SslEngineWrapper extends SSLEngine {
 
     private final SSLEngine sslEngine;
     private final String peerHost;
 
-    SSLEngineWrapper(SSLEngine sslEngine, String peerHost) {
+    SslEngineWrapper(SSLEngine sslEngine, String peerHost) {
       this.sslEngine = sslEngine;
       this.peerHost = peerHost;
     }
@@ -1221,7 +1222,7 @@ final class ProtocolNegotiators {
 
     @Override
     public SSLSession getHandshakeSession() {
-      return new FakeSSLSession(peerHost);
+      return new FakeSslSession(peerHost);
     }
 
     @Override
@@ -1352,10 +1353,10 @@ final class ProtocolNegotiators {
     }
   }
 
-  static class FakeSSLSession implements SSLSession {
+  static class FakeSslSession implements SSLSession {
     private final String peerHost;
 
-    FakeSSLSession(String peerHost) {
+    FakeSslSession(String peerHost) {
       this.peerHost = peerHost;
     }
 
@@ -1370,8 +1371,9 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public javax.security.cert.X509Certificate[] getPeerCertificateChain() throws SSLPeerUnverifiedException {
-      throw new UnsupportedOperationException("This method is deprecated and marked for removal. Use the getPeerCertificates() method instead.");
+    public javax.security.cert.X509Certificate[] getPeerCertificateChain() {
+      throw new UnsupportedOperationException("This method is deprecated and marked for removal. "
+          + "Use the getPeerCertificates() method instead.");
     }
 
     @Override

@@ -59,9 +59,11 @@ import io.grpc.StatusException;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.InsightBuilder;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
@@ -73,6 +75,7 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.grpc.testing.TlsTesting;
+import io.grpc.util.CertificateUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
@@ -100,7 +103,12 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -114,6 +122,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
+import javax.net.ssl.X509TrustManager;
+import javax.security.auth.x500.X500Principal;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -199,7 +212,7 @@ public class NettyClientTransportTest {
   }
 
   @Test
-  public void setSoLingerChannelOption() throws IOException {
+  public void setSoLingerChannelOption() throws IOException, GeneralSecurityException {
     startServer();
     Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
     // set SO_LINGER option
@@ -817,6 +830,51 @@ public class NettyClientTransportTest {
     assertEquals(false, serverExecutorPool.isInUse());
   }
 
+  @Test
+  public void authorityOverrideInCallOptions_doesntMatchServerPeerHost_newStreamCreationFails()
+      throws IOException, InterruptedException, GeneralSecurityException {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
+    callMeMaybe(transport.start(fakeClientTransportListener));
+    synchronized (fakeClientTransportListener) {
+      fakeClientTransportListener.wait(10000);
+    }
+    assertThat(fakeClientTransportListener.isConnected).isTrue();
+
+    ClientStream stream = transport.newStream(
+        Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+        new ClientStreamTracer[]{new ClientStreamTracer() {
+        }});
+
+    assertThat(stream).isInstanceOf(FailingClientStream.class);
+    InsightBuilder insightBuilder = new InsightBuilder();
+    stream.appendTimeoutInsight(insightBuilder);
+    assertThat(insightBuilder.toString()).contains(
+        "Status{code=INTERNAL, description=Peer hostname verification failed for authority, "
+            + "cause=null}");
+  }
+
+  @Test
+  public void authorityOverrideInCallOptions_matchesServerPeerHost_newStreamCreationSucceeds()
+      throws IOException, InterruptedException, GeneralSecurityException {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
+    callMeMaybe(transport.start(fakeClientTransportListener));
+    synchronized (fakeClientTransportListener) {
+      fakeClientTransportListener.wait(10000);
+    }
+    assertThat(fakeClientTransportListener.isConnected).isTrue();
+
+    ClientStream stream = transport.newStream(
+        Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("zoo.test.google.fr"),
+        new ClientStreamTracer[]{new ClientStreamTracer() {
+        }});
+
+    assertThat(stream).isNotInstanceOf(FailingClientStream.class);
+  }
+
   private Throwable getRootCause(Throwable t) {
     if (t.getCause() == null) {
       return t;
@@ -824,10 +882,34 @@ public class NettyClientTransportTest {
     return getRootCause(t.getCause());
   }
 
-  private ProtocolNegotiator newNegotiator() throws IOException {
+  private ProtocolNegotiator newNegotiator() throws IOException, GeneralSecurityException {
     InputStream caCert = TlsTesting.loadCert("ca.pem");
     SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert).build();
-    return ProtocolNegotiators.tls(clientContext, null);
+    return ProtocolNegotiators.tls(clientContext,
+        (X509ExtendedTrustManager) getX509ExtendedTrustManager(
+            TlsTesting.loadCert("ca.pem")).get());
+  }
+
+  private static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
+      throws GeneralSecurityException {
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    try {
+      ks.load(null, null);
+    } catch (IOException ex) {
+      // Shouldn't really happen, as we're not loading any data.
+      throw new GeneralSecurityException(ex);
+    }
+    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
+    for (X509Certificate cert : certs) {
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    }
+
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(ks);
+    return Arrays.stream(trustManagerFactory.getTrustManagers())
+        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
   }
 
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator) {
@@ -951,7 +1033,7 @@ public class NettyClientTransportTest {
 
     Rpc(NettyClientTransport transport, Metadata headers) {
       stream = transport.newStream(
-          METHOD, headers, CallOptions.DEFAULT.withAuthority("wrong-authority"),
+          METHOD, headers, CallOptions.DEFAULT,
           new ClientStreamTracer[]{ new ClientStreamTracer() {} });
       stream.start(listener);
       stream.request(1);
@@ -1143,5 +1225,52 @@ public class NettyClientTransportTest {
 
     @Override
     public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+  }
+
+  static class FakeTrustManager implements X509TrustManager {
+
+    @Override
+    public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
+        throws CertificateException {
+
+    }
+
+    @Override
+    public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
+        throws CertificateException {
+
+    }
+
+    @Override
+    public X509Certificate[] getAcceptedIssuers() {
+      return new X509Certificate[0];
+    }
+  }
+
+  static class FakeClientTransportListener implements ManagedClientTransport.Listener {
+    private boolean isConnected = false;
+
+    @Override
+    public void transportShutdown(Status s) {
+
+    }
+
+    @Override
+    public void transportTerminated() {
+
+    }
+
+    @Override
+    public void transportReady() {
+      isConnected = true;
+      synchronized (this) {
+        notify();
+      }
+    }
+
+    @Override
+    public void transportInUse(boolean inUse) {
+
+    }
   }
 }
