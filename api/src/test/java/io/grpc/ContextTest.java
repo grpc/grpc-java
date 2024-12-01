@@ -113,7 +113,7 @@ public class ContextTest {
   }
 
   @After
-  public void tearDown() {
+  public void tearDown()  {
     scheduler.shutdown();
     assertEquals(Context.ROOT, Context.current());
   }
@@ -128,7 +128,7 @@ public class ContextTest {
       public void run() {
         contextOfNewThread.set(Context.current());
       }
-    }).start();
+      }).start();
     assertNotNull(contextOfNewThread.get(5, TimeUnit.SECONDS));
     assertNotSame(contextOfThisThread, contextOfNewThread.get());
     assertSame(contextOfThisThread, Context.current());
@@ -290,7 +290,6 @@ public class ContextTest {
   @Test
   public void notifyListenersOnCancel() {
     class SetContextCancellationListener implements Context.CancellationListener {
-
       private final AtomicReference<Context> observed;
 
       public SetContextCancellationListener(AtomicReference<Context> observed) {
@@ -322,7 +321,6 @@ public class ContextTest {
   @Test
   public void removeListenersFromContextAndChildContext() {
     class SetContextCancellationListener implements Context.CancellationListener {
-
       private final List<Context> observedContexts;
 
       SetContextCancellationListener() {
@@ -366,12 +364,10 @@ public class ContextTest {
       }
 
       @Override
-      public void close() {
-      }
+      public void close() {}
 
       @Override
-      public void flush() {
-      }
+      public void flush() {}
     };
     Logger logger = Logger.getLogger(Context.class.getName());
     logger.addHandler(logHandler);
@@ -760,7 +756,6 @@ public class ContextTest {
   }
 
   private static class QueuedExecutor implements Executor {
-
     private final Queue<Runnable> runnables = new ArrayDeque<>();
 
     @Override
@@ -827,8 +822,8 @@ public class ContextTest {
   }
 
   /**
-   * Ensure that newly created threads can attach/detach a context. The current test thread already
-   * has a context manually attached in {@link #setUp()}.
+   * Ensure that newly created threads can attach/detach a context.
+   * The current test thread already has a context manually attached in {@link #setUp()}.
    */
   @Test
   public void newThreadAttachContext() throws Exception {
@@ -1123,7 +1118,7 @@ public class ContextTest {
     try {
       logger.addHandler(handler);
       Context ctx = Context.current();
-      for (int i = 0; i < Context.CONTEXT_DEPTH_WARN_THRESH; i++) {
+      for (int i = 0; i < Context.CONTEXT_DEPTH_WARN_THRESH ; i++) {
         assertNull(logRef.get());
         ctx = ctx.fork();
       }
@@ -1138,7 +1133,6 @@ public class ContextTest {
 
   // UsedReflectively
   public static final class LoadMeWithStaticTestingClassLoader implements Runnable {
-
     @Override
     public void run() {
       Logger logger = Logger.getLogger(Context.class.getName());
@@ -1169,10 +1163,6 @@ public class ContextTest {
     }
   }
 
-  /**
-   * Allows more precise catch blocks than plain Error to avoid catching AssertionError.
-   */
-  private static final class TestError extends Error {
-
-  }
+  /** Allows more precise catch blocks than plain Error to avoid catching AssertionError. */
+  private static final class TestError extends Error {}
 }
