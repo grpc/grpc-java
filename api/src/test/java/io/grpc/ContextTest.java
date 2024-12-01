@@ -31,12 +31,18 @@ import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -54,6 +60,14 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import javax.tools.FileObject;
+import javax.tools.ForwardingJavaFileManager;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileManager;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -99,7 +113,7 @@ public class ContextTest {
   }
 
   @After
-  public void tearDown()  {
+  public void tearDown() {
     scheduler.shutdown();
     assertEquals(Context.ROOT, Context.current());
   }
@@ -114,7 +128,7 @@ public class ContextTest {
       public void run() {
         contextOfNewThread.set(Context.current());
       }
-      }).start();
+    }).start();
     assertNotNull(contextOfNewThread.get(5, TimeUnit.SECONDS));
     assertNotSame(contextOfThisThread, contextOfNewThread.get());
     assertSame(contextOfThisThread, Context.current());
@@ -276,6 +290,7 @@ public class ContextTest {
   @Test
   public void notifyListenersOnCancel() {
     class SetContextCancellationListener implements Context.CancellationListener {
+
       private final AtomicReference<Context> observed;
 
       public SetContextCancellationListener(AtomicReference<Context> observed) {
@@ -307,6 +322,7 @@ public class ContextTest {
   @Test
   public void removeListenersFromContextAndChildContext() {
     class SetContextCancellationListener implements Context.CancellationListener {
+
       private final List<Context> observedContexts;
 
       SetContextCancellationListener() {
@@ -350,10 +366,12 @@ public class ContextTest {
       }
 
       @Override
-      public void close() {}
+      public void close() {
+      }
 
       @Override
-      public void flush() {}
+      public void flush() {
+      }
     };
     Logger logger = Logger.getLogger(Context.class.getName());
     logger.addHandler(logHandler);
@@ -742,6 +760,7 @@ public class ContextTest {
   }
 
   private static class QueuedExecutor implements Executor {
+
     private final Queue<Runnable> runnables = new ArrayDeque<>();
 
     @Override
@@ -808,8 +827,8 @@ public class ContextTest {
   }
 
   /**
-   * Ensure that newly created threads can attach/detach a context.
-   * The current test thread already has a context manually attached in {@link #setUp()}.
+   * Ensure that newly created threads can attach/detach a context. The current test thread already
+   * has a context manually attached in {@link #setUp()}.
    */
   @Test
   public void newThreadAttachContext() throws Exception {
@@ -936,6 +955,103 @@ public class ContextTest {
   }
 
   @Test
+  public void customStorage() throws Exception {
+    JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+
+    Map<String, ByteArrayOutputStream> classBytes = new HashMap<>();
+    JavaFileManager fileManager = new ForwardingJavaFileManager<StandardJavaFileManager>(
+        compiler.getStandardFileManager(null, null, null)) {
+      @Override
+      public JavaFileObject getJavaFileForOutput(Location location, String className,
+          JavaFileObject.Kind kind, FileObject sibling) {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        classBytes.put(className, outputStream);
+        return new SimpleJavaFileObject(
+            URI.create("string:///" + className.replace('.', '/') + kind.extension), kind) {
+          @Override
+          public OutputStream openOutputStream() {
+            return outputStream;
+          }
+        };
+      }
+    };
+
+    JavaFileObject sourceFile = new SimpleJavaFileObject(URI.create("string:///ContextStorageOverride.java"),
+        JavaFileObject.Kind.SOURCE) {
+      @Override
+      public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+        return "package io.grpc.override;\n"
+            + "\n"
+            + "import io.grpc.Context;\n"
+            + "import io.grpc.Context.Storage;\n"
+            + "\n"
+            + "public class ContextStorageOverride extends Storage {\n"
+            + "  public static Context toAttach = null;\n"
+            + "  public static Context toDetach = null;\n"
+            + "  public static Context toRestore = null;\n"
+            + "  public static Context current = null;\n"
+            + "\n"
+            + "  @Override\n"
+            + "  public Context doAttach(Context toAttach) {\n"
+            + "    ContextStorageOverride.toAttach = toAttach;\n"
+            + "    return current();\n"
+            + "  }\n"
+            + "\n"
+            + "  @Override\n"
+            + "  public void detach(Context toDetach, Context toRestore) {\n"
+            + "    ContextStorageOverride.toDetach = toDetach;\n"
+            + "    ContextStorageOverride.toRestore = toRestore;\n"
+            + "  }\n"
+            + "\n"
+            + "  @Override\n"
+            + "  public Context current() {\n"
+            + "    return current;\n"
+            + "  }\n"
+            + "}\n";
+      }
+    };
+
+    boolean result = compiler.getTask(null, fileManager, null, null, null,
+            Collections.singletonList(sourceFile)).call();
+    if (!result) {
+      fail("Compilation failed");
+      return;
+    }
+
+    ClassReplacingClassLoader classLoader = new
+        ClassReplacingClassLoader(
+        getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"), classBytes);
+
+    Class<?> storageClass = classLoader.loadClass("io.grpc.override.ContextStorageOverride");
+    Field toAttachField = storageClass.getDeclaredField("toAttach");
+    Field toDetachField = storageClass.getDeclaredField("toDetach");
+    Field toRestoreField = storageClass.getDeclaredField("toRestore");
+    Field currentField = storageClass.getDeclaredField("current");
+
+    Class<?> contextInSeperated = classLoader.loadClass(Context.class.getName());
+
+    Constructor<?> contextConstructor = contextInSeperated.getDeclaredConstructor();
+    contextConstructor.setAccessible(true);
+    Object context1 = contextConstructor.newInstance();
+    Object context2 = contextConstructor.newInstance();
+    Object context3 = contextConstructor.newInstance();
+
+    currentField.set(null, context1);
+
+    // current: context1;
+    assertEquals(context1, contextInSeperated.getMethod("current").invoke(null));
+
+    // current: context1; context2.attach()
+    assertEquals(context1, contextInSeperated.getMethod("attach").invoke(context2));
+    assertEquals(context2, toAttachField.get(null));
+
+    // context2.detach(context3)
+    contextInSeperated.getMethod("detach", contextInSeperated).invoke(context2, context3);
+    assertEquals(context2, toDetachField.get(null));
+    assertEquals(context3, toRestoreField.get(null));
+  }
+
+  @Test
   public void cancellableAncestorTest() {
     Context c = Context.current();
     assertNull(cancellableAncestor(c));
@@ -1007,7 +1123,7 @@ public class ContextTest {
     try {
       logger.addHandler(handler);
       Context ctx = Context.current();
-      for (int i = 0; i < Context.CONTEXT_DEPTH_WARN_THRESH ; i++) {
+      for (int i = 0; i < Context.CONTEXT_DEPTH_WARN_THRESH; i++) {
         assertNull(logRef.get());
         ctx = ctx.fork();
       }
@@ -1022,6 +1138,7 @@ public class ContextTest {
 
   // UsedReflectively
   public static final class LoadMeWithStaticTestingClassLoader implements Runnable {
+
     @Override
     public void run() {
       Logger logger = Logger.getLogger(Context.class.getName());
@@ -1052,6 +1169,10 @@ public class ContextTest {
     }
   }
 
-  /** Allows more precise catch blocks than plain Error to avoid catching AssertionError. */
-  private static final class TestError extends Error {}
+  /**
+   * Allows more precise catch blocks than plain Error to avoid catching AssertionError.
+   */
+  private static final class TestError extends Error {
+
+  }
 }
