@@ -110,7 +110,7 @@ public final class S2AChannelCredentials {
      * Sets the stub to use to communicate with S2A. This is only used for testing that the
      * stream to S2A gets closed.
      */
-    public Builder setStub(S2AStub stub) {
+    Builder setStub(S2AStub stub) {
       checkNotNull(stub);
       this.stub = stub;
       return this;
