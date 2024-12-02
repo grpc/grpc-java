@@ -1271,14 +1271,10 @@ public class NettyClientTransportTest {
     private boolean isConnected = false;
 
     @Override
-    public void transportShutdown(Status s) {
-
-    }
+    public void transportShutdown(Status s) {}
 
     @Override
-    public void transportTerminated() {
-
-    }
+    public void transportTerminated() {}
 
     @Override
     public void transportReady() {
@@ -1289,9 +1285,7 @@ public class NettyClientTransportTest {
     }
 
     @Override
-    public void transportInUse(boolean inUse) {
-
-    }
+    public void transportInUse(boolean inUse) {}
   }
 
   private class FakeTrustManager implements X509TrustManager {

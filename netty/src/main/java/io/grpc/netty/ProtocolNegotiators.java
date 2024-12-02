@@ -1258,9 +1258,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void closeOutbound() {
-
-    }
+    public void closeOutbound() {}
 
     @Override
     public boolean isOutboundDone() {
@@ -1278,9 +1276,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void setEnabledCipherSuites(String[] strings) {
-
-    }
+    public void setEnabledCipherSuites(String[] strings) {}
 
     @Override
     public String[] getSupportedProtocols() {
@@ -1293,9 +1289,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void setEnabledProtocols(String[] strings) {
-
-    }
+    public void setEnabledProtocols(String[] strings) {}
 
     @Override
     public SSLSession getSession() {
@@ -1303,9 +1297,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void beginHandshake() throws SSLException {
-
-    }
+    public void beginHandshake() throws SSLException {}
 
     @Override
     public HandshakeStatus getHandshakeStatus() {
@@ -1313,9 +1305,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void setUseClientMode(boolean b) {
-
-    }
+    public void setUseClientMode(boolean b) {}
 
     @Override
     public boolean getUseClientMode() {
@@ -1323,9 +1313,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void setNeedClientAuth(boolean b) {
-
-    }
+    public void setNeedClientAuth(boolean b) {}
 
     @Override
     public boolean getNeedClientAuth() {
@@ -1333,9 +1321,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void setWantClientAuth(boolean b) {
-
-    }
+    public void setWantClientAuth(boolean b) {}
 
     @Override
     public boolean getWantClientAuth() {
@@ -1343,9 +1329,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void setEnableSessionCreation(boolean b) {
-
-    }
+    public void setEnableSessionCreation(boolean b) {}
 
     @Override
     public boolean getEnableSessionCreation() {
@@ -1387,9 +1371,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void invalidate() {
-
-    }
+    public void invalidate() {}
 
     @Override
     public boolean isValid() {
@@ -1397,9 +1379,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void putValue(String s, Object o) {
-
-    }
+    public void putValue(String s, Object o) {}
 
     @Override
     public Object getValue(String s) {
@@ -1407,9 +1387,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void removeValue(String s) {
-
-    }
+    public void removeValue(String s) {}
 
     @Override
     public String[] getValueNames() {
