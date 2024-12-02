@@ -971,7 +971,8 @@ public class ContextTest {
       }
     };
 
-    JavaFileObject sourceFile = new SimpleJavaFileObject(URI.create("string:///ContextStorageOverride.java"),
+    JavaFileObject sourceFile = new SimpleJavaFileObject(URI.create(
+        "string:///ContextStorageOverride.java"),
         JavaFileObject.Kind.SOURCE) {
       @Override
       public CharSequence getCharContent(boolean ignoreEncodingErrors) {
