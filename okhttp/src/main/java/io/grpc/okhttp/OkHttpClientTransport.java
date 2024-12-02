@@ -47,6 +47,7 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
@@ -71,12 +72,19 @@ import io.grpc.okhttp.internal.framed.Settings;
 import io.grpc.okhttp.internal.framed.Variant;
 import io.grpc.okhttp.internal.proxy.HttpUrl;
 import io.grpc.okhttp.internal.proxy.Request;
+import io.grpc.util.CertificateUtils;
 import io.perfmark.PerfMark;
+import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumMap;
@@ -104,7 +112,10 @@ import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
+import javax.security.auth.x500.X500Principal;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -212,7 +223,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  private Optional<X509ExtendedTrustManager> x509ExtendedTrustManager;
+  private Optional<TrustManager> x509ExtendedTrustManager;
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -412,7 +423,19 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     if (callOptions.getAuthority() != null && channelCredentials instanceof TlsChannelCredentials) {
       if (x509ExtendedTrustManager == null) {
-
+        try {
+          x509ExtendedTrustManager = getX509ExtendedTrustManager(
+              (TlsChannelCredentials) channelCredentials);
+        } catch (GeneralSecurityException e) {
+          log.log(Level.FINE, "Failure getting X509ExtendedTrustManager from TlsCredentials", e);
+          return new FailingClientStream(Status.INTERNAL.withDescription(
+              "Failure getting X509ExtendedTrustManager from TlsCredentials"),
+              tracers);
+        }
+      } else if (!x509ExtendedTrustManager.isPresent()) {
+        return new FailingClientStream(Status.INTERNAL.withDescription(
+            "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
+            tracers);
       }
     }
     // FIXME: it is likely wrong to pass the transportTracer here as it'll exit the lock's scope
@@ -433,6 +456,47 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           callOptions,
           useGetForSafeMethods);
     }
+  }
+
+  private Optional<TrustManager> getX509ExtendedTrustManager(TlsChannelCredentials tlsCreds)
+      throws GeneralSecurityException {
+    Optional<TrustManager> x509ExtendedTrustManager;
+    if (tlsCreds.getTrustManagers() != null) {
+      x509ExtendedTrustManager = tlsCreds.getTrustManagers().stream().filter(
+          trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+    } else if (tlsCreds.getRootCertificates() != null) {
+      x509ExtendedTrustManager = getX509ExtendedTrustManager(new ByteArrayInputStream(
+          tlsCreds.getRootCertificates()));
+    } else { // else use system default
+      TrustManagerFactory tmf = TrustManagerFactory.getInstance(
+          TrustManagerFactory.getDefaultAlgorithm());
+      tmf.init((KeyStore) null);
+      x509ExtendedTrustManager = Arrays.stream(tmf.getTrustManagers())
+          .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+    }
+    return x509ExtendedTrustManager;
+  }
+
+  private static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
+      throws GeneralSecurityException {
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    try {
+      ks.load(null, null);
+    } catch (IOException ex) {
+      // Shouldn't really happen, as we're not loading any data.
+      throw new GeneralSecurityException(ex);
+    }
+    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
+    for (X509Certificate cert : certs) {
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    }
+
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(ks);
+    return Arrays.stream(trustManagerFactory.getTrustManagers())
+        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
   }
 
   @GuardedBy("lock")
