@@ -173,6 +173,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
   }
 
   /** Returns removed children. */
+  @SuppressWarnings("deprecation")
   private List<ChildLbState> updateChildrenWithResolvedAddresses(
       Map<Object, ResolvedAddresses> newChildAddresses) {
     // Create a map with the old values
@@ -191,7 +192,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       }
       newChildLbStates.add(childLbState);
       if (entry.getValue() != null) {
-        childLbState.lb.acceptResolvedAddresses(entry.getValue()); // update child LB
+        //TODO - https://github.com/grpc/grpc-java/issues/11194
+        childLbState.lb.handleResolvedAddresses(entry.getValue()); // update child LB
       }
     }
 
