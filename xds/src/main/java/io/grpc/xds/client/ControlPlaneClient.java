@@ -495,4 +495,54 @@ final class ControlPlaneClient {
     }
   }
 
+  @VisibleForTesting
+  static class FailingXdsTransport implements XdsTransport {
+    String failingMessage;
+
+    public FailingXdsTransport(String msg) {
+      this.failingMessage = msg;
+    }
+
+    @Override
+    public <ReqT, RespT> StreamingCall<ReqT, RespT>
+        createStreamingCall(String fullMethodName,
+                            MethodDescriptor.Marshaller<ReqT> reqMarshaller,
+                            MethodDescriptor.Marshaller<RespT> respMarshaller) {
+      return new FailingXdsStreamingCall<>();
+    }
+
+    @Override
+    public void shutdown() {
+      // no-op
+    }
+
+    private class FailingXdsStreamingCall<ReqT, RespT> implements StreamingCall<ReqT, RespT> {
+
+      @Override
+      public void start(XdsTransportFactory.EventHandler<RespT> eventHandler) {
+        eventHandler.onStatusReceived(Status.UNAVAILABLE.withDescription(failingMessage));
+      }
+
+      @Override
+      public void sendMessage(ReqT message) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public void startRecvMessage() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public void sendError(Exception e) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public boolean isReady() {
+        return false;
+      }
+    }
+  }
+
 }

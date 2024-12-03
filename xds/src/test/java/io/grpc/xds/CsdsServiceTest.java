@@ -504,7 +504,7 @@ public class CsdsServiceTest {
 
     @Override
     public void startMissingResourceTimers(Collection<String> resourceNames,
-                                           XdsResourceType resourceType) {
+                                           XdsResourceType<?> resourceType) {
       // do nothing
     }
 

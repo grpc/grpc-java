@@ -198,7 +198,7 @@ public final class XdsClientImpl extends XdsClient implements XdsClient.Resource
 
   @Override
   public void startMissingResourceTimers(Collection<String> resourceNames,
-                                         XdsResourceType resourceType) {
+                                         XdsResourceType<?> resourceType) {
     Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap =
         resourceSubscribers.get(resourceType);
 
@@ -480,7 +480,15 @@ public final class XdsClientImpl extends XdsClient implements XdsClient.Resource
     }
 
     logger.log(XdsLogLevel.DEBUG, "Creating control plane client for {0}", serverInfo.target());
-    XdsTransportFactory.XdsTransport xdsTransport = xdsTransportFactory.create(serverInfo);
+    XdsTransportFactory.XdsTransport xdsTransport;
+    try {
+      xdsTransport = xdsTransportFactory.create(serverInfo);
+    } catch (Exception e) {
+      String msg = String.format("Failed to create xds transport for %s: %s",
+          serverInfo.target(), e.getMessage());
+      logger.log(XdsLogLevel.WARNING, msg);
+      xdsTransport = new ControlPlaneClient.FailingXdsTransport(msg);
+    }
 
     ControlPlaneClient controlPlaneClient = new ControlPlaneClient(
         xdsTransport,

@@ -429,6 +429,7 @@ public abstract class XdsClient {
      * For any of the subscribers to one of the specified resources, if there isn't a result or
      * an existing timer for the resource, start a timer for the resource.
      */
-    void startMissingResourceTimers(Collection<String> resourceNames, XdsResourceType resourceType);
+    void startMissingResourceTimers(Collection<String> resourceNames,
+                                    XdsResourceType<?> resourceType);
   }
 }

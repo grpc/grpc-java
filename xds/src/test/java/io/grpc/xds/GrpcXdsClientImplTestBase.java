@@ -3775,11 +3775,14 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void sendToBadUrl() throws Exception {
     // Setup xdsClient to fail on stream creation
-    XdsClientImpl client = createXdsClient("some. garbage");
+    String garbageUri = "some. garbage";
+    XdsClientImpl client = createXdsClient(garbageUri);
 
     client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
+    verify(ldsResourceWatcher, Mockito.timeout(5000).atLeastOnce())
+        .onError(errorCaptor.capture());
+    assertThat(errorCaptor.getValue().getDescription()).contains(garbageUri);
     client.shutdown();
   }
 
