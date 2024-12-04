@@ -1330,6 +1330,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public javax.security.cert.X509Certificate[] getPeerCertificateChain() {
       throw new UnsupportedOperationException("This method is deprecated and marked for removal. "
           + "Use the getPeerCertificates() method instead.");
