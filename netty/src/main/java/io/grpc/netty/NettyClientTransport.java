@@ -63,6 +63,7 @@ import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.security.cert.CertificateException;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -111,6 +112,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
+  private final ConcurrentHashMap<String, Boolean> authoritiesAllowedForPeer = new ConcurrentHashMap<>();
 
   NettyClientTransport(
       SocketAddress address,
@@ -208,11 +210,21 @@ class NettyClientTransport implements ConnectionClientTransport {
             "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
             tracers);
       }
-      try {
-        clientTlsProtocolNegotiator.verifyAuthorityAllowedForPeerCert(callOptions.getAuthority());
-      } catch (SSLPeerUnverifiedException | CertificateException e) {
-        logger.log(Level.FINE, "Peer hostname verification failed for authority '{}'.",
-            callOptions.getAuthority());
+      boolean peerVerified;
+      if (authoritiesAllowedForPeer.containsKey(callOptions.getAuthority())) {
+        peerVerified = authoritiesAllowedForPeer.get(callOptions.getAuthority());
+      } else {
+        try {
+          clientTlsProtocolNegotiator.verifyAuthorityAllowedForPeerCert(callOptions.getAuthority());
+          peerVerified = true;
+        } catch (SSLPeerUnverifiedException | CertificateException e) {
+          peerVerified = false;
+          logger.log(Level.FINE, "Peer hostname verification failed for authority '{}'.",
+              callOptions.getAuthority());
+        }
+        authoritiesAllowedForPeer.put(callOptions.getAuthority(), peerVerified);
+      }
+      if (!peerVerified) {
         return new FailingClientStream(Status.INTERNAL.withDescription(
             "Peer hostname verification failed for authority"), tracers);
       }
