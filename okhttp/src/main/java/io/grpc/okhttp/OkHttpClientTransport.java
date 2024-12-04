@@ -77,12 +77,14 @@ import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.Principal;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collections;
@@ -97,6 +99,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
@@ -108,14 +111,17 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.net.SocketFactory;
+import javax.net.ssl.ExtendedSSLSession;
+import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSessionContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
-import javax.security.auth.x500.X500Principal;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -123,6 +129,7 @@ import okio.ByteString;
 import okio.Okio;
 import okio.Source;
 import okio.Timeout;
+import sun.security.ssl.SSLSocketImpl;
 
 /**
  * A okhttp-based {@link ConnectionClientTransport} implementation.
@@ -132,6 +139,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
   private final ChannelCredentials channelCredentials;
+  private Socket sock;
+  private SSLSession sslSession;
 
   private static Map<ErrorCode, Status> buildErrorCodeToStatusMap() {
     Map<ErrorCode, Status> errorToStatus = new EnumMap<>(ErrorCode.class);
@@ -223,7 +232,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  private Optional<TrustManager> x509ExtendedTrustManager;
+  private final ConcurrentHashMap<String, Boolean> authoritiesAllowedForPeer = new ConcurrentHashMap<>();
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -421,9 +430,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     Preconditions.checkNotNull(headers, "headers");
     StatsTraceContext statsTraceContext =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
-    if (callOptions.getAuthority() != null && channelCredentials instanceof TlsChannelCredentials) {
-      if (x509ExtendedTrustManager == null) {
-        try {
+    if (socket instanceof SSLSocket && callOptions.getAuthority() != null && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
+      Optional<TrustManager> x509ExtendedTrustManager;
+      try {
           x509ExtendedTrustManager = getX509ExtendedTrustManager(
               (TlsChannelCredentials) channelCredentials);
         } catch (GeneralSecurityException e) {
@@ -432,9 +441,22 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
               "Failure getting X509ExtendedTrustManager from TlsCredentials"),
               tracers);
         }
-      } else if (!x509ExtendedTrustManager.isPresent()) {
+      if (!x509ExtendedTrustManager.isPresent()) {
         return new FailingClientStream(Status.INTERNAL.withDescription(
             "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
+            tracers);
+      }
+      try {
+        Certificate[] peerCertificates = sslSession.getPeerCertificates();
+        X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
+        for (int i = 0; i < peerCertificates.length; i++) {
+          x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+        }
+        ((X509ExtendedTrustManager) x509ExtendedTrustManager.get()).checkServerTrusted(x509PeerCertificates, "RSA", new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
+      } catch (SSLPeerUnverifiedException | CertificateException e) {
+        log.log(Level.FINE, "Failure in verifying authority against peer", e);
+        return new FailingClientStream(Status.INTERNAL.withDescription(
+            "Failure in verifying authority against peer"),
             tracers);
       }
     }
@@ -465,7 +487,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       x509ExtendedTrustManager = tlsCreds.getTrustManagers().stream().filter(
           trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
     } else if (tlsCreds.getRootCertificates() != null) {
-      x509ExtendedTrustManager = getX509ExtendedTrustManager(new ByteArrayInputStream(
+      x509ExtendedTrustManager = CertificateUtils.getX509ExtendedTrustManager(new ByteArrayInputStream(
           tlsCreds.getRootCertificates()));
     } else { // else use system default
       TrustManagerFactory tmf = TrustManagerFactory.getInstance(
@@ -475,28 +497,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
     }
     return x509ExtendedTrustManager;
-  }
-
-  private static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
-      throws GeneralSecurityException {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    try {
-      ks.load(null, null);
-    } catch (IOException ex) {
-      // Shouldn't really happen, as we're not loading any data.
-      throw new GeneralSecurityException(ex);
-    }
-    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
-    for (X509Certificate cert : certs) {
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
-    }
-
-    TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init(ks);
-    return Arrays.stream(trustManagerFactory.getTrustManagers())
-        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
   }
 
   @GuardedBy("lock")
@@ -614,8 +614,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           public void close() {
           }
         });
-        Socket sock;
-        SSLSession sslSession = null;
         try {
           // This is a hack to make sure the connection preface and initial settings to be sent out
           // without blocking the start. By doing this essentially prevents potential deadlock when
@@ -1541,6 +1539,244 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     public void alternateService(int streamId, String origin, ByteString protocol, String host,
         int port, long maxAge) {
       // TODO(madongfly): Deal with alternateService propagation
+    }
+  }
+
+  /**
+   * SSLSocket wrapper that provides a fake SSLSession for handshake session.
+   */
+  static class SslSocketWrapper extends SSLSocket {
+
+    private final SSLSession sslSession;
+    private final SSLSocket sslSocket;
+
+    SslSocketWrapper(SSLSocket sslSocket, String peerHost) {
+      this.sslSocket = sslSocket;
+      this.sslSession = new FakeSslSession(peerHost);
+    }
+
+    @Override
+    public SSLSession getHandshakeSession() {
+      return this.sslSession;
+    }
+
+    @Override
+    public boolean isConnected() {
+      return sslSocket.isConnected();
+    }
+
+    @Override
+    public String[] getSupportedCipherSuites() {
+      return new String[0];
+    }
+
+    @Override
+    public String[] getEnabledCipherSuites() {
+      return new String[0];
+    }
+
+    @Override
+    public void setEnabledCipherSuites(String[] strings) {
+
+    }
+
+    @Override
+    public String[] getSupportedProtocols() {
+      return new String[0];
+    }
+
+    @Override
+    public String[] getEnabledProtocols() {
+      return new String[0];
+    }
+
+    @Override
+    public void setEnabledProtocols(String[] strings) {
+
+    }
+
+    @Override
+    public SSLSession getSession() {
+      return null;
+    }
+
+    @Override
+    public void addHandshakeCompletedListener(
+        HandshakeCompletedListener handshakeCompletedListener) {
+
+    }
+
+    @Override
+    public void removeHandshakeCompletedListener(
+        HandshakeCompletedListener handshakeCompletedListener) {
+
+    }
+
+    @Override
+    public void startHandshake() throws IOException {
+
+    }
+
+    @Override
+    public void setUseClientMode(boolean b) {
+
+    }
+
+    @Override
+    public boolean getUseClientMode() {
+      return false;
+    }
+
+    @Override
+    public void setNeedClientAuth(boolean b) {
+
+    }
+
+    @Override
+    public boolean getNeedClientAuth() {
+      return false;
+    }
+
+    @Override
+    public void setWantClientAuth(boolean b) {
+
+    }
+
+    @Override
+    public boolean getWantClientAuth() {
+      return false;
+    }
+
+    @Override
+    public void setEnableSessionCreation(boolean b) {
+
+    }
+
+    @Override
+    public boolean getEnableSessionCreation() {
+      return false;
+    }
+  }
+
+  /**
+   * Fake SSLSession instance that provides the peer host name to verify for per-rpc check.
+   */
+  static class FakeSslSession extends ExtendedSSLSession {
+
+    private final String peerHost;
+
+    FakeSslSession(String peerHost) {
+      this.peerHost = peerHost;
+    }
+
+    @Override
+    public String getPeerHost() {
+      return peerHost;
+    }
+
+    @Override
+    public byte[] getId() {
+      return new byte[0];
+    }
+
+    @Override
+    public SSLSessionContext getSessionContext() {
+      return null;
+    }
+
+    @Override
+    public long getCreationTime() {
+      return 0;
+    }
+
+    @Override
+    public long getLastAccessedTime() {
+      return 0;
+    }
+
+    @Override
+    public void invalidate() {
+
+    }
+
+    @Override
+    public boolean isValid() {
+      return false;
+    }
+
+    @Override
+    public void putValue(String s, Object o) {
+
+    }
+
+    @Override
+    public Object getValue(String s) {
+      return null;
+    }
+
+    @Override
+    public void removeValue(String s) {
+
+    }
+
+    @Override
+    public String[] getValueNames() {
+      return new String[0];
+    }
+
+    @Override
+    public Certificate[] getPeerCertificates() throws SSLPeerUnverifiedException {
+      return new Certificate[0];
+    }
+
+    @Override
+    public Certificate[] getLocalCertificates() {
+      return new Certificate[0];
+    }
+
+    @Override
+    public Principal getPeerPrincipal() throws SSLPeerUnverifiedException {
+      return null;
+    }
+
+    @Override
+    public Principal getLocalPrincipal() {
+      return null;
+    }
+
+    @Override
+    public String getCipherSuite() {
+      return null;
+    }
+
+    @Override
+    public String getProtocol() {
+      return null;
+    }
+
+    @Override
+    public int getPeerPort() {
+      return 0;
+    }
+
+    @Override
+    public int getPacketBufferSize() {
+      return 0;
+    }
+
+    @Override
+    public int getApplicationBufferSize() {
+      return 0;
+    }
+
+    @Override
+    public String[] getLocalSupportedSignatureAlgorithms() {
+      return new String[0];
+    }
+
+    @Override
+    public String[] getPeerSupportedSignatureAlgorithms() {
+      return new String[0];
     }
   }
 }
