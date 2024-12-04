@@ -68,8 +68,8 @@ public class HelloWorldClientTls {
 
         if (args.length < 2 || args.length == 4 || args.length > 5) {
             System.out.println("USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath " +
-                "[clientCertChainFilePath clientPrivateKeyFilePath]]\n  Note: clientCertChainFilePath and " +
-                "clientPrivateKeyFilePath are only needed if mutual auth is desired.");
+                   "[clientCertChainFilePath clientPrivateKeyFilePath]]\n  Note: clientCertChainFilePath and " +
+                   "clientPrivateKeyFilePath are only needed if mutual auth is desired.");
             System.exit(0);
         }
 
@@ -88,9 +88,9 @@ public class HelloWorldClientTls {
         String host = args[0];
         int port = Integer.parseInt(args[1]);
         ManagedChannel channel = Grpc.newChannelBuilderForAddress(host, port, tlsBuilder.build())
-            /* Only for using provided test certs. */
-            .overrideAuthority("foo.test.google.fr")
-            .build();
+                /* Only for using provided test certs. */
+                .overrideAuthority("foo.test.google.fr")
+                .build();
         try {
             HelloWorldClientTls client = new HelloWorldClientTls(channel);
             client.greet(host);
