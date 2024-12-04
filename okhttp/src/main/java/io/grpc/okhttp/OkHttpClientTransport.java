@@ -114,6 +114,7 @@ import javax.net.SocketFactory;
 import javax.net.ssl.ExtendedSSLSession;
 import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSessionContext;
@@ -231,7 +232,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  private final ConcurrentHashMap<String, Boolean> authoritiesAllowedForPeer = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Boolean> authoritiesAllowedForPeer =
+      new ConcurrentHashMap<>();
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -429,7 +431,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     Preconditions.checkNotNull(headers, "headers");
     StatsTraceContext statsTraceContext =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
-    if (socket instanceof SSLSocket && callOptions.getAuthority() != null && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
+    if (socket instanceof SSLSocket && callOptions.getAuthority() != null
+        && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
       boolean isAuthorityValid;
       if (authoritiesAllowedForPeer.containsKey(callOptions.getAuthority())) {
         isAuthorityValid = authoritiesAllowedForPeer.get(callOptions.getAuthority());
@@ -446,8 +449,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         }
         if (!x509ExtendedTrustManager.isPresent()) {
           return new FailingClientStream(Status.INTERNAL.withDescription(
-              "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
-              tracers);
+              "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
+                  + "available"), tracers);
         }
         try {
           Certificate[] peerCertificates = sslSession.getPeerCertificates();
@@ -495,8 +498,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       x509ExtendedTrustManager = tlsCreds.getTrustManagers().stream().filter(
           trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
     } else if (tlsCreds.getRootCertificates() != null) {
-      x509ExtendedTrustManager = CertificateUtils.getX509ExtendedTrustManager(new ByteArrayInputStream(
-          tlsCreds.getRootCertificates()));
+      x509ExtendedTrustManager = CertificateUtils.getX509ExtendedTrustManager(
+          new ByteArrayInputStream(tlsCreds.getRootCertificates()));
     } else { // else use system default
       TrustManagerFactory tmf = TrustManagerFactory.getInstance(
           TrustManagerFactory.getDefaultAlgorithm());
@@ -1574,6 +1577,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     @Override
+    public SSLParameters getSSLParameters() {
+      SSLParameters sslParameters = sslSocket.getSSLParameters();
+      sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
+      return sslParameters;
+    }
+
+    @Override
     public String[] getSupportedCipherSuites() {
       return new String[0];
     }
@@ -1669,7 +1679,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   /**
    * Fake SSLSession instance that provides the peer host name to verify for per-rpc check.
    */
-  static class FakeSslSession extends ExtendedSSLSession {
+  static class FakeSslSession implements SSLSession {
 
     private final String peerHost;
 
@@ -1683,8 +1693,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     @SuppressWarnings("deprecation")
-    public javax.security.cert.X509Certificate[] getPeerCertificateChain() throws SSLPeerUnverifiedException {
-      throw new UnsupportedOperationException("This method is deprecated and marked for removal. Use the getPeerCertificates() method instead.");
+    public javax.security.cert.X509Certificate[] getPeerCertificateChain() {
+      throw new UnsupportedOperationException("This method is deprecated and marked for removal. "
+          + "Use the getPeerCertificates() method instead.");
     }
 
     @Override
@@ -1780,16 +1791,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     @Override
     public int getApplicationBufferSize() {
       return 0;
-    }
-
-    @Override
-    public String[] getLocalSupportedSignatureAlgorithms() {
-      return new String[0];
-    }
-
-    @Override
-    public String[] getPeerSupportedSignatureAlgorithms() {
-      return new String[0];
     }
   }
 }

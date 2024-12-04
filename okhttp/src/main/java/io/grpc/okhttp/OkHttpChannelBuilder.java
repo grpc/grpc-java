@@ -92,7 +92,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
-  private final ChannelCredentials channelCrentials;
+  private final ChannelCredentials channelCredentials;
   private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
 
@@ -210,6 +210,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
     this.freezeSecurityConfiguration = false;
+    this.channelCredentials = null;
   }
 
   OkHttpChannelBuilder(
@@ -222,7 +223,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     this.sslSocketFactory = factory;
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
-    this.channelCrentials = channelCreds;
+    this.channelCredentials = channelCreds;
   }
 
   private final class OkHttpChannelTransportFactoryBuilder
@@ -905,7 +906,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
           keepAliveWithoutCalls,
           maxInboundMetadataSize,
           transportTracerFactory,
-          useGetForSafeMethods, managedChannelImplBuilder.getChannelCredentials());
+          useGetForSafeMethods,
+          channelCredentials);
       return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 

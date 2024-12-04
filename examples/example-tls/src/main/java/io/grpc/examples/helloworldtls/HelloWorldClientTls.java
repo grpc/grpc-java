@@ -18,6 +18,7 @@ package io.grpc.examples.helloworldtls;
 
 import io.grpc.Channel;
 import io.grpc.Grpc;
+import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
@@ -52,7 +53,9 @@ public class HelloWorldClientTls {
         HelloRequest request = HelloRequest.newBuilder().setName(name).build();
         HelloReply response;
         try {
-            response = blockingStub.sayHello(request);
+            response = io.grpc.stub.ClientCalls.blockingUnaryCall(
+                blockingStub.getChannel(), GreeterGrpc.getSayHelloMethod(),
+                blockingStub.getCallOptions().withAuthority("foo.test.google.in"), request);
         } catch (StatusRuntimeException e) {
             logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
             return;
@@ -87,7 +90,7 @@ public class HelloWorldClientTls {
         }
         String host = args[0];
         int port = Integer.parseInt(args[1]);
-        ManagedChannel channel = Grpc.newChannelBuilderForAddress(host, port, tlsBuilder.build())
+        ManagedChannel channel = OkHttpChannelBuilder.forAddress(host, port, tlsBuilder.build())
                 /* Only for using provided test certs. */
                 .overrideAuthority("foo.test.google.fr")
                 .build();

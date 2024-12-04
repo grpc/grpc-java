@@ -181,21 +181,21 @@ public final class ManagedChannelRegistry {
           + "artifact");
     }
     StringBuilder error = new StringBuilder();
-    for (ManagedChannelProvider provider : providers()) {
-      Collection<Class<? extends SocketAddress>> channelProviderSocketAddressTypes
-          = provider.getSupportedSocketAddressTypes();
-      if (!channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-        error.append("; ");
-        error.append(provider.getClass().getName());
-        error.append(": does not support 1 or more of ");
-        error.append(Arrays.toString(nameResolverSocketAddressTypes.toArray()));
-        continue;
-      }
-      ManagedChannelProvider.NewChannelBuilderResult result
-          = provider.newChannelBuilder(target, creds);
-      if (result.getChannelBuilder() != null) {
-        return result.getChannelBuilder();
-      }
+      for (ManagedChannelProvider provider : providers()) {
+        Collection<Class<? extends SocketAddress>> channelProviderSocketAddressTypes
+            = provider.getSupportedSocketAddressTypes();
+        if (!channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+          error.append("; ");
+          error.append(provider.getClass().getName());
+          error.append(": does not support 1 or more of ");
+          error.append(Arrays.toString(nameResolverSocketAddressTypes.toArray()));
+          continue;
+        }
+        ManagedChannelProvider.NewChannelBuilderResult result
+            = provider.newChannelBuilder(target, creds);
+        if (result.getChannelBuilder() != null) {
+          return result.getChannelBuilder();
+        }
       error.append("; ");
       error.append(provider.getClass().getName());
       error.append(": ");
