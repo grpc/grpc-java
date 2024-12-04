@@ -1288,7 +1288,7 @@ public class NettyClientTransportTest {
     public void transportInUse(boolean inUse) {}
   }
 
-  private class FakeTrustManager implements X509TrustManager {
+  private static class FakeTrustManager implements X509TrustManager {
 
     private final X509TrustManager delegate;
 

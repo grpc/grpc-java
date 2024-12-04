@@ -112,7 +112,8 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
-  private final ConcurrentHashMap<String, Boolean> authoritiesAllowedForPeer = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Boolean> authoritiesAllowedForPeer =
+      new ConcurrentHashMap<>();
 
   NettyClientTransport(
       SocketAddress address,
