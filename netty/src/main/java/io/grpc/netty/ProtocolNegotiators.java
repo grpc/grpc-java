@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.util.CertificateUtils.getX509ExtendedTrustManager;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -269,28 +270,6 @@ final class ProtocolNegotiators {
       return FromServerCredentialsResult.error(
           "Unsupported credential type: " + creds.getClass().getName());
     }
-  }
-
-  private static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
-      throws GeneralSecurityException {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    try {
-      ks.load(null, null);
-    } catch (IOException ex) {
-      // Shouldn't really happen, as we're not loading any data.
-      throw new GeneralSecurityException(ex);
-    }
-    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
-    for (X509Certificate cert : certs) {
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
-    }
-
-    TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init(ks);
-    return Arrays.stream(trustManagerFactory.getTrustManagers())
-        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
   }
 
   public static final class FromChannelCredentialsResult {
