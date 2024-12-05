@@ -136,6 +136,7 @@ public class TestServiceClient {
   private int soakResponseSize = 314159;
   private int numThreads = 1;
   private String additionalMetadata = "";
+  private String testType = "largeUnary";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
@@ -217,6 +218,8 @@ public class TestServiceClient {
         soakResponseSize = Integer.parseInt(value);
       }  else if ("soak_num_threads".equals(key)) {
         numThreads = Integer.parseInt(value);
+      } else if ("test_type".equals(value)) {
+        testType = value;
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
       } else {
@@ -281,7 +284,7 @@ public class TestServiceClient {
           + "\n                              The minimum time in milliseconds between consecutive "
           + "\n                              RPCs in a soak test (rpc_soak or channel_soak), "
           + "\n                              useful for limiting QPS. Default: "
-          + c.soakMinTimeMsBetweenRpcs
+            + c.soakMinTimeMsBetweenRpcs
           + "\n --soak_overall_timeout_seconds "
           + "\n                              The overall number of seconds after which a soak test "
           + "\n                              should stop and fail, if the desired number of "
@@ -296,6 +299,11 @@ public class TestServiceClient {
           + "\n --soak_num_threads           The number of threads for concurrent execution of the "
           + "\n                              soak tests (rpc_soak or channel_soak). Default "
             + c.numThreads
+          + "\n --test_type"
+          + "\n                              Specifies the type of RPC soak test to run"
+          + "\n                              (largeUnary,clientStreaming,serverStreaming "
+          + "or pingPong)."
+          + "\n                              Default " + c.testType
           + "\n --additional_metadata "
           + "\n                              Additional metadata to send in each request, as a "
           + "\n                              semicolon-separated list of key:value pairs. Default "
@@ -533,6 +541,7 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
+            testType,
             (currentChannel) -> currentChannel);
         break;
       }
@@ -548,6 +557,7 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
+            testType,
             (currentChannel) -> tester.createNewChannel(currentChannel));
         break;
       }

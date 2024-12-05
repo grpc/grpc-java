@@ -77,6 +77,7 @@ public final class XdsFederationTestClient {
   private int soakRequestSize = 271828;
   private int soakResponseSize = 314159;
   private String testCase = "rpc_soak";
+  private String testType = "largeUnary";
   private final ArrayList<InnerClient> clients = new ArrayList<>();
 
   private void parseArgs(String[] args) {
@@ -108,6 +109,9 @@ public final class XdsFederationTestClient {
           break;
         case "test_case":
           testCase = value;
+          break;
+        case "test_type":
+          testType = value;
           break;
         case "soak_iterations":
           soakIterations = Integer.parseInt(value);
@@ -191,6 +195,20 @@ public final class XdsFederationTestClient {
           + "                                          The response size in a soak RPC. Default"
           + " "
           + c.soakResponseSize
+          + " --test_type \n"
+          + "                                          This option specifies the type of RPC test "
+          + "to run during a soak test. The available test types are:\n"
+          + "                                          \n"
+          + "                                          largeUnary: A single large request and "
+          + "response.\n"
+          + "                                          clientStreaming: A test where the client "
+          + "streams data to the server.\n"
+          + "                                          serverStreaming: A test where the server "
+          + "streams data to the client.\n"
+          + "                                          pingPong: A test where the client and "
+          + "server exchange small messages back and forth .\n"
+          + "                                          Default value: 'largeUnary'\n"
+          + c.testType
       );
       System.exit(1);
     }
@@ -259,6 +277,7 @@ public final class XdsFederationTestClient {
                 soakRequestSize,
                 soakResponseSize,
                 1,
+                testType,
                 (currentChannel) -> currentChannel);
           }
               break;
@@ -273,6 +292,7 @@ public final class XdsFederationTestClient {
                 soakRequestSize,
                 soakResponseSize,
                 1,
+                testType,
                 (currentChannel) -> createNewChannel(currentChannel));
           }
             break;
