@@ -487,7 +487,8 @@ public final class XdsClientImpl extends XdsClient implements XdsClient.Resource
       String msg = String.format("Failed to create xds transport for %s: %s",
           serverInfo.target(), e.getMessage());
       logger.log(XdsLogLevel.WARNING, msg);
-      xdsTransport = new ControlPlaneClient.FailingXdsTransport(msg);
+      xdsTransport =
+          new ControlPlaneClient.FailingXdsTransport(Status.UNAVAILABLE.withDescription(msg));
     }
 
     ControlPlaneClient controlPlaneClient = new ControlPlaneClient(

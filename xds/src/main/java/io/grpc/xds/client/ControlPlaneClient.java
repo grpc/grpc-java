@@ -497,10 +497,10 @@ final class ControlPlaneClient {
 
   @VisibleForTesting
   static class FailingXdsTransport implements XdsTransport {
-    String failingMessage;
+    Status error;
 
-    public FailingXdsTransport(String msg) {
-      this.failingMessage = msg;
+    public FailingXdsTransport(Status error) {
+      this.error = error;
     }
 
     @Override
@@ -520,22 +520,22 @@ final class ControlPlaneClient {
 
       @Override
       public void start(XdsTransportFactory.EventHandler<RespT> eventHandler) {
-        eventHandler.onStatusReceived(Status.UNAVAILABLE.withDescription(failingMessage));
+        eventHandler.onStatusReceived(error);
       }
 
       @Override
       public void sendMessage(ReqT message) {
-        throw new UnsupportedOperationException();
+        // no-op
       }
 
       @Override
       public void startRecvMessage() {
-        throw new UnsupportedOperationException();
+        // no-op
       }
 
       @Override
       public void sendError(Exception e) {
-        throw new UnsupportedOperationException();
+        // no-op
       }
 
       @Override
