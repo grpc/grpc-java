@@ -5,29 +5,32 @@ import static io.grpc.xds.client.XdsLogger.XdsLogLevel.DEBUG;
 
 import io.grpc.InternalLogId;
 import io.grpc.Status;
-import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
+import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsResourceType;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
-public final class XdsDependencyManager {
+final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
   private final XdsClient xdsClient;
   private final XdsConfigWatcher xdsConfigWatcher;
   private final SynchronizationContext syncContext;
   private final String dataPlaneAuthority;
-  private final Map<String, List<ClusterSubscription>> clusterSubscriptions = new HashMap<>();
+  private final Map<String, Set<ClusterSubscription>> clusterSubscriptions = new HashMap<>();
+
   private final InternalLogId logId;
   private final XdsLogger logger;
   private XdsConfig lastXdsConfig = null;
   private Map<XdsResourceType, Map<String, XdsClient.ResourceWatcher>> resourceWatchers
       = new HashMap<>();
 
-  public XdsDependencyManager(XdsClient xdsClient, XdsConfigWatcher xdsConfigWatcher,
+  XdsDependencyManager(XdsClient xdsClient, XdsConfigWatcher xdsConfigWatcher,
                               SynchronizationContext syncContext, String dataPlaneAuthority,
                               String listenerName)
   {
@@ -39,40 +42,54 @@ public final class XdsDependencyManager {
     this.dataPlaneAuthority = dataPlaneAuthority;
 
     // start the ball rolling
-    this.syncContext.executeLater(() -> {
-      ResourceContext listenerContext =
-          new ResourceContext(XdsListenerResource.getInstance(), listenerName);
-      LdsWatcher ldsWatcher = new LdsWatcher(listenerContext);
-      resourceWatchers.computeIfAbsent(listenerContext.resourceType, k -> new HashMap<>())
-          .put(listenerContext.resourceName, ldsWatcher);
-      xdsClient.watchXdsResource(listenerContext.resourceType, listenerName, ldsWatcher);
-    });
+    addWatcher(new LdsWatcher(listenerName));
   }
 
+  @Override
   public ClusterSubscription subscribeToCluster(String clusterName) {
     checkNotNull(clusterName, "clusterName");
-    ClusterSubscription subscription = new ClusterSubscription(clusterName);
-    clusterSubscriptions.computeIfAbsent(clusterName, k -> new ArrayList<>()).add(subscription);
+    ClusterSubscription subscription = new ClusterSubscriptionImpl(clusterName);
 
-    // TODO add XdsClient watches for this cluster, children and their endpoints
+    Set<ClusterSubscription> localSubscriptions =
+        clusterSubscriptions.computeIfAbsent(clusterName, k -> new HashSet<>());
+    localSubscriptions.add(subscription);
+    addWatcher(new CdsWatcher(clusterName));
+
     return subscription;
   }
 
+  @Override
   public void releaseSubscription(ClusterSubscription subscription) {
     checkNotNull(subscription, "subscription");
-    List<ClusterSubscription> subscriptionList =
-        clusterSubscriptions.get(subscription.clusterName);
-    if (subscriptionList == null) {
-      logger.log(DEBUG, "Subscription already released {0}", subscription.clusterName);
+    String clusterName = subscription.getClusterName();
+    Set<ClusterSubscription> subscriptions = clusterSubscriptions.get(clusterName);
+    if (subscriptions == null) {
+      logger.log(DEBUG, "Subscription already released for {0}", clusterName);
       return;
     }
 
-    subscriptionList.remove(subscription);
-    if (subscriptionList.isEmpty()) {
-      clusterSubscriptions.remove(subscription.clusterName);
-      // TODO release XdsClient watches for this cluster, children and their endpoints
+    subscriptions.remove(subscription);
+    if (subscriptions.isEmpty()) {
+      clusterSubscriptions.remove(clusterName);
+      // TODO release XdsClient watches for this cluster and its endpoint
     }
   }
+
+  @Override
+  public void refreshDynamicSubscriptions() {
+    // TODO: implement
+  }
+
+  private void addWatcher(XdsWatcherBase watcher) {
+    ResourceContext context = watcher.resourceContext;
+
+    this.syncContext.executeLater(() -> {
+      resourceWatchers.computeIfAbsent(context.resourceType, k -> new HashMap<>())
+          .put(context.resourceName, watcher);
+      xdsClient.watchXdsResource(context.resourceType, context.resourceName, watcher);
+    });
+  }
+
 
   public void shutdown() {
     for (Map.Entry<XdsResourceType, Map<String, XdsClient.ResourceWatcher>> typeMapEntry
@@ -83,6 +100,11 @@ public final class XdsDependencyManager {
             watcherEntry.getValue());
       }
     }
+  }
+
+  @Override
+  public String toString() {
+    return logId.toString();
   }
 
   public static class ResourceContext {
@@ -101,72 +123,24 @@ public final class XdsDependencyManager {
     void OnResourceDoesNotExist(ResourceContext resourceContext);
   }
 
-  public static final class ClusterSubscription {
+  public static final class ClusterSubscriptionImpl implements ClusterSubscription {
     String clusterName;
 
-    public ClusterSubscription(String clusterName) {
+    public ClusterSubscriptionImpl(String clusterName) {
       this.clusterName = clusterName;
     }
-  }
 
-  /**
-   * A full XDS configuration from listener through endpoints
-   */
-  public static class XdsConfig {
-    public final XdsListenerResource listener;
-    public final XdsRouteConfigureResource route;
-    public final Map<String, StatusOr<XdsClusterConfig>> clusters;
-
-    public XdsConfig(XdsListenerResource listener, XdsRouteConfigureResource route,
-                     Map<String, StatusOr<XdsClusterConfig>> clusters) {
-      this.listener = listener;
-      this.route = route;
-      this.clusters = clusters;
-    }
-
-    public static class XdsClusterConfig {
-      public final String clusterName;
-      public final XdsClusterResource cluster;
-      public final XdsEndpointResource endpoint;
-
-      public XdsClusterConfig(String clusterName, XdsClusterResource cluster,
-                              XdsEndpointResource endpoint) {
-        this.clusterName = clusterName;
-        this.cluster = cluster;
-        this.endpoint = endpoint;
-      }
+    @Override
+    public String getClusterName() {
+      return clusterName;
     }
   }
 
-  private class LdsWatcher implements XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate> {
-    ResourceContext resourceContext;
+  private abstract class XdsWatcherBase<T> implements XdsClient.ResourceWatcher<T> {
+    private final ResourceContext resourceContext;
 
-    public LdsWatcher(ResourceContext resourceContext) {
-      this.resourceContext = resourceContext;
-    }
-
-    @Override
-    public void onError(Status error) {
-      xdsConfigWatcher.OnError(listenerContext, error);
-    }
-
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      xdsConfigWatcher.OnResourceDoesNotExist(listenerContext);
-    }
-
-    @Override
-    public void onChanged(XdsListenerResource.LdsUpdate update) {
-       // TODO: process the update
-    }
-  }
-
-  private class RdsWatcher
-      implements XdsClient.ResourceWatcher<XdsRouteConfigureResource.RdsUpdate> {
-    ResourceContext resourceContext;
-
-    public RdsWatcher(ResourceContext resourceContext) {
-      this.resourceContext = resourceContext;
+    private XdsWatcherBase(XdsResourceType<T> type, String resourceName) {
+      this.resourceContext = new ResourceContext(type, resourceName);
     }
 
     @Override
@@ -178,11 +152,55 @@ public final class XdsDependencyManager {
     public void onResourceDoesNotExist(String resourceName) {
       xdsConfigWatcher.OnResourceDoesNotExist(resourceContext);
     }
+  }
+  private class LdsWatcher extends XdsWatcherBase<XdsListenerResource.LdsUpdate> {
+
+    private LdsWatcher(String resourceName) {
+      super(XdsListenerResource.getInstance(), resourceName);
+    }
 
     @Override
-    public void onChanged(XdsRouteConfigureResource.RdsUpdate update) {
-      // TODO: process the update
+    public void onChanged(XdsListenerResource.LdsUpdate update) {
+       // TODO: process the update and add an RdsWatcher if needed
+       //  else see if we should publish a new XdsConfig
     }
   }
 
+  private class RdsWatcher extends XdsWatcherBase<RdsUpdate> {
+
+    public RdsWatcher(String resourceName) {
+      super(XdsRouteConfigureResource.getInstance(), resourceName);
+    }
+
+    @Override
+    public void onChanged(RdsUpdate update) {
+      // TODO: process the update and add CdsWatchers for all virtual hosts as needed
+      //  If none needed see if we should publish a new XdsConfig
+    }
+  }
+
+
+  private class CdsWatcher extends XdsWatcherBase<XdsClusterResource.CdsUpdate> {
+
+    private CdsWatcher(String resourceName) {
+      super(XdsClusterResource.getInstance(), resourceName);
+    }
+
+    @Override
+    public void onChanged(XdsClusterResource.CdsUpdate update) {
+      // TODO: process the update and add an EdsWatcher if needed
+      //  else see if we should publish a new XdsConfig
+    }
+  }
+
+  private class EdsWatcher extends XdsWatcherBase<XdsEndpointResource.EdsUpdate> {
+    private EdsWatcher(String resourceName) {
+      super(XdsEndpointResource.getInstance(), resourceName);
+    }
+
+    @Override
+    public void onChanged(XdsEndpointResource.EdsUpdate update) {
+      // TODO: process the update and see if we should publish a new XdsConfig
+    }
+  }
 }
