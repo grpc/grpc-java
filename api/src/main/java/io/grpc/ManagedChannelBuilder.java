@@ -633,6 +633,23 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Provides an "extended" argument for the {@link NameResolver}, if applicable, replacing any
+   * 'value' previously provided for 'key'.
+   *
+   * <p>NB: If the selected {@link NameResolver} does not understand 'key', or target URI resolution
+   * isn't needed at all, your extended argument will be silently ignored.
+   *
+   * <p>See {@link NameResolver.Args#getExtension(NameResolver.Args.Key)} for more.
+   *
+   * @param key identifies the argument in a type-safe manner
+   * @param value the argument itself
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Builds a channel using the given parameters.

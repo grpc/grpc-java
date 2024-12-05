@@ -204,6 +204,8 @@ public class ManagedChannelImplTest {
       .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
       .setScheduledExecutorService(new FakeClock().getScheduledExecutorService())
       .build();
+  private static final NameResolver.Args.Key<String> TEST_RESOLVER_ARG_EXT_KEY =
+      NameResolver.Args.Key.create("test-key");
 
   private URI expectedUri;
   private final SocketAddress socketAddress =
@@ -4268,13 +4270,18 @@ public class ManagedChannelImplTest {
           return "fake";
         }
       };
-    channelBuilder.nameResolverFactory(factory).proxyDetector(neverProxy);
+    channelBuilder
+        .nameResolverFactory(factory)
+        .proxyDetector(neverProxy)
+        .setNameResolverArg(TEST_RESOLVER_ARG_EXT_KEY, "test-value");
+
     createChannel();
 
     NameResolver.Args args = capturedArgs.get();
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
+    assertThat(args.getExtension(TEST_RESOLVER_ARG_EXT_KEY)).isEqualTo("test-value");
 
     verify(offloadExecutor, never()).execute(any(Runnable.class));
     args.getOffloadExecutor()

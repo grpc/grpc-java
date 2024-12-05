@@ -28,11 +28,14 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -276,7 +279,12 @@ public abstract class NameResolver {
   /**
    * Information that a {@link Factory} uses to create a {@link NameResolver}.
    *
-   * <p>Note this class doesn't override neither {@code equals()} nor {@code hashCode()}.
+   * <p>Args applicable to all {@link NameResolver}s are defined here using ordinary setters and
+   * getters. This container can also hold externally-defined "extended" args that aren't so widely
+   * useful or that would be inappropriate dependencies for this low level API. See {@link
+   * Args#getExtension} for more.
+   *
+   * <p>Note this class overrides neither {@code equals()} nor {@code hashCode()}.
    *
    * @since 1.21.0
    */
@@ -286,31 +294,26 @@ public abstract class NameResolver {
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
+    private final Extensions extensions;
     @Nullable private final ScheduledExecutorService scheduledExecutorService;
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
     @Nullable private final MetricRecorder metricRecorder;
 
-    private Args(
-        Integer defaultPort,
-        ProxyDetector proxyDetector,
-        SynchronizationContext syncContext,
-        ServiceConfigParser serviceConfigParser,
-        @Nullable ScheduledExecutorService scheduledExecutorService,
-        @Nullable ChannelLogger channelLogger,
-        @Nullable Executor executor,
-        @Nullable String overrideAuthority,
-        @Nullable MetricRecorder metricRecorder) {
-      this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
-      this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
-      this.syncContext = checkNotNull(syncContext, "syncContext not set");
-      this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
-      this.scheduledExecutorService = scheduledExecutorService;
-      this.channelLogger = channelLogger;
-      this.executor = executor;
-      this.overrideAuthority = overrideAuthority;
-      this.metricRecorder = metricRecorder;
+    private Args(Builder builder) {
+      this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
+      this.proxyDetector = checkNotNull(builder.proxyDetector, "proxyDetector not set");
+      this.syncContext = checkNotNull(builder.syncContext, "syncContext not set");
+      this.serviceConfigParser =
+          checkNotNull(builder.serviceConfigParser, "serviceConfigParser not set");
+      this.extensions =
+          builder.extensionsBuilder != null ? builder.extensionsBuilder.build() : Extensions.EMPTY;
+      this.scheduledExecutorService = builder.scheduledExecutorService;
+      this.channelLogger = builder.channelLogger;
+      this.executor = builder.executor;
+      this.overrideAuthority = builder.overrideAuthority;
+      this.metricRecorder = builder.metricRecorder;
     }
 
     /**
@@ -319,6 +322,7 @@ public abstract class NameResolver {
      *
      * @since 1.21.0
      */
+    // <p>TODO: Only meaningful for InetSocketAddress producers. Move to {@link Extensions}?
     public int getDefaultPort() {
       return defaultPort;
     }
@@ -369,6 +373,29 @@ public abstract class NameResolver {
      */
     public ServiceConfigParser getServiceConfigParser() {
       return serviceConfigParser;
+    }
+
+    /**
+     * Gets the value of an "extension" arg by key, or {@code null} if it's not set.
+     *
+     * <p>While ordinary {@link Args} should be universally useful and meaningful, extension
+     * arguments can apply just to resolvers of a certain URI scheme, just to resolvers producing a
+     * particular type of {@link java.net.SocketAddress}, or even an individual {@link NameResolver}
+     * subclass. Extension args are identified by an instance of {@link Args.Key} which should be
+     * defined in a java package and class appropriate to the argument's scope.
+     *
+     * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
+     * the name to be resolved itself. However, there are rare cases where all or part of the target
+     * name can't be represented by any standard URI scheme or can't be encoded as a String at all.
+     * Extension args, in contrast, can be an arbitrary Java type, making them a useful work around
+     * in these cases.
+     *
+     * <p>Extension args can also be used simply to avoid adding inappropriate deps to the low level
+     * io.grpc package.
+     */
+    @Nullable
+    public <T> T getExtension(Key<T> key) {
+      return extensions.get(key);
     }
 
     /**
@@ -424,6 +451,7 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
+          .add("extensions", extensions)
           .add("scheduledExecutorService", scheduledExecutorService)
           .add("channelLogger", channelLogger)
           .add("executor", executor)
@@ -443,6 +471,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
+      builder.extensionsBuilder = extensions.toBuilder();
       builder.setScheduledExecutorService(scheduledExecutorService);
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
@@ -475,6 +504,7 @@ public abstract class NameResolver {
       private Executor executor;
       private String overrideAuthority;
       private MetricRecorder metricRecorder;
+      private Extensions.Builder extensionsBuilder = Extensions.newBuilder();
 
       Builder() {
       }
@@ -561,6 +591,19 @@ public abstract class NameResolver {
         return this;
       }
 
+      /** See {@link Args#getExtension(Key)}. */
+      public <T> Builder setExtension(Key<T> key, T value) {
+        extensionsBuilder.set(key, value);
+        return this;
+      }
+
+      /** Copies each extension argument from 'extensions' into this Builder. */
+      @Internal
+      public Builder setAllExtensions(Extensions extensions) {
+        extensionsBuilder.setAll(extensions);
+        return this;
+      }
+
       /**
        * See {@link Args#getMetricRecorder()}. This is an optional field.
        */
@@ -575,11 +618,139 @@ public abstract class NameResolver {
        * @since 1.21.0
        */
       public Args build() {
-        return
-            new Args(
-                defaultPort, proxyDetector, syncContext, serviceConfigParser,
-                scheduledExecutorService, channelLogger, executor, overrideAuthority,
-                metricRecorder);
+        return new Args(this);
+      }
+    }
+
+    /**
+     * Identifies an externally-defined extension argument that can be stored in {@link Args}.
+     *
+     * <p>Uses reference equality so keys should be defined as global constants.
+     *
+     * @param <T> type of values that can be stored under this key
+     */
+    @Immutable
+    @SuppressWarnings("UnusedTypeParameter")
+    public static final class Key<T> {
+      private final String debugString;
+
+      private Key(String debugString) {
+        this.debugString = debugString;
+      }
+
+      @Override
+      public String toString() {
+        return debugString;
+      }
+
+      /**
+       * Creates a new instance of {@link Key}.
+       *
+       * @param debugString a string used to describe the key, used for debugging.
+       * @param <T> Key type
+       * @return a new instance of Key
+       */
+      public static <T> Key<T> create(String debugString) {
+        return new Key<>(debugString);
+      }
+    }
+
+    /**
+     * An immutable type-safe container of externally-defined {@link NameResolver} arguments.
+     *
+     * <p>NB: This class overrides neither {@code equals()} nor {@code hashCode()}.
+     */
+    @Immutable
+    @Internal
+    public static final class Extensions {
+      private static final IdentityHashMap<Key<?>, Object> EMPTY_MAP = new IdentityHashMap<>();
+
+      /** The canonical empty instance. */
+      public static final Extensions EMPTY = new Extensions(EMPTY_MAP);
+
+      private final IdentityHashMap<Key<?>, Object> data;
+
+      private Extensions(IdentityHashMap<Key<?>, Object> data) {
+        assert data != null;
+        this.data = data;
+      }
+
+      /** Gets the value for the key, or {@code null} if it's not present. */
+      @SuppressWarnings("unchecked")
+      @Nullable
+      public <T> T get(Key<T> key) {
+        return (T) data.get(key);
+      }
+
+      Set<Key<?>> keysForTest() {
+        return Collections.unmodifiableSet(data.keySet());
+      }
+
+      /** Creates a new builder. */
+      public static Builder newBuilder() {
+        return new Builder(EMPTY);
+      }
+
+      /**
+       * Creates a new builder that is pre-populated with the content of this container.
+       *
+       * @return a new builder.
+       */
+      public Builder toBuilder() {
+        return new Builder(this);
+      }
+
+      @Override
+      public String toString() {
+        return data.toString();
+      }
+
+      /** Fluently builds instances of {@link Extensions}. */
+      public static final class Builder {
+        private Extensions base;
+        private IdentityHashMap<Key<?>, Object> newdata;
+
+        private Builder(Extensions base) {
+          assert base != null;
+          this.base = base;
+        }
+
+        private IdentityHashMap<Key<?>, Object> data(int size) {
+          if (newdata == null) {
+            newdata = new IdentityHashMap<>(size);
+          }
+          return newdata;
+        }
+
+        /**
+         * Associates 'value' with 'key', replacing any previously associated value.
+         *
+         * @return this
+         */
+        public <T> Builder set(Key<T> key, T value) {
+          data(1).put(key, value);
+          return this;
+        }
+
+        /** Copies all entries from 'other' into this Builder. */
+        public Builder setAll(Extensions other) {
+          data(other.data.size()).putAll(other.data);
+          return this;
+        }
+
+        /** Builds the extensions. */
+        public Extensions build() {
+          if (newdata != null) {
+            for (Map.Entry<Key<?>, Object> entry : base.data.entrySet()) {
+              if (!newdata.containsKey(entry.getKey())) {
+                newdata.put(entry.getKey(), entry.getValue());
+              }
+            }
+            base = new Extensions(newdata);
+            newdata = null;
+          }
+          return base;
+        }
       }
     }
   }
