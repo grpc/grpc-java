@@ -94,15 +94,19 @@ public final class Metadata {
    * Simple metadata marshaller that encodes strings as is.
    *
    * <p>This should be used with ASCII strings that only contain the characters listed in the class
-   * comment of {@link AsciiMarshaller}. Otherwise the output may be considered invalid and
-   * discarded by the transport, or the call may fail.
+   * comment of {@link AsciiMarshaller}. Otherwise an {@link IllegalArgumentException} will be
+   * thrown.
    */
   public static final AsciiMarshaller<String> ASCII_STRING_MARSHALLER =
       new AsciiMarshaller<String>() {
 
         @Override
         public String toAsciiString(String value) {
-          return value;
+          checkArgument(
+              value.chars().allMatch(c -> c >= 0x20 && c <= 0x7E),
+              "String \"%s\" contains non-printable ASCII characters",
+              value);
+          return value.trim();
         }
 
         @Override
