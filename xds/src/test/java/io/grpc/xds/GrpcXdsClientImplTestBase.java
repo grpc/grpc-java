@@ -3613,7 +3613,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(3, true, xdsServerInfo.target());
+    verifyServerConnection(2, true, xdsServerInfo.target());
+    verifyServerConnection(4, false, xdsServerInfo.target());
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -3627,6 +3628,11 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
+    // Check metric data, should be in error since haven't gotten a response.
+    callback_ReportServerConnection();
+    verifyServerConnection(2, true, xdsServerInfo.target());
+    verifyServerConnection(5, false, xdsServerInfo.target());
+
     // Management server becomes unreachable again.
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
@@ -3638,7 +3644,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(4, false, xdsServerInfo.target());
+    verifyServerConnection(6, false, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
@@ -3654,7 +3660,12 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Check metric data.
     callback_ReportServerConnection();
-    verifyServerConnection(5, false, xdsServerInfo.target());
+    verifyServerConnection(7, false, xdsServerInfo.target());
+
+    // Send a response so CPC is considered working
+    call.sendResponse(LDS, listeners, "63", "3242");
+    callback_ReportServerConnection();
+    verifyServerConnection(3, true, xdsServerInfo.target());
 
     inOrder.verifyNoMoreInteractions();
   }

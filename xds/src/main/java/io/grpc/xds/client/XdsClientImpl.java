@@ -611,7 +611,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     syncContext.execute(() -> {
       serverCpClientMap.forEach((serverInfo, controlPlaneClient) ->
           callback.reportServerConnectionGauge(
-              controlPlaneClient.hasWorkingAdsStream(), serverInfo.target()));
+              !controlPlaneClient.isInError(), serverInfo.target()));
       future.set(null);
     });
     return future;
@@ -974,6 +974,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (status.isOk()) {
         return; // Not considered an error
       }
+
+      metricReporter.reportServerFailure(1L, serverInfo.target());
 
       Collection<String> authoritiesForClosedCpc = getActiveAuthorities(cpcClosed);
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
