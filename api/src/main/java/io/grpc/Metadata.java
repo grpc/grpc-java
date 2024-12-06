@@ -212,7 +212,7 @@ public final class Metadata {
   }
 
   /** checks when {@link #namesAndValues} is null or has no elements. */
-  private boolean isEmpty() {
+  public boolean isEmpty() {
     return size == 0;
   }
 
