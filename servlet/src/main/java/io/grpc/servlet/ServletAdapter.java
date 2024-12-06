@@ -77,15 +77,18 @@ public final class ServletAdapter {
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final int maxInboundMessageSize;
   private final Attributes attributes;
+  private final boolean forceTrailers;
 
   ServletAdapter(
       ServerTransportListener transportListener,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      int maxInboundMessageSize) {
+      int maxInboundMessageSize,
+      boolean forceTrailers) {
     this.transportListener = transportListener;
     this.streamTracerFactories = streamTracerFactories;
     this.maxInboundMessageSize = maxInboundMessageSize;
     attributes = transportListener.transportReady(Attributes.EMPTY);
+    this.forceTrailers = forceTrailers;
   }
 
   /**
@@ -148,7 +151,8 @@ public final class ServletAdapter {
                 new InetSocketAddress(req.getLocalAddr(), req.getLocalPort()))
             .build(),
         getAuthority(req),
-        logId);
+        logId,
+        forceTrailers);
 
     transportListener.streamCreated(stream, method, headers);
     stream.transportState().runOnTransportThread(stream.transportState()::onStreamAllocated);
