@@ -179,6 +179,7 @@ public class WeightedTargetLoadBalancerTest {
     }
   }
 
+  @Deprecated
   @Test
   public void handleResolvedAddresses() {
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor =
@@ -264,6 +265,7 @@ public class WeightedTargetLoadBalancerTest {
     }
   }
 
+  @Deprecated
   @Test
   public void handleNameResolutionError() {
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
@@ -302,6 +304,7 @@ public class WeightedTargetLoadBalancerTest {
     }
   }
 
+  @Deprecated
   @Test
   public void balancingStateUpdatedFromChildBalancers() {
     Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
@@ -390,6 +393,7 @@ public class WeightedTargetLoadBalancerTest {
             new WeightedChildPicker(weights[3], failurePickers[3]));
   }
 
+  @Deprecated
   @Test
   public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
     Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
@@ -412,6 +416,7 @@ public class WeightedTargetLoadBalancerTest {
 
   // When the ChildHelper is asked to update the overall balancing state, it should not do that if
   // the update was triggered by the parent LB that will handle triggering the overall state update.
+  @Deprecated
   @Test
   public void noDuplicateOverallBalancingStateUpdate() {
     FakeLoadBalancerProvider fakeLbProvider = new FakeLoadBalancerProvider();
@@ -469,6 +474,7 @@ public class WeightedTargetLoadBalancerTest {
       this.helper = helper;
     }
 
+    @Deprecated
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       helper.updateBalancingState(
