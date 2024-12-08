@@ -44,11 +44,9 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -75,14 +73,6 @@ public class DnsNameResolver extends NameResolver {
 
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
   static final String SERVICE_CONFIG_PREFIX = "grpc_config=";
-  private static final Set<String> SERVICE_CONFIG_CHOICE_KEYS =
-      Collections.unmodifiableSet(
-          new HashSet<>(
-              Arrays.asList(
-                  SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY,
-                  SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY,
-                  SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY,
-                  SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY)));
 
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
   private static final String SERVICE_CONFIG_NAME_PREFIX = "_grpc_config.";
@@ -500,10 +490,6 @@ public class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static Map<String, ?> maybeChooseServiceConfig(
       Map<String, ?> choice, Random random, String hostname) {
-    for (Map.Entry<String, ?> entry : choice.entrySet()) {
-      Verify.verify(SERVICE_CONFIG_CHOICE_KEYS.contains(entry.getKey()), "Bad key: %s", entry);
-    }
-
     List<String> clientLanguages = getClientLanguagesFromChoice(choice);
     if (clientLanguages != null && !clientLanguages.isEmpty()) {
       boolean javaPresent = false;
