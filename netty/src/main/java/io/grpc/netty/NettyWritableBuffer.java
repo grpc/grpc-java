@@ -16,13 +16,16 @@
 
 package io.grpc.netty;
 
+import io.grpc.ByteBufferBacked;
 import io.grpc.internal.WritableBuffer;
 import io.netty.buffer.ByteBuf;
+
+import java.nio.ByteBuffer;
 
 /**
  * The {@link WritableBuffer} used by the Netty transport.
  */
-class NettyWritableBuffer implements WritableBuffer {
+class NettyWritableBuffer implements WritableBuffer, ByteBufferBacked {
 
   private final ByteBuf bytebuf;
 
@@ -48,6 +51,26 @@ class NettyWritableBuffer implements WritableBuffer {
   @Override
   public int readableBytes() {
     return bytebuf.readableBytes();
+  }
+
+  @Override
+  public ByteBuffer getWritableBuffer(int size) {
+    if (bytebuf.writableBytes() >= size && size > 0) {
+      try {
+        return bytebuf.internalNioBuffer(bytebuf.writerIndex(), size);
+      } catch (UnsupportedOperationException uoe) {
+        // fall-through
+      }
+    }
+    return null;
+  }
+
+  @Override
+  public void bufferBytesWritten(int size) {
+    if (size < 0 || size > bytebuf.writableBytes()) {
+      throw new IllegalStateException();
+    }
+    bytebuf.writerIndex(bytebuf.writerIndex() + size);
   }
 
   @Override
