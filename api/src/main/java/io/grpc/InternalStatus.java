@@ -42,8 +42,8 @@ public final class InternalStatus {
    * of the stack trace.
    */
   @Internal
-  public static final StatusRuntimeException asRuntimeException(Status status,
-      @Nullable Metadata trailers, boolean fillInStackTrace) {
-    return new StatusRuntimeException(status, trailers, fillInStackTrace);
+  public static StatusRuntimeException asRuntimeException(Status status,
+      @Nullable Metadata trailers) {
+    return new InternalStatusRuntimeException(status, trailers);
   }
 }
