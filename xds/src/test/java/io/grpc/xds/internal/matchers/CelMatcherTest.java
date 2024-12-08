@@ -1,0 +1,160 @@
+/*
+ * Copyright 2024 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.xds.internal.matchers;
+
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
+
+import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.common.CelErrorCode;
+import dev.cel.common.CelValidationException;
+import dev.cel.common.types.MapType;
+import dev.cel.common.types.SimpleType;
+import dev.cel.compiler.CelCompiler;
+import dev.cel.compiler.CelCompilerFactory;
+import dev.cel.parser.CelStandardMacro;
+import dev.cel.runtime.CelEvaluationException;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.NoopServerCall;
+import io.grpc.ServerCall;
+import io.grpc.Status;
+import io.grpc.Status.Code;
+import io.grpc.StatusRuntimeException;
+import io.grpc.StringMarshaller;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+
+@RunWith(JUnit4.class)
+public class CelMatcherTest {
+  // Construct the compilation and runtime environments.
+  // These instances are immutable and thus trivially thread-safe and amenable to caching.
+  private static final CelCompiler CEL_COMPILER =
+      CelCompilerFactory.standardCelCompilerBuilder()
+          .addVar("request.path", SimpleType.STRING)
+          .addVar("request.host", SimpleType.STRING)
+          .addVar("request.method", SimpleType.STRING)
+          .addVar("request.headers", MapType.create(SimpleType.STRING, SimpleType.STRING))
+          // request.protocol is a legal input, but we don't set it in java.
+          // TODO(sergiitk): add other fields not supported by gRPC
+          .addVar("request.protocol", SimpleType.STRING)
+          .setResultType(SimpleType.BOOL)
+          .setStandardMacros(CelStandardMacro.STANDARD_MACROS)
+          .build();
+
+
+  private static final HttpMatchInput fakeInput = new HttpMatchInput() {
+    @Override
+    public Metadata metadata() {
+      return new Metadata();
+    }
+
+    @Override public ServerCall<?, ?> serverCall() {
+      final MethodDescriptor<String, String> method =
+          MethodDescriptor.<String, String>newBuilder()
+              .setType(MethodType.UNKNOWN)
+              .setFullMethodName("service/method")
+              .setRequestMarshaller(new StringMarshaller())
+              .setResponseMarshaller(new StringMarshaller())
+              .build();
+      return new NoopServerCall<String, String>() {
+        @Override
+        public MethodDescriptor<String, String> getMethodDescriptor() {
+          return method;
+        }
+      };
+    }
+  };
+
+  @Test
+  public void construct() throws Exception {
+    CelAbstractSyntaxTree ast = celAst("1 == 1");
+    CelMatcher matcher = CelMatcher.create(ast);
+    assertThat(matcher.description()).isEqualTo("");
+
+    String description = "Optional description";
+    matcher = CelMatcher.create(ast, description);
+    assertThat(matcher.description()).isEqualTo(description);
+  }
+
+  @Test
+  public void progTrue() throws Exception {
+    assertThat(newMatcher("request.method == 'POST'").test(fakeInput)).isTrue();
+  }
+
+  @Test
+  public void unknownRequestProperty() throws Exception {
+    CelMatcher matcher = newMatcher("request.protocol == 'Whatever'");
+
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
+
+    // Verify CelErrorCode is ATTRIBUTE_NOT_FOUND.
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ATTRIBUTE_NOT_FOUND);
+  }
+
+  @Test
+  public void unknownHeader() throws Exception {
+    CelMatcher matcher = newMatcher("request.headers['foo'] == 'bar'");
+
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
+
+    // Verify CelErrorCode is ATTRIBUTE_NOT_FOUND.
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ATTRIBUTE_NOT_FOUND);
+  }
+
+  @Test
+  public void macros_comprehensionsDisabled() throws Exception {
+    CelMatcher matcherWithComprehensions = newMatcher(
+        "size(['foo', 'bar'].map(x, [request.headers[x], request.headers[x]])) == 1");
+
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcherWithComprehensions.test(fakeInput)).getStatus();
+
+    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
+
+    // Verify CelErrorCode is ITERATION_BUDGET_EXCEEDED.
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ITERATION_BUDGET_EXCEEDED);
+  }
+
+  @Test
+  public void macros_hasEnabled() throws Exception {
+    boolean result = newMatcher("has(request.headers.foo)").test(fakeInput);
+    assertThat(result).isFalse();
+  }
+
+  private CelMatcher newMatcher(String expr) throws CelValidationException, CelEvaluationException {
+    return CelMatcher.create(celAst(expr));
+  }
+
+  private CelAbstractSyntaxTree celAst(String expr) throws CelValidationException {
+    return CEL_COMPILER.compile(expr).getAst();
+  }
+}

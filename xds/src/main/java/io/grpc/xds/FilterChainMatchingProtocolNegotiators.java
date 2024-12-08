@@ -108,6 +108,7 @@ final class FilterChainMatchingProtocolNegotiators {
         drainGraceTime = drainGraceNanosObj;
         drainGraceTimeUnit = TimeUnit.NANOSECONDS;
       }
+      // TODO(sergiitk): [design] drains connections on LDS update.
       FilterChainSelectorManager.Closer closer = new FilterChainSelectorManager.Closer(
           new GracefullyShutdownChannelRunnable(ctx.channel(), drainGraceTime, drainGraceTimeUnit));
       FilterChainSelector selector = filterChainSelectorManager.register(closer);

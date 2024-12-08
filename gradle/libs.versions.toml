@@ -27,6 +27,8 @@ commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
+dev-cel-compiler = "dev.cel:compiler:0.6.0"
+dev-cel-runtime = "dev.cel:runtime:0.6.0"
 # error-prone 2.31.0+ blocked on https://github.com/grpc/grpc-java/issues/10152
 # It breaks Bazel (ArrayIndexOutOfBoundsException in turbine) and Dexing ("D8:
 # java.lang.NullPointerException"). We can trivially upgrade the Bazel CI to
