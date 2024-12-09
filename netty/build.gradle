@@ -18,8 +18,7 @@ tasks.named("jar").configure {
 dependencies {
     api project(':grpc-api'),
             libraries.netty.codec.http2
-    implementation project(':grpc-util'),
-            project(':grpc-core'),
+            implementation project(':grpc-core'),
             libs.netty.handler.proxy,
             libraries.guava,
             libraries.errorprone.annotations,
