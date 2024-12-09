@@ -59,10 +59,11 @@ import javax.servlet.http.HttpServletResponse;
  * process it, and transforms the gRPC response into {@link HttpServletResponse}. An adapter can be
  * instantiated by {@link ServletServerBuilder#buildServletAdapter()}.
  *
- * <p>In a servlet, calling {@link #doPost(HttpServletRequest, HttpServletResponse)} inside {@link
- * javax.servlet.http.HttpServlet#doPost(HttpServletRequest, HttpServletResponse)} makes the servlet
- * backed by the gRPC server associated with the adapter. The servlet must support Asynchronous
- * Processing and must be deployed to a container that supports servlet 4.0 and enables HTTP/2.
+ * <p>In a servlet, calling {@link #doPost(String, HttpServletRequest, HttpServletResponse)} inside 
+ * {@link javax.servlet.http.HttpServlet#doPost(HttpServletRequest, HttpServletResponse)} makes
+ * the servlet backed by the gRPC server associated with the adapter. The servlet must support 
+ * Asynchronous Processing and must be deployed to a container that supports servlet 4.0
+ * and enables HTTP/2.
  *
  * <p>The API is experimental. The authors would like to know more about the real usecases. Users
  * are welcome to provide feedback by commenting on
