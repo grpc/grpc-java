@@ -111,7 +111,8 @@ public final class ServletAdapter {
    * <p>Do not modify {@code req} and {@code resp} before or after calling this method. However,
    * calling {@code resp.setBufferSize()} before invocation is allowed.
    */
-  public void doPost(String method, HttpServletRequest req, HttpServletResponse resp) throws IOException {
+  public void doPost(String method, HttpServletRequest req, HttpServletResponse resp)
+      throws IOException {
     checkArgument(req.isAsyncSupported(), "servlet does not support asynchronous operation");
     checkArgument(ServletAdapter.isGrpc(req), "the request is not a gRPC request");
 

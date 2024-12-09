@@ -63,7 +63,8 @@ public class GrpcServlet extends HttpServlet {
     Boolean removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
     String method = req.getRequestURI();
     if (removeContextPath) {
-      method = method.substring(req.getContextPath().length()); // remove Context Path from application server
+      // remove context path used in application server
+      method = method.substring(req.getContextPath().length());
     }
     return method.substring(1); // remove the leading "/"
   }
