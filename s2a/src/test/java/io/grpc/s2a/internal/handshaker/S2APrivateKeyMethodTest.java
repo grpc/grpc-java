@@ -30,8 +30,7 @@ import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.netty.handler.ssl.OpenSslPrivateKeyMethod;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.io.InputStream;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.cert.CertificateFactory;
@@ -63,8 +62,11 @@ public final class S2APrivateKeyMethodTest {
   private static boolean verifySignature(
       byte[] dataToSign, byte[] signature, String signatureAlgorithm) throws Exception {
     Signature sig = Signature.getInstance(signatureAlgorithm);
-    sig.initVerify(extractPublicKeyFromPem(new String(
-        Files.readAllBytes(FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8)));
+    InputStream leafCert =
+        S2APrivateKeyMethodTest.class.getClassLoader().getResourceAsStream("leaf_cert_ec.pem");
+    sig.initVerify(extractPublicKeyFromPem(FakeWriter.convertInputStreamToString(
+        leafCert)));
+    leafCert.close();
     sig.update(dataToSign);
     return sig.verify(signature);
   }

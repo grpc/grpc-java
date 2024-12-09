@@ -28,8 +28,7 @@ import io.grpc.internal.SharedResourcePool;
 import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.io.InputStream;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -77,18 +76,29 @@ public class S2AStubTest {
 
     SessionResp resp = stub.send(req);
 
+    String leafCertString = "";
+    String cert2String = "";
+    String cert1String = "";
+    ClassLoader classLoader = S2AStubTest.class.getClassLoader();
+    try (
+        InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+        InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+        InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ) {
+      leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+      cert2String = FakeWriter.convertInputStreamToString(cert2);
+      cert1String = FakeWriter.convertInputStreamToString(cert1);
+    }
+
     SessionResp expected =
         SessionResp.newBuilder()
             .setGetTlsConfigurationResp(
                 GetTlsConfigurationResp.newBuilder()
                     .setClientTlsConfiguration(
                         GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                            .addCertificateChain(new String(Files.readAllBytes(
-                              FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
-                            .addCertificateChain(new String(Files.readAllBytes(
-                              FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
-                            .addCertificateChain(new String(Files.readAllBytes(
-                              FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
+                            .addCertificateChain(leafCertString)
+                            .addCertificateChain(cert1String)
+                            .addCertificateChain(cert2String)
                             .setMinTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .setMaxTlsVersion(TLSVersion.TLS_VERSION_1_3)
                             .addCiphersuites(

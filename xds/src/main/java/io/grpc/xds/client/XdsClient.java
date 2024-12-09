@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
@@ -154,44 +155,46 @@ public abstract class XdsClient {
     private final String version;
     private final ResourceMetadataStatus status;
     private final long updateTimeNanos;
+    private final boolean cached;
     @Nullable private final Any rawResource;
     @Nullable private final UpdateFailureState errorState;
 
     private ResourceMetadata(
-        ResourceMetadataStatus status, String version, long updateTimeNanos,
+        ResourceMetadataStatus status, String version, long updateTimeNanos, boolean cached,
         @Nullable Any rawResource, @Nullable UpdateFailureState errorState) {
       this.status = checkNotNull(status, "status");
       this.version = checkNotNull(version, "version");
       this.updateTimeNanos = updateTimeNanos;
+      this.cached = cached;
       this.rawResource = rawResource;
       this.errorState = errorState;
     }
 
-    static ResourceMetadata newResourceMetadataUnknown() {
-      return new ResourceMetadata(ResourceMetadataStatus.UNKNOWN, "", 0, null, null);
+    public static ResourceMetadata newResourceMetadataUnknown() {
+      return new ResourceMetadata(ResourceMetadataStatus.UNKNOWN, "", 0, false,null, null);
     }
 
-    static ResourceMetadata newResourceMetadataRequested() {
-      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, null, null);
+    public static ResourceMetadata newResourceMetadataRequested() {
+      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, false, null, null);
     }
 
-    static ResourceMetadata newResourceMetadataDoesNotExist() {
-      return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, null, null);
+    public static ResourceMetadata newResourceMetadataDoesNotExist() {
+      return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, false, null, null);
     }
 
     public static ResourceMetadata newResourceMetadataAcked(
         Any rawResource, String version, long updateTimeNanos) {
       checkNotNull(rawResource, "rawResource");
       return new ResourceMetadata(
-          ResourceMetadataStatus.ACKED, version, updateTimeNanos, rawResource, null);
+          ResourceMetadataStatus.ACKED, version, updateTimeNanos, true, rawResource, null);
     }
 
-    static ResourceMetadata newResourceMetadataNacked(
+    public static ResourceMetadata newResourceMetadataNacked(
         ResourceMetadata metadata, String failedVersion, long failedUpdateTime,
-        String failedDetails) {
+        String failedDetails, boolean cached) {
       checkNotNull(metadata, "metadata");
       return new ResourceMetadata(ResourceMetadataStatus.NACKED,
-          metadata.getVersion(), metadata.getUpdateTimeNanos(), metadata.getRawResource(),
+          metadata.getVersion(), metadata.getUpdateTimeNanos(), cached, metadata.getRawResource(),
           new UpdateFailureState(failedVersion, failedUpdateTime, failedDetails));
     }
 
@@ -208,6 +211,11 @@ public abstract class XdsClient {
     /** The timestamp when the resource was last successfully updated. */
     public long getUpdateTimeNanos() {
       return updateTimeNanos;
+    }
+
+    /** Returns whether the resource was cached. */
+    public boolean isCached() {
+      return cached;
     }
 
     /** The last successfully updated xDS resource as it was returned by the server. */
@@ -375,6 +383,23 @@ public abstract class XdsClient {
    * responsible for sending load reports to the control plane servers.
    */
   public Map<Bootstrapper.ServerInfo, LoadReportClient> getServerLrsClientMap() {
+    throw new UnsupportedOperationException();
+  }
+
+  /** Callback used to report a gauge metric value for server connections. */
+  public interface ServerConnectionCallback {
+    void reportServerConnectionGauge(boolean isConnected, String xdsServer);
+  }
+
+  /**
+   * Reports whether xDS client has a "working" ADS stream to xDS server. The definition of a
+   * working stream is defined in gRFC A78.
+   *
+   * @see <a
+   *     href="https://github.com/grpc/proposal/blob/master/A78-grpc-metrics-wrr-pf-xds.md#xdsclient">
+   *     A78-grpc-metrics-wrr-pf-xds.md</a>
+   */
+  public Future<Void> reportServerConnections(ServerConnectionCallback callback) {
     throw new UnsupportedOperationException();
   }
 
