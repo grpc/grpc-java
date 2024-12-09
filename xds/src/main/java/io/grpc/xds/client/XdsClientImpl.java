@@ -672,18 +672,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   }
 
 
-  @Override
-  public Future<Void> reportServerConnections(ServerConnectionCallback callback) {
-    SettableFuture<Void> future = SettableFuture.create();
-    syncContext.execute(() -> {
-      serverCpClientMap.forEach((serverInfo, controlPlaneClient) ->
-          callback.reportServerConnectionGauge(
-              controlPlaneClient.hasWorkingAdsStream(), serverInfo.target()));
-      future.set(null);
-    });
-    return future;
-  }
-
   /** Tracks a single subscribed resource. */
   private final class ResourceSubscriber<T extends ResourceUpdate> {
     @Nullable
