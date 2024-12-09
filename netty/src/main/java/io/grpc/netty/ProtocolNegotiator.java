@@ -69,11 +69,12 @@ interface ProtocolNegotiator {
   /**
    * Verify the authority against peer if applicable depending on the transport credential type.
    * @throws UnsupportedOperationException if the verification should happen but the required
-   * type of TrustManager could not be found.
+   *     type of TrustManager could not be found.
    * @throws SSLPeerUnverifiedException if peer verification failed
    * @throws CertificateException if certificates have a problem
    */
-  default boolean mayBeVerifyAuthority(String authority) throws SSLPeerUnverifiedException, CertificateException {
+  default boolean mayBeVerifyAuthority(String authority)
+      throws SSLPeerUnverifiedException, CertificateException {
     return true;
   }
 }

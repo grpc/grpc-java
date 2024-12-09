@@ -891,8 +891,8 @@ public class NettyClientTransportTest {
     InsightBuilder insightBuilder = new InsightBuilder();
     stream.appendTimeoutInsight(insightBuilder);
     assertThat(insightBuilder.toString()).contains(
-        "Status{code=INTERNAL, description=Peer hostname verification failed for authority, "
-            + "cause=null}");
+        "Status{code=INTERNAL, description=Peer hostname verification failed for authority"
+            + " 'foo.test.google.in'., cause=null}");
   }
 
   @Test

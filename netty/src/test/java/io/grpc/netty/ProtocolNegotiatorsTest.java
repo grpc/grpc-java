@@ -26,10 +26,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -66,6 +68,7 @@ import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
+import io.grpc.netty.ProtocolNegotiators.SslEngineWrapper;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
@@ -118,6 +121,7 @@ import java.net.SocketAddress;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayDeque;
@@ -140,6 +144,7 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -1030,6 +1035,44 @@ public class ProtocolNegotiatorsTest {
     return new ClientTlsProtocolNegotiator(GrpcSslContexts.forClient().trustManager(
         TlsTesting.loadCert("ca.pem")).build(),
         null, Optional.empty(), null);
+  }
+
+  @Test
+  public void allowedAuthoritiesForTransport_LruCache() throws SSLException, CertificateException {
+    X509ExtendedTrustManager mockX509ExtendedTrustManager = mock(X509ExtendedTrustManager.class);
+    ClientTlsProtocolNegotiator negotiator = new ClientTlsProtocolNegotiator(
+        GrpcSslContexts.forClient().trustManager(
+            TlsTesting.loadCert("ca.pem")).build(),
+        null, Optional.empty(), mockX509ExtendedTrustManager);
+    SSLEngine mockSslEngine = mock(SSLEngine.class);
+    negotiator.setSslEngine(mockSslEngine);
+    SSLSession mockSslSession = mock(SSLSession.class);
+    when(mockSslEngine.getSession()).thenReturn(mockSslSession);
+    when(mockSslSession.getPeerCertificates()).thenReturn(new Certificate[0]);
+
+    // Fill the cache
+    for (int i = 0; i < 100; i++) {
+      boolean unused = negotiator.mayBeVerifyAuthority("authority" + i);
+    }
+    // Should use value from the cache.
+    boolean unused = negotiator.mayBeVerifyAuthority("authority0");
+    // Should evict authority0.
+    unused = negotiator.mayBeVerifyAuthority("authority100");
+    // Should call TrustManager as the cached value has been evicted for this authority value.
+    unused = negotiator.mayBeVerifyAuthority("authority0");
+
+    ArgumentCaptor<SslEngineWrapper> sslEngineWrapperArgumentCaptor =
+        ArgumentCaptor.forClass(SslEngineWrapper.class);
+    verify(mockX509ExtendedTrustManager, times(102)).checkServerTrusted(any(), eq("RSA"),
+        sslEngineWrapperArgumentCaptor.capture());
+    List<SslEngineWrapper> sslEngineWrappersCaptured =
+        sslEngineWrapperArgumentCaptor.getAllValues();
+    assertThat(sslEngineWrappersCaptured).hasSize(102);
+    for (int i = 0; i < 100; i++) {
+      assertThat(sslEngineWrappersCaptured.get(i).getPeerHost()).isEqualTo("authority" + i);
+    }
+    assertThat(sslEngineWrappersCaptured.get(100).getPeerHost()).isEqualTo("authority100");
+    assertThat(sslEngineWrappersCaptured.get(101).getPeerHost()).isEqualTo("authority0");
   }
 
   @Test
