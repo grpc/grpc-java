@@ -159,7 +159,7 @@ public final class ServletAdapter {
     asyncCtx.addListener(new GrpcAsyncListener(stream, logId));
   }
 
-  private static String getMethod(HttpServletRequest req) {
+  private String getMethod(HttpServletRequest req) {
     Boolean removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
     String method = req.getRequestURI();
     if (removeContextPath) {
