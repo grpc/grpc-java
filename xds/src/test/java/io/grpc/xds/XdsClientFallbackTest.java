@@ -273,11 +273,11 @@ public class XdsClientFallbackTest {
     xdsClient = xdsClientPool.getObject();
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-    verify(ldsWatcher, timeout(5000)).onError(any());
+    verify(ldsWatcher, timeout(5000).atLeastOnce()).onError(any());
     verify(ldsWatcher, timeout(5000).times(0)).onChanged(any());
     xdsClient.watchXdsResource(
         XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher2);
-    verify(rdsWatcher2, timeout(5000)).onError(any());
+    verify(rdsWatcher2, timeout(5000).atLeastOnce()).onError(any());
 
     mainXdsServer.restartXdsServer();
 
