@@ -18,7 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.util.CertificateUtils.getX509ExtendedTrustManager;
+import static io.grpc.internal.CertificateUtils.getX509ExtendedTrustManager;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -42,6 +42,7 @@ import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
+import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -85,6 +86,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
@@ -640,6 +642,35 @@ final class ProtocolNegotiators {
     boolean hasX509ExtendedTrustManager() {
       return x509ExtendedTrustManager != null;
     }
+
+    public boolean mayBeVerifyAuthority(@Nonnull String authority) {
+        ClientTlsProtocolNegotiator clientTlsProtocolNegotiator =
+            (ClientTlsProtocolNegotiator) negotiator;
+        if (!clientTlsProtocolNegotiator.canVerifyAuthorityOverride()) {
+          return new FailingClientStream(Status.INTERNAL.withDescription(
+              "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
+              tracers);
+        }
+        boolean peerVerified;
+        if (authoritiesAllowedForPeer.containsKey(callOptions.getAuthority())) {
+          peerVerified = authoritiesAllowedForPeer.get(callOptions.getAuthority());
+        } else {
+          try {
+            clientTlsProtocolNegotiator.verifyAuthorityAllowedForPeerCert(
+                callOptions.getAuthority());
+            peerVerified = true;
+          } catch (SSLPeerUnverifiedException | CertificateException e) {
+            peerVerified = false;
+            logger.log(Level.FINE, "Peer hostname verification failed for authority '{}'.",
+                callOptions.getAuthority());
+          }
+          authoritiesAllowedForPeer.put(callOptions.getAuthority(), peerVerified);
+        }
+        if (!peerVerified) {
+          return new FailingClientStream(Status.INTERNAL.withDescription(
+              "Peer hostname verification failed for authority"), tracers);
+        }
+      }
   }
 
   static final class ClientTlsHandler extends ProtocolNegotiationHandler {

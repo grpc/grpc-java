@@ -203,32 +203,25 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (channel == null) {
       return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
     }
-    if (negotiator instanceof ClientTlsProtocolNegotiator && callOptions.getAuthority() != null) {
-      ClientTlsProtocolNegotiator clientTlsProtocolNegotiator =
-          (ClientTlsProtocolNegotiator) negotiator;
-      if (!clientTlsProtocolNegotiator.canVerifyAuthorityOverride()) {
-        return new FailingClientStream(Status.INTERNAL.withDescription(
-            "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
-            tracers);
-      }
-      boolean peerVerified;
-      if (authoritiesAllowedForPeer.containsKey(callOptions.getAuthority())) {
-        peerVerified = authoritiesAllowedForPeer.get(callOptions.getAuthority());
-      } else {
-        try {
-          clientTlsProtocolNegotiator.verifyAuthorityAllowedForPeerCert(callOptions.getAuthority());
-          peerVerified = true;
-        } catch (SSLPeerUnverifiedException | CertificateException e) {
-          peerVerified = false;
-          logger.log(Level.FINE, "Peer hostname verification failed for authority '{}'.",
-              callOptions.getAuthority());
-        }
-        authoritiesAllowedForPeer.put(callOptions.getAuthority(), peerVerified);
-      }
-      if (!peerVerified) {
+    try {
+      if (callOptions.getAuthority() != null && !negotiator.mayBeVerifyAuthority(
+          callOptions.getAuthority())) {
+        logger.log(Level.FINE, "Peer hostname verification failed for authority '{}'.",
+            callOptions.getAuthority());
         return new FailingClientStream(Status.INTERNAL.withDescription(
             "Peer hostname verification failed for authority"), tracers);
       }
+    } catch (UnsupportedOperationException ex) {
+      logger.log(Level.FINE, "Can't allow authority override in rpc when X509ExtendedTrustManager is not available.",
+          callOptions.getAuthority());
+      return new FailingClientStream(Status.INTERNAL.withDescription(
+          "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
+          tracers);
+    } catch (SSLPeerUnverifiedException | CertificateException ex) {
+      logger.log(Level.FINE, "Peer hostname verification failed for authority '{}'.",
+          callOptions.getAuthority());
+      return new FailingClientStream(Status.INTERNAL.withDescription(
+          "Peer hostname verification failed for authority"), tracers);
     }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);

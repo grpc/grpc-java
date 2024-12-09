@@ -30,7 +30,6 @@ def protocVersion = '3.25.5'
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
-    implementation "io.grpc:grpc-api:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 }
@@ -75,8 +74,6 @@ application {
     applicationDistribution.into('bin') {
         from(helloWorldTlsServer)
         from(helloWorldTlsClient)
-        filePermissions {
-            unix(0755)
-        }
+        fileMode = 0755
     }
 }
