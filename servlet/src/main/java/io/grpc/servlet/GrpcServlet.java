@@ -36,6 +36,7 @@ import javax.servlet.http.HttpServletResponse;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public class GrpcServlet extends HttpServlet {
   private static final long serialVersionUID = 1L;
+  public static final String REMOVE_CONTEXT_PATH = "REMOVE_CONTEXT_PATH";
 
   private final ServletAdapter servletAdapter;
 
@@ -58,6 +59,15 @@ public class GrpcServlet extends HttpServlet {
     return serverBuilder.buildServletAdapter();
   }
 
+  private String getMethod(HttpServletRequest req) {
+    Boolean removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
+    String method = req.getRequestURI();
+    if (removeContextPath) {
+      method = method.substring(req.getContextPath().length()); // remove Context Path from application server
+    }
+    return method.substring(1); // remove the leading "/"
+  }
+
   @Override
   protected final void doGet(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
@@ -67,7 +77,7 @@ public class GrpcServlet extends HttpServlet {
   @Override
   protected final void doPost(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
-    servletAdapter.doPost(request, response);
+    servletAdapter.doPost(getMethod(request), request, response);
   }
 
   @Override

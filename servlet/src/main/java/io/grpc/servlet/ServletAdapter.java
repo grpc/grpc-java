@@ -70,7 +70,6 @@ import javax.servlet.http.HttpServletResponse;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public final class ServletAdapter {
-  public static final String REMOVE_CONTEXT_PATH = "REMOVE_CONTEXT_PATH";
 
   static final Logger logger = Logger.getLogger(ServletAdapter.class.getName());
 
@@ -111,7 +110,7 @@ public final class ServletAdapter {
    * <p>Do not modify {@code req} and {@code resp} before or after calling this method. However,
    * calling {@code resp.setBufferSize()} before invocation is allowed.
    */
-  public void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+  public void doPost(String method, HttpServletRequest req, HttpServletResponse resp) throws IOException {
     checkArgument(req.isAsyncSupported(), "servlet does not support asynchronous operation");
     checkArgument(ServletAdapter.isGrpc(req), "the request is not a gRPC request");
 
@@ -120,7 +119,6 @@ public final class ServletAdapter {
 
     AsyncContext asyncCtx = req.startAsync(req, resp);
 
-    String method = getMethod(req);
     Metadata headers = getHeaders(req);
 
     if (logger.isLoggable(FINEST)) {
@@ -157,15 +155,6 @@ public final class ServletAdapter {
     asyncCtx.getRequest().getInputStream()
         .setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
     asyncCtx.addListener(new GrpcAsyncListener(stream, logId));
-  }
-
-  private String getMethod(HttpServletRequest req) {
-    Boolean removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
-    String method = req.getRequestURI();
-    if (removeContextPath) {
-      method = method.substring(req.getContextPath().length()); // remove Context Path from application server
-    }
-    return method.substring(1); // remove the leading "/"
   }
 
   // This method must use Enumeration and its members, since that is the only way to read headers
