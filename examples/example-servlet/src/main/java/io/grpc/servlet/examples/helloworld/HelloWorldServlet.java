@@ -64,7 +64,7 @@ public class HelloWorldServlet extends HttpServlet {
   protected void doPost(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
     if (ServletAdapter.isGrpc(request)) {
-      servletAdapter.doPost(request, response);
+      servletAdapter.doPost("helloworld.Greeter/SayHello", request, response);
     } else {
       response.setContentType("text/html");
       response.getWriter().println("<p>Hello non-gRPC client!</p>");
