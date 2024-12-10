@@ -41,6 +41,11 @@ public final class SingleTokenFetcher implements TokenFetcher {
     accessToken = token;
   }
 
+  @VisibleForTesting
+  public static String getAccessToken() {
+    return accessToken;
+  }
+
   private SingleTokenFetcher(String token) {
     this.token = token;
   }

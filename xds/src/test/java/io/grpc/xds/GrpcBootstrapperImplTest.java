@@ -32,6 +32,7 @@ import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.BootstrapperImpl;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsInitializationException;
@@ -61,10 +62,12 @@ public class GrpcBootstrapperImplTest {
   private String originalBootstrapPathFromSysProp;
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
+  private boolean originalExperimentalXdsFallbackFlag;
 
   @Before
   public void setUp() {
     saveEnvironment();
+    originalExperimentalXdsFallbackFlag = CommonBootstrapperTestUtils.setEnableXdsFallback(true);
     bootstrapper.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
   }
 
@@ -81,6 +84,7 @@ public class GrpcBootstrapperImplTest {
     bootstrapper.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
     bootstrapper.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     bootstrapper.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
+    CommonBootstrapperTestUtils.setEnableXdsFallback(originalExperimentalXdsFallbackFlag);
   }
 
   @Test
