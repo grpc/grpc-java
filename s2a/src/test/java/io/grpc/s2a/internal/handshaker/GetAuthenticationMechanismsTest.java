@@ -20,6 +20,7 @@ import com.google.common.truth.Expect;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.grpc.s2a.internal.handshaker.tokenmanager.SingleTokenFetcher;
 import java.util.Optional;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -31,11 +32,18 @@ import org.junit.runners.JUnit4;
 public final class GetAuthenticationMechanismsTest {
   @Rule public final Expect expect = Expect.create();
   private static final String TOKEN = "access_token";
+  private static String originalAccessToken;
 
   @BeforeClass
   public static void setUpClass() {
+    originalAccessToken = SingleTokenFetcher.getAccessToken();
     // Set the token that the client will use to authenticate to the S2A.
     SingleTokenFetcher.setAccessToken(TOKEN);
+  }
+
+  @AfterClass
+  public static void tearDownClass() {
+    SingleTokenFetcher.setAccessToken(originalAccessToken);
   }
 
   @Test

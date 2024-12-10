@@ -30,10 +30,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
 import org.junit.Rule;
 import org.junit.Test;

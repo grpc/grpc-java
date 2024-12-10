@@ -20,17 +20,17 @@ import static io.grpc.s2a.internal.handshaker.TLSVersion.TLS_VERSION_1_2;
 import static io.grpc.s2a.internal.handshaker.TLSVersion.TLS_VERSION_1_3;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.io.CharStreams;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.ByteString;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.CertificateUtils;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.Signature;
@@ -54,14 +54,7 @@ final class FakeWriter implements StreamObserver<SessionReq> {
     FAILURE
   }
 
-  public static final File leafCertFile =
-      new File("src/test/resources/leaf_cert_ec.pem");
-  public static final File cert2File =
-      new File("src/test/resources/int_cert2_ec.pem");
-  public static final File cert1File =
-      new File("src/test/resources/int_cert1_ec.pem");
-  public static final File keyFile = 
-      new File("src/test/resources/leaf_key_ec.pem");
+  private static final ClassLoader classLoader = FakeWriter.class.getClassLoader();
   private static final ImmutableMap<SignatureAlgorithm, String>
       ALGORITHM_TO_SIGNATURE_INSTANCE_IDENTIFIER =
           ImmutableMap.of(
@@ -78,6 +71,10 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   private VerificationResult verificationResult = VerificationResult.UNSPECIFIED;
   private String failureReason;
   private PrivateKey privateKey;
+
+  public static String convertInputStreamToString(InputStream is) throws IOException {
+    return CharStreams.toString(new InputStreamReader(is, StandardCharsets.UTF_8));
+  }
 
   @CanIgnoreReturnValue
   FakeWriter setReader(StreamObserver<SessionResp> reader) {
@@ -106,11 +103,10 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   @CanIgnoreReturnValue
   FakeWriter initializePrivateKey() throws InvalidKeySpecException, NoSuchAlgorithmException,
                     IOException, FileNotFoundException, UnsupportedEncodingException {
-    FileInputStream keyInputStream = new FileInputStream(keyFile);
-    try {
+    try (
+        InputStream keyInputStream = classLoader.getResourceAsStream("leaf_key_ec.pem");
+    ) {
       privateKey = CertificateUtils.getPrivateKey(keyInputStream);
-    } finally {
-      keyInputStream.close();
     }
     return this;
   }
@@ -130,32 +126,39 @@ final class FakeWriter implements StreamObserver<SessionReq> {
   }
 
   void sendGetTlsConfigResp() {
-    try {
-      reader.onNext(
-          SessionResp.newBuilder()
-              .setGetTlsConfigurationResp(
-                  GetTlsConfigurationResp.newBuilder()
-                      .setClientTlsConfiguration(
-                          GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                              .addCertificateChain(new String(Files.readAllBytes(
-                                FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
-                              .addCertificateChain(new String(Files.readAllBytes(
-                                FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
-                              .addCertificateChain(new String(Files.readAllBytes(
-                                FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
-                              .setMinTlsVersion(TLS_VERSION_1_3)
-                              .setMaxTlsVersion(TLS_VERSION_1_3)
-                              .addCiphersuites(
-                                  Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
-                              .addCiphersuites(
-                                  Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
-                              .addCiphersuites(
-                                  Ciphersuite
-                                  .CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)))
-              .build());
+    String leafCertString = "";
+    String cert2String = "";
+    String cert1String = "";
+    try (
+        InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+        InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+        InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ) {
+      leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+      cert2String = FakeWriter.convertInputStreamToString(cert2);
+      cert1String = FakeWriter.convertInputStreamToString(cert1);
     } catch (IOException e) {
       reader.onError(e);
     }
+    reader.onNext(
+        SessionResp.newBuilder()
+            .setGetTlsConfigurationResp(
+                GetTlsConfigurationResp.newBuilder()
+                    .setClientTlsConfiguration(
+                        GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
+                            .addCertificateChain(leafCertString)
+                            .addCertificateChain(cert1String)
+                            .addCertificateChain(cert2String)
+                            .setMinTlsVersion(TLS_VERSION_1_3)
+                            .setMaxTlsVersion(TLS_VERSION_1_3)
+                            .addCiphersuites(
+                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
+                            .addCiphersuites(
+                                Ciphersuite.CIPHERSUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384)
+                            .addCiphersuites(
+                                Ciphersuite
+                                .CIPHERSUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)))
+            .build());
   }
 
   boolean isFakeWriterClosed() {
@@ -191,25 +194,32 @@ final class FakeWriter implements StreamObserver<SessionReq> {
         reader.onCompleted();
         break;
       case BAD_TLS_VERSION_RESPONSE:
-        try {
-          reader.onNext(
-              SessionResp.newBuilder()
-                  .setGetTlsConfigurationResp(
-                      GetTlsConfigurationResp.newBuilder()
-                          .setClientTlsConfiguration(
-                              GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                                  .addCertificateChain(new String(Files.readAllBytes(
-                                    FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
-                                  .addCertificateChain(new String(Files.readAllBytes(
-                                    FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
-                                  .addCertificateChain(new String(Files.readAllBytes(
-                                    FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
-                                  .setMinTlsVersion(TLS_VERSION_1_3)
-                                  .setMaxTlsVersion(TLS_VERSION_1_2)))
-                  .build());
+        String leafCertString = "";
+        String cert2String = "";
+        String cert1String = "";
+        try (
+            InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+            InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+            InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+        ) {
+          leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+          cert2String = FakeWriter.convertInputStreamToString(cert2);
+          cert1String = FakeWriter.convertInputStreamToString(cert1);
         } catch (IOException e) {
           reader.onError(e);
         }
+        reader.onNext(
+            SessionResp.newBuilder()
+                .setGetTlsConfigurationResp(
+                    GetTlsConfigurationResp.newBuilder()
+                        .setClientTlsConfiguration(
+                            GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
+                                .addCertificateChain(leafCertString)
+                                .addCertificateChain(cert1String)
+                                .addCertificateChain(cert2String)
+                                .setMinTlsVersion(TLS_VERSION_1_3)
+                                .setMaxTlsVersion(TLS_VERSION_1_2)))
+                .build());
         break;
       default:
         try {
@@ -249,17 +259,28 @@ final class FakeWriter implements StreamObserver<SessionReq> {
                   .setDetails("No TLS configuration for the server side."))
           .build();
     }
+    String leafCertString = "";
+    String cert2String = "";
+    String cert1String = "";
+    try (
+        InputStream leafCert = classLoader.getResourceAsStream("leaf_cert_ec.pem");
+        InputStream cert2 = classLoader.getResourceAsStream("int_cert2_ec.pem");
+        InputStream cert1 = classLoader.getResourceAsStream("int_cert1_ec.pem");
+    ) {
+      leafCertString = FakeWriter.convertInputStreamToString(leafCert);
+      cert2String = FakeWriter.convertInputStreamToString(cert2);
+      cert1String = FakeWriter.convertInputStreamToString(cert1);
+    } catch (IOException e) {
+      reader.onError(e);
+    }
     return SessionResp.newBuilder()
         .setGetTlsConfigurationResp(
             GetTlsConfigurationResp.newBuilder()
                 .setClientTlsConfiguration(
                     GetTlsConfigurationResp.ClientTlsConfiguration.newBuilder()
-                        .addCertificateChain(new String(Files.readAllBytes(
-                          FakeWriter.leafCertFile.toPath()), StandardCharsets.UTF_8))
-                        .addCertificateChain(new String(Files.readAllBytes(
-                          FakeWriter.cert1File.toPath()), StandardCharsets.UTF_8))
-                        .addCertificateChain(new String(Files.readAllBytes(
-                          FakeWriter.cert2File.toPath()), StandardCharsets.UTF_8))
+                        .addCertificateChain(leafCertString)
+                        .addCertificateChain(cert1String)
+                        .addCertificateChain(cert2String)
                         .setMinTlsVersion(TLS_VERSION_1_3)
                         .setMaxTlsVersion(TLS_VERSION_1_3)
                         .addCiphersuites(

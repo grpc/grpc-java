@@ -41,6 +41,9 @@ import java.util.Map;
 @Internal
 public abstract class BootstrapperImpl extends Bootstrapper {
 
+  public static final String GRPC_EXPERIMENTAL_XDS_FALLBACK =
+      "GRPC_EXPERIMENTAL_XDS_FALLBACK";
+
   // Client features.
   @VisibleForTesting
   public static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
@@ -51,6 +54,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   // Server features.
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
   private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
+
+  @VisibleForTesting
+  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, false);
 
   protected final XdsLogger logger;
 
@@ -64,6 +70,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException;
+
 
   /**
    * Reads and parses bootstrap config. The config is expected to be in JSON format.
@@ -103,6 +110,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
     List<ServerInfo> servers = parseServerInfos(rawServerConfigs, logger);
+    if (servers.size() > 1 && !enableXdsFallback) {
+      servers = ImmutableList.of(servers.get(0));
+    }
     builder.servers(servers);
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -209,6 +219,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
         if (rawAuthorityServers == null || rawAuthorityServers.isEmpty()) {
           authorityServers = servers;
         } else {
+          if (rawAuthorityServers.size() > 1 && !enableXdsFallback) {
+            rawAuthorityServers = ImmutableList.of(rawAuthorityServers.get(0));
+          }
           authorityServers = parseServerInfos(rawAuthorityServers, logger);
         }
         authorityInfoMapBuilder.put(
