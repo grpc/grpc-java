@@ -151,6 +151,8 @@ public final class ManagedChannelImplBuilder
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+  final NameResolver.Args.Extensions.Builder nameResolverArgsExtBuilder =
+      NameResolver.Args.Extensions.newBuilder();
 
   final List<ClientTransportFilter> transportFilters = new ArrayList<>();
 
@@ -551,6 +553,12 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
     // TODO(notcarl): use real parsing
     defaultServiceConfig = checkMapEntryTypes(serviceConfig);
+    return this;
+  }
+
+  @Override
+  public <X> ManagedChannelImplBuilder setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
+    nameResolverArgsExtBuilder.set(key, value);
     return this;
   }
 
