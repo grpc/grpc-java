@@ -282,7 +282,7 @@ public abstract class NameResolver {
    * <p>Args applicable to all {@link NameResolver}s are defined here using ordinary setters and
    * getters. This container can also hold externally-defined "extended" args that aren't so widely
    * useful or that would be inappropriate dependencies for this low level API. See {@link
-   * Args#getExtension} for more.
+   * Args#getArg} for more.
    *
    * <p>Note this class overrides neither {@code equals()} nor {@code hashCode()}.
    *
@@ -394,7 +394,7 @@ public abstract class NameResolver {
      * io.grpc package.
      */
     @Nullable
-    public <T> T getExtension(Key<T> key) {
+    public <T> T getArg(Key<T> key) {
       return extensions.get(key);
     }
 
@@ -591,8 +591,8 @@ public abstract class NameResolver {
         return this;
       }
 
-      /** See {@link Args#getExtension(Key)}. */
-      public <T> Builder setExtension(Key<T> key, T value) {
+      /** See {@link Args#getArg(Key)}. */
+      public <T> Builder setArg(Key<T> key, T value) {
         extensionsBuilder.set(key, value);
         return this;
       }

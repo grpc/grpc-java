@@ -4281,7 +4281,7 @@ public class ManagedChannelImplTest {
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
-    assertThat(args.getExtension(TEST_RESOLVER_ARG_EXT_KEY)).isEqualTo("test-value");
+    assertThat(args.getArg(TEST_RESOLVER_ARG_EXT_KEY)).isEqualTo("test-value");
 
     verify(offloadExecutor, never()).execute(any(Runnable.class));
     args.getOffloadExecutor()

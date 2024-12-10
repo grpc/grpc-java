@@ -640,7 +640,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>NB: If the selected {@link NameResolver} does not understand 'key', or target URI resolution
    * isn't needed at all, your extended argument will be silently ignored.
    *
-   * <p>See {@link NameResolver.Args#getExtension(NameResolver.Args.Key)} for more.
+   * <p>See {@link NameResolver.Args#getArg(NameResolver.Args.Key)} for more.
    *
    * @param key identifies the argument in a type-safe manner
    * @param value the argument itself

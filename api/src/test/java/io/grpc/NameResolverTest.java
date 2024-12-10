@@ -82,7 +82,7 @@ public class NameResolverTest {
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
-    assertThat(args.getExtension(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
@@ -94,7 +94,7 @@ public class NameResolverTest {
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
-    assertThat(args.getExtension(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
@@ -111,7 +111,7 @@ public class NameResolverTest {
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
-        .setExtension(EXT_ARG_KEY, extensionArgValue)
+        .setArg(EXT_ARG_KEY, extensionArgValue)
         .build();
   }
 
