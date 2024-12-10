@@ -202,4 +202,12 @@ final class XdsTestControlPlaneService extends
     }
     return responseBuilder.build();
   }
+
+  public Map<String, Integer> getSubscriberCounts() {
+    Map<String, Integer> subscriberCounts = new HashMap<>();
+    for (String type : subscribers.keySet()) {
+      subscriberCounts.put(type, subscribers.get(type).size());
+    }
+    return subscriberCounts;
+  }
 }
