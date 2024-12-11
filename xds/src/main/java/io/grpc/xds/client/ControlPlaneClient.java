@@ -238,7 +238,7 @@ final class ControlPlaneClient {
    */
   // Must be synchronized.
   void readyHandler(boolean shouldSendInitialRequest) {
-    if (shouldSendInitialRequest) {
+    if (!shutdown && shouldSendInitialRequest) {
       sendDiscoveryRequests();
     }
   }

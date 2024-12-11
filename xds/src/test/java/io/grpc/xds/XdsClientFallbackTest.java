@@ -428,7 +428,7 @@ public class XdsClientFallbackTest {
 
   @Test
   public void testGoodUrlFollowedByBadUrl() {
-    // Setup xdsClient to fail on stream creation
+    // xdsClient should succeed in stream creation as it doesn't need to use the bad url
     String garbageUri = "some. garbage";
     String validUri = "localhost:" + mainXdsServer.getServer().getPort();
 
@@ -437,7 +437,6 @@ public class XdsClientFallbackTest {
         new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-    fakeClock.forwardTime(20, TimeUnit.SECONDS);
     verify(ldsWatcher, timeout(5000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(
             MAIN_HTTP_CONNECTION_MANAGER));
