@@ -25,6 +25,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -32,6 +33,7 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.core.v3.Metadata;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
@@ -42,14 +44,17 @@ import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.xds.ClusterMetadataRegistry.ClusterMetadataValueParser;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.internal.ProtobufJsonConverter;
 import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 
@@ -169,7 +174,48 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     updateBuilder.filterMetadata(
         ImmutableMap.copyOf(cluster.getMetadata().getFilterMetadataMap()));
 
+    try {
+      ImmutableMap<String, Object> parsedFilterMetadata =
+          parseClusterMetadata(cluster.getMetadata());
+      updateBuilder.parsedMetadata(parsedFilterMetadata);
+    } catch (InvalidProtocolBufferException e) {
+      throw new ResourceInvalidException("xDS filter metadata invalid.");
+    }
+
     return updateBuilder.build();
+  }
+
+  private static ImmutableMap<String, Object> parseClusterMetadata(Metadata metadata)
+      throws InvalidProtocolBufferException {
+    ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
+
+    ClusterMetadataRegistry registry = ClusterMetadataRegistry.getInstance();
+    // Process typed_filter_metadata
+    for (Map.Entry<String, Any> entry : metadata.getTypedFilterMetadataMap().entrySet()) {
+      String key = entry.getKey();
+      Any value = entry.getValue();
+      ClusterMetadataValueParser parser = registry.findParser(value.getTypeUrl());
+      if (parser != null) {
+        Object parsedValue = parser.parse(value);
+        if (parsedValue == null) {
+          // parsing failed
+          throw new InvalidProtocolBufferException("Could not parse!");
+        }
+        parsedMetadata.put(key, parsedValue);
+      }
+    }
+
+    // Process filter_metadata for remaining keys
+    for (Map.Entry<String, Struct> entry : metadata.getFilterMetadataMap().entrySet()) {
+      String key = entry.getKey();
+      if (!parsedMetadata.build().containsKey(key)) {
+        Struct structValue = entry.getValue();
+        Object jsonValue = ProtobufJsonConverter.convertToJson(structValue);
+        parsedMetadata.put(key, jsonValue);
+      }
+    }
+
+    return parsedMetadata.build();
   }
 
   private static StructOrError<CdsUpdate.Builder> parseAggregateCluster(Cluster cluster) {
@@ -571,13 +617,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     abstract ImmutableMap<String, Struct> filterMetadata();
 
+    abstract ImmutableMap<String, Object> parsedMetadata();
+
     private static Builder newBuilder(String clusterName) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .minRingSize(0)
           .maxRingSize(0)
           .choiceCount(0)
-          .filterMetadata(ImmutableMap.of());
+          .filterMetadata(ImmutableMap.of())
+          .parsedMetadata(ImmutableMap.of());
     }
 
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
@@ -695,6 +744,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       protected abstract Builder outlierDetection(OutlierDetection outlierDetection);
 
       protected abstract Builder filterMetadata(ImmutableMap<String, Struct> filterMetadata);
+
+      protected abstract Builder parsedMetadata(ImmutableMap<String, Object> parsedMetadata);
 
       abstract CdsUpdate build();
     }
