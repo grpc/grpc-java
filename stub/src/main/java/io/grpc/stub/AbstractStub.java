@@ -192,6 +192,10 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
     return build(newChannel, callOptions);
   }
 
+  public final S withChannelAndCallOption(Channel newChannel, CallOptions callOptions) {
+    return build(newChannel, callOptions);
+  }
+
   /**
    * Sets a custom option to be passed to client interceptors on the channel
    * {@link io.grpc.ClientInterceptor} via the CallOptions parameter.
