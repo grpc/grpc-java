@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.client.XdsClient.*;
 import static io.grpc.xds.client.XdsLogger.XdsLogLevel.DEBUG;
 
 import io.grpc.InternalLogId;
@@ -24,6 +25,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsResourceType;
 import java.util.HashMap;
@@ -46,7 +48,7 @@ final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
   private final InternalLogId logId;
   private final XdsLogger logger;
   private XdsConfig lastXdsConfig = null;
-  private Map<XdsResourceType, Map<String, XdsClient.ResourceWatcher>> resourceWatchers
+  private Map<XdsResourceType<?>, Map<String, ResourceWatcher<?>>> resourceWatchers
       = new HashMap<>();
 
   XdsDependencyManager(XdsClient xdsClient, XdsConfigWatcher xdsConfigWatcher,
@@ -99,8 +101,8 @@ final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
     // TODO: implement
   }
 
-  private void addWatcher(XdsWatcherBase watcher) {
-    ResourceContext context = watcher.resourceContext;
+  private <T extends ResourceUpdate> void addWatcher(XdsWatcherBase<T> watcher) {
+    ResourceContext<T> context = watcher.resourceContext;
 
     this.syncContext.executeLater(() -> {
       resourceWatchers.computeIfAbsent(context.resourceType, k -> new HashMap<>())
@@ -111,13 +113,20 @@ final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
 
 
   public void shutdown() {
-    for (Map.Entry<XdsResourceType, Map<String, XdsClient.ResourceWatcher>> typeMapEntry
+    for (Map.Entry<XdsResourceType<?>, Map<String, ResourceWatcher<?>>> typeMapEntry
         : resourceWatchers.entrySet()) {
-      for (Map.Entry<String, XdsClient.ResourceWatcher> watcherEntry :
-          typeMapEntry.getValue().entrySet()) {
-        xdsClient.cancelXdsResourceWatch(typeMapEntry.getKey(), watcherEntry.getKey(),
-            watcherEntry.getValue());
-      }
+      XdsResourceType<?> resourceType = typeMapEntry.getKey();
+      /* TODO: fix generics so that this isn't a syntax error
+      shutdownWatchersForType(resourceType, typeMapEntry.getValue());
+      */
+    }
+  }
+
+  private <T extends ResourceUpdate> void shutdownWatchersForType(XdsResourceType<T> resourceType,
+                                           Map<String, ResourceWatcher<T>> watchers) {
+    for (Map.Entry<String, ResourceWatcher<T>> watcherEntry : watchers.entrySet()) {
+      xdsClient.cancelXdsResourceWatch(resourceType, watcherEntry.getKey(),
+          watcherEntry.getValue());
     }
   }
 
@@ -126,11 +135,11 @@ final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
     return logId.toString();
   }
 
-  public static class ResourceContext {
+  public static class ResourceContext<T extends ResourceUpdate> {
     String resourceName;
-    XdsResourceType resourceType;
+    XdsResourceType<T> resourceType;
 
-    public ResourceContext(XdsResourceType resourceType, String resourceName) {
+    public ResourceContext(XdsResourceType<T> resourceType, String resourceName) {
       this.resourceName = resourceName;
       this.resourceType = resourceType;
     };
@@ -138,8 +147,8 @@ final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
 
   public interface XdsConfigWatcher {
     void OnUpdate(XdsConfig config);
-    void OnError(ResourceContext resourceContext, Status status);
-    void OnResourceDoesNotExist(ResourceContext resourceContext);
+    void OnError(ResourceContext<?> resourceContext, Status status);
+    void OnResourceDoesNotExist(ResourceContext<?> resourceContext);
   }
 
   public static final class ClusterSubscriptionImpl implements ClusterSubscription {
@@ -155,11 +164,11 @@ final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
     }
   }
 
-  private abstract class XdsWatcherBase<T> implements XdsClient.ResourceWatcher<T> {
-    private final ResourceContext resourceContext;
+  private abstract class XdsWatcherBase<T extends ResourceUpdate> implements ResourceWatcher<T> {
+    private final ResourceContext<T> resourceContext;
 
     private XdsWatcherBase(XdsResourceType<T> type, String resourceName) {
-      this.resourceContext = new ResourceContext(type, resourceName);
+      this.resourceContext = new ResourceContext<>(type, resourceName);
     }
 
     @Override
