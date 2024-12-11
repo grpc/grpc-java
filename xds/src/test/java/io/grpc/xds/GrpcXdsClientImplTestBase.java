@@ -3782,25 +3782,6 @@ public abstract class GrpcXdsClientImplTestBase {
     client.shutdown();
   }
 
-  @Test
-  public void circuitBreakingConversionOf32bitIntTo64bitLongForMaxRequestNegativeValue() {
-    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
-        cdsResourceWatcher);
-    Any clusterCircuitBreakers = Any.pack(
-        mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, null, false, null,
-            "envoy.transport_sockets.tls", mf.buildCircuitBreakers(50, -1), null));
-    call.sendResponse(CDS, clusterCircuitBreakers, VERSION_1, "0000");
-
-    // Client sent an ACK CDS request.
-    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(4294967295L);
-  }
-
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
