@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
@@ -63,6 +64,9 @@ public final class OkHostnameVerifier implements HostnameVerifier {
 
   @Override
   public boolean verify(String host, SSLSession session) {
+    if (!isAscii(host)) {
+      return false;
+    }
     try {
       Certificate[] certificates = session.getPeerCertificates();
       return verify(host, (X509Certificate) certificates[0]);
@@ -253,5 +257,10 @@ public final class OkHostnameVerifier implements HostnameVerifier {
 
     // hostName matches pattern
     return true;
+  }
+
+  private static boolean isAscii(String input) {
+    // Only ASCII characters are 1 byte in UTF-8.
+    return input.getBytes(StandardCharsets.UTF_8).length == input.length();
   }
 }
