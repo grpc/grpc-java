@@ -213,7 +213,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           continue;
         }
         if (threshold.hasMaxRequests()) {
-          maxConcurrentRequests = (long) threshold.getMaxRequests().getValue();
+          maxConcurrentRequests = Integer.toUnsignedLong(threshold.getMaxRequests().getValue());
         }
       }
     }
