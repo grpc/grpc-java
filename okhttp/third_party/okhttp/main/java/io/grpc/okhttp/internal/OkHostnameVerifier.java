@@ -63,6 +63,9 @@ public final class OkHostnameVerifier implements HostnameVerifier {
 
   @Override
   public boolean verify(String host, SSLSession session) {
+    if (!isAscii(host)) {
+      return false;
+    }
     try {
       Certificate[] certificates = session.getPeerCertificates();
       return verify(host, (X509Certificate) certificates[0]);
@@ -253,5 +256,14 @@ public final class OkHostnameVerifier implements HostnameVerifier {
 
     // hostName matches pattern
     return true;
+  }
+
+  private static boolean isAscii(String input) {
+    try {
+      // All only ascii characters are 1 byte in utf8
+      return input.getBytes("UTF-8").length == input.length();
+    } catch (java.io.UnsupportedEncodingException e) {
+      return false;
+    }
   }
 }
