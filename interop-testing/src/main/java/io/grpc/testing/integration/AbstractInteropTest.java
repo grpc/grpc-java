@@ -109,6 +109,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1719,6 +1720,26 @@ public abstract class AbstractInteropTest {
   }
 
   private SoakIterationResult performOneSoakIteration(
+      TestServiceGrpc.TestServiceBlockingStub blockingStub,
+      TestServiceGrpc.TestServiceStub nonBlockingStub,
+      int soakRequestSize,
+      int soakResponseSize,
+      String testType) throws InterruptedException {
+    switch (testType) {
+      case "largeUnary":
+        return performOneSoakIterationLargeUnary(blockingStub, soakRequestSize, soakResponseSize);
+      case "clientStreaming":
+        return performOneSoakIterationClientStreaming(nonBlockingStub, soakRequestSize);
+      case "serverStreaming":
+        return performOneSoakIterationServerStreaming(nonBlockingStub, soakResponseSize);
+      case "pingPong":
+        return performOneSoakIterationPingPong(nonBlockingStub, soakRequestSize, soakResponseSize);
+      default:
+        throw new IllegalArgumentException("Invalid test type: " + testType);
+    }
+  }
+
+  private SoakIterationResult performOneSoakIterationLargeUnary(
       TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize, int soakResponseSize)
       throws InterruptedException {
     long startNs = System.nanoTime();
@@ -1743,10 +1764,141 @@ public abstract class AbstractInteropTest {
     return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
   }
 
-  /**
-   * Runs large unary RPCs in a loop with configurable failure thresholds
-   * and channel creation behavior.
-   */
+  private SoakIterationResult performOneSoakIterationClientStreaming(
+      TestServiceGrpc.TestServiceStub soakStub, int soakRequestSize)
+      throws InterruptedException {
+    long startNs = System.nanoTime();
+    Status status = Status.OK;
+    final int numRequests = 3; // need to be discussed
+    final List<StreamingInputCallRequest> requests = new ArrayList<>(numRequests);
+    for (int i = 0; i < numRequests; i++) {
+      requests.add(StreamingInputCallRequest.newBuilder()
+          .setPayload(Payload.newBuilder()
+              .setBody(ByteString.copyFrom(new byte[soakRequestSize])))
+          .build());
+    }
+    final StreamingInputCallResponse goldenResponse = StreamingInputCallResponse.newBuilder()
+        .setAggregatedPayloadSize(soakRequestSize * numRequests)
+        .build();
+    StreamRecorder<StreamingInputCallResponse> responseObserver = StreamRecorder.create();
+    StreamObserver<StreamingInputCallRequest> requestObserver =
+        soakStub.streamingInputCall(responseObserver);
+    try {
+      for (StreamingInputCallRequest request: requests) {
+        requestObserver.onNext(request);
+      }
+      requestObserver.onCompleted();
+      responseObserver.awaitCompletion();
+      assertEquals(goldenResponse, responseObserver.firstValue().get());
+      assertThat(responseObserver.getValues()).hasSize(1);
+    } catch (StatusRuntimeException e) {
+      status = e.getStatus();
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+    long elapsedNs = System.nanoTime() - startNs;
+    return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
+  }
+
+  private SoakIterationResult performOneSoakIterationServerStreaming(
+      TestServiceGrpc.TestServiceStub soakStub, int soakResponseSize)
+      throws InterruptedException {
+    long startNs = System.nanoTime();
+    Status status = Status.OK;
+    final int numResponses = 3; // need to be discussed
+    StreamingOutputCallRequest.Builder requestBuilder = StreamingOutputCallRequest.newBuilder();
+    for (int i = 0; i < numResponses; i++) {
+      requestBuilder.addResponseParameters(ResponseParameters.newBuilder()
+          .setSize(soakResponseSize));
+    }
+    StreamingOutputCallRequest request = requestBuilder.build();
+    final List<StreamingOutputCallResponse> goldenResponses = new ArrayList<>();
+    for (int i = 0; i < numResponses; i++) {
+      goldenResponses.add(
+          StreamingOutputCallResponse.newBuilder()
+              .setPayload(Payload.newBuilder()
+                      .setBody(ByteString.copyFrom(new byte[soakResponseSize])))
+              .build()
+      );
+    }
+    StreamRecorder<StreamingOutputCallResponse> recorder = StreamRecorder.create();
+    try {
+      soakStub.streamingOutputCall(request, recorder);
+      recorder.awaitCompletion();
+      assertSuccess(recorder);
+      assertResponses(goldenResponses, recorder.getValues());
+    } catch (StatusRuntimeException e) {
+      status = e.getStatus();
+      System.err.println("Error occurred during Server streaming: " + status);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+    long elapsedNs = System.nanoTime() - startNs;
+    return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
+  }
+
+  private SoakIterationResult performOneSoakIterationPingPong(
+      TestServiceGrpc.TestServiceStub soakStub, int soakRequestSize, int soakResponseSize)
+      throws InterruptedException {
+    long startNs = System.nanoTime();
+    Status status = Status.OK;
+    final int numRequests = 3;
+    final int numResponses = 3;
+    final List<StreamingOutputCallRequest> requests = new ArrayList<>(numRequests);
+    for (int i = 0; i < numRequests; i++) {
+      requests.add(StreamingOutputCallRequest.newBuilder()
+          .addResponseParameters(ResponseParameters.newBuilder().setSize(soakResponseSize))
+          .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[soakRequestSize])))
+          .build());
+    }
+    final List<StreamingOutputCallResponse> goldenResponses = new ArrayList<>(numResponses);
+    for (int i = 0; i < numResponses; i++) {
+      goldenResponses.add(StreamingOutputCallResponse.newBuilder()
+          .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[soakResponseSize])))
+          .build());
+    }
+    // Use a blocking queue to collect responses from the server
+    final ArrayBlockingQueue<Object> queue = new ArrayBlockingQueue<>(numRequests);
+    StreamObserver<StreamingOutputCallRequest> requestsObserver =
+        soakStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
+          @Override
+          public void onNext(StreamingOutputCallResponse response) {
+            queue.add(response);
+          }
+
+          @Override
+          public void onError(Throwable t) {
+            queue.add(t);
+          }
+
+          @Override
+          public void onCompleted() {
+            queue.add("Completed");
+          }
+        });
+    try {
+      for (int i = 0; i < numRequests; i++) {
+        assertNull(queue.peek());
+        requestsObserver.onNext(requests.get(i));
+        Object actualResponse = queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
+        assertNotNull("Timed out waiting for response", actualResponse);
+        if (actualResponse instanceof Throwable) {
+          throw new AssertionError(actualResponse);
+        }
+        assertResponse(goldenResponses.get(i), (StreamingOutputCallResponse) actualResponse);
+      }
+      requestsObserver.onCompleted();
+      assertEquals("Completed", queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
+    } catch (StatusRuntimeException e) {
+      status = e.getStatus();
+      System.err.println("Error occurred during Ping-Pong iteration: " + status);
+    }
+    long elapsedNs = System.nanoTime() - startNs;
+    return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
+  }
+
   public void performSoakTest(
       String serverUri,
       int soakIterations,
@@ -1757,6 +1909,7 @@ public abstract class AbstractInteropTest {
       int soakRequestSize,
       int soakResponseSize,
       int numThreads,
+      String testType,
       Function<ManagedChannel, ManagedChannel> createNewChannel)
       throws InterruptedException {
     if (soakIterations % numThreads != 0) {
@@ -1785,6 +1938,7 @@ public abstract class AbstractInteropTest {
               serverUri,
               threadResultsList.get(currentThreadInd),
               sharedChannel,
+              testType,
               createNewChannel);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
@@ -1796,7 +1950,7 @@ public abstract class AbstractInteropTest {
     for (Thread thread : threads) {
       thread.join();
     }
-
+    
     int totalFailures = 0;
     int iterationsDone = 0;
     Histogram latencies = new Histogram(4);
@@ -1866,8 +2020,14 @@ public abstract class AbstractInteropTest {
       String serverUri,
       ThreadResults threadResults,
       ManagedChannel sharedChannel,
+      String testType,
       Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException {
     ManagedChannel currentChannel = sharedChannel;
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc
+        .newBlockingStub(currentChannel)
+        .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+    TestServiceGrpc.TestServiceStub nonBlockingStub = TestServiceGrpc.newStub(currentChannel)
+        .withInterceptors(recordClientCallInterceptor(clientCallCapture));
     for (int i = 0; i < soakIterationsPerThread; i++) {
       if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
@@ -1876,11 +2036,20 @@ public abstract class AbstractInteropTest {
           + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
 
       currentChannel = maybeCreateChannel.apply(currentChannel);
-      TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
-          .newBlockingStub(currentChannel)
-              .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-      SoakIterationResult result = performOneSoakIteration(currentStub,
-          soakRequestSize, soakResponseSize);
+      SoakIterationResult result;
+      if (testType.equals("largeUnary")) {
+        TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
+            .newBlockingStub(currentChannel)
+                .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+        result = performOneSoakIteration(currentStub, nonBlockingStub, soakRequestSize,
+            soakResponseSize, testType);
+      } else {
+        TestServiceGrpc.TestServiceStub currentStub = TestServiceGrpc
+            .newStub(currentChannel)
+                .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+        result = performOneSoakIteration(blockingStub, currentStub, soakRequestSize,
+            soakResponseSize, testType);
+      }
       SocketAddress peer = clientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       StringBuilder logStr = new StringBuilder(
@@ -1908,6 +2077,7 @@ public abstract class AbstractInteropTest {
       }
     }
   }
+
 
   private static void assertSuccess(StreamRecorder<?> recorder) {
     if (recorder.getError() != null) {
