@@ -70,17 +70,16 @@ import io.netty.util.AsciiString;
 import java.io.ByteArrayInputStream;
 import java.net.SocketAddress;
 import java.net.URI;
-import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.security.Principal;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -89,13 +88,10 @@ import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLEngineResult;
-import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSessionContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
@@ -573,9 +569,13 @@ final class ProtocolNegotiators {
   }
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
-
-    private static final int MAX_AUTHORITIES_CACHE_SIZE = 100;
-    private final LinkedHashMap<String, Boolean> authoritiesAllowedForPeer = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Status> peerVerificationResults =
+            new LinkedHashMap<String, Status>() {
+          @Override
+          protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+            return size() > 100;
+          }
+        };
     private SSLEngine sslEngine;
 
     public ClientTlsProtocolNegotiator(SslContext sslContext,
@@ -618,29 +618,27 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    synchronized public boolean mayBeVerifyAuthority(@Nonnull String authority) {
+    public synchronized Status verifyAuthority(@Nonnull String authority) {
       if (!canVerifyAuthorityOverride()) {
-        throw new UnsupportedOperationException(
-            "Can't allow authority override in rpc when X509ExtendedTrustManager is not"
-                + "available.");
+        return Status.FAILED_PRECONDITION.withDescription(
+                "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
+                        + "available");
       }
-      boolean peerVerified;
-      if (authoritiesAllowedForPeer.containsKey(authority)) {
-        peerVerified = authoritiesAllowedForPeer.get(authority);
+      if (peerVerificationResults.containsKey(authority)) {
+        return peerVerificationResults.get(authority);
       } else {
+        Status peerVerificationStatus;
         try {
           verifyAuthorityAllowedForPeerCert(authority);
-          peerVerified = true;
+          peerVerificationStatus = Status.OK;
         } catch (SSLPeerUnverifiedException | CertificateException e) {
-          peerVerified = false;
+          peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                  String.format("Peer hostname verification failed for authority '%s'",
+                  authority));
         }
-        authoritiesAllowedForPeer.put(authority, peerVerified);
-        if (authoritiesAllowedForPeer.size() > MAX_AUTHORITIES_CACHE_SIZE) {
-          authoritiesAllowedForPeer.remove(
-              authoritiesAllowedForPeer.entrySet().iterator().next().getKey());
-        }
+        peerVerificationResults.put(authority, peerVerificationStatus);
+        return peerVerificationStatus;
       }
-      return peerVerified;
     }
 
     public void setSslEngine(SSLEngine sslEngine) {
@@ -1210,8 +1208,7 @@ final class ProtocolNegotiators {
     }
   }
 
-  static final class SslEngineWrapper extends SSLEngine {
-
+  static final class SslEngineWrapper extends NoopSslEngine {
     private final SSLEngine sslEngine;
     private final String peerHost;
 
@@ -1234,115 +1231,9 @@ final class ProtocolNegotiators {
     public SSLParameters getSSLParameters() {
       return sslEngine.getSSLParameters();
     }
-
-    @Override
-    public SSLEngineResult wrap(ByteBuffer[] byteBuffers, int i, int i1, ByteBuffer byteBuffer)
-        throws SSLException {
-      return null;
-    }
-
-    @Override
-    public SSLEngineResult unwrap(ByteBuffer byteBuffer, ByteBuffer[] byteBuffers, int i, int i1)
-        throws SSLException {
-      return null;
-    }
-
-    @Override
-    public Runnable getDelegatedTask() {
-      return null;
-    }
-
-    @Override
-    public void closeInbound() throws SSLException {
-
-    }
-
-    @Override
-    public boolean isInboundDone() {
-      return false;
-    }
-
-    @Override
-    public void closeOutbound() {}
-
-    @Override
-    public boolean isOutboundDone() {
-      return false;
-    }
-
-    @Override
-    public String[] getSupportedCipherSuites() {
-      return new String[0];
-    }
-
-    @Override
-    public String[] getEnabledCipherSuites() {
-      return new String[0];
-    }
-
-    @Override
-    public void setEnabledCipherSuites(String[] strings) {}
-
-    @Override
-    public String[] getSupportedProtocols() {
-      return new String[0];
-    }
-
-    @Override
-    public String[] getEnabledProtocols() {
-      return new String[0];
-    }
-
-    @Override
-    public void setEnabledProtocols(String[] strings) {}
-
-    @Override
-    public SSLSession getSession() {
-      return null;
-    }
-
-    @Override
-    public void beginHandshake() throws SSLException {}
-
-    @Override
-    public HandshakeStatus getHandshakeStatus() {
-      return null;
-    }
-
-    @Override
-    public void setUseClientMode(boolean b) {}
-
-    @Override
-    public boolean getUseClientMode() {
-      return false;
-    }
-
-    @Override
-    public void setNeedClientAuth(boolean b) {}
-
-    @Override
-    public boolean getNeedClientAuth() {
-      return false;
-    }
-
-    @Override
-    public void setWantClientAuth(boolean b) {}
-
-    @Override
-    public boolean getWantClientAuth() {
-      return false;
-    }
-
-    @Override
-    public void setEnableSessionCreation(boolean b) {}
-
-    @Override
-    public boolean getEnableSessionCreation() {
-      return false;
-    }
   }
 
-  static class FakeSslSession implements SSLSession {
+  static class FakeSslSession extends NoopSslSession {
     private final String peerHost;
 
     FakeSslSession(String peerHost) {
@@ -1350,104 +1241,8 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public byte[] getId() {
-      return new byte[0];
-    }
-
-    @Override
-    public SSLSessionContext getSessionContext() {
-      return null;
-    }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public javax.security.cert.X509Certificate[] getPeerCertificateChain() {
-      throw new UnsupportedOperationException("This method is deprecated and marked for removal. "
-          + "Use the getPeerCertificates() method instead.");
-    }
-
-    @Override
-    public long getCreationTime() {
-      return 0;
-    }
-
-    @Override
-    public long getLastAccessedTime() {
-      return 0;
-    }
-
-    @Override
-    public void invalidate() {}
-
-    @Override
-    public boolean isValid() {
-      return false;
-    }
-
-    @Override
-    public void putValue(String s, Object o) {}
-
-    @Override
-    public Object getValue(String s) {
-      return null;
-    }
-
-    @Override
-    public void removeValue(String s) {}
-
-    @Override
-    public String[] getValueNames() {
-      return new String[0];
-    }
-
-    @Override
-    public Certificate[] getPeerCertificates() throws SSLPeerUnverifiedException {
-      return new Certificate[0];
-    }
-
-    @Override
-    public Certificate[] getLocalCertificates() {
-      return new Certificate[0];
-    }
-
-    @Override
-    public Principal getPeerPrincipal() throws SSLPeerUnverifiedException {
-      return null;
-    }
-
-    @Override
-    public Principal getLocalPrincipal() {
-      return null;
-    }
-
-    @Override
-    public String getCipherSuite() {
-      return null;
-    }
-
-    @Override
-    public String getProtocol() {
-      return null;
-    }
-
-    @Override
     public String getPeerHost() {
       return peerHost;
-    }
-
-    @Override
-    public int getPeerPort() {
-      return 0;
-    }
-
-    @Override
-    public int getPacketBufferSize() {
-      return 0;
-    }
-
-    @Override
-    public int getApplicationBufferSize() {
-      return 0;
     }
   }
 }

@@ -1052,14 +1052,14 @@ public class ProtocolNegotiatorsTest {
 
     // Fill the cache
     for (int i = 0; i < 100; i++) {
-      boolean unused = negotiator.mayBeVerifyAuthority("authority" + i);
+      Status unused = negotiator.verifyAuthority("authority" + i);
     }
     // Should use value from the cache.
-    boolean unused = negotiator.mayBeVerifyAuthority("authority0");
+    Status unused = negotiator.verifyAuthority("authority0");
     // Should evict authority0.
-    unused = negotiator.mayBeVerifyAuthority("authority100");
+    unused = negotiator.verifyAuthority("authority100");
     // Should call TrustManager as the cached value has been evicted for this authority value.
-    unused = negotiator.mayBeVerifyAuthority("authority0");
+    unused = negotiator.verifyAuthority("authority0");
 
     ArgumentCaptor<SslEngineWrapper> sslEngineWrapperArgumentCaptor =
         ArgumentCaptor.forClass(SslEngineWrapper.class);

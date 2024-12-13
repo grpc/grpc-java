@@ -60,20 +60,15 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
-import java.security.cert.CertificateException;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.net.ssl.SSLPeerUnverifiedException;
 
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
-  private static final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -199,26 +194,11 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (channel == null) {
       return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
     }
-    try {
-      if (callOptions.getAuthority() != null && !negotiator.mayBeVerifyAuthority(
-          callOptions.getAuthority())) {
-        String errMsg = String.format("Peer hostname verification failed for authority '%s'.",
-            callOptions.getAuthority());
-        logger.log(Level.FINE, errMsg);
-        return new FailingClientStream(Status.INTERNAL.withDescription(errMsg), tracers);
+    if (callOptions.getAuthority() != null) {
+      Status verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
+      if (verificationStatus != Status.OK) {
+        return new FailingClientStream(verificationStatus, tracers);
       }
-    } catch (UnsupportedOperationException ex) {
-      logger.log(Level.FINE,
-          "Can't allow authority override in rpc when X509ExtendedTrustManager is not available.",
-          callOptions.getAuthority());
-      return new FailingClientStream(Status.INTERNAL.withDescription(
-          "Can't allow authority override in rpc when X509ExtendedTrustManager is not available"),
-          tracers);
-    } catch (SSLPeerUnverifiedException | CertificateException ex) {
-      String errMsg = String.format("Peer hostname verification failed for authority '%s'.",
-          callOptions.getAuthority());
-      logger.log(Level.FINE, errMsg, ex);
-      return new FailingClientStream(Status.INTERNAL.withDescription(errMsg), tracers);
     }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);

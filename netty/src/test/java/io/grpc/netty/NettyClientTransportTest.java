@@ -866,7 +866,7 @@ public class NettyClientTransportTest {
     InsightBuilder insightBuilder = new InsightBuilder();
     stream.appendTimeoutInsight(insightBuilder);
     assertThat(insightBuilder.toString()).contains(
-        "Status{code=INTERNAL, description=Can't allow authority override in rpc when "
+        "Status{code=FAILED_PRECONDITION, description=Can't allow authority override in rpc when "
             + "X509ExtendedTrustManager is not available, cause=null}");
   }
 
@@ -891,8 +891,8 @@ public class NettyClientTransportTest {
     InsightBuilder insightBuilder = new InsightBuilder();
     stream.appendTimeoutInsight(insightBuilder);
     assertThat(insightBuilder.toString()).contains(
-        "Status{code=INTERNAL, description=Peer hostname verification failed for authority"
-            + " 'foo.test.google.in'., cause=null}");
+        "Status{code=UNAVAILABLE, description=Peer hostname verification failed for authority"
+            + " 'foo.test.google.in', cause=null}");
   }
 
   @Test
