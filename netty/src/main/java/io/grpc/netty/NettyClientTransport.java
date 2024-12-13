@@ -196,7 +196,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
     if (callOptions.getAuthority() != null) {
       Status verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
-      if (verificationStatus != Status.OK) {
+      if (!verificationStatus.equals(Status.OK)) {
         return new FailingClientStream(verificationStatus, tracers);
       }
     }
