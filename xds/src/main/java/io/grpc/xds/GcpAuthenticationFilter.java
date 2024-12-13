@@ -22,6 +22,7 @@ import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.Audience;
 import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.TokenCacheConfig;
 import io.grpc.CallCredentials;
@@ -35,6 +36,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.auth.MoreCallCredentials;
+import io.grpc.xds.ClusterMetadataRegistry.ClusterMetadataValueParser;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -217,6 +219,34 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
     V getOrInsert(K key, Function<K, V> create) {
       return cache.computeIfAbsent(key, create);
+    }
+  }
+
+  /**
+   * Parser for Audience metadata type.
+   */
+  static class AudienceMetadataParser implements ClusterMetadataValueParser {
+
+    @Override
+    public String getTypeUrl() {
+      return "extensions.filters.http.gcp_authn.v3.Audience";
+    }
+
+    @Override
+    public String parse(Any any) throws InvalidProtocolBufferException {
+      if (any.is(Audience.class)) {
+        Audience audience = any.unpack(Audience.class);
+        String url = audience.getUrl();
+        if (url.isEmpty()) {
+          throw new InvalidProtocolBufferException(
+              "Audience URL is empty. Metadata value must contain a valid URL.");
+        }
+        return url;
+      } else {
+        throw new InvalidProtocolBufferException(
+            String.format("Unexpected message type: %s. Expected: %s",
+                any.getTypeUrl(), Audience.getDescriptor().getFullName()));
+      }
     }
   }
 }

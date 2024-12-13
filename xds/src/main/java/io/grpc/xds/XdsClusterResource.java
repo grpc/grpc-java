@@ -179,7 +179,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           parseClusterMetadata(cluster.getMetadata());
       updateBuilder.parsedMetadata(parsedFilterMetadata);
     } catch (InvalidProtocolBufferException e) {
-      throw new ResourceInvalidException("xDS filter metadata invalid.");
+      throw new ResourceInvalidException(
+          "Failed to parse xDS filter metadata for cluster '" + cluster.getName() + "': "
+              + e.getMessage(), e);
     }
 
     return updateBuilder.build();
@@ -197,10 +199,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       ClusterMetadataValueParser parser = registry.findParser(value.getTypeUrl());
       if (parser != null) {
         Object parsedValue = parser.parse(value);
-        if (parsedValue == null) {
-          // parsing failed
-          throw new InvalidProtocolBufferException("Could not parse!");
-        }
         parsedMetadata.put(key, parsedValue);
       }
     }
