@@ -136,8 +136,8 @@ final class ProtocolNegotiators {
         if (tlsCreds.getTrustManagers() != null) {
           trustManagers = tlsCreds.getTrustManagers();
         } else if (tlsCreds.getRootCertificates() != null) {
-          trustManagers = CertificateUtils.getTrustManagers(
-                  new ByteArrayInputStream(tlsCreds.getRootCertificates()));
+          trustManagers = Arrays.asList(CertificateUtils.createTrustManager(
+                  new ByteArrayInputStream(tlsCreds.getRootCertificates())));
         } else { // else use system default
           TrustManagerFactory tmf = TrustManagerFactory.getInstance(
               TrustManagerFactory.getDefaultAlgorithm());

@@ -16,37 +16,13 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
-import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import io.grpc.CallCredentials;
-import io.grpc.ChannelCredentials;
-import io.grpc.ChannelLogger;
-import io.grpc.ChoiceChannelCredentials;
-import io.grpc.CompositeCallCredentials;
-import io.grpc.CompositeChannelCredentials;
-import io.grpc.ExperimentalApi;
-import io.grpc.ForwardingChannelBuilder2;
-import io.grpc.InsecureChannelCredentials;
-import io.grpc.Internal;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.TlsChannelCredentials;
-import io.grpc.internal.AtomicBackoff;
-import io.grpc.internal.ClientTransportFactory;
-import io.grpc.internal.ConnectionClientTransport;
-import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.KeepAliveManager;
-import io.grpc.internal.ManagedChannelImplBuilder;
+import io.grpc.*;
+import io.grpc.internal.*;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
-import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder.Resource;
-import io.grpc.internal.SharedResourcePool;
-import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.CipherSuite;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Platform;
@@ -65,24 +41,17 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.KeyManager;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.security.auth.x500.X500Principal;
+import javax.net.ssl.*;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
+import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
@@ -705,30 +674,10 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
     InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
     try {
-      return createTrustManager(rootCertsStream);
+      return io.grpc.internal.CertificateUtils.createTrustManager(rootCertsStream);
     } finally {
       GrpcUtil.closeQuietly(rootCertsStream);
     }
-  }
-
-  static TrustManager[] createTrustManager(InputStream rootCerts) throws GeneralSecurityException {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    try {
-      ks.load(null, null);
-    } catch (IOException ex) {
-      // Shouldn't really happen, as we're not loading any data.
-      throw new GeneralSecurityException(ex);
-    }
-    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
-    for (X509Certificate cert : certs) {
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
-    }
-
-    TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init(ks);
-    return trustManagerFactory.getTrustManagers();
   }
 
   static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
