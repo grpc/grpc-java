@@ -99,10 +99,10 @@ public final class ManagedChannelRegistry {
   public static synchronized ManagedChannelRegistry getDefaultRegistry() {
     if (instance == null) {
       List<ManagedChannelProvider> providerList = ServiceProviders.loadAll(
-          ManagedChannelProvider.class,
-          getHardCodedClasses(),
-          ManagedChannelProvider.class.getClassLoader(),
-          new ManagedChannelPriorityAccessor());
+              ManagedChannelProvider.class,
+              getHardCodedClasses(),
+              ManagedChannelProvider.class.getClassLoader(),
+              new ManagedChannelPriorityAccessor());
       instance = new ManagedChannelRegistry();
       for (ManagedChannelProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
@@ -157,7 +157,7 @@ public final class ManagedChannelRegistry {
 
   @VisibleForTesting
   ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
-      String target, ChannelCredentials creds) {
+                                             String target, ChannelCredentials creds) {
     NameResolverProvider nameResolverProvider = null;
     try {
       URI uri = new URI(target);
@@ -167,35 +167,35 @@ public final class ManagedChannelRegistry {
     }
     if (nameResolverProvider == null) {
       nameResolverProvider = nameResolverRegistry.getProviderForScheme(
-          nameResolverRegistry.getDefaultScheme());
+              nameResolverRegistry.getDefaultScheme());
     }
     Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
-        = (nameResolverProvider != null)
-        ? nameResolverProvider.getProducedSocketAddressTypes() :
-        Collections.emptySet();
+            = (nameResolverProvider != null)
+            ? nameResolverProvider.getProducedSocketAddressTypes() :
+            Collections.emptySet();
 
     List<ManagedChannelProvider> providers = providers();
     if (providers.isEmpty()) {
       throw new ProviderNotFoundException("No functional channel service provider found. "
-          + "Try adding a dependency on the grpc-okhttp, grpc-netty, or grpc-netty-shaded "
-          + "artifact");
+              + "Try adding a dependency on the grpc-okhttp, grpc-netty, or grpc-netty-shaded "
+              + "artifact");
     }
     StringBuilder error = new StringBuilder();
-      for (ManagedChannelProvider provider : providers()) {
-        Collection<Class<? extends SocketAddress>> channelProviderSocketAddressTypes
-            = provider.getSupportedSocketAddressTypes();
-        if (!channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-          error.append("; ");
-          error.append(provider.getClass().getName());
-          error.append(": does not support 1 or more of ");
-          error.append(Arrays.toString(nameResolverSocketAddressTypes.toArray()));
-          continue;
-        }
-        ManagedChannelProvider.NewChannelBuilderResult result
-            = provider.newChannelBuilder(target, creds);
-        if (result.getChannelBuilder() != null) {
-          return result.getChannelBuilder();
-        }
+    for (ManagedChannelProvider provider : providers()) {
+      Collection<Class<? extends SocketAddress>> channelProviderSocketAddressTypes
+              = provider.getSupportedSocketAddressTypes();
+      if (!channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+        error.append("; ");
+        error.append(provider.getClass().getName());
+        error.append(": does not support 1 or more of ");
+        error.append(Arrays.toString(nameResolverSocketAddressTypes.toArray()));
+        continue;
+      }
+      ManagedChannelProvider.NewChannelBuilderResult result
+              = provider.newChannelBuilder(target, creds);
+      if (result.getChannelBuilder() != null) {
+        return result.getChannelBuilder();
+      }
       error.append("; ");
       error.append(provider.getClass().getName());
       error.append(": ");
@@ -205,7 +205,7 @@ public final class ManagedChannelRegistry {
   }
 
   private static final class ManagedChannelPriorityAccessor
-      implements ServiceProviders.PriorityAccessor<ManagedChannelProvider> {
+          implements ServiceProviders.PriorityAccessor<ManagedChannelProvider> {
     @Override
     public boolean isAvailable(ManagedChannelProvider provider) {
       return provider.isAvailable();

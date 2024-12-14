@@ -111,7 +111,6 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.net.SocketFactory;
-import javax.net.ssl.ExtendedSSLSession;
 import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLParameters;
@@ -232,7 +231,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  private final ConcurrentHashMap<String, Boolean> authoritiesAllowedForPeer =
+  private final ConcurrentHashMap<String, Boolean> authorityVerificationStatuses =
       new ConcurrentHashMap<>();
 
   @GuardedBy("lock")
@@ -433,9 +432,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     if (socket instanceof SSLSocket && callOptions.getAuthority() != null
         && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
+      if (hostnameVerifier != null) {
+        hostnameVerifier.verify(callOptions.getAuthority(), ((SSLSocket) socket).getSession());
+      }
       boolean isAuthorityValid;
-      if (authoritiesAllowedForPeer.containsKey(callOptions.getAuthority())) {
-        isAuthorityValid = authoritiesAllowedForPeer.get(callOptions.getAuthority());
+      if (authorityVerificationStatuses.containsKey(callOptions.getAuthority())) {
+        isAuthorityValid = authorityVerificationStatuses.get(callOptions.getAuthority());
       } else {
         Optional<TrustManager> x509ExtendedTrustManager;
         try {
@@ -461,10 +463,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           ((X509ExtendedTrustManager) x509ExtendedTrustManager.get()).checkServerTrusted(
               x509PeerCertificates, "RSA",
               new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
-          authoritiesAllowedForPeer.put(callOptions.getAuthority(), true);
+          authorityVerificationStatuses.put(callOptions.getAuthority(), true);
         } catch (SSLPeerUnverifiedException | CertificateException e) {
           log.log(Level.FINE, "Failure in verifying authority against peer", e);
-          authoritiesAllowedForPeer.put(callOptions.getAuthority(), false);
+          authorityVerificationStatuses.put(callOptions.getAuthority(), false);
           return new FailingClientStream(Status.INTERNAL.withDescription(
               "Failure in verifying authority against peer"),
               tracers);
