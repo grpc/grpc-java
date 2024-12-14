@@ -72,9 +72,7 @@ import io.grpc.okhttp.internal.framed.Settings;
 import io.grpc.okhttp.internal.framed.Variant;
 import io.grpc.okhttp.internal.proxy.HttpUrl;
 import io.grpc.okhttp.internal.proxy.Request;
-import io.grpc.util.CertificateUtils;
 import io.perfmark.PerfMark;
-import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -86,20 +84,8 @@ import java.security.Principal;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
@@ -231,8 +217,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  private final ConcurrentHashMap<String, Boolean> authorityVerificationStatuses =
-      new ConcurrentHashMap<>();
+  private final LinkedHashMap<String, Status> peerVerificationResults =
+          new LinkedHashMap<String, Status>() {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+              return size() > 100;
+            }
+          };
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -432,45 +423,51 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     if (socket instanceof SSLSocket && callOptions.getAuthority() != null
         && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
-      if (hostnameVerifier != null) {
-        hostnameVerifier.verify(callOptions.getAuthority(), ((SSLSocket) socket).getSession());
-      }
-      boolean isAuthorityValid;
-      if (authorityVerificationStatuses.containsKey(callOptions.getAuthority())) {
-        isAuthorityValid = authorityVerificationStatuses.get(callOptions.getAuthority());
+      Status peerVerificationStatus;
+      if (peerVerificationResults.containsKey(callOptions.getAuthority())) {
+        peerVerificationStatus = peerVerificationResults.get(callOptions.getAuthority());
       } else {
-        Optional<TrustManager> x509ExtendedTrustManager;
-        try {
-          x509ExtendedTrustManager = getX509ExtendedTrustManager(
-              (TlsChannelCredentials) channelCredentials);
-        } catch (GeneralSecurityException e) {
-          log.log(Level.FINE, "Failure getting X509ExtendedTrustManager from TlsCredentials", e);
-          return new FailingClientStream(Status.INTERNAL.withDescription(
-              "Failure getting X509ExtendedTrustManager from TlsCredentials"),
-              tracers);
-        }
-        if (!x509ExtendedTrustManager.isPresent()) {
-          return new FailingClientStream(Status.INTERNAL.withDescription(
-              "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
-                  + "available"), tracers);
-        }
-        try {
-          Certificate[] peerCertificates = sslSession.getPeerCertificates();
-          X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
-          for (int i = 0; i < peerCertificates.length; i++) {
-            x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+        if (hostnameVerifier != null &&
+                !hostnameVerifier.verify(callOptions.getAuthority(),
+                        ((SSLSocket) socket).getSession())) {
+          peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                  String.format("HostNameVerifier verification failed for authority '%s'.",
+                          callOptions.getAuthority()));
+        } else {
+          Optional<TrustManager> x509ExtendedTrustManager;
+          try {
+            x509ExtendedTrustManager = getX509ExtendedTrustManager(
+                    (TlsChannelCredentials) channelCredentials);
+          } catch (GeneralSecurityException e) {
+            return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                    "Failure getting X509ExtendedTrustManager from TlsCredentials").withCause(e),
+                    tracers);
           }
-          ((X509ExtendedTrustManager) x509ExtendedTrustManager.get()).checkServerTrusted(
-              x509PeerCertificates, "RSA",
-              new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
-          authorityVerificationStatuses.put(callOptions.getAuthority(), true);
-        } catch (SSLPeerUnverifiedException | CertificateException e) {
-          log.log(Level.FINE, "Failure in verifying authority against peer", e);
-          authorityVerificationStatuses.put(callOptions.getAuthority(), false);
-          return new FailingClientStream(Status.INTERNAL.withDescription(
-              "Failure in verifying authority against peer"),
-              tracers);
+          if (!x509ExtendedTrustManager.isPresent()) {
+            return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                    "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
+                            + "available"), tracers);
+          }
+          try {
+            Certificate[] peerCertificates = sslSession.getPeerCertificates();
+            X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
+            for (int i = 0; i < peerCertificates.length; i++) {
+              x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+            }
+            ((X509ExtendedTrustManager) x509ExtendedTrustManager.get()).checkServerTrusted(
+                    x509PeerCertificates, "RSA",
+                    new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
+            peerVerificationStatus = Status.OK;
+          } catch (SSLPeerUnverifiedException | CertificateException e) {
+            peerVerificationStatus = Status.INTERNAL.withDescription(
+                    String.format("Failure in verifying authority '%s' against peer",
+                            callOptions.getAuthority())).withCause(e);
+          }
         }
+        peerVerificationResults.put(callOptions.getAuthority(), peerVerificationStatus);
+      }
+      if (!peerVerificationStatus.isOk()) {
+        return new FailingClientStream(peerVerificationStatus, tracers);
       }
     }
     // FIXME: it is likely wrong to pass the transportTracer here as it'll exit the lock's scope
@@ -495,21 +492,19 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   private Optional<TrustManager> getX509ExtendedTrustManager(TlsChannelCredentials tlsCreds)
       throws GeneralSecurityException {
-    Optional<TrustManager> x509ExtendedTrustManager;
+    TrustManager[] tm = null;
+    // Using the same way of creating TrustManager from {@link OkHttpChannelBuilder#sslSocketFactoryFrom}.
     if (tlsCreds.getTrustManagers() != null) {
-      x509ExtendedTrustManager = tlsCreds.getTrustManagers().stream().filter(
-          trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+      tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
     } else if (tlsCreds.getRootCertificates() != null) {
-      x509ExtendedTrustManager = CertificateUtils.getX509ExtendedTrustManager(
-          new ByteArrayInputStream(tlsCreds.getRootCertificates()));
+      tm = io.grpc.internal.CertificateUtils.createTrustManager(tlsCreds.getRootCertificates());
     } else { // else use system default
       TrustManagerFactory tmf = TrustManagerFactory.getInstance(
           TrustManagerFactory.getDefaultAlgorithm());
       tmf.init((KeyStore) null);
-      x509ExtendedTrustManager = Arrays.stream(tmf.getTrustManagers())
-          .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+      tm = tmf.getTrustManagers();
     }
-    return x509ExtendedTrustManager;
+    return Arrays.stream(tm).filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
   }
 
   @GuardedBy("lock")
