@@ -632,7 +632,7 @@ final class ProtocolNegotiators {
         } catch (SSLPeerUnverifiedException | CertificateException e) {
           peerVerificationStatus = Status.UNAVAILABLE.withDescription(
                   String.format("Peer hostname verification failed for authority '%s'",
-                  authority));
+                  authority)).withCause(e);
         }
         peerVerificationResults.put(authority, peerVerificationStatus);
         return peerVerificationStatus;
