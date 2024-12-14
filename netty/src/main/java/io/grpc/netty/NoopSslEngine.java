@@ -26,7 +26,7 @@ import javax.net.ssl.SSLSession;
  * A no-op implementation of SslEngine, to facilitate overriding only the required methods in
  * specific implementations.
  */
-public class NoopSslEngine extends SSLEngine {
+class NoopSslEngine extends SSLEngine {
   @Override
   public SSLEngineResult wrap(ByteBuffer[] srcs, int offset, int length, ByteBuffer dst)
           throws SSLException {

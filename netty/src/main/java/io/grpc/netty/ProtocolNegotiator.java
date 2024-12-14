@@ -69,6 +69,7 @@ interface ProtocolNegotiator {
    * Verify the authority against peer if applicable depending on the transport credential type.
    */
   default Status verifyAuthority(String authority) {
-    return Status.UNAVAILABLE;
+    return Status.UNAVAILABLE.withDescription("Per-rpc authority verification not implemented by "
+            + "the protocol negotiator");
   }
 }

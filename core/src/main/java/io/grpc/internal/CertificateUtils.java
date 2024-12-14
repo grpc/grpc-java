@@ -26,10 +26,9 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Optional;
+import java.util.List;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509ExtendedTrustManager;
 import javax.security.auth.x500.X500Principal;
 
 /**
@@ -37,10 +36,9 @@ import javax.security.auth.x500.X500Principal;
  */
 public class CertificateUtils {
   /**
-   * Creates a X509ExtendedTrustManager using the provided CA certs if applicable for the
-   * certificate type.
+   * Creates a X509TrustManagers using the provided CA certs.
    */
-  public static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
+  public static List<TrustManager> getTrustManagers(InputStream rootCerts)
       throws GeneralSecurityException {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     try {
@@ -58,8 +56,7 @@ public class CertificateUtils {
     TrustManagerFactory trustManagerFactory =
         TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     trustManagerFactory.init(ks);
-    return Arrays.stream(trustManagerFactory.getTrustManagers())
-        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+    return Arrays.asList(trustManagerFactory.getTrustManagers());
   }
 
   private static X509Certificate[] getX509Certificates(InputStream inputStream)

@@ -18,7 +18,6 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.internal.CertificateUtils.getX509ExtendedTrustManager;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -42,6 +41,7 @@ import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
+import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -79,6 +79,7 @@ import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -130,27 +131,24 @@ final class ProtocolNegotiators {
             new ByteArrayInputStream(tlsCreds.getPrivateKey()),
             tlsCreds.getPrivateKeyPassword());
       }
-      Optional<TrustManager> x509ExtendedTrustManager;
       try {
+        List<TrustManager> trustManagers;
         if (tlsCreds.getTrustManagers() != null) {
-          builder.trustManager(new FixedTrustManagerFactory(tlsCreds.getTrustManagers()));
-          x509ExtendedTrustManager = tlsCreds.getTrustManagers().stream().filter(
-              trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+          trustManagers = tlsCreds.getTrustManagers();
         } else if (tlsCreds.getRootCertificates() != null) {
-          builder.trustManager(new ByteArrayInputStream(tlsCreds.getRootCertificates()));
-          x509ExtendedTrustManager = getX509ExtendedTrustManager(new ByteArrayInputStream(
-              tlsCreds.getRootCertificates()));
+          trustManagers = CertificateUtils.getTrustManagers(
+                  new ByteArrayInputStream(tlsCreds.getRootCertificates()));
         } else { // else use system default
           TrustManagerFactory tmf = TrustManagerFactory.getInstance(
               TrustManagerFactory.getDefaultAlgorithm());
           tmf.init((KeyStore) null);
-          x509ExtendedTrustManager = Arrays.stream(tmf.getTrustManagers())
-              .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+          trustManagers = Arrays.asList(tmf.getTrustManagers());
         }
+        builder.trustManager(new FixedTrustManagerFactory(trustManagers));
+        Optional<TrustManager> x509ExtendedTrustManager = trustManagers.stream().filter(
+                trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
         return FromChannelCredentialsResult.negotiator(tlsClientFactory(builder.build(),
-            x509ExtendedTrustManager.isPresent()
-                ? (X509ExtendedTrustManager) x509ExtendedTrustManager.get()
-                : null));
+                (X509ExtendedTrustManager) x509ExtendedTrustManager.orElse(null)));
       } catch (SSLException | GeneralSecurityException ex) {
         log.log(Level.FINE, "Exception building SslContext", ex);
         return FromChannelCredentialsResult.error(
@@ -1233,7 +1231,7 @@ final class ProtocolNegotiators {
     }
   }
 
-  static class FakeSslSession extends NoopSslSession {
+  static final class FakeSslSession extends NoopSslSession {
     private final String peerHost;
 
     FakeSslSession(String peerHost) {
