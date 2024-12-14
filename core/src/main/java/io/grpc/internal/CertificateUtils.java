@@ -37,7 +37,8 @@ public class CertificateUtils {
   /**
    * Creates X509TrustManagers using the provided CA certs.
    */
-  public static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
+  public static TrustManager[] createTrustManager(byte[] rootCerts)
+      throws GeneralSecurityException {
     InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
     try {
       return io.grpc.internal.CertificateUtils.createTrustManager(rootCertsStream);
