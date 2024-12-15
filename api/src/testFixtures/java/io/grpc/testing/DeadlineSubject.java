@@ -67,7 +67,7 @@ public final class DeadlineSubject extends ComparableSubject {
         if (Math.abs(actualNanos - expectedNanos) > deltaNanos) {
           failWithoutActual(
               fact("expected", expectedNanos / NANOSECONDS_IN_A_SECOND),
-              fact("but was", expectedNanos  / NANOSECONDS_IN_A_SECOND),
+              fact("but was", actualNanos  / NANOSECONDS_IN_A_SECOND),
               fact("outside tolerance in seconds",  deltaNanos  / NANOSECONDS_IN_A_SECOND));
         }
       }
