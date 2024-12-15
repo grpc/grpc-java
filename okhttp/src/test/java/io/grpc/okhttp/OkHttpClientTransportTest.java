@@ -72,8 +72,10 @@ import io.grpc.internal.AbstractStream;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.InsightBuilder;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.OkHttpFrameLogger.Direction;
@@ -117,6 +119,10 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
+import javax.net.ssl.HandshakeCompletedListener;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -191,16 +197,24 @@ public class OkHttpClientTransportTest {
 
   private void initTransport() throws Exception {
     startTransport(
-        DEFAULT_START_STREAM_ID, null, true, null);
+        DEFAULT_START_STREAM_ID, null, true, null, null);
   }
 
   private void initTransport(int startId) throws Exception {
-    startTransport(startId, null, true, null);
+    startTransport(startId, null, true, null, null);
   }
 
   private void startTransport(int startId, @Nullable Runnable connectingCallback,
-      boolean waitingForConnected, String userAgent)
-      throws Exception {
+                              boolean waitingForConnected, String userAgent,
+                              HostnameVerifier hostnameVerifier) throws Exception {
+    startTransport(startId, connectingCallback, waitingForConnected, userAgent, hostnameVerifier,
+            false);
+  }
+
+  private void startTransport(int startId, @Nullable Runnable connectingCallback,
+                              boolean waitingForConnected, String userAgent,
+                              HostnameVerifier hostnameVerifier, boolean useSslSocket)
+          throws Exception {
     connectedFuture = SettableFuture.create();
     final Ticker ticker = new Ticker() {
       @Override
@@ -214,7 +228,11 @@ public class OkHttpClientTransportTest {
         return Stopwatch.createUnstarted(ticker);
       }
     };
-    channelBuilder.socketFactory(new FakeSocketFactory(socket));
+    channelBuilder.socketFactory(
+            new FakeSocketFactory(useSslSocket ? new MockSslSocket(socket) : socket));
+    if (hostnameVerifier != null) {
+      channelBuilder = channelBuilder.hostnameVerifier(hostnameVerifier);
+    }
     clientTransport = new OkHttpClientTransport(
         channelBuilder.buildTransportFactory(),
         userAgent,
@@ -700,7 +718,7 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void overrideDefaultUserAgent() throws Exception {
-    startTransport(3, null, true, "fakeUserAgent");
+    startTransport(3, null, true, "fakeUserAgent", null);
     MockStreamListener listener = new MockStreamListener();
     ClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
@@ -747,6 +765,70 @@ public class OkHttpClientTransportTest {
     Buffer sentFrame = capturedBuffer.poll();
     assertEquals(createMessageFrame(message), sentFrame);
     stream.cancel(Status.CANCELLED);
+    shutdownAndVerify();
+  }
+
+  @Test
+  public void perRpcAuthoritySpecified_verificationSkippedInPlainTextConnection()
+          throws Exception {
+    initTransport();
+    final String message = "Hello Server";
+    MockStreamListener listener = new MockStreamListener();
+    ClientStream stream =
+            clientTransport.newStream(method, new Metadata(),
+                    CallOptions.DEFAULT.withAuthority("some-authority"), tracers);
+    stream.start(listener);
+    InputStream input = new ByteArrayInputStream(message.getBytes(UTF_8));
+    assertEquals(12, input.available());
+    stream.writeMessage(input);
+    stream.flush();
+    verify(frameWriter, timeout(TIME_OUT_MS))
+            .data(eq(false), eq(3), any(Buffer.class), eq(12 + HEADER_LENGTH));
+    Buffer sentFrame = capturedBuffer.poll();
+    assertEquals(createMessageFrame(message), sentFrame);
+    stream.cancel(Status.CANCELLED);
+    shutdownAndVerify();
+  }
+
+  @Test
+  public void perRpcAuthoritySpecified_hostnameVerification_ignoredForNonSslSocket()
+          throws Exception {
+    startTransport(
+            DEFAULT_START_STREAM_ID, null, true, null,
+            (hostname, session) -> false, false);
+    ClientStream unused =
+            clientTransport.newStream(method, new Metadata(),
+                    CallOptions.DEFAULT.withAuthority("some-authority"), tracers);
+    shutdownAndVerify();
+  }
+
+  @Test
+  public void perRpcAuthoritySpecified_hostnameVerification_SslSocket_successCase()
+          throws Exception {
+    startTransport(
+            DEFAULT_START_STREAM_ID, null, true, null,
+            (hostname, session) -> true, true);
+    ClientStream unused =
+            clientTransport.newStream(method, new Metadata(),
+                    CallOptions.DEFAULT.withAuthority("some-authority"), tracers);
+    shutdownAndVerify();
+  }
+
+  @Test
+  public void perRpcAuthoritySpecified_hostnameVerification_SslSocket_failureCase()
+          throws Exception {
+    startTransport(
+            DEFAULT_START_STREAM_ID, null, true, null,
+            (hostname, session) -> false, true);
+    ClientStream clientStream =
+            clientTransport.newStream(method, new Metadata(),
+                    CallOptions.DEFAULT.withAuthority("some-authority"), tracers);
+    assertThat(clientStream).isInstanceOf(FailingClientStream.class);
+    InsightBuilder insightBuilder = new InsightBuilder();
+    clientStream.appendTimeoutInsight(insightBuilder);
+    assertThat(insightBuilder.toString()).contains("error=Status{code=UNAVAILABLE, "
+            + "description=HostNameVerifier verification failed for authority 'some-authority', "
+            + "cause=null}");
     shutdownAndVerify();
   }
 
@@ -1714,7 +1796,7 @@ public class OkHttpClientTransportTest {
         DEFAULT_START_STREAM_ID,
         connectingCallback,
         false,
-        null);
+        null, null);
     clientTransport.shutdown(SHUTDOWN_REASON);
     delayed.set(null);
     shutdownAndVerify();
@@ -2391,6 +2473,124 @@ public class OkHttpClientTransportTest {
     @Override
     public InputStream getInputStream() {
       return inputStream;
+    }
+  }
+
+  private static class MockSslSocket extends SSLSocket {
+    private Socket delegate;
+
+    MockSslSocket(Socket socket) {
+      delegate = socket;
+    }
+
+    @Override
+    public String[] getSupportedCipherSuites() {
+      return new String[0];
+    }
+
+    @Override
+    public String[] getEnabledCipherSuites() {
+      return new String[0];
+    }
+
+    @Override
+    public void setEnabledCipherSuites(String[] suites) {
+
+    }
+
+    @Override
+    public String[] getSupportedProtocols() {
+      return new String[0];
+    }
+
+    @Override
+    public String[] getEnabledProtocols() {
+      return new String[0];
+    }
+
+    @Override
+    public void setEnabledProtocols(String[] protocols) {
+
+    }
+
+    @Override
+    public SSLSession getSession() {
+      return null;
+    }
+
+    @Override
+    public void addHandshakeCompletedListener(HandshakeCompletedListener listener) {
+
+    }
+
+    @Override
+    public void removeHandshakeCompletedListener(HandshakeCompletedListener listener) {
+
+    }
+
+    @Override
+    public void startHandshake() throws IOException {
+
+    }
+
+    @Override
+    public void setUseClientMode(boolean mode) {
+
+    }
+
+    @Override
+    public boolean getUseClientMode() {
+      return false;
+    }
+
+    @Override
+    public void setNeedClientAuth(boolean need) {
+
+    }
+
+    @Override
+    public boolean getNeedClientAuth() {
+      return false;
+    }
+
+    @Override
+    public void setWantClientAuth(boolean want) {
+
+    }
+
+    @Override
+    public boolean getWantClientAuth() {
+      return false;
+    }
+
+    @Override
+    public void setEnableSessionCreation(boolean flag) {
+
+    }
+
+    @Override
+    public boolean getEnableSessionCreation() {
+      return false;
+    }
+
+    @Override
+    public synchronized void close() throws IOException {
+      delegate.close();
+    }
+
+    @Override
+    public SocketAddress getLocalSocketAddress() {
+      return delegate.getLocalSocketAddress();
+    }
+
+    @Override
+    public OutputStream getOutputStream() throws IOException {
+      return delegate.getOutputStream();
+    }
+
+    @Override
+    public InputStream getInputStream() throws IOException {
+      return delegate.getInputStream();
     }
   }
 

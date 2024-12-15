@@ -84,7 +84,19 @@ import java.security.Principal;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
@@ -421,48 +433,47 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     Preconditions.checkNotNull(headers, "headers");
     StatsTraceContext statsTraceContext =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
+    if (hostnameVerifier != null && socket instanceof SSLSocket
+            && !hostnameVerifier.verify(callOptions.getAuthority(),
+                    ((SSLSocket) socket).getSession())) {
+      return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+              String.format("HostNameVerifier verification failed for authority '%s'",
+                      callOptions.getAuthority())), tracers);
+    }
     if (socket instanceof SSLSocket && callOptions.getAuthority() != null
         && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
       Status peerVerificationStatus;
       if (peerVerificationResults.containsKey(callOptions.getAuthority())) {
         peerVerificationStatus = peerVerificationResults.get(callOptions.getAuthority());
       } else {
-        if (hostnameVerifier != null &&
-                !hostnameVerifier.verify(callOptions.getAuthority(),
-                        ((SSLSocket) socket).getSession())) {
+        Optional<TrustManager> x509ExtendedTrustManager;
+        try {
+          x509ExtendedTrustManager = getX509ExtendedTrustManager(
+                  (TlsChannelCredentials) channelCredentials);
+        } catch (GeneralSecurityException e) {
+          return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                  "Failure getting X509ExtendedTrustManager from TlsCredentials").withCause(e),
+                  tracers);
+        }
+        if (!x509ExtendedTrustManager.isPresent()) {
+          return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                  "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
+                          + "available"), tracers);
+        }
+        try {
+          Certificate[] peerCertificates = sslSession.getPeerCertificates();
+          X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
+          for (int i = 0; i < peerCertificates.length; i++) {
+            x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+          }
+          ((X509ExtendedTrustManager) x509ExtendedTrustManager.get()).checkServerTrusted(
+                  x509PeerCertificates, "RSA",
+                  new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
+          peerVerificationStatus = Status.OK;
+        } catch (SSLPeerUnverifiedException | CertificateException e) {
           peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                  String.format("HostNameVerifier verification failed for authority '%s'.",
-                          callOptions.getAuthority()));
-        } else {
-          Optional<TrustManager> x509ExtendedTrustManager;
-          try {
-            x509ExtendedTrustManager = getX509ExtendedTrustManager(
-                    (TlsChannelCredentials) channelCredentials);
-          } catch (GeneralSecurityException e) {
-            return new FailingClientStream(Status.UNAVAILABLE.withDescription(
-                    "Failure getting X509ExtendedTrustManager from TlsCredentials").withCause(e),
-                    tracers);
-          }
-          if (!x509ExtendedTrustManager.isPresent()) {
-            return new FailingClientStream(Status.UNAVAILABLE.withDescription(
-                    "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
-                            + "available"), tracers);
-          }
-          try {
-            Certificate[] peerCertificates = sslSession.getPeerCertificates();
-            X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
-            for (int i = 0; i < peerCertificates.length; i++) {
-              x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
-            }
-            ((X509ExtendedTrustManager) x509ExtendedTrustManager.get()).checkServerTrusted(
-                    x509PeerCertificates, "RSA",
-                    new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
-            peerVerificationStatus = Status.OK;
-          } catch (SSLPeerUnverifiedException | CertificateException e) {
-            peerVerificationStatus = Status.INTERNAL.withDescription(
-                    String.format("Failure in verifying authority '%s' against peer",
-                            callOptions.getAuthority())).withCause(e);
-          }
+                  String.format("Failure in verifying authority '%s' against peer",
+                          callOptions.getAuthority())).withCause(e);
         }
         peerVerificationResults.put(callOptions.getAuthority(), peerVerificationStatus);
       }
@@ -493,7 +504,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private Optional<TrustManager> getX509ExtendedTrustManager(TlsChannelCredentials tlsCreds)
       throws GeneralSecurityException {
     TrustManager[] tm = null;
-    // Using the same way of creating TrustManager from {@link OkHttpChannelBuilder#sslSocketFactoryFrom}.
+    // Using the same way of creating TrustManager from
+    // {@link OkHttpChannelBuilder#sslSocketFactoryFrom}.
     if (tlsCreds.getTrustManagers() != null) {
       tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
     } else if (tlsCreds.getRootCertificates() != null) {
@@ -504,7 +516,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       tmf.init((KeyStore) null);
       tm = tmf.getTrustManagers();
     }
-    return Arrays.stream(tm).filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+    return Arrays.stream(tm).filter(
+            trustManager -> trustManager instanceof X509ExtendedTrustManager)
+            .findFirst();
   }
 
   @GuardedBy("lock")
@@ -1690,6 +1704,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     @SuppressWarnings("deprecation")
+    @Override
     public javax.security.cert.X509Certificate[] getPeerCertificateChain() {
       throw new UnsupportedOperationException("This method is deprecated and marked for removal. "
           + "Use the getPeerCertificates() method instead.");
