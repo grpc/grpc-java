@@ -53,6 +53,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -157,6 +159,18 @@ public class AbstractClientStreamTest {
     stream.cancel(Status.DEADLINE_EXCEEDED);
 
     verify(mockListener).closed(any(Status.class), same(PROCESSED), any(Metadata.class));
+  }
+
+  @Test
+  public void cancel_closesFramerAndReleasesBuffers() {
+    TrackingWritableBufferAllocator trackingAllocator = new TrackingWritableBufferAllocator();
+    AbstractClientStream stream =
+            new BaseAbstractClientStream(trackingAllocator, statsTraceCtx, transportTracer);
+    stream.start(mockListener);
+    stream.writeMessage(new ByteArrayInputStream(new byte[1]));
+    stream.cancel(Status.DEADLINE_EXCEEDED);
+    assertTrue(trackingAllocator.allocatedBuffersReleased());
+    assertTrue(stream.framer().isClosed());
   }
 
   @Test
@@ -632,6 +646,39 @@ public class AbstractClientStreamTest {
     @Override
     public void runOnTransportThread(Runnable r) {
       r.run();
+    }
+  }
+
+  private static class TrackingWritableBufferAllocator implements WritableBufferAllocator {
+    List<ReleaseVerifyingBuffer> allocatedBuffers = new ArrayList<>();
+
+    @Override
+    public WritableBuffer allocate(int capacityHint) {
+      ReleaseVerifyingBuffer buf = new ReleaseVerifyingBuffer(capacityHint);
+      allocatedBuffers.add(buf);
+      return buf;
+    }
+
+    boolean allocatedBuffersReleased() {
+      return allocatedBuffers.stream().allMatch(ReleaseVerifyingBuffer::isReleased);
+    }
+  }
+
+  private static class ReleaseVerifyingBuffer extends ByteWritableBuffer {
+    boolean isReleased;
+
+    ReleaseVerifyingBuffer(int maxFrameSize) {
+      super(maxFrameSize);
+    }
+
+    @Override
+    public void release() {
+      super.release();
+      isReleased = true;
+    }
+
+    boolean isReleased() {
+      return isReleased;
     }
   }
 }
