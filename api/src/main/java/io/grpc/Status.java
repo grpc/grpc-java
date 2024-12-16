@@ -657,7 +657,10 @@ public final class Status {
    */
   @Override
   public boolean equals(Object obj) {
-    return super.equals(obj);
+    if(obj instanceof Status){
+      return ((Status)obj).getCode().value() == this.getCode().value();
+    }
+    return false;
   }
 
   /**
