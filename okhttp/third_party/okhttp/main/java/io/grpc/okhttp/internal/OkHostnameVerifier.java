@@ -34,6 +34,8 @@ import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
 import javax.security.auth.x500.X500Principal;
+import com.google.common.base.Utf8;
+import com.google.common.base.Ascii;
 
 /**
  * A HostnameVerifier consistent with <a
@@ -75,7 +77,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
     }
   }
 
-  public boolean verify(String host, X509Certificate certificate) {
+  private boolean verify(String host, X509Certificate certificate) {
     return verifyAsIpAddress(host)
         ? verifyIpAddress(host, certificate)
         : verifyHostName(host, certificate);
@@ -102,7 +104,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
    * Returns true if {@code certificate} matches {@code hostName}.
    */
   private boolean verifyHostName(String hostName, X509Certificate certificate) {
-    hostName = asciiToLowercase(hostName);
+    hostName = Ascii.toLowerCase(hostName);
     boolean hasDns = false;
     List<String> altNames = getSubjectAltNames(certificate, ALT_DNS_NAME);
     for (int i = 0, size = altNames.size(); i < size; i++) {
@@ -202,7 +204,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
     }
     // hostName and pattern are now absolute domain names.
 
-    pattern = asciiToLowercase(pattern);
+    pattern = Ascii.toLowerCase(pattern);
     // hostName and pattern are now in lower case -- domain names are case-insensitive.
 
     if (!pattern.contains("*")) {
@@ -260,20 +262,11 @@ public final class OkHostnameVerifier implements HostnameVerifier {
   }
 
   /**
-   * Normalize the input to lowercase, if it is an ASCII string.
-   * Avoid unicode characters like \u1E0E from returning lowercased ascii
-   * that could match real hostnames.
+   * Returns true if {@code input} is an ASCII string.
+   * @param input the string to check.
    */
-  private static String asciiToLowercase(String input) {
-    if (isAscii(input)) {
-      return input.toLowerCase(Locale.US);
-    } else {
-      return input;
-    }
-  }
-
   private static boolean isAscii(String input) {
     // Only ASCII characters are 1 byte in UTF-8.
-    return input.getBytes(StandardCharsets.UTF_8).length == input.length();
+    return Utf8.encodedLength(input) == input.length();
   }
 }
