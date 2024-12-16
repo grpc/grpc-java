@@ -657,7 +657,7 @@ public final class Status {
    */
   @Override
   public boolean equals(Object obj) {
-    if(obj instanceof Status){
+    if(obj instanceof Status) {
       return ((Status)obj).getCode().value() == this.getCode().value();
     }
     return false;
