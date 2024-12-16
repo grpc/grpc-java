@@ -18,7 +18,6 @@ package io.grpc.examples.helloworldtls;
 
 import io.grpc.Channel;
 import io.grpc.Grpc;
-import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;

@@ -472,7 +472,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           peerVerificationStatus = Status.OK;
         } catch (SSLPeerUnverifiedException | CertificateException e) {
           peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                  String.format("Failure in verifying authority '%s' against peer",
+                  String.format("Failure in verifying authority '%s' against peer during rpc",
                           callOptions.getAuthority())).withCause(e);
         }
         peerVerificationResults.put(callOptions.getAuthority(), peerVerificationStatus);

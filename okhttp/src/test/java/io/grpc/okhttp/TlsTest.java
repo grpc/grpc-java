@@ -156,7 +156,7 @@ public class TlsTest {
     } catch (StatusRuntimeException ex) {
       assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
       assertThat(ex.getStatus().getDescription()).isEqualTo(
-              "Failure in verifying authority 'foo.test.google.in' against peer");
+              "Failure in verifying authority 'foo.test.google.in' against peer during rpc");
       assertThat(ex.getStatus().getCause()).isInstanceOf(CertificateException.class);
       assertThat(ex.getStatus().getCause().getMessage()).isEqualTo(
               "No subject alternative DNS name matching foo.test.google.in found.");
