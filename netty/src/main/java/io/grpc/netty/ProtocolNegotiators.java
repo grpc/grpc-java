@@ -88,6 +88,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
@@ -145,10 +146,15 @@ final class ProtocolNegotiators {
           trustManagers = Arrays.asList(tmf.getTrustManagers());
         }
         builder.trustManager(new FixedTrustManagerFactory(trustManagers));
-        Optional<TrustManager> x509ExtendedTrustManager = trustManagers.stream().filter(
-                trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+        TrustManager x509ExtendedTrustManager = null;
+        for (TrustManager trustManager: trustManagers) {
+          if (trustManager instanceof X509ExtendedTrustManager) {
+            x509ExtendedTrustManager = trustManager;
+            break;
+          }
+        }
         return FromChannelCredentialsResult.negotiator(tlsClientFactory(builder.build(),
-                (X509ExtendedTrustManager) x509ExtendedTrustManager.orElse(null)));
+                (X509ExtendedTrustManager) x509ExtendedTrustManager));
       } catch (SSLException | GeneralSecurityException ex) {
         log.log(Level.FINE, "Exception building SslContext", ex);
         return FromChannelCredentialsResult.error(
@@ -567,6 +573,7 @@ final class ProtocolNegotiators {
   }
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
+    @GuardedBy("this")
     private final LinkedHashMap<String, Status> peerVerificationResults =
             new LinkedHashMap<String, Status>() {
           @Override
@@ -617,10 +624,12 @@ final class ProtocolNegotiators {
 
     @Override
     public synchronized Status verifyAuthority(@Nonnull String authority) {
-      if (!canVerifyAuthorityOverride()) {
+      // sslEngine won't be set when creating ClientTlsHandler from InternalProtocolNegotiators
+      // for example.
+      if (sslEngine == null || x509ExtendedTrustManager == null) {
         return Status.FAILED_PRECONDITION.withDescription(
-                "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
-                        + "available");
+                "Can't allow authority override in rpc when SslEngine or X509ExtendedTrustManager"
+                        + " is not available");
       }
       if (peerVerificationResults.containsKey(authority)) {
         return peerVerificationResults.get(authority);
@@ -631,7 +640,7 @@ final class ProtocolNegotiators {
           peerVerificationStatus = Status.OK;
         } catch (SSLPeerUnverifiedException | CertificateException e) {
           peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                  String.format("Peer hostname verification failed for authority '%s'",
+                  String.format("Peer hostname verification during rpc failed for authority '%s'",
                   authority)).withCause(e);
         }
         peerVerificationResults.put(authority, peerVerificationStatus);
@@ -643,17 +652,11 @@ final class ProtocolNegotiators {
       this.sslEngine = sslEngine;
     }
 
-    boolean canVerifyAuthorityOverride() {
-      // sslEngine won't be set when creating ClientTlsHandlder from InternalProtocolNegotiators
-      // for example.
-      return sslEngine != null && x509ExtendedTrustManager != null;
-    }
-
     private void verifyAuthorityAllowedForPeerCert(String authority)
         throws SSLPeerUnverifiedException, CertificateException {
       SSLEngine sslEngineWrapper = new SslEngineWrapper(sslEngine, authority);
       // The typecasting of Certificate to X509Certificate should work because this method will only
-      // be called when there is a X509ExtendedTrustManager available.
+      // be called when using TLS and thus X509.
       Certificate[] peerCertificates = sslEngine.getSession().getPeerCertificates();
       X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
       for (int i = 0; i < peerCertificates.length; i++) {

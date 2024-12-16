@@ -867,7 +867,7 @@ public class NettyClientTransportTest {
     stream.appendTimeoutInsight(insightBuilder);
     assertThat(insightBuilder.toString()).contains(
         "Status{code=FAILED_PRECONDITION, description=Can't allow authority override in rpc when "
-            + "X509ExtendedTrustManager is not available, cause=null}");
+            + "SslEngine or X509ExtendedTrustManager is not available, cause=null}");
   }
 
   @Test
@@ -891,8 +891,10 @@ public class NettyClientTransportTest {
     InsightBuilder insightBuilder = new InsightBuilder();
     stream.appendTimeoutInsight(insightBuilder);
     assertThat(insightBuilder.toString()).contains(
-        "Status{code=UNAVAILABLE, description=Peer hostname verification failed for authority"
-            + " 'foo.test.google.in', cause=null}");
+        "Status{code=UNAVAILABLE, description=Peer hostname verification during rpc failed for"
+                + " authority 'foo.test.google.in'");
+    assertThat(insightBuilder.toString()).contains("cause=java.security.cert.CertificateException:"
+            + " No subject alternative DNS name matching foo.test.google.in found.");
   }
 
   @Test
