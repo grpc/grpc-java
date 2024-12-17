@@ -385,7 +385,7 @@ public abstract class NameResolver {
      * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
      * the name to be resolved itself. However, there are rare cases where all or part of the target
      * name can't be represented by any standard URI scheme or can't be encoded as a String at all.
-     * Custom args, in contrast, can be an arbitrary Java type, making them a useful work around in
+     * Custom args, in contrast, can hold arbitrary Java types, making them a useful work around in
      * these cases.
      *
      * <p>Custom args can also be used simply to avoid adding inappropriate deps to the low level
@@ -618,7 +618,7 @@ public abstract class NameResolver {
     }
 
     /**
-     * Identifies an externally-defined extension argument that can be stored in {@link Args}.
+     * Identifies an externally-defined custom argument that can be stored in {@link Args}.
      *
      * <p>Uses reference equality so keys should be defined as global constants.
      *
