@@ -279,7 +279,7 @@ public abstract class NameResolver {
    * Information that a {@link Factory} uses to create a {@link NameResolver}.
    *
    * <p>Args applicable to all {@link NameResolver}s are defined here using ordinary setters and
-   * getters. This container can also hold externally-defined "extended" args that aren't so widely
+   * getters. This container can also hold externally-defined "custom" args that aren't so widely
    * useful or that would be inappropriate dependencies for this low level API. See {@link
    * Args#getArg} for more.
    *
@@ -320,7 +320,7 @@ public abstract class NameResolver {
      *
      * @since 1.21.0
      */
-    // <p>TODO: Only meaningful for InetSocketAddress producers. Move to {@link Extensions}?
+    // <p>TODO: Only meaningful for InetSocketAddress producers. Make this a custom arg?
     public int getDefaultPort() {
       return defaultPort;
     }
@@ -374,24 +374,24 @@ public abstract class NameResolver {
     }
 
     /**
-     * Gets the value of an "extension" arg by key, or {@code null} if it's not set.
+     * Gets the value of a custom arg by key, or {@code null} if it's not set.
      *
-     * <p>While ordinary {@link Args} should be universally useful and meaningful, extension
-     * arguments can apply just to resolvers of a certain URI scheme, just to resolvers producing a
-     * particular type of {@link java.net.SocketAddress}, or even an individual {@link NameResolver}
-     * subclass. Extension args are identified by an instance of {@link Args.Key} which should be
-     * defined in a java package and class appropriate to the argument's scope.
+     * <p>While ordinary {@link Args} should be universally useful and meaningful, custom arguments
+     * can apply just to resolvers of a certain URI scheme, just to resolvers producing a particular
+     * type of {@link java.net.SocketAddress}, or even an individual {@link NameResolver} subclass.
+     * Custom args are identified by an instance of {@link Args.Key} which should be a constant
+     * defined in a java package and class appropriate for the argument's scope.
      *
      * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
      * the name to be resolved itself. However, there are rare cases where all or part of the target
      * name can't be represented by any standard URI scheme or can't be encoded as a String at all.
-     * Extension args, in contrast, can be an arbitrary Java type, making them a useful work around
-     * in these cases.
+     * Custom args, in contrast, can be an arbitrary Java type, making them a useful work around in
+     * these cases.
      *
-     * <p>Extension args can also be used simply to avoid adding inappropriate deps to the low level
+     * <p>Custom args can also be used simply to avoid adding inappropriate deps to the low level
      * io.grpc package.
      */
-    @SuppressWarnings("unchecked")  // Cast is safe because all put()s go through the setArg() API.
+    @SuppressWarnings("unchecked") // Cast is safe because all put()s go through the setArg() API.
     @Nullable
     public <T> T getArg(Key<T> key) {
       return customArgs != null ? (T) customArgs.get(key) : null;

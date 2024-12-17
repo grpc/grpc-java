@@ -634,11 +634,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Provides an "extended" argument for the {@link NameResolver}, if applicable, replacing any
-   * 'value' previously provided for 'key'.
+   * Provides a "custom" argument for the {@link NameResolver}, if applicable, replacing any 'value'
+   * previously provided for 'key'.
    *
    * <p>NB: If the selected {@link NameResolver} does not understand 'key', or target URI resolution
-   * isn't needed at all, your extended argument will be silently ignored.
+   * isn't needed at all, your custom argument will be silently ignored.
    *
    * <p>See {@link NameResolver.Args#getArg(NameResolver.Args.Key)} for more.
    *
