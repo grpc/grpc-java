@@ -659,7 +659,9 @@ public class GrpcBootstrapperImplTest {
         + "      \"channel_creds\": [\n"
         + "        {\"type\": \"insecure\"}\n"
         + "      ],\n"
-        + "      \"server_features\": [null, {}, 3, true, \"unexpected\", \"trusted_xds_server\"]\n"
+        + "      \"server_features\": [\n"
+        + "        null, {}, 3, true, \"unexpected\", \"ignore_resource_deletion\"\n"
+        + "      ]\n"
         + "    }\n"
         + "  ]\n"
         + "}";
@@ -667,7 +669,7 @@ public class GrpcBootstrapperImplTest {
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
-    assertThat(serverInfo.isTrustedXdsServer()).isTrue();
+    assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
 
   @Test
