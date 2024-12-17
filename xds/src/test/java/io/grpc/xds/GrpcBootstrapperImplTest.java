@@ -651,6 +651,28 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
+  public void serverFeatures_ignoresUnknownValues() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\n"
+        + "        null, {}, 3, true, \"unexpected\", \"ignore_resource_deletion\"\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
+  }
+
+  @Test
   public void notFound() {
     bootstrapper.bootstrapPathFromEnvVar = null;
     bootstrapper.bootstrapPathFromSysProp = null;
