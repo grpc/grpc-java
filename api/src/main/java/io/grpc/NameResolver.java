@@ -31,7 +31,6 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
@@ -294,12 +293,12 @@ public abstract class NameResolver {
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
-    private final Extensions extensions;
     @Nullable private final ScheduledExecutorService scheduledExecutorService;
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
     @Nullable private final MetricRecorder metricRecorder;
+    @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -307,13 +306,12 @@ public abstract class NameResolver {
       this.syncContext = checkNotNull(builder.syncContext, "syncContext not set");
       this.serviceConfigParser =
           checkNotNull(builder.serviceConfigParser, "serviceConfigParser not set");
-      this.extensions =
-          builder.extensionsBuilder != null ? builder.extensionsBuilder.build() : Extensions.EMPTY;
       this.scheduledExecutorService = builder.scheduledExecutorService;
       this.channelLogger = builder.channelLogger;
       this.executor = builder.executor;
       this.overrideAuthority = builder.overrideAuthority;
       this.metricRecorder = builder.metricRecorder;
+      this.customArgs = cloneCustomArgs(builder.customArgs);
     }
 
     /**
@@ -393,9 +391,10 @@ public abstract class NameResolver {
      * <p>Extension args can also be used simply to avoid adding inappropriate deps to the low level
      * io.grpc package.
      */
+    @SuppressWarnings("unchecked")  // Cast is safe because all put()s go through the setArg() API.
     @Nullable
     public <T> T getArg(Key<T> key) {
-      return extensions.get(key);
+      return customArgs != null ? (T) customArgs.get(key) : null;
     }
 
     /**
@@ -451,7 +450,7 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
-          .add("extensions", extensions)
+          .add("customArgs", customArgs)
           .add("scheduledExecutorService", scheduledExecutorService)
           .add("channelLogger", channelLogger)
           .add("executor", executor)
@@ -471,12 +470,12 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
-      builder.extensionsBuilder = extensions.toBuilder();
       builder.setScheduledExecutorService(scheduledExecutorService);
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
       builder.setOverrideAuthority(overrideAuthority);
       builder.setMetricRecorder(metricRecorder);
+      builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }
 
@@ -504,7 +503,7 @@ public abstract class NameResolver {
       private Executor executor;
       private String overrideAuthority;
       private MetricRecorder metricRecorder;
-      private Extensions.Builder extensionsBuilder = Extensions.newBuilder();
+      private IdentityHashMap<Key<?>, Object> customArgs;
 
       Builder() {
       }
@@ -593,14 +592,10 @@ public abstract class NameResolver {
 
       /** See {@link Args#getArg(Key)}. */
       public <T> Builder setArg(Key<T> key, T value) {
-        extensionsBuilder.set(key, value);
-        return this;
-      }
-
-      /** Copies each extension argument from 'extensions' into this Builder. */
-      @Internal
-      public Builder setAllExtensions(Extensions extensions) {
-        extensionsBuilder.setAll(extensions);
+        if (customArgs == null) {
+          customArgs = new IdentityHashMap<>();
+        }
+        customArgs.put(key, value);
         return this;
       }
 
@@ -652,105 +647,6 @@ public abstract class NameResolver {
        */
       public static <T> Key<T> create(String debugString) {
         return new Key<>(debugString);
-      }
-    }
-
-    /**
-     * An immutable type-safe container of externally-defined {@link NameResolver} arguments.
-     *
-     * <p>NB: This class overrides neither {@code equals()} nor {@code hashCode()}.
-     */
-    @Immutable
-    @Internal
-    public static final class Extensions {
-      private static final IdentityHashMap<Key<?>, Object> EMPTY_MAP = new IdentityHashMap<>();
-
-      /** The canonical empty instance. */
-      public static final Extensions EMPTY = new Extensions(EMPTY_MAP);
-
-      private final IdentityHashMap<Key<?>, Object> data;
-
-      private Extensions(IdentityHashMap<Key<?>, Object> data) {
-        assert data != null;
-        this.data = data;
-      }
-
-      /** Gets the value for the key, or {@code null} if it's not present. */
-      @SuppressWarnings("unchecked")
-      @Nullable
-      public <T> T get(Key<T> key) {
-        return (T) data.get(key);
-      }
-
-      Set<Key<?>> keysForTest() {
-        return Collections.unmodifiableSet(data.keySet());
-      }
-
-      /** Creates a new builder. */
-      public static Builder newBuilder() {
-        return new Builder(EMPTY);
-      }
-
-      /**
-       * Creates a new builder that is pre-populated with the content of this container.
-       *
-       * @return a new builder.
-       */
-      public Builder toBuilder() {
-        return new Builder(this);
-      }
-
-      @Override
-      public String toString() {
-        return data.toString();
-      }
-
-      /** Fluently builds instances of {@link Extensions}. */
-      public static final class Builder {
-        private Extensions base;
-        private IdentityHashMap<Key<?>, Object> newdata;
-
-        private Builder(Extensions base) {
-          assert base != null;
-          this.base = base;
-        }
-
-        private IdentityHashMap<Key<?>, Object> data(int size) {
-          if (newdata == null) {
-            newdata = new IdentityHashMap<>(size);
-          }
-          return newdata;
-        }
-
-        /**
-         * Associates 'value' with 'key', replacing any previously associated value.
-         *
-         * @return this
-         */
-        public <T> Builder set(Key<T> key, T value) {
-          data(1).put(key, value);
-          return this;
-        }
-
-        /** Copies all entries from 'other' into this Builder. */
-        public Builder setAll(Extensions other) {
-          data(other.data.size()).putAll(other.data);
-          return this;
-        }
-
-        /** Builds the extensions. */
-        public Extensions build() {
-          if (newdata != null) {
-            for (Map.Entry<Key<?>, Object> entry : base.data.entrySet()) {
-              if (!newdata.containsKey(entry.getKey())) {
-                newdata.put(entry.getKey(), entry.getValue());
-              }
-            }
-            base = new Extensions(newdata);
-            newdata = null;
-          }
-          return base;
-        }
       }
     }
   }
@@ -1047,5 +943,11 @@ public abstract class NameResolver {
             .toString();
       }
     }
+  }
+
+  @Nullable
+  private static IdentityHashMap<Args.Key<?>, Object> cloneCustomArgs(
+          @Nullable IdentityHashMap<Args.Key<?>, Object> customArgs) {
+    return customArgs != null ? new IdentityHashMap<>(customArgs) : null;
   }
 }

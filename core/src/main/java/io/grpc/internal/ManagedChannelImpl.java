@@ -591,8 +591,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.authorityOverride = builder.authorityOverride;
     this.metricRecorder = new MetricRecorderImpl(builder.metricSinks,
         MetricInstrumentRegistry.getDefaultRegistry());
-    this.nameResolverArgs =
-        NameResolver.Args.newBuilder()
+    NameResolver.Args.Builder nameResolverArgsBuilder = NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
@@ -601,9 +600,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setMetricRecorder(this.metricRecorder)
-            .setOverrideAuthority(this.authorityOverride)
-            .setAllExtensions(builder.nameResolverArgsExtBuilder.build())
-            .build();
+            .setOverrideAuthority(this.authorityOverride);
+    builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
+    this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
         targetUri, authorityOverride, nameResolverProvider, nameResolverArgs);
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");

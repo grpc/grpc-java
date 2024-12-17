@@ -50,8 +50,10 @@ public class NameResolverTest {
   private static final Attributes.Key<String> YOLO_ATTR_KEY = Attributes.Key.create("yolo");
   private static Attributes ATTRIBUTES =
       Attributes.newBuilder().set(YOLO_ATTR_KEY, "To be, or not to be?").build();
-  private static final NameResolver.Args.Key<Integer> EXT_ARG_KEY =
+  private static final NameResolver.Args.Key<Integer> FOO_ARG_KEY =
       NameResolver.Args.Key.create("foo");
+  private static final NameResolver.Args.Key<Integer> BAR_ARG_KEY =
+          NameResolver.Args.Key.create("bar");
   private static ConfigOrError CONFIG = ConfigOrError.fromConfig("foo");
 
   @Rule
@@ -82,7 +84,8 @@ public class NameResolverTest {
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
-    assertThat(args.getArg(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
@@ -94,7 +97,8 @@ public class NameResolverTest {
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
-    assertThat(args.getArg(EXT_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
@@ -111,7 +115,7 @@ public class NameResolverTest {
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
-        .setArg(EXT_ARG_KEY, extensionArgValue)
+        .setArg(FOO_ARG_KEY, extensionArgValue)
         .build();
   }
 

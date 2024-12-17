@@ -42,6 +42,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
@@ -55,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -151,8 +153,6 @@ public final class ManagedChannelImplBuilder
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
-  final NameResolver.Args.Extensions.Builder nameResolverArgsExtBuilder =
-      NameResolver.Args.Extensions.newBuilder();
 
   final List<ClientTransportFilter> transportFilters = new ArrayList<>();
 
@@ -161,6 +161,8 @@ public final class ManagedChannelImplBuilder
   final ChannelCredentials channelCredentials;
   @Nullable
   final CallCredentials callCredentials;
+  @Nullable
+  IdentityHashMap<NameResolver.Args.Key<?>, Object> nameResolverCustomArgs;
 
   @Nullable
   private final SocketAddress directServerAddress;
@@ -556,12 +558,6 @@ public final class ManagedChannelImplBuilder
     return this;
   }
 
-  @Override
-  public <X> ManagedChannelImplBuilder setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
-    nameResolverArgsExtBuilder.set(key, value);
-    return this;
-  }
-
   @Nullable
   private static Map<String, ?> checkMapEntryTypes(@Nullable Map<?, ?> map) {
     if (map == null) {
@@ -619,6 +615,24 @@ public final class ManagedChannelImplBuilder
       }
     }
     return Collections.unmodifiableList(parsedList);
+  }
+
+  @Override
+  public <X> ManagedChannelImplBuilder setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
+    if (nameResolverCustomArgs == null) {
+      nameResolverCustomArgs = new IdentityHashMap<>();
+    }
+    nameResolverCustomArgs.put(key, value);
+    return this;
+  }
+
+  @SuppressWarnings("unchecked") // This cast is safe because of setNameResolverArg()'s signature.
+  void copyAllNameResolverCustomArgsTo(NameResolver.Args.Builder dest) {
+    if (nameResolverCustomArgs != null) {
+      for (Map.Entry<Args.Key<?>, Object> entry : nameResolverCustomArgs.entrySet()) {
+        dest.setArg((NameResolver.Args.Key<Object>) entry.getKey(), entry.getValue());
+      }
+    }
   }
 
   @Override
