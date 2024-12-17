@@ -599,8 +599,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setServiceConfigParser(serviceConfigParser)
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
-            .setMetricRecorder(this.metricRecorder)
-            .setOverrideAuthority(this.authorityOverride);
+            .setOverrideAuthority(this.authorityOverride)
+            .setMetricRecorder(this.metricRecorder);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(

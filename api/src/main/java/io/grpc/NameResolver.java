@@ -592,6 +592,8 @@ public abstract class NameResolver {
 
       /** See {@link Args#getArg(Key)}. */
       public <T> Builder setArg(Key<T> key, T value) {
+        checkNotNull(key, "key");
+        checkNotNull(value, "value");
         if (customArgs == null) {
           customArgs = new IdentityHashMap<>();
         }

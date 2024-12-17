@@ -42,7 +42,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
@@ -629,7 +628,7 @@ public final class ManagedChannelImplBuilder
   @SuppressWarnings("unchecked") // This cast is safe because of setNameResolverArg()'s signature.
   void copyAllNameResolverCustomArgsTo(NameResolver.Args.Builder dest) {
     if (nameResolverCustomArgs != null) {
-      for (Map.Entry<Args.Key<?>, Object> entry : nameResolverCustomArgs.entrySet()) {
+      for (Map.Entry<NameResolver.Args.Key<?>, Object> entry : nameResolverCustomArgs.entrySet()) {
         dest.setArg((NameResolver.Args.Key<Object>) entry.getKey(), entry.getValue());
       }
     }
