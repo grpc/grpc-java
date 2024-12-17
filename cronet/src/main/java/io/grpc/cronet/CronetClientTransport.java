@@ -151,13 +151,14 @@ class CronetClientTransport implements ConnectionClientTransport {
     return new StartCallback().clientStream;
   }
 
-  @SuppressWarnings("GuardedBy")
   @GuardedBy("lock")
   private void startStream(CronetClientStream stream) {
-    streams.add(stream);
-    // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock'; instead
-    // found: 'this.lock'
-    stream.transportState().start(streamFactory);
+    synchronized (lock) {
+      streams.add(stream);
+      synchronized (stream.transportState().lock) {
+        stream.transportState().start(streamFactory);
+      }
+    }
   }
 
   @Override
