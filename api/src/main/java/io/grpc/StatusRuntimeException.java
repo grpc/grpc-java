@@ -45,12 +45,7 @@ public class StatusRuntimeException extends RuntimeException {
    * @since 1.0.0
    */
   public StatusRuntimeException(Status status, @Nullable Metadata trailers) {
-    this(status, trailers, /*fillInStackTrace=*/ true);
-  }
-
-  StatusRuntimeException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
-    super(Status.formatThrowableMessage(status), status.getCause(),
-            /* enable suppressions */ true, /* writableStackTrace */ fillInStackTrace);
+    super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
   }
