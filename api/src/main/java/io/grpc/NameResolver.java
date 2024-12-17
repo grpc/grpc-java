@@ -374,7 +374,7 @@ public abstract class NameResolver {
     }
 
     /**
-     * Gets the value of a custom arg by key, or {@code null} if it's not set.
+     * Returns the value of a custom arg named 'key', or {@code null} if it's not set.
      *
      * <p>While ordinary {@link Args} should be universally useful and meaningful, custom arguments
      * can apply just to resolvers of a certain URI scheme, just to resolvers producing a particular
