@@ -90,7 +90,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
         Arrays.asList("grpc.target", "grpc.xds.server"), Collections.emptyList(), false);
     RESOURCES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.xds_client.resources",
         "EXPERIMENTAL.  Number of xDS resources.", "{resource}",
-        Arrays.asList("grpc.target", "grpc.xds.authority", "grpc.xds.cache_state",
+        Arrays.asList("grpc.target", "grpc.xds.cache_state",
             "grpc.xds.resource_type"), Collections.emptyList(), false);
   }
 
