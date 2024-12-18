@@ -31,12 +31,18 @@ import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -54,6 +60,14 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import javax.tools.FileObject;
+import javax.tools.ForwardingJavaFileManager;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileManager;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -933,6 +947,104 @@ public class ContextTest {
       modifiersField.set(storage, storageModifiers | Modifier.FINAL);
       modifiersField.setAccessible(false);
     }
+  }
+
+  @Test
+  public void customStorage() throws Exception {
+    JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+
+    Map<String, ByteArrayOutputStream> classBytes = new HashMap<>();
+    JavaFileManager fileManager = new ForwardingJavaFileManager<StandardJavaFileManager>(
+        compiler.getStandardFileManager(null, null, null)) {
+      @Override
+      public JavaFileObject getJavaFileForOutput(Location location, String className,
+          JavaFileObject.Kind kind, FileObject sibling) {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        classBytes.put(className, outputStream);
+        return new SimpleJavaFileObject(
+            URI.create("string:///" + className.replace('.', '/') + kind.extension), kind) {
+          @Override
+          public OutputStream openOutputStream() {
+            return outputStream;
+          }
+        };
+      }
+    };
+
+    JavaFileObject sourceFile = new SimpleJavaFileObject(URI.create(
+        "string:///ContextStorageOverride.java"),
+        JavaFileObject.Kind.SOURCE) {
+      @Override
+      public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+        return "package io.grpc.override;\n"
+            + "\n"
+            + "import io.grpc.Context;\n"
+            + "import io.grpc.Context.Storage;\n"
+            + "\n"
+            + "public class ContextStorageOverride extends Storage {\n"
+            + "  public static Context toAttach = null;\n"
+            + "  public static Context toDetach = null;\n"
+            + "  public static Context toRestore = null;\n"
+            + "  public static Context current = null;\n"
+            + "\n"
+            + "  @Override\n"
+            + "  public Context doAttach(Context toAttach) {\n"
+            + "    ContextStorageOverride.toAttach = toAttach;\n"
+            + "    return current();\n"
+            + "  }\n"
+            + "\n"
+            + "  @Override\n"
+            + "  public void detach(Context toDetach, Context toRestore) {\n"
+            + "    ContextStorageOverride.toDetach = toDetach;\n"
+            + "    ContextStorageOverride.toRestore = toRestore;\n"
+            + "  }\n"
+            + "\n"
+            + "  @Override\n"
+            + "  public Context current() {\n"
+            + "    return current;\n"
+            + "  }\n"
+            + "}\n";
+      }
+    };
+
+    boolean result = compiler.getTask(null, fileManager, null, null, null,
+            Collections.singletonList(sourceFile)).call();
+    if (!result) {
+      fail("Compilation failed");
+      return;
+    }
+
+    ClassReplacingClassLoader classLoader = new
+        ClassReplacingClassLoader(
+        getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"), classBytes);
+
+    Class<?> storageClass = classLoader.loadClass("io.grpc.override.ContextStorageOverride");
+    Field toAttachField = storageClass.getDeclaredField("toAttach");
+    Field toDetachField = storageClass.getDeclaredField("toDetach");
+    Field toRestoreField = storageClass.getDeclaredField("toRestore");
+    Field currentField = storageClass.getDeclaredField("current");
+
+    Class<?> contextInSeperated = classLoader.loadClass(Context.class.getName());
+
+    Constructor<?> contextConstructor = contextInSeperated.getDeclaredConstructor();
+    contextConstructor.setAccessible(true);
+    Object context1 = contextConstructor.newInstance();
+    Object context2 = contextConstructor.newInstance();
+    Object context3 = contextConstructor.newInstance();
+
+    currentField.set(null, context1);
+
+    // current: context1;
+    assertEquals(context1, contextInSeperated.getMethod("current").invoke(null));
+
+    // current: context1; context2.attach()
+    assertEquals(context1, contextInSeperated.getMethod("attach").invoke(context2));
+    assertEquals(context2, toAttachField.get(null));
+
+    // context2.detach(context3)
+    contextInSeperated.getMethod("detach", contextInSeperated).invoke(context2, context3);
+    assertEquals(context2, toDetachField.get(null));
+    assertEquals(context3, toRestoreField.get(null));
   }
 
   @Test
