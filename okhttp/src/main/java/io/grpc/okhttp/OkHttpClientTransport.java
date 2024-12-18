@@ -16,10 +16,6 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
-import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -44,6 +40,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
@@ -54,6 +51,7 @@ import io.grpc.internal.Http2Ping;
 import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.NoopSslSession;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
@@ -80,11 +78,9 @@ import java.net.Socket;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.security.Principal;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumMap;
@@ -95,7 +91,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
@@ -109,12 +104,10 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.net.SocketFactory;
-import javax.net.ssl.HandshakeCompletedListener;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSessionContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
@@ -127,6 +120,10 @@ import okio.ByteString;
 import okio.Okio;
 import okio.Source;
 import okio.Timeout;
+
+import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
+import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
 
 /**
  * A okhttp-based {@link ConnectionClientTransport} implementation.
@@ -446,7 +443,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       if (peerVerificationResults.containsKey(callOptions.getAuthority())) {
         peerVerificationStatus = peerVerificationResults.get(callOptions.getAuthority());
       } else {
-        Optional<TrustManager> x509ExtendedTrustManager;
+        TrustManager x509ExtendedTrustManager;
         try {
           x509ExtendedTrustManager = getX509ExtendedTrustManager(
                   (TlsChannelCredentials) channelCredentials);
@@ -455,7 +452,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
                   "Failure getting X509ExtendedTrustManager from TlsCredentials").withCause(e),
                   tracers);
         }
-        if (!x509ExtendedTrustManager.isPresent()) {
+        if (x509ExtendedTrustManager == null) {
           return new FailingClientStream(Status.UNAVAILABLE.withDescription(
                   "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
                           + "available"), tracers);
@@ -466,7 +463,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           for (int i = 0; i < peerCertificates.length; i++) {
             x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
           }
-          ((X509ExtendedTrustManager) x509ExtendedTrustManager.get()).checkServerTrusted(
+          ((X509ExtendedTrustManager) x509ExtendedTrustManager).checkServerTrusted(
                   x509PeerCertificates, "RSA",
                   new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
           peerVerificationStatus = Status.OK;
@@ -501,24 +498,26 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
   }
 
-  private Optional<TrustManager> getX509ExtendedTrustManager(TlsChannelCredentials tlsCreds)
+  private TrustManager getX509ExtendedTrustManager(TlsChannelCredentials tlsCreds)
       throws GeneralSecurityException {
     TrustManager[] tm = null;
-    // Using the same way of creating TrustManager from
-    // {@link OkHttpChannelBuilder#sslSocketFactoryFrom}.
+    // Using the same way of creating TrustManager from OkHttpChannelBuilder.sslSocketFactoryFrom()
     if (tlsCreds.getTrustManagers() != null) {
       tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
     } else if (tlsCreds.getRootCertificates() != null) {
-      tm = io.grpc.internal.CertificateUtils.createTrustManager(tlsCreds.getRootCertificates());
+      tm = CertificateUtils.createTrustManager(tlsCreds.getRootCertificates());
     } else { // else use system default
       TrustManagerFactory tmf = TrustManagerFactory.getInstance(
           TrustManagerFactory.getDefaultAlgorithm());
       tmf.init((KeyStore) null);
       tm = tmf.getTrustManagers();
     }
-    return Arrays.stream(tm).filter(
-            trustManager -> trustManager instanceof X509ExtendedTrustManager)
-            .findFirst();
+    for (TrustManager trustManager: tm) {
+      if (trustManager instanceof X509ExtendedTrustManager) {
+        return trustManager;
+      }
+    }
+    return null;
   }
 
   @GuardedBy("lock")
@@ -1567,7 +1566,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   /**
    * SSLSocket wrapper that provides a fake SSLSession for handshake session.
    */
-  static class SslSocketWrapper extends SSLSocket {
+  static class SslSocketWrapper extends NoopSslSocket {
 
     private final SSLSession sslSession;
     private final SSLSocket sslSocket;
@@ -1593,104 +1592,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
       return sslParameters;
     }
-
-    @Override
-    public String[] getSupportedCipherSuites() {
-      return new String[0];
-    }
-
-    @Override
-    public String[] getEnabledCipherSuites() {
-      return new String[0];
-    }
-
-    @Override
-    public void setEnabledCipherSuites(String[] strings) {
-
-    }
-
-    @Override
-    public String[] getSupportedProtocols() {
-      return new String[0];
-    }
-
-    @Override
-    public String[] getEnabledProtocols() {
-      return new String[0];
-    }
-
-    @Override
-    public void setEnabledProtocols(String[] strings) {
-
-    }
-
-    @Override
-    public SSLSession getSession() {
-      return null;
-    }
-
-    @Override
-    public void addHandshakeCompletedListener(
-        HandshakeCompletedListener handshakeCompletedListener) {
-
-    }
-
-    @Override
-    public void removeHandshakeCompletedListener(
-        HandshakeCompletedListener handshakeCompletedListener) {
-
-    }
-
-    @Override
-    public void startHandshake() throws IOException {
-
-    }
-
-    @Override
-    public void setUseClientMode(boolean b) {
-
-    }
-
-    @Override
-    public boolean getUseClientMode() {
-      return false;
-    }
-
-    @Override
-    public void setNeedClientAuth(boolean b) {
-
-    }
-
-    @Override
-    public boolean getNeedClientAuth() {
-      return false;
-    }
-
-    @Override
-    public void setWantClientAuth(boolean b) {
-
-    }
-
-    @Override
-    public boolean getWantClientAuth() {
-      return false;
-    }
-
-    @Override
-    public void setEnableSessionCreation(boolean b) {
-
-    }
-
-    @Override
-    public boolean getEnableSessionCreation() {
-      return false;
-    }
   }
 
   /**
    * Fake SSLSession instance that provides the peer host name to verify for per-rpc check.
    */
-  static class FakeSslSession implements SSLSession {
+  static class FakeSslSession extends NoopSslSession {
 
     private final String peerHost;
 
@@ -1701,108 +1608,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     @Override
     public String getPeerHost() {
       return peerHost;
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    public javax.security.cert.X509Certificate[] getPeerCertificateChain() {
-      throw new UnsupportedOperationException("This method is deprecated and marked for removal. "
-          + "Use the getPeerCertificates() method instead.");
-    }
-
-    @Override
-    public byte[] getId() {
-      return new byte[0];
-    }
-
-    @Override
-    public SSLSessionContext getSessionContext() {
-      return null;
-    }
-
-    @Override
-    public long getCreationTime() {
-      return 0;
-    }
-
-    @Override
-    public long getLastAccessedTime() {
-      return 0;
-    }
-
-    @Override
-    public void invalidate() {
-
-    }
-
-    @Override
-    public boolean isValid() {
-      return false;
-    }
-
-    @Override
-    public void putValue(String s, Object o) {
-
-    }
-
-    @Override
-    public Object getValue(String s) {
-      return null;
-    }
-
-    @Override
-    public void removeValue(String s) {
-
-    }
-
-    @Override
-    public String[] getValueNames() {
-      return new String[0];
-    }
-
-    @Override
-    public Certificate[] getPeerCertificates() throws SSLPeerUnverifiedException {
-      return new Certificate[0];
-    }
-
-    @Override
-    public Certificate[] getLocalCertificates() {
-      return new Certificate[0];
-    }
-
-    @Override
-    public Principal getPeerPrincipal() throws SSLPeerUnverifiedException {
-      return null;
-    }
-
-    @Override
-    public Principal getLocalPrincipal() {
-      return null;
-    }
-
-    @Override
-    public String getCipherSuite() {
-      return null;
-    }
-
-    @Override
-    public String getProtocol() {
-      return null;
-    }
-
-    @Override
-    public int getPeerPort() {
-      return 0;
-    }
-
-    @Override
-    public int getPacketBufferSize() {
-      return 0;
-    }
-
-    @Override
-    public int getApplicationBufferSize() {
-      return 0;
     }
   }
 }

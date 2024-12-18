@@ -28,8 +28,6 @@ def grpcVersion = '1.70.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.25.5'
 
 dependencies {
-    implementation "io.grpc:grpc-api:${grpcVersion}"
-    implementation "io.grpc:grpc-okhttp:${grpcVersion}"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     compileOnly "org.apache.tomcat:annotations-api:6.0.53"
