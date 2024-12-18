@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.netty;
+package io.grpc.internal;
 
 import java.security.Principal;
 import java.security.cert.Certificate;
@@ -25,7 +25,7 @@ import javax.net.ssl.SSLSessionContext;
 /** A no-op ssl session, to facilitate overriding only the required methods in specific
  * implementations.
  */
-class NoopSslSession implements SSLSession {
+public class NoopSslSession implements SSLSession {
   @Override
   public byte[] getId() {
     return new byte[0];
