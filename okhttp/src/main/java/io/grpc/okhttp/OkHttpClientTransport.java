@@ -16,6 +16,10 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
+import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -120,10 +124,6 @@ import okio.ByteString;
 import okio.Okio;
 import okio.Source;
 import okio.Timeout;
-
-import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
-import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
 
 /**
  * A okhttp-based {@link ConnectionClientTransport} implementation.
