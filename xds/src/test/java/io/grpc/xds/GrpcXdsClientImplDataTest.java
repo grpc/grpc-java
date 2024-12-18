@@ -140,7 +140,6 @@ import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
-import io.grpc.xds.client.XdsResourceType.StructOrError;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
@@ -939,7 +938,7 @@ public class GrpcXdsClientImplDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
                     .setFilterState(
                         FilterState.newBuilder()
-                            .setKey(XdsResourceType.HASH_POLICY_FILTER_STATE_KEY)))
+                            .setKey(XdsRouteConfigureResource.HASH_POLICY_FILTER_STATE_KEY)))
             .addHashPolicy(
                 io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
                     .setQueryParameter(
