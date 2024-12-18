@@ -69,7 +69,7 @@ public class NameResolverTest {
   private final Executor executor = Executors.newSingleThreadExecutor();
   private final String overrideAuthority = "grpc.io";
   private final MetricRecorder metricRecorder = new MetricRecorder() {};
-  private final int extensionArgValue = 42;
+  private final int customArgValue = 42;
   @Mock NameResolver.Listener mockListener;
 
   @Test
@@ -84,7 +84,7 @@ public class NameResolverTest {
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
-    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
     assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     NameResolver.Args args2 = args.toBuilder().build();
@@ -97,7 +97,7 @@ public class NameResolverTest {
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
-    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(extensionArgValue);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
     assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     assertThat(args2).isNotSameInstanceAs(args);
@@ -115,7 +115,7 @@ public class NameResolverTest {
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
-        .setArg(FOO_ARG_KEY, extensionArgValue)
+        .setArg(FOO_ARG_KEY, customArgValue)
         .build();
   }
 
