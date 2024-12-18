@@ -53,8 +53,16 @@ dependencies {
             libraries.mockito.core,
             libraries.okhttp
 
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()

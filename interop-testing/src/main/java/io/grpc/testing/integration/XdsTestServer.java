@@ -57,6 +57,7 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /** Interop test server that implements the xDS testing service. */
 public final class XdsTestServer {
@@ -193,6 +194,7 @@ public final class XdsTestServer {
   }
 
   @SuppressWarnings("AddressSelection")
+  @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void start() throws Exception {
     if (enableCsmObservability) {
       csmObservability = CsmObservability.newBuilder()

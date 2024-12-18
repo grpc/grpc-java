@@ -22,15 +22,16 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Optional;
+import com.google.common.io.ByteStreams;
 import io.grpc.internal.SpiffeUtil.SpiffeBundle;
 import io.grpc.internal.SpiffeUtil.SpiffeId;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.io.OutputStream;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
@@ -247,10 +248,12 @@ public class SpiffeUtilTest {
     }
 
     private String copyFileToTmp(String fileName) throws Exception {
-      Path tempFilePath = tempFolder.newFile(fileName).toPath();
+      File tempFilePath = tempFolder.newFile(fileName);
       try (InputStream resourceStream = SpiffeUtilTest.class.getClassLoader()
-          .getResourceAsStream(TEST_DIRECTORY_PREFIX + fileName)) {
-        Files.copy(resourceStream, tempFilePath, StandardCopyOption.REPLACE_EXISTING);
+            .getResourceAsStream(TEST_DIRECTORY_PREFIX + fileName);
+          OutputStream fileStream = new FileOutputStream(tempFilePath)) {
+        ByteStreams.copy(resourceStream, fileStream);
+        fileStream.flush();
       }
       return tempFilePath.toString();
     }
@@ -358,9 +361,11 @@ public class SpiffeUtilTest {
       NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil
           .loadTrustBundleFromFile(null));
       assertEquals("trustBundleFile", npe.getMessage());
-      NoSuchFileException nsfe = assertThrows(NoSuchFileException.class, () -> SpiffeUtil
+      FileNotFoundException nsfe = assertThrows(FileNotFoundException.class, () -> SpiffeUtil
           .loadTrustBundleFromFile("i_do_not_exist"));
-      assertEquals("i_do_not_exist", nsfe.getMessage());
+      assertTrue(
+          "Did not contain expected substring: " + nsfe.getMessage(),
+          nsfe.getMessage().contains("i_do_not_exist"));
     }
   }
 }

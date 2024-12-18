@@ -22,6 +22,14 @@ dependencies {
             project(':grpc-core'),
             project(":grpc-context"), // Override google-auth dependency with our newer version
             libraries.google.auth.oauth2Http
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }

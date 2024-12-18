@@ -36,6 +36,7 @@ tasks.named("jar").configure {
 dependencies {
     compileOnly sourceSets.context.output
     api libraries.jsr305,
+            libraries.animalsniffer.annotations,
             libraries.errorprone.annotations
     implementation libraries.guava
 
@@ -48,8 +49,18 @@ dependencies {
     testImplementation project(':grpc-testing')
     testImplementation libraries.guava.testlib
 
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    // Temporarily disabled until StatusException is fixed.
+    // Context: https://github.com/grpc/grpc-java/pull/11066
+    //signature (libraries.signature.android) {
+    //    artifact {
+    //        extension = "signature"
+    //    }
+    //}
 }
 
 tasks.named("javadoc").configure {
