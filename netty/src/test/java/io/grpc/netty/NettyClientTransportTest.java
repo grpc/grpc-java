@@ -842,64 +842,99 @@ public class NettyClientTransportTest {
   @Test
   public void authorityOverrideInCallOptions_noX509ExtendedTrustManager_newStreamCreationFails()
       throws IOException, InterruptedException, GeneralSecurityException {
-    startServer();
-    InputStream caCert = TlsTesting.loadCert("ca.pem");
-    X509TrustManager x509ExtendedTrustManager =
-        (X509TrustManager) getX509ExtendedTrustManager(caCert).get();
-    ProtocolNegotiators.FromChannelCredentialsResult result =
-        ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
-            .trustManager(new FakeTrustManager(x509ExtendedTrustManager)).build());
-    NettyClientTransport transport = newTransport(result.negotiator.newNegotiator());
-    FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
-    callMeMaybe(transport.start(fakeClientTransportListener));
-    synchronized (fakeClientTransportListener) {
-      fakeClientTransportListener.wait(10000);
+    System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
+    try {
+      startServer();
+      InputStream caCert = TlsTesting.loadCert("ca.pem");
+      X509TrustManager x509ExtendedTrustManager =
+              (X509TrustManager) getX509ExtendedTrustManager(caCert).get();
+      ProtocolNegotiators.FromChannelCredentialsResult result =
+              ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
+                      .trustManager(new FakeTrustManager(x509ExtendedTrustManager)).build());
+      NettyClientTransport transport = newTransport(result.negotiator.newNegotiator());
+      FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      synchronized (fakeClientTransportListener) {
+        fakeClientTransportListener.wait(10000);
+      }
+      assertThat(fakeClientTransportListener.isConnected).isTrue();
+
+      ClientStream stream = transport.newStream(
+              Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+              new ClientStreamTracer[]{new ClientStreamTracer() {
+              }});
+
+      assertThat(stream).isInstanceOf(FailingClientStream.class);
+      InsightBuilder insightBuilder = new InsightBuilder();
+      stream.appendTimeoutInsight(insightBuilder);
+      assertThat(insightBuilder.toString()).contains(
+              "Status{code=FAILED_PRECONDITION, description=Can't allow authority override in rpc when "
+                      + "SslEngine or X509ExtendedTrustManager is not available, cause=null}");
+    } finally {
+      System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
     }
-    assertThat(fakeClientTransportListener.isConnected).isTrue();
-
-    ClientStream stream = transport.newStream(
-        Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
-        new ClientStreamTracer[]{new ClientStreamTracer() {
-        }});
-
-    assertThat(stream).isInstanceOf(FailingClientStream.class);
-    InsightBuilder insightBuilder = new InsightBuilder();
-    stream.appendTimeoutInsight(insightBuilder);
-    assertThat(insightBuilder.toString()).contains(
-        "Status{code=FAILED_PRECONDITION, description=Can't allow authority override in rpc when "
-            + "SslEngine or X509ExtendedTrustManager is not available, cause=null}");
   }
 
   @Test
   public void authorityOverrideInCallOptions_doesntMatchServerPeerHost_newStreamCreationFails()
       throws IOException, InterruptedException, GeneralSecurityException {
-    startServer();
-    NettyClientTransport transport = newTransport(newNegotiator());
-    FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
-    callMeMaybe(transport.start(fakeClientTransportListener));
-    synchronized (fakeClientTransportListener) {
-      fakeClientTransportListener.wait(10000);
+    System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
+    try {
+      startServer();
+      NettyClientTransport transport = newTransport(newNegotiator());
+      FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      synchronized (fakeClientTransportListener) {
+        fakeClientTransportListener.wait(10000);
+      }
+      assertThat(fakeClientTransportListener.isConnected).isTrue();
+
+      ClientStream stream = transport.newStream(
+              Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+              new ClientStreamTracer[]{new ClientStreamTracer() {
+              }});
+
+      assertThat(stream).isInstanceOf(FailingClientStream.class);
+      InsightBuilder insightBuilder = new InsightBuilder();
+      stream.appendTimeoutInsight(insightBuilder);
+      assertThat(insightBuilder.toString()).contains(
+              "Status{code=UNAVAILABLE, description=Peer hostname verification during rpc failed for"
+                      + " authority 'foo.test.google.in'");
+      assertThat(insightBuilder.toString()).contains("cause=java.security.cert.CertificateException:"
+              + " No subject alternative DNS name matching foo.test.google.in found.");
+    } finally {
+      System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
     }
-    assertThat(fakeClientTransportListener.isConnected).isTrue();
-
-    ClientStream stream = transport.newStream(
-        Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
-        new ClientStreamTracer[]{new ClientStreamTracer() {
-        }});
-
-    assertThat(stream).isInstanceOf(FailingClientStream.class);
-    InsightBuilder insightBuilder = new InsightBuilder();
-    stream.appendTimeoutInsight(insightBuilder);
-    assertThat(insightBuilder.toString()).contains(
-        "Status{code=UNAVAILABLE, description=Peer hostname verification during rpc failed for"
-                + " authority 'foo.test.google.in'");
-    assertThat(insightBuilder.toString()).contains("cause=java.security.cert.CertificateException:"
-            + " No subject alternative DNS name matching foo.test.google.in found.");
   }
 
   @Test
   public void authorityOverrideInCallOptions_matchesServerPeerHost_newStreamCreationSucceeds()
       throws IOException, InterruptedException, GeneralSecurityException {
+    System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
+    try {
+      startServer();
+      NettyClientTransport transport = newTransport(newNegotiator());
+      FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      synchronized (fakeClientTransportListener) {
+        fakeClientTransportListener.wait(10000);
+      }
+      assertThat(fakeClientTransportListener.isConnected).isTrue();
+
+      ClientStream stream = transport.newStream(
+              Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("zoo.test.google.fr"),
+              new ClientStreamTracer[]{new ClientStreamTracer() {
+              }});
+
+      assertThat(stream).isNotInstanceOf(FailingClientStream.class);
+    } finally {
+      System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
+    }
+  }
+
+  @Test
+  public void authorityOverrideInCallOptions_notMatches_flagDisabled_createsStream()
+          throws IOException, InterruptedException, GeneralSecurityException {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator());
     FakeClientTransportListener fakeClientTransportListener = new FakeClientTransportListener();
@@ -910,11 +945,11 @@ public class NettyClientTransportTest {
     assertThat(fakeClientTransportListener.isConnected).isTrue();
 
     ClientStream stream = transport.newStream(
-        Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("zoo.test.google.fr"),
-        new ClientStreamTracer[]{new ClientStreamTracer() {
-        }});
+            Rpc.METHOD, new Metadata(), CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+            new ClientStreamTracer[]{new ClientStreamTracer() {
+            }});
 
-    assertThat(stream).isNotInstanceOf(FailingClientStream.class);
+    assertThat(stream).isInstanceOf(NettyClientStream.class);
   }
 
   private Throwable getRootCause(Throwable t) {
