@@ -46,6 +46,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.Iterables;
 import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
@@ -239,11 +240,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Get the CancelClientStreamCommand written to the queue. Above we verified that there is
     // only one CancelClientStreamCommand enqueued, and is the third enqueued command (create,
     // frame write failure, cancel).
-    CancelClientStreamCommand cancelCommand = Mockito.mockingDetails(writeQueue).getInvocations()
-        // Get enqueue() innovations only
-        .stream().filter(invocation -> invocation.getMethod().getName().equals("enqueue"))
+    CancelClientStreamCommand cancelCommand = Iterables.get(
+        Iterables.filter(
+          Mockito.mockingDetails(writeQueue).getInvocations(),
+          // Get enqueue() innovations only
+          invocation -> invocation.getMethod().getName().equals("enqueue")),
         // Get the third invocation of enqueue()
-        .skip(2).findFirst().get()
+        2)
         // Get the first argument (QueuedCommand command)
         .getArgument(0);
 

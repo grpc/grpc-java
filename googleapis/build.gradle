@@ -21,5 +21,9 @@ dependencies {
                    libraries.guava.jre // JRE required by transitive protobuf-java-util
     testImplementation testFixtures(project(':grpc-core'))
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
