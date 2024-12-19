@@ -26,10 +26,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -66,6 +68,7 @@ import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
+import io.grpc.netty.ProtocolNegotiators.SslEngineWrapper;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.CertificateUtils;
@@ -111,10 +114,15 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -136,6 +144,7 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -222,13 +231,52 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
-  public void fromClient_tls() {
+  public void fromClient_tls_trustManager()
+      throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
+    KeyStore certStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    certStore.load(null);
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
+      for (X509Certificate cert : CertificateUtils.getX509Certificates(ca)) {
+        certStore.setCertificateEntry(cert.getSubjectX500Principal().getName("RFC2253"), cert);
+      }
+    }
+    trustManagerFactory.init(certStore);
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
+            .trustManager(trustManagerFactory.getTrustManagers()).build());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+    assertThat(((ClientTlsProtocolNegotiator) result.negotiator.newNegotiator())
+        .hasX509ExtendedTrustManager()).isTrue();
+  }
+
+  @Test
+  public void fromClient_tls_CaCertsInputStream() throws IOException {
+    ProtocolNegotiators.FromChannelCredentialsResult result =
+        ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
+            .trustManager(TlsTesting.loadCert("ca.pem")).build());
+    assertThat(result.error).isNull();
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.negotiator)
+        .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+    assertThat(((ClientTlsProtocolNegotiator) result.negotiator.newNegotiator())
+        .hasX509ExtendedTrustManager()).isTrue();
+  }
+
+  @Test
+  public void fromClient_tls_systemDefault() {
     ProtocolNegotiators.FromChannelCredentialsResult result =
         ProtocolNegotiators.from(TlsChannelCredentials.create());
     assertThat(result.error).isNull();
     assertThat(result.callCredentials).isNull();
     assertThat(result.negotiator)
         .isInstanceOf(ProtocolNegotiators.TlsProtocolNegotiatorClientFactory.class);
+    assertThat(((ClientTlsProtocolNegotiator) result.negotiator.newNegotiator())
+        .hasX509ExtendedTrustManager()).isTrue();
   }
 
   @Test
@@ -877,7 +925,8 @@ public class ProtocolNegotiatorsTest {
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger, Optional.empty());
+        "authority", elg, noopLogger, Optional.empty(),
+        getClientTlsProtocolNegotiator());
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -915,7 +964,8 @@ public class ProtocolNegotiatorsTest {
         .applicationProtocolConfig(apn).build();
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger, Optional.empty());
+        "authority", elg, noopLogger, Optional.empty(),
+        getClientTlsProtocolNegotiator());
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -939,7 +989,8 @@ public class ProtocolNegotiatorsTest {
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", elg, noopLogger, Optional.empty());
+        "authority", elg, noopLogger, Optional.empty(),
+        getClientTlsProtocolNegotiator());
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -967,7 +1018,8 @@ public class ProtocolNegotiatorsTest {
   @Test
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
-        "authority", null, noopLogger, Optional.empty());
+        "authority", null, noopLogger, Optional.empty(),
+        getClientTlsProtocolNegotiator());
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 
@@ -977,6 +1029,50 @@ public class ProtocolNegotiatorsTest {
     assertThat(pendingWrite.cause()).isInstanceOf(StatusRuntimeException.class);
     assertThat(Status.fromThrowable(pendingWrite.cause()).getCode())
         .isEqualTo(Status.Code.UNAVAILABLE);
+  }
+
+  private ClientTlsProtocolNegotiator getClientTlsProtocolNegotiator() throws SSLException {
+    return new ClientTlsProtocolNegotiator(GrpcSslContexts.forClient().trustManager(
+        TlsTesting.loadCert("ca.pem")).build(),
+        null, Optional.empty(), null);
+  }
+
+  @Test
+  public void allowedAuthoritiesForTransport_LruCache() throws SSLException, CertificateException {
+    X509ExtendedTrustManager mockX509ExtendedTrustManager = mock(X509ExtendedTrustManager.class);
+    ClientTlsProtocolNegotiator negotiator = new ClientTlsProtocolNegotiator(
+        GrpcSslContexts.forClient().trustManager(
+            TlsTesting.loadCert("ca.pem")).build(),
+        null, Optional.empty(), mockX509ExtendedTrustManager);
+    SSLEngine mockSslEngine = mock(SSLEngine.class);
+    negotiator.setSslEngine(mockSslEngine);
+    SSLSession mockSslSession = mock(SSLSession.class);
+    when(mockSslEngine.getSession()).thenReturn(mockSslSession);
+    when(mockSslSession.getPeerCertificates()).thenReturn(new Certificate[0]);
+
+    // Fill the cache
+    for (int i = 0; i < 100; i++) {
+      Status unused = negotiator.verifyAuthority("authority" + i);
+    }
+    // Should use value from the cache.
+    Status unused = negotiator.verifyAuthority("authority0");
+    // Should evict authority0.
+    unused = negotiator.verifyAuthority("authority100");
+    // Should call TrustManager as the cached value has been evicted for this authority value.
+    unused = negotiator.verifyAuthority("authority0");
+
+    ArgumentCaptor<SslEngineWrapper> sslEngineWrapperArgumentCaptor =
+        ArgumentCaptor.forClass(SslEngineWrapper.class);
+    verify(mockX509ExtendedTrustManager, times(102)).checkServerTrusted(any(), eq("RSA"),
+        sslEngineWrapperArgumentCaptor.capture());
+    List<SslEngineWrapper> sslEngineWrappersCaptured =
+        sslEngineWrapperArgumentCaptor.getAllValues();
+    assertThat(sslEngineWrappersCaptured).hasSize(102);
+    for (int i = 0; i < 100; i++) {
+      assertThat(sslEngineWrappersCaptured.get(i).getPeerHost()).isEqualTo("authority" + i);
+    }
+    assertThat(sslEngineWrappersCaptured.get(100).getPeerHost()).isEqualTo("authority100");
+    assertThat(sslEngineWrappersCaptured.get(101).getPeerHost()).isEqualTo("authority0");
   }
 
   @Test
@@ -1007,7 +1103,7 @@ public class ProtocolNegotiatorsTest {
   public void tls_failsOnNullSslContext() {
     thrown.expect(NullPointerException.class);
 
-    Object unused = ProtocolNegotiators.tls(null);
+    Object unused = ProtocolNegotiators.tls(null, null);
   }
 
   @Test
@@ -1230,7 +1326,7 @@ public class ProtocolNegotiatorsTest {
     }
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
     ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext,
-        null, Optional.empty());
+        null, Optional.empty(), null);
     WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 

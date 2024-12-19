@@ -41,8 +41,10 @@ import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
+import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.NoopSslSession;
 import io.grpc.internal.ObjectPool;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFutureListener;
@@ -70,18 +72,32 @@ import java.io.ByteArrayInputStream;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.channels.ClosedChannelException;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
  * Common {@link ProtocolNegotiator}s used by gRPC.
@@ -117,14 +133,30 @@ final class ProtocolNegotiators {
             new ByteArrayInputStream(tlsCreds.getPrivateKey()),
             tlsCreds.getPrivateKeyPassword());
       }
-      if (tlsCreds.getTrustManagers() != null) {
-        builder.trustManager(new FixedTrustManagerFactory(tlsCreds.getTrustManagers()));
-      } else if (tlsCreds.getRootCertificates() != null) {
-        builder.trustManager(new ByteArrayInputStream(tlsCreds.getRootCertificates()));
-      } // else use system default
       try {
-        return FromChannelCredentialsResult.negotiator(tlsClientFactory(builder.build()));
-      } catch (SSLException ex) {
+        List<TrustManager> trustManagers;
+        if (tlsCreds.getTrustManagers() != null) {
+          trustManagers = tlsCreds.getTrustManagers();
+        } else if (tlsCreds.getRootCertificates() != null) {
+          trustManagers = Arrays.asList(CertificateUtils.createTrustManager(
+                  new ByteArrayInputStream(tlsCreds.getRootCertificates())));
+        } else { // else use system default
+          TrustManagerFactory tmf = TrustManagerFactory.getInstance(
+              TrustManagerFactory.getDefaultAlgorithm());
+          tmf.init((KeyStore) null);
+          trustManagers = Arrays.asList(tmf.getTrustManagers());
+        }
+        builder.trustManager(new FixedTrustManagerFactory(trustManagers));
+        TrustManager x509ExtendedTrustManager = null;
+        for (TrustManager trustManager: trustManagers) {
+          if (trustManager instanceof X509ExtendedTrustManager) {
+            x509ExtendedTrustManager = trustManager;
+            break;
+          }
+        }
+        return FromChannelCredentialsResult.negotiator(tlsClientFactory(builder.build(),
+                (X509ExtendedTrustManager) x509ExtendedTrustManager));
+      } catch (SSLException | GeneralSecurityException ex) {
         log.log(Level.FINE, "Exception building SslContext", ex);
         return FromChannelCredentialsResult.error(
             "Unable to create SslContext: " + ex.getMessage());
@@ -542,20 +574,32 @@ final class ProtocolNegotiators {
   }
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
+    @GuardedBy("this")
+    private final LinkedHashMap<String, Status> peerVerificationResults =
+            new LinkedHashMap<String, Status>() {
+          @Override
+          protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+            return size() > 100;
+          }
+        };
+    private SSLEngine sslEngine;
 
     public ClientTlsProtocolNegotiator(SslContext sslContext,
-        ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable) {
+        ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
+        X509ExtendedTrustManager x509ExtendedTrustManager) {
       this.sslContext = checkNotNull(sslContext, "sslContext");
       this.executorPool = executorPool;
       if (this.executorPool != null) {
         this.executor = this.executorPool.getObject();
       }
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
+      this.x509ExtendedTrustManager = x509ExtendedTrustManager;
     }
 
     private final SslContext sslContext;
     private final ObjectPool<? extends Executor> executorPool;
     private final Optional<Runnable> handshakeCompleteRunnable;
+    private final X509ExtendedTrustManager x509ExtendedTrustManager;
     private Executor executor;
 
     @Override
@@ -568,7 +612,7 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority(),
-          this.executor, negotiationLogger, handshakeCompleteRunnable);
+          this.executor, negotiationLogger, handshakeCompleteRunnable, this);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
 
@@ -578,6 +622,54 @@ final class ProtocolNegotiators {
         this.executorPool.returnObject(this.executor);
       }
     }
+
+    @Override
+    public synchronized Status verifyAuthority(@Nonnull String authority) {
+      // sslEngine won't be set when creating ClientTlsHandler from InternalProtocolNegotiators
+      // for example.
+      if (sslEngine == null || x509ExtendedTrustManager == null) {
+        return Status.FAILED_PRECONDITION.withDescription(
+                "Can't allow authority override in rpc when SslEngine or X509ExtendedTrustManager"
+                        + " is not available");
+      }
+      if (peerVerificationResults.containsKey(authority)) {
+        return peerVerificationResults.get(authority);
+      } else {
+        Status peerVerificationStatus;
+        try {
+          verifyAuthorityAllowedForPeerCert(authority);
+          peerVerificationStatus = Status.OK;
+        } catch (SSLPeerUnverifiedException | CertificateException e) {
+          peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                  String.format("Peer hostname verification during rpc failed for authority '%s'",
+                  authority)).withCause(e);
+        }
+        peerVerificationResults.put(authority, peerVerificationStatus);
+        return peerVerificationStatus;
+      }
+    }
+
+    public void setSslEngine(SSLEngine sslEngine) {
+      this.sslEngine = sslEngine;
+    }
+
+    private void verifyAuthorityAllowedForPeerCert(String authority)
+        throws SSLPeerUnverifiedException, CertificateException {
+      SSLEngine sslEngineWrapper = new SslEngineWrapper(sslEngine, authority);
+      // The typecasting of Certificate to X509Certificate should work because this method will only
+      // be called when using TLS and thus X509.
+      Certificate[] peerCertificates = sslEngine.getSession().getPeerCertificates();
+      X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
+      for (int i = 0; i < peerCertificates.length; i++) {
+        x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+      }
+      x509ExtendedTrustManager.checkServerTrusted(x509PeerCertificates, "RSA", sslEngineWrapper);
+    }
+
+    @VisibleForTesting
+    boolean hasX509ExtendedTrustManager() {
+      return x509ExtendedTrustManager != null;
+    }
   }
 
   static final class ClientTlsHandler extends ProtocolNegotiationHandler {
@@ -585,12 +677,14 @@ final class ProtocolNegotiators {
     private final SslContext sslContext;
     private final String host;
     private final int port;
+    private final ClientTlsProtocolNegotiator clientTlsProtocolNegotiator;
     private Executor executor;
     private final Optional<Runnable> handshakeCompleteRunnable;
 
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
         Executor executor, ChannelLogger negotiationLogger,
-        Optional<Runnable> handshakeCompleteRunnable) {
+        Optional<Runnable> handshakeCompleteRunnable,
+        ClientTlsProtocolNegotiator clientTlsProtocolNegotiator) {
       super(next, negotiationLogger);
       this.sslContext = checkNotNull(sslContext, "sslContext");
       HostPort hostPort = parseAuthority(authority);
@@ -598,6 +692,7 @@ final class ProtocolNegotiators {
       this.port = hostPort.port;
       this.executor = executor;
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
+      this.clientTlsProtocolNegotiator = clientTlsProtocolNegotiator;
     }
 
     @Override
@@ -609,6 +704,7 @@ final class ProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
           ? new SslHandler(sslEngine, false, this.executor)
           : new SslHandler(sslEngine, false));
+      clientTlsProtocolNegotiator.setSslEngine(sslEngine);
     }
 
     @Override
@@ -698,8 +794,10 @@ final class ProtocolNegotiators {
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
-      ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable) {
-    return new ClientTlsProtocolNegotiator(sslContext, executorPool, handshakeCompleteRunnable);
+      ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
+      X509ExtendedTrustManager x509ExtendedTrustManager) {
+    return new ClientTlsProtocolNegotiator(sslContext, executorPool, handshakeCompleteRunnable,
+        x509ExtendedTrustManager);
   }
 
   /**
@@ -707,25 +805,31 @@ final class ProtocolNegotiators {
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
    */
-  public static ProtocolNegotiator tls(SslContext sslContext) {
-    return tls(sslContext, null, Optional.empty());
+  public static ProtocolNegotiator tls(SslContext sslContext,
+      X509ExtendedTrustManager x509ExtendedTrustManager) {
+    return tls(sslContext, null, Optional.empty(),
+        x509ExtendedTrustManager);
   }
 
-  public static ProtocolNegotiator.ClientFactory tlsClientFactory(SslContext sslContext) {
-    return new TlsProtocolNegotiatorClientFactory(sslContext);
+  public static ProtocolNegotiator.ClientFactory tlsClientFactory(SslContext sslContext,
+      X509ExtendedTrustManager x509ExtendedTrustManager) {
+    return new TlsProtocolNegotiatorClientFactory(sslContext, x509ExtendedTrustManager);
   }
 
   @VisibleForTesting
   static final class TlsProtocolNegotiatorClientFactory
       implements ProtocolNegotiator.ClientFactory {
     private final SslContext sslContext;
+    private final X509ExtendedTrustManager x509ExtendedTrustManager;
 
-    public TlsProtocolNegotiatorClientFactory(SslContext sslContext) {
+    public TlsProtocolNegotiatorClientFactory(SslContext sslContext,
+        X509ExtendedTrustManager x509ExtendedTrustManager) {
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
+      this.x509ExtendedTrustManager = x509ExtendedTrustManager;
     }
 
     @Override public ProtocolNegotiator newNegotiator() {
-      return tls(sslContext);
+      return tls(sslContext, x509ExtendedTrustManager);
     }
 
     @Override public int getDefaultPort() {
@@ -1103,6 +1207,44 @@ final class ProtocolNegotiators {
       negotiationLogger.log(ChannelLogLevel.INFO, "{0} completed", negotiatorName);
       ctx.pipeline().replace(ctx.name(), /* newName= */ null, next);
       ctx.fireUserEventTriggered(pne);
+    }
+  }
+
+  static final class SslEngineWrapper extends NoopSslEngine {
+    private final SSLEngine sslEngine;
+    private final String peerHost;
+
+    SslEngineWrapper(SSLEngine sslEngine, String peerHost) {
+      this.sslEngine = sslEngine;
+      this.peerHost = peerHost;
+    }
+
+    @Override
+    public String getPeerHost() {
+      return peerHost;
+    }
+
+    @Override
+    public SSLSession getHandshakeSession() {
+      return new FakeSslSession(peerHost);
+    }
+
+    @Override
+    public SSLParameters getSSLParameters() {
+      return sslEngine.getSSLParameters();
+    }
+  }
+
+  static final class FakeSslSession extends NoopSslSession {
+    private final String peerHost;
+
+    FakeSslSession(String peerHost) {
+      this.peerHost = peerHost;
+    }
+
+    @Override
+    public String getPeerHost() {
+      return peerHost;
     }
   }
 }

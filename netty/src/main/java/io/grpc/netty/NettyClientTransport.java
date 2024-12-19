@@ -194,6 +194,16 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (channel == null) {
       return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
     }
+    if (callOptions.getAuthority() != null) {
+      Status verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
+      if (!verificationStatus.isOk()) {
+        if (GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false)) {
+          return new FailingClientStream(verificationStatus, tracers);
+        }
+        channelLogger.log(ChannelLogger.ChannelLogLevel.WARNING, "Authority '{}' specified via call" +
+                " options for rpc did not match peer certificate's subject names.");
+      }
+    }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     return new NettyClientStream(
