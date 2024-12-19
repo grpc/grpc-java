@@ -248,14 +248,14 @@ public class SpiffeUtilTest {
     }
 
     private String copyFileToTmp(String fileName) throws Exception {
-      File tempFilePath = tempFolder.newFile(fileName);
+      File tempFile = tempFolder.newFile(fileName);
       try (InputStream resourceStream = SpiffeUtilTest.class.getClassLoader()
             .getResourceAsStream(TEST_DIRECTORY_PREFIX + fileName);
-          OutputStream fileStream = new FileOutputStream(tempFilePath)) {
+          OutputStream fileStream = new FileOutputStream(tempFile)) {
         ByteStreams.copy(resourceStream, fileStream);
         fileStream.flush();
       }
-      return tempFilePath.toString();
+      return tempFile.toString();
     }
 
     @Test
