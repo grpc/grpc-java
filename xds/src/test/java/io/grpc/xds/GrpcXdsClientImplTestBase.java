@@ -3524,6 +3524,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
     // Management server closes the RPC stream with an error.
+    fakeClock.forwardNanos(1000L); // Make sure retry isn't based on stopwatch 0
     call.sendError(Status.UNKNOWN.asException());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
         .onError(errorCaptor.capture());
