@@ -451,12 +451,9 @@ final class ControlPlaneClient {
       // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
       // to avoid TSAN races, since tests may wait until callbacks are called but then would run
       // concurrently with the stopwatch and schedule.
-
-      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
-
       rpcRetryTimer =
-          syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+          syncContext.schedule(new RpcRetryTask(), retryBackoffPolicy.nextBackoffNanos(),
+              TimeUnit.NANOSECONDS, timeService);
 
       Status newStatus = status;
       if (responseReceived) {
