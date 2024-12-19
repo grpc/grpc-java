@@ -44,7 +44,7 @@ import javax.annotation.Nullable;
  * referenced resources or updates the XdsConfig and notifies the XdsConfigWatcher.
  */
 @SuppressWarnings("unused") // TODO remove when changes for A74 are fully implemented
-final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
+final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegistry {
   private final XdsClient xdsClient;
   private final XdsConfigWatcher xdsConfigWatcher;
   private final SynchronizationContext syncContext;
@@ -81,11 +81,6 @@ final class XdsDependencyManager implements XdsClusterSubscriptionRegistry {
     addWatcher(new CdsWatcher(clusterName));
 
     return subscription;
-  }
-
-  @Override
-  public void refreshDynamicSubscriptions() {
-    // TODO: implement
   }
 
   @SuppressWarnings("unchecked")

@@ -23,13 +23,14 @@ import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import java.io.Closeable;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Represents the xDS configuration tree for a specified Listener.
  */
-class XdsConfig {
+public class XdsConfig {
   final LdsUpdate listener;
   final RdsUpdate route;
   final Map<String, StatusOr<XdsClusterConfig>> clusters;
@@ -40,7 +41,7 @@ class XdsConfig {
     this.clusters = clusters;
   }
 
-  static class XdsClusterConfig {
+  public static class XdsClusterConfig {
     final String clusterName;
     final CdsUpdate clusterResource;
     final StatusOr<EdsUpdate> endpoint;
@@ -80,4 +81,7 @@ class XdsConfig {
     }
   }
 
+  public interface XdsClusterSubscriptionRegistry {
+    Closeable subscribeToCluster(String clusterName);
+  }
 }
