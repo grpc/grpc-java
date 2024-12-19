@@ -202,11 +202,13 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         parsedMetadata.put(key, parsedValue);
       }
     }
+    // building once to reuse in the next loop
+    ImmutableMap<String, Object> intermediateParsedMetadata = parsedMetadata.build();
 
     // Process filter_metadata for remaining keys
     for (Map.Entry<String, Struct> entry : metadata.getFilterMetadataMap().entrySet()) {
       String key = entry.getKey();
-      if (!parsedMetadata.build().containsKey(key)) {
+      if (!intermediateParsedMetadata.containsKey(key)) {
         Struct structValue = entry.getValue();
         Object jsonValue = ProtobufJsonConverter.convertToJson(structValue);
         parsedMetadata.put(key, jsonValue);

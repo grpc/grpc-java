@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser;
@@ -45,7 +46,8 @@ final class ClusterMetadataRegistry {
     return supportedParsers.get(typeUrl);
   }
 
-  private void registerParser(ClusterMetadataValueParser parser) {
+  @VisibleForTesting
+  void registerParser(ClusterMetadataValueParser parser) {
     supportedParsers.put(parser.getTypeUrl(), parser);
   }
 

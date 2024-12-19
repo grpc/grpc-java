@@ -229,7 +229,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
     @Override
     public String getTypeUrl() {
-      return "extensions.filters.http.gcp_authn.v3.Audience";
+      return "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.Audience";
     }
 
     @Override
