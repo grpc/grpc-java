@@ -817,18 +817,36 @@ public class OkHttpClientTransportTest {
   @Test
   public void perRpcAuthoritySpecified_hostnameVerification_SslSocket_failureCase()
           throws Exception {
+    System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
+    try {
+      startTransport(
+              DEFAULT_START_STREAM_ID, null, true, null,
+              (hostname, session) -> false, true);
+      ClientStream clientStream =
+              clientTransport.newStream(method, new Metadata(),
+                      CallOptions.DEFAULT.withAuthority("some-authority"), tracers);
+      assertThat(clientStream).isInstanceOf(FailingClientStream.class);
+      InsightBuilder insightBuilder = new InsightBuilder();
+      clientStream.appendTimeoutInsight(insightBuilder);
+      assertThat(insightBuilder.toString()).contains("error=Status{code=UNAVAILABLE, "
+              + "description=HostNameVerifier verification failed for authority 'some-authority', "
+              + "cause=null}");
+      shutdownAndVerify();
+    } finally {
+      System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
+    }
+  }
+
+  @Test
+  public void perRpcAuthoritySpecified_hostnameVerification_SslSocket_flagDisabled()
+          throws Exception {
     startTransport(
             DEFAULT_START_STREAM_ID, null, true, null,
             (hostname, session) -> false, true);
     ClientStream clientStream =
             clientTransport.newStream(method, new Metadata(),
                     CallOptions.DEFAULT.withAuthority("some-authority"), tracers);
-    assertThat(clientStream).isInstanceOf(FailingClientStream.class);
-    InsightBuilder insightBuilder = new InsightBuilder();
-    clientStream.appendTimeoutInsight(insightBuilder);
-    assertThat(insightBuilder.toString()).contains("error=Status{code=UNAVAILABLE, "
-            + "description=HostNameVerifier verification failed for authority 'some-authority', "
-            + "cause=null}");
+    assertThat(clientStream).isInstanceOf(OkHttpClientStream.class);
     shutdownAndVerify();
   }
 
