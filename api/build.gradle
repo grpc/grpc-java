@@ -54,13 +54,11 @@ dependencies {
             extension = "signature"
         }
     }
-    // TODO: Temporarily disabled until StatusException is fixed.
-    // Context: https://github.com/grpc/grpc-java/pull/11066
-    //signature (libraries.signature.android) {
-    //    artifact {
-    //        extension = "signature"
-    //    }
-    //}
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("javadoc").configure {

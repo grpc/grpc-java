@@ -373,10 +373,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         } else {
           call.cancelled = true;
           listener.onCancel();
-          // The status will not have a cause in all failure scenarios but we want to make sure
+          // The status will not have a cause in all failure scenarios, but we want to make sure
           // we always cancel the context with one to keep the context cancelled state consistent.
           cancelCause = InternalStatus.asRuntimeException(
-              Status.CANCELLED.withDescription("RPC cancelled"), null, false);
+              Status.CANCELLED.withDescription("RPC cancelled"), null);
         }
       } finally {
         // Cancel context after delivering RPC closure notification to allow the application to
