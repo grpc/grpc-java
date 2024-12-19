@@ -57,6 +57,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -1199,8 +1200,10 @@ public class ManagedChannelImplTest {
     // config simply gets ignored and not gets reassigned.
     resolver.resolved();
     timer.forwardNanos(1234);
-    assertThat(getStats(channel).channelTrace.events.stream().filter(
-        event -> event.description.equals("Service config changed")).count()).isEqualTo(0);
+    assertThat(Iterables.filter(
+          getStats(channel).channelTrace.events,
+          event -> event.description.equals("Service config changed")))
+        .isEmpty();
   }
 
   @Test

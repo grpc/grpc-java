@@ -23,13 +23,12 @@ import com.google.common.base.Optional;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.io.Files;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
@@ -188,8 +187,8 @@ public final class SpiffeUtil {
   }
 
   private static Map<String, ?> readTrustDomainsFromFile(String filePath) throws IOException {
-    Path path = Paths.get(checkNotNull(filePath, "trustBundleFile"));
-    String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+    File file = new File(checkNotNull(filePath, "trustBundleFile"));
+    String json = new String(Files.toByteArray(file), StandardCharsets.UTF_8);
     Object jsonObject = JsonParser.parse(json);
     if (!(jsonObject instanceof Map)) {
       throw new IllegalArgumentException(

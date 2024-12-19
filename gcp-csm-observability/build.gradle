@@ -28,5 +28,9 @@ dependencies {
             libraries.opentelemetry.sdk.testing,
             libraries.assertj.core // opentelemetry.sdk.testing uses compileOnly for this dep
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }

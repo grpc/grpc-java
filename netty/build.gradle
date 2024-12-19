@@ -65,8 +65,16 @@ dependencies {
             classifier = "linux-x86_64"
         }
     }
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

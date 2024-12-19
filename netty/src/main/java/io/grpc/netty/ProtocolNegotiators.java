@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
@@ -72,7 +73,6 @@ import java.net.URI;
 import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -82,6 +82,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * Common {@link ProtocolNegotiator}s used by gRPC.
@@ -601,6 +602,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
+    @IgnoreJRERequirement
     protected void handlerAdded0(ChannelHandlerContext ctx) {
       SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
       SSLParameters sslParams = sslEngine.getSSLParameters();
@@ -708,7 +710,7 @@ final class ProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static ProtocolNegotiator tls(SslContext sslContext) {
-    return tls(sslContext, null, Optional.empty());
+    return tls(sslContext, null, Optional.absent());
   }
 
   public static ProtocolNegotiator.ClientFactory tlsClientFactory(SslContext sslContext) {

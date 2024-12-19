@@ -28,7 +28,11 @@ dependencies {
             libraries.junit,
             libraries.truth
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 sourceSets {

@@ -28,7 +28,11 @@ dependencies {
             project(':grpc-inprocess'),
             testFixtures(project(':grpc-core'))
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()

@@ -39,7 +39,11 @@ dependencies {
             testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api'))
     testCompileOnly libraries.javax.annotation
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()

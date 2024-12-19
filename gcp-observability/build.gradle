@@ -74,7 +74,11 @@ dependencies {
         exclude group: 'junit', module: 'junit'
     }
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()

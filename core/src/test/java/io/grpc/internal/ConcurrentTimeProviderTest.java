@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -36,10 +35,8 @@ public class ConcurrentTimeProviderTest {
     // Get the current time from the ConcurrentTimeProvider
     long actualTimeNanos = concurrentTimeProvider.currentTimeNanos();
 
-    // Get the current time from Instant for comparison
-    Instant instantNow = Instant.now();
-    long expectedTimeNanos = TimeUnit.SECONDS.toNanos(instantNow.getEpochSecond())
-        + instantNow.getNano();
+    // Get the current time from System for comparison
+    long expectedTimeNanos = TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
 
     // Validate the time returned is close to the expected value within a tolerance
     // (i,e 10 millisecond tolerance in nanoseconds).

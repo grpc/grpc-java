@@ -19,12 +19,14 @@ package io.grpc;
 import static org.junit.Assert.assertEquals;
 
 import java.time.Duration;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link TimeUtils}. */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class TimeUtilsTest {
 
   @Test

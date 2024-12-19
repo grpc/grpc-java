@@ -43,7 +43,11 @@ dependencies {
     testImplementation libraries.junit,
             libraries.mockito.core
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

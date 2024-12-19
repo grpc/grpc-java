@@ -17,8 +17,16 @@ dependencies {
 
     testImplementation project(':grpc-core')
 
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("jar").configure {

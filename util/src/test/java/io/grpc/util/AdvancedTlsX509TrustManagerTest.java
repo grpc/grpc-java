@@ -44,6 +44,7 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLSocket;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,6 +52,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link AdvancedTlsX509TrustManager}. */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class AdvancedTlsX509TrustManagerTest {
 
   private static final String CA_PEM_FILE = "ca.pem";

@@ -65,8 +65,16 @@ dependencies {
     shadow project(':grpc-netty').configurations.runtimeClasspath.allDependencies.matching {
         it.group != 'io.netty'
     }
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("jar").configure {

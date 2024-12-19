@@ -10,7 +10,11 @@ dependencies {
     implementation project(':grpc-interop-testing'),
             project(':grpc-gcp-observability')
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 application {

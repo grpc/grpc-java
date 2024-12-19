@@ -62,7 +62,11 @@ dependencies {
         }
     }
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()

@@ -28,6 +28,7 @@ import io.grpc.Deadline;
 import io.grpc.stub.AbstractStub.StubFactory;
 import io.grpc.stub.AbstractStubTest.NoopStub;
 import java.time.Duration;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -54,6 +55,7 @@ public class AbstractStubTest extends BaseAbstractStubTest<NoopStub> {
   }
 
   @Test
+  @IgnoreJRERequirement
   public void testDuration() {
     NoopStub stub = NoopStub.newStub(new StubFactory<NoopStub>() {
       @Override

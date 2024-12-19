@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -28,6 +29,7 @@ import org.junit.runners.JUnit4;
  * Unit tests for {@link InstantTimeProvider}.
  */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class InstantTimeProviderTest {
   @Test
   public void testInstantCurrentTimeNanos() throws Exception {

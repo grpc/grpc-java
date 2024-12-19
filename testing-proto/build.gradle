@@ -20,7 +20,11 @@ dependencies {
     compileOnly libraries.javax.annotation
     testImplementation libraries.truth
     testRuntimeOnly libraries.javax.annotation
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()
