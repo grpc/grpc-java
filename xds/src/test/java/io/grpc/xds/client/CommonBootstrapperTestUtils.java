@@ -18,12 +18,15 @@ package io.grpc.xds.client;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.TimeProvider;
+import io.grpc.stub.StreamObserver;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
@@ -36,9 +39,14 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 public class CommonBootstrapperTestUtils {
+  public static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
   private static final String SERVER_URI_CUSTOM_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
+  public static final String LDS_RESOURCE = "listener.googleapis.com";
+  public static final String RDS_RESOURCE = "route-configuration.googleapis.com";
+  public static final String CDS_RESOURCE = "cluster.googleapis.com";
+  public static final String EDS_RESOURCE = "cluster-load-assignment.googleapis.com";
 
   private static final long TIME_INCREMENT = TimeUnit.SECONDS.toNanos(1);
 
@@ -221,6 +229,25 @@ public class CommonBootstrapperTestUtils {
         .certProviders(ImmutableMap.of("cert-instance-name",
             Bootstrapper.CertificateProviderInfo.create("file-watcher", ImmutableMap.of())))
         .build();
+  }
+
+  private static class MockStreamObserver implements StreamObserver<DiscoveryRequest> {
+    private final List<DiscoveryRequest> requests = new ArrayList<>();
+
+    @Override
+    public void onNext(DiscoveryRequest value) {
+      requests.add(value);
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      // Ignore
+    }
+
+    @Override
+    public void onCompleted() {
+      // Ignore
+    }
   }
 
 }
