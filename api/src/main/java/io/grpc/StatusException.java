@@ -44,12 +44,7 @@ public class StatusException extends Exception {
    * @since 1.0.0
    */
   public StatusException(Status status, @Nullable Metadata trailers) {
-    this(status, trailers, /*fillInStackTrace=*/ true);
-  }
-
-  StatusException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
-    super(Status.formatThrowableMessage(status), status.getCause(),
-            /* enableSuppression */ true, /* writableStackTrace */fillInStackTrace);
+    super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
   }
