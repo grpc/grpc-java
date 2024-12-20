@@ -248,7 +248,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
       boolean ignoreResourceDeletion = false;
-      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
+      // "For forward compatibility reasons, the client will ignore any entry in the list that it
+      // does not understand, regardless of type."
+      List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
