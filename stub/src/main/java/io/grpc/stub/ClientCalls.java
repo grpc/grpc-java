@@ -887,11 +887,11 @@ public final class ClientCalls {
       throwIfInterrupted();
       Runnable runnable;
 
-      while (!predicate.test(testTarget)) {
+      while (!predicate.apply(testTarget)) {
         waiterLock.lock();
         try {
           while ((runnable = poll()) == null) {
-            if (predicate.test(testTarget)) {
+            if (predicate.apply(testTarget)) {
               return; // The condition for which we were waiting is now satisfied
             }
 
