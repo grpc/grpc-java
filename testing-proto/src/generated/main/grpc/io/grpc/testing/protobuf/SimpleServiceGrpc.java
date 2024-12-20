@@ -375,8 +375,7 @@ public final class SimpleServiceGrpc {
      */
     @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
     public io.grpc.stub.BlockingClientCall<?, io.grpc.testing.protobuf.SimpleResponse>
-        serverStreamingRpc(io.grpc.testing.protobuf.SimpleRequest request) throws java.lang.InterruptedException,
-            io.grpc.StatusException {
+        serverStreamingRpc(io.grpc.testing.protobuf.SimpleRequest request) {
       return io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall(
           getChannel(), getServerStreamingRpcMethod(), getCallOptions(), request);
     }

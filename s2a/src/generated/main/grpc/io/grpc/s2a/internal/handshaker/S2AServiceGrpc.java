@@ -184,7 +184,7 @@ public final class S2AServiceGrpc {
      * </pre>
      */
     @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
-    public io.grpc.stub.BlockingClientCall<io.grpc.s2a.handshaker.SessionReq, io.grpc.s2a.handshaker.SessionResp>
+    public io.grpc.stub.BlockingClientCall<io.grpc.s2a.internal.handshaker.SessionReq, io.grpc.s2a.internal.handshaker.SessionResp>
         setUpSession() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getSetUpSessionMethod(), getCallOptions());

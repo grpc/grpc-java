@@ -220,35 +220,22 @@ public final class ClientCalls {
 
   /**
    * Initiates a client streaming call over the specified channel.  It returns an
-   * object which can be used in a blocking manner to send values to the server and retrieve a
-   * response.
-   *
-   * <p>Call {@link BlockingClientCall#write} for each value to send to the server. After the last
-   * value has been written, call {@link BlockingClientCall#halfClose} to indicate that writing is
-   * complete and then {@link BlockingClientCall#read} to get the response.
+   * object which can be used in a blocking manner to retrieve responses..
    *
    * <p>The methods {@link BlockingClientCall#hasNext()} and {@link
    * BlockingClientCall#cancel(String, Throwable)} can be used for more extensive control.
    *
    * @return A {@link BlockingClientCall} that has had the request sent and halfClose called
-   * @throws InterruptedException if it receives an interrupt while sending the request
-   * @throws StatusException if the write to the server failed
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
   public static <ReqT, RespT> BlockingClientCall<ReqT, RespT> blockingV2ServerStreamingCall(
-      Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req)
-      throws InterruptedException, StatusException {
+      Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req) {
     BlockingClientCall<ReqT, RespT> call =
         blockingBidiStreamingCall(channel, method, callOptions);
 
-    try {
-      call.write(req);
+      call.sendSingleRequest(req);
       call.halfClose();
       return call;
-    } catch (InterruptedException e) {
-      call.cancel("Interrupted while writing request", e);
-      throw e;
-    }
   }
 
   /**

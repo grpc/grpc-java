@@ -238,6 +238,10 @@ public final class BlockingClientCall<ReqT, RespT> {
     }
   }
 
+  void sendSingleRequest(ReqT request) {
+    call.sendMessage(request);
+  }
+
   /**
    * Cancel stream and stop any further writes.  Note that some reads that are in flight may still
    * happen after the cancel.
