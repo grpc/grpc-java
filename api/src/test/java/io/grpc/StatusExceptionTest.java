@@ -29,14 +29,6 @@ import org.junit.runners.JUnit4;
 public class StatusExceptionTest {
 
   @Test
-  public void internalCtorRemovesStack() {
-    StackTraceElement[] trace =
-        new StatusException(Status.CANCELLED, null, false) {}.getStackTrace();
-
-    assertThat(trace).isEmpty();
-  }
-
-  @Test
   public void normalCtorKeepsStack() {
     StackTraceElement[] trace =
         new StatusException(Status.CANCELLED, null) {}.getStackTrace();
