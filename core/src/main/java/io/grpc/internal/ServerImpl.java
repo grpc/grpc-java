@@ -887,7 +887,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         // failed status has an exception we will create one here if needed.
         Throwable cancelCause = status.getCause();
         if (cancelCause == null) {
-          cancelCause = InternalStatus.asRuntimeException(
+          cancelCause = InternalStatus.asRuntimeExceptionWithoutStacktrace(
               Status.CANCELLED.withDescription("RPC cancelled"), null);
         }
 
