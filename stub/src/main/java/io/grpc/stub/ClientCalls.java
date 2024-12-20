@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
 import com.google.common.util.concurrent.AbstractFuture;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -48,7 +49,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nonnull;
@@ -233,9 +233,9 @@ public final class ClientCalls {
     BlockingClientCall<ReqT, RespT> call =
         blockingBidiStreamingCall(channel, method, callOptions);
 
-      call.sendSingleRequest(req);
-      call.halfClose();
-      return call;
+    call.sendSingleRequest(req);
+    call.halfClose();
+    return call;
   }
 
   /**
