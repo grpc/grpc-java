@@ -621,7 +621,7 @@ public final class ManagedChannelImplBuilder
     if (nameResolverCustomArgs == null) {
       nameResolverCustomArgs = new IdentityHashMap<>();
     }
-    nameResolverCustomArgs.put(key, value);
+    nameResolverCustomArgs.put(checkNotNull(key, "key"), checkNotNull(value, "value"));
     return this;
   }
 
