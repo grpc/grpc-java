@@ -47,9 +47,13 @@ public class NameResolverTest {
   private static final List<EquivalentAddressGroup> ADDRESSES =
       Collections.singletonList(
           new EquivalentAddressGroup(new FakeSocketAddress("fake-address-1"), Attributes.EMPTY));
-  private static final Attributes.Key<String> YOLO_KEY = Attributes.Key.create("yolo");
-  private static Attributes ATTRIBUTES = Attributes.newBuilder()
-      .set(YOLO_KEY, "To be, or not to be?").build();
+  private static final Attributes.Key<String> YOLO_ATTR_KEY = Attributes.Key.create("yolo");
+  private static Attributes ATTRIBUTES =
+      Attributes.newBuilder().set(YOLO_ATTR_KEY, "To be, or not to be?").build();
+  private static final NameResolver.Args.Key<Integer> FOO_ARG_KEY =
+      NameResolver.Args.Key.create("foo");
+  private static final NameResolver.Args.Key<Integer> BAR_ARG_KEY =
+          NameResolver.Args.Key.create("bar");
   private static ConfigOrError CONFIG = ConfigOrError.fromConfig("foo");
 
   @Rule
@@ -65,6 +69,7 @@ public class NameResolverTest {
   private final Executor executor = Executors.newSingleThreadExecutor();
   private final String overrideAuthority = "grpc.io";
   private final MetricRecorder metricRecorder = new MetricRecorder() {};
+  private final int customArgValue = 42;
   @Mock NameResolver.Listener mockListener;
 
   @Test
@@ -79,6 +84,8 @@ public class NameResolverTest {
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
+    assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
@@ -90,6 +97,8 @@ public class NameResolverTest {
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
+    assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
@@ -106,6 +115,7 @@ public class NameResolverTest {
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
+        .setArg(FOO_ARG_KEY, customArgValue)
         .build();
   }
 
