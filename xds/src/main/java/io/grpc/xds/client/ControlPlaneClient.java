@@ -446,7 +446,7 @@ final class ControlPlaneClient {
         // Reset the backoff sequence if had received a response, or backoff sequence
         // has never been initialized.
         retryBackoffPolicy = backoffPolicyProvider.get();
-        stopwatch.reset();
+        stopwatch.reset().start();
       }
 
       // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
