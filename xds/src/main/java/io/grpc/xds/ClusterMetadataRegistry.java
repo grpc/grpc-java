@@ -22,6 +22,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser;
 import java.util.HashMap;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * Registry for parsing cluster metadata values.
@@ -42,6 +43,7 @@ final class ClusterMetadataRegistry {
     return INSTANCE;
   }
 
+  @Nullable
   ClusterMetadataValueParser findParser(String typeUrl) {
     return supportedParsers.get(typeUrl);
   }
@@ -49,6 +51,10 @@ final class ClusterMetadataRegistry {
   @VisibleForTesting
   void registerParser(ClusterMetadataValueParser parser) {
     supportedParsers.put(parser.getTypeUrl(), parser);
+  }
+
+  void removeParser(ClusterMetadataValueParser parser) {
+    supportedParsers.remove(parser.getTypeUrl());
   }
 
   interface ClusterMetadataValueParser {

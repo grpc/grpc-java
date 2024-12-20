@@ -22,6 +22,7 @@ import io.grpc.Internal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 /**
  * Converter for Protobuf {@link Struct} to JSON-like {@link Map}.
@@ -38,7 +39,8 @@ public final class ProtobufJsonConverter {
     return result;
   }
 
-  public static Object convertValue(Value value) {
+  @Nullable
+  private static Object convertValue(Value value) {
     switch (value.getKindCase()) {
       case STRUCT_VALUE:
         return convertToJson(value.getStructValue());

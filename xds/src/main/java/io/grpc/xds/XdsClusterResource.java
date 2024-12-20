@@ -187,6 +187,18 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     return updateBuilder.build();
   }
 
+  /**
+   * Parses cluster metadata into a structured map.
+   *
+   * <p>Values in {@code typed_filter_metadata} take precedence over
+   * {@code filter_metadata} when keys overlap, following Envoy API behavior. See
+   * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/core/v3/base.proto#L217-L259">
+   *   Envoy metadata documentation </a> for details.
+   *
+   * @param metadata the {@link Metadata} containing the fields to parse.
+   * @return an immutable map of parsed metadata.
+   * @throws InvalidProtocolBufferException if parsing {@code typed_filter_metadata} fails.
+   */
   private static ImmutableMap<String, Object> parseClusterMetadata(Metadata metadata)
       throws InvalidProtocolBufferException {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();

@@ -222,9 +222,6 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     }
   }
 
-  /**
-   * Parser for Audience metadata type.
-   */
   static class AudienceMetadataParser implements ClusterMetadataValueParser {
 
     @Override
@@ -234,19 +231,13 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
     @Override
     public String parse(Any any) throws InvalidProtocolBufferException {
-      if (any.is(Audience.class)) {
-        Audience audience = any.unpack(Audience.class);
-        String url = audience.getUrl();
-        if (url.isEmpty()) {
-          throw new InvalidProtocolBufferException(
-              "Audience URL is empty. Metadata value must contain a valid URL.");
-        }
-        return url;
-      } else {
+      Audience audience = any.unpack(Audience.class);
+      String url = audience.getUrl();
+      if (url.isEmpty()) {
         throw new InvalidProtocolBufferException(
-            String.format("Unexpected message type: %s. Expected: %s",
-                any.getTypeUrl(), Audience.getDescriptor().getFullName()));
+            "Audience URL is empty. Metadata value must contain a valid URL.");
       }
+      return url;
     }
   }
 }
