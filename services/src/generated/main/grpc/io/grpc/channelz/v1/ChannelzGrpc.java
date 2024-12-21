@@ -251,6 +251,21 @@ public final class ChannelzGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static ChannelzBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<ChannelzBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ChannelzBlockingV2Stub>() {
+        @java.lang.Override
+        public ChannelzBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ChannelzBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return ChannelzBlockingV2Stub.newStub(factory, channel);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ChannelzBlockingStub newBlockingStub(
@@ -476,6 +491,98 @@ public final class ChannelzGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service Channelz.
+   * <pre>
+   * Channelz is a service exposed by gRPC servers that provides detailed debug
+   * information.
+   * </pre>
+   */
+  public static final class ChannelzBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<ChannelzBlockingV2Stub> {
+    private ChannelzBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected ChannelzBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new ChannelzBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * Gets all root channels (i.e. channels the application has directly
+     * created). This does not include subchannels nor non-top level channels.
+     * </pre>
+     */
+    public io.grpc.channelz.v1.GetTopChannelsResponse getTopChannels(io.grpc.channelz.v1.GetTopChannelsRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetTopChannelsMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Gets all servers that exist in the process.
+     * </pre>
+     */
+    public io.grpc.channelz.v1.GetServersResponse getServers(io.grpc.channelz.v1.GetServersRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetServersMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Returns a single Server, or else a NOT_FOUND code.
+     * </pre>
+     */
+    public io.grpc.channelz.v1.GetServerResponse getServer(io.grpc.channelz.v1.GetServerRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetServerMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Gets all server sockets that exist in the process.
+     * </pre>
+     */
+    public io.grpc.channelz.v1.GetServerSocketsResponse getServerSockets(io.grpc.channelz.v1.GetServerSocketsRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetServerSocketsMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Returns a single Channel, or else a NOT_FOUND code.
+     * </pre>
+     */
+    public io.grpc.channelz.v1.GetChannelResponse getChannel(io.grpc.channelz.v1.GetChannelRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetChannelMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Returns a single Subchannel, or else a NOT_FOUND code.
+     * </pre>
+     */
+    public io.grpc.channelz.v1.GetSubchannelResponse getSubchannel(io.grpc.channelz.v1.GetSubchannelRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetSubchannelMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Returns a single Socket or else a NOT_FOUND code.
+     * </pre>
+     */
+    public io.grpc.channelz.v1.GetSocketResponse getSocket(io.grpc.channelz.v1.GetSocketRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetSocketMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do llimited synchronous rpc calls to service Channelz.
    * <pre>
    * Channelz is a service exposed by gRPC servers that provides detailed debug
    * information.
