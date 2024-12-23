@@ -17,6 +17,7 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api'),
+            libraries.animalsniffer.annotations,
             libraries.netty.codec.http2
     implementation project(':grpc-core'),
             libs.netty.handler.proxy,
