@@ -412,7 +412,7 @@ static void GrpcWriteServiceDocComment(Printer* printer,
       printer->Print(vars, " * A stub to allow clients to do asynchronous rpc calls to service $service$.\n");
       break;
     case BLOCKING_CLIENT_IMPL:
-      printer->Print(vars, " * A stub to allow clients to do llimited synchronous rpc calls to service $service$.\n");
+      printer->Print(vars, " * A stub to allow clients to do limited synchronous rpc calls to service $service$.\n");
       break;
     case BLOCKING_V2_CLIENT_IMPL:
       printer->Print(vars, " * A stub to allow clients to do synchronous rpc calls to service $service$.\n");

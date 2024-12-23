@@ -267,7 +267,7 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service LoadReportingService.
+   * A stub to allow clients to do limited synchronous rpc calls to service LoadReportingService.
    */
   public static final class LoadReportingServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {

@@ -582,7 +582,7 @@ public final class ChannelzGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service Channelz.
+   * A stub to allow clients to do limited synchronous rpc calls to service Channelz.
    * <pre>
    * Channelz is a service exposed by gRPC servers that provides detailed debug
    * information.

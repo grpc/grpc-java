@@ -189,7 +189,7 @@ public final class LoadBalancerGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service LoadBalancer.
+   * A stub to allow clients to do limited synchronous rpc calls to service LoadBalancer.
    */
   public static final class LoadBalancerBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
