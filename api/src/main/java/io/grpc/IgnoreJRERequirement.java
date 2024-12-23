@@ -16,17 +16,15 @@
 
 package io.grpc;
 
-import java.time.Duration;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Target;
 
-final class TimeUtils {
-  private TimeUtils() {}
-
-  @IgnoreJRERequirement
-  static long convertToNanos(Duration duration) {
-    try {
-      return duration.toNanos();
-    } catch (ArithmeticException tooBig) {
-      return duration.isNegative() ? Long.MIN_VALUE : Long.MAX_VALUE;
-    }
-  }
-}
+/**
+ * Disables Animal Sniffer's signature checking. This is our own package-private version to avoid
+ * dependening on animalsniffer-annotations.
+ *
+ * <p>FIELD is purposefully not supported, as Android wouldn't be able to ignore a field. Instead,
+ * the entire class would need to be avoided on Android.
+ */
+@Target({ElementType.METHOD, ElementType.CONSTRUCTOR, ElementType.TYPE})
+@interface IgnoreJRERequirement {}
