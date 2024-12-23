@@ -195,10 +195,9 @@ public class GcpObservabilityTest {
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
           mock(InternalLoggingServerInterceptor.Factory.class);
       when(serverInterceptorFactory.create()).thenReturn(serverInterceptor);
-
-      try (GcpObservability unused =
-          GcpObservability.grpcInit(
-              sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+      try {
+        GcpObservability observability = GcpObservability.grpcInit(
+            sink, config, channelInterceptorFactory, serverInterceptorFactory);
         List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
         assertThat(configurators).hasSize(1);
         ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
