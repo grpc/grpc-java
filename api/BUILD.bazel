@@ -6,7 +6,6 @@ java_library(
         "src/main/java/**/*.java",
         "src/context/java/**/*.java",
     ]),
-    javacopts = ["-Xep:DoNotCall:OFF"],  # Remove once requiring Bazel 3.4.0+; allows non-final
     visibility = ["//visibility:public"],
     deps = [
         artifact("com.google.code.findbugs:jsr305"),
