@@ -27,113 +27,31 @@ before trying out the examples.
 
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
-- <details>
-  <summary>Hedging</summary>
+- [Hedging example](src/main/java/io/grpc/examples/hedging)
 
-  The [hedging example](src/main/java/io/grpc/examples/hedging) demonstrates that enabling hedging
-  can reduce tail latency. (Users should note that enabling hedging may introduce other overhead;
-  and in some scenarios, such as when some server resource gets exhausted for a period of time and
-  almost every RPC during that time has high latency or fails, hedging may make things worse.
-  Setting a throttle in the service config is recommended to protect the server from too many
-  inappropriate retry or hedging requests.)
+- [Retrying example](src/main/java/io/grpc/examples/retrying)
 
-  The server and the client in the example are basically the same as those in the
-  [hello world](src/main/java/io/grpc/examples/helloworld) example, except that the server mimics a
-  long tail of latency, and the client sends 2000 requests and can turn on and off hedging.
-
-  To mimic the latency, the server randomly delays the RPC handling by 2 seconds at 10% chance, 5
-  seconds at 5% chance, and 10 seconds at 1% chance.
-
-  When running the client enabling the following hedging policy
-
-  ```json
-        "hedgingPolicy": {
-          "maxAttempts": 3,
-          "hedgingDelay": "1s"
-        }
-  ```
-  Then the latency summary in the client log is like the following
-
-  ```text
-  Total RPCs sent: 2,000. Total RPCs failed: 0
-  [Hedging enabled]
-  ========================
-  50% latency: 0ms
-  90% latency: 6ms
-  95% latency: 1,003ms
-  99% latency: 2,002ms
-  99.9% latency: 2,011ms
-  Max latency: 5,272ms
-  ========================
-  ```
-
-  See [the section below](#to-build-the-examples) for how to build and run the example. The
-  executables for the server and the client are `hedging-hello-world-server` and
-  `hedging-hello-world-client`.
-
-  To disable hedging, set environment variable `DISABLE_HEDGING_IN_HEDGING_EXAMPLE=true` before
-  running the client. That produces a latency summary in the client log like the following
-
-  ```text
-  Total RPCs sent: 2,000. Total RPCs failed: 0
-  [Hedging disabled]
-  ========================
-  50% latency: 0ms
-  90% latency: 2,002ms
-  95% latency: 5,002ms
-  99% latency: 10,004ms
-  99.9% latency: 10,007ms
-  Max latency: 10,007ms
-  ========================
-  ```
-
-</details>
-
-- <details>
-  <summary>Retrying</summary>
-
-  The [retrying example](src/main/java/io/grpc/examples/retrying) provides a HelloWorld gRPC client &
-  server which demos the effect of client retry policy configured on the [ManagedChannel](
-  ../api/src/main/java/io/grpc/ManagedChannel.java) via [gRPC ServiceConfig](
-  https://github.com/grpc/grpc/blob/master/doc/service_config.md). Retry policy implementation &
-  configuration details are outlined in the [proposal](https://github.com/grpc/proposal/blob/master/A6-client-retries.md).
-
-  This retrying example is very similar to the [hedging example](src/main/java/io/grpc/examples/hedging) in its setup.
-  The [RetryingHelloWorldServer](src/main/java/io/grpc/examples/retrying/RetryingHelloWorldServer.java) responds with
-  a status UNAVAILABLE error response to a specified percentage of requests to simulate server resource exhaustion and
-  general flakiness. The [RetryingHelloWorldClient](src/main/java/io/grpc/examples/retrying/RetryingHelloWorldClient.java) makes
-  a number of sequential requests to the server, several of which will be retried depending on the configured policy in
-  [retrying_service_config.json](src/main/resources/io/grpc/examples/retrying/retrying_service_config.json). Although
-  the requests are blocking unary calls for simplicity, these could easily be changed to future unary calls in order to
-  test the result of request concurrency with retry policy enabled.
-
-  One can experiment with the [RetryingHelloWorldServer](src/main/java/io/grpc/examples/retrying/RetryingHelloWorldServer.java)
-  failure conditions to simulate server throttling, as well as alter policy values in the [retrying_service_config.json](
-  src/main/resources/io/grpc/examples/retrying/retrying_service_config.json) to see their effects. To disable retrying
-  entirely, set environment variable `DISABLE_RETRYING_IN_RETRYING_EXAMPLE=true` before running the client.
-  Disabling the retry policy should produce many more failed gRPC calls as seen in the output log.
-
-  See [the section below](#to-build-the-examples) for how to build and run the example. The
-  executables for the server and the client are `retrying-hello-world-server` and
-  `retrying-hello-world-client`.
-
-</details>
-
-- <details>
-  <summary>Health Service</summary>
-
-  The [health service example](src/main/java/io/grpc/examples/healthservice)
-  provides a HelloWorld gRPC server that doesn't like short names along with a
-  health service.  It also provides a client application which makes HelloWorld 
-  calls and checks the health status.  
-
-  The client application also shows how the round robin load balancer can
-  utilize the health status to avoid making calls to a service that is
-  not actively serving.
-</details>
-
+- [Health Service example](src/main/java/io/grpc/examples/healthservice)
 
 - [Keep Alive](src/main/java/io/grpc/examples/keepalive)
+
+- [Cancellation](src/main/java/io/grpc/examples/cancellation)
+
+- [Custom Load Balance](src/main/java/io/grpc/examples/customloadbalance)
+
+- [Deadline](src/main/java/io/grpc/examples/deadline)
+
+- [Error Details](src/main/java/io/grpc/examples/errordetails)
+
+- [GRPC Proxy](src/main/java/io/grpc/examples/grpcproxy)
+
+- [Load Balance](src/main/java/io/grpc/examples/loadbalance)
+
+- [Multiplex](src/main/java/io/grpc/examples/multiplex)
+
+- [Name Resolve](src/main/java/io/grpc/examples/nameresolve)
+
+- [Pre-Serialized Messages](src/main/java/io/grpc/examples/preserialized)
 
 ### <a name="to-build-the-examples"></a> To build the examples
 
