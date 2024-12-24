@@ -52,7 +52,7 @@ public class HeaderClientInterceptor implements ClientInterceptor {
           public void onHeaders(Metadata headers) {
             /**
              * if you don't need receive header from server,
-             * you can use {@link io.grpc.stub.MetadataUtils#attachHeaders}
+             * you can use {@link io.grpc.stub.MetadataUtils#newAttachHeadersInterceptor}
              * directly to send header
              */
             logger.info("header received from server:" + headers);
