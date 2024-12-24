@@ -199,7 +199,7 @@ public class GcpObservabilityTest {
       try {
         GcpObservability gcpObservability = GcpObservability.grpcInit(
             sink, config, channelInterceptorFactory, serverInterceptorFactory);
-        // Added the assert statement to fix the build warnings.
+        // Added the assert statement to fix the PR build/check warnings.
         assertThat(gcpObservability).isNotNull();
         List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
         assertThat(configurators).hasSize(1);
