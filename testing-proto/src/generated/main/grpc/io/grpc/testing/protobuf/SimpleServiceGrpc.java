@@ -394,7 +394,7 @@ public final class SimpleServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service SimpleService.
+   * A stub to allow clients to do limited synchronous rpc calls to service SimpleService.
    * <pre>
    * A simple service for test.
    * </pre>

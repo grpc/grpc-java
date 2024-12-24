@@ -284,7 +284,7 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service AggregatedDiscoveryService.
+   * A stub to allow clients to do limited synchronous rpc calls to service AggregatedDiscoveryService.
    * <pre>
    * See https://github.com/envoyproxy/envoy-api#apis for a description of the role of
    * ADS and how it is intended to be used by a management server. ADS requests

@@ -207,7 +207,7 @@ public final class RateLimitQuotaServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service RateLimitQuotaService.
+   * A stub to allow clients to do limited synchronous rpc calls to service RateLimitQuotaService.
    * <pre>
    * Defines the Rate Limit Quota Service (RLQS).
    * </pre>

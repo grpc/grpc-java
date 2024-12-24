@@ -244,7 +244,7 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service XdsUpdateHealthService.
+   * A stub to allow clients to do limited synchronous rpc calls to service XdsUpdateHealthService.
    * <pre>
    * A service to remotely control health status of an xDS test server.
    * </pre>

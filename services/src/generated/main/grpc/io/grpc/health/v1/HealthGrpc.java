@@ -290,7 +290,7 @@ public final class HealthGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service Health.
+   * A stub to allow clients to do limited synchronous rpc calls to service Health.
    */
   public static final class HealthBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {

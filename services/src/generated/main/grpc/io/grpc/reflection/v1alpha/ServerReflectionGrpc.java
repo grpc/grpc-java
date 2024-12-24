@@ -192,7 +192,7 @@ public final class ServerReflectionGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service ServerReflection.
+   * A stub to allow clients to do limited synchronous rpc calls to service ServerReflection.
    */
   public static final class ServerReflectionBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {

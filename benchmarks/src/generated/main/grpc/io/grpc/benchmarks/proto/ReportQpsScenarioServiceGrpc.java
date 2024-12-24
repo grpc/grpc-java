@@ -187,7 +187,7 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service ReportQpsScenarioService.
+   * A stub to allow clients to do limited synchronous rpc calls to service ReportQpsScenarioService.
    */
   public static final class ReportQpsScenarioServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {

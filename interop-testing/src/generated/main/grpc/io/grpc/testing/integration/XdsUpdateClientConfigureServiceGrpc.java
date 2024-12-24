@@ -202,7 +202,7 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service XdsUpdateClientConfigureService.
+   * A stub to allow clients to do limited synchronous rpc calls to service XdsUpdateClientConfigureService.
    * <pre>
    * A service to dynamically update the configuration of an xDS test client.
    * </pre>

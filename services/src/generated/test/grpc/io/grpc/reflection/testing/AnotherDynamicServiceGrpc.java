@@ -202,7 +202,7 @@ public final class AnotherDynamicServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service AnotherDynamicService.
+   * A stub to allow clients to do limited synchronous rpc calls to service AnotherDynamicService.
    * <pre>
    * AnotherDynamicService
    * </pre>

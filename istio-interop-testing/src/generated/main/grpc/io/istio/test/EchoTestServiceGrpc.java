@@ -231,7 +231,7 @@ public final class EchoTestServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service EchoTestService.
+   * A stub to allow clients to do limited synchronous rpc calls to service EchoTestService.
    */
   public static final class EchoTestServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<EchoTestServiceBlockingStub> {

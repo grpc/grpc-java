@@ -206,7 +206,7 @@ public final class TestDeprecatedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service TestDeprecatedService.
+   * A stub to allow clients to do limited synchronous rpc calls to service TestDeprecatedService.
    * <pre>
    * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
    * </pre>

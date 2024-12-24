@@ -230,7 +230,7 @@ public final class OpenRcaServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service OpenRcaService.
+   * A stub to allow clients to do limited synchronous rpc calls to service OpenRcaService.
    * <pre>
    * Out-of-band (OOB) load reporting service for the additional load reporting
    * agent that does not sit in the request path. Reports are periodically sampled
