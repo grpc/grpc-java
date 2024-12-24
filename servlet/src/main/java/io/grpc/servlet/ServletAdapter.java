@@ -59,10 +59,11 @@ import javax.servlet.http.HttpServletResponse;
  * process it, and transforms the gRPC response into {@link HttpServletResponse}. An adapter can be
  * instantiated by {@link ServletServerBuilder#buildServletAdapter()}.
  *
- * <p>In a servlet, calling {@link #doPost(HttpServletRequest, HttpServletResponse)} inside {@link
- * javax.servlet.http.HttpServlet#doPost(HttpServletRequest, HttpServletResponse)} makes the servlet
- * backed by the gRPC server associated with the adapter. The servlet must support Asynchronous
- * Processing and must be deployed to a container that supports servlet 4.0 and enables HTTP/2.
+ * <p>In a servlet, calling {@link #doPost(String, HttpServletRequest, HttpServletResponse)} inside 
+ * {@link javax.servlet.http.HttpServlet#doPost(HttpServletRequest, HttpServletResponse)} makes
+ * the servlet backed by the gRPC server associated with the adapter. The servlet must support 
+ * Asynchronous Processing and must be deployed to a container that supports servlet 4.0
+ * and enables HTTP/2.
  *
  * <p>The API is experimental. The authors would like to know more about the real usecases. Users
  * are welcome to provide feedback by commenting on
@@ -110,7 +111,8 @@ public final class ServletAdapter {
    * <p>Do not modify {@code req} and {@code resp} before or after calling this method. However,
    * calling {@code resp.setBufferSize()} before invocation is allowed.
    */
-  public void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+  public void doPost(String method, HttpServletRequest req, HttpServletResponse resp)
+      throws IOException {
     checkArgument(req.isAsyncSupported(), "servlet does not support asynchronous operation");
     checkArgument(ServletAdapter.isGrpc(req), "the request is not a gRPC request");
 
@@ -119,7 +121,6 @@ public final class ServletAdapter {
 
     AsyncContext asyncCtx = req.startAsync(req, resp);
 
-    String method = req.getRequestURI().substring(1); // remove the leading "/"
     Metadata headers = getHeaders(req);
 
     if (logger.isLoggable(FINEST)) {
