@@ -196,9 +196,11 @@ public class GcpObservabilityTest {
           mock(InternalLoggingServerInterceptor.Factory.class);
       when(serverInterceptorFactory.create()).thenReturn(serverInterceptor);
 
-      try (GcpObservability unused =
-          GcpObservability.grpcInit(
-              sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+      try {
+        GcpObservability gcpObservability = GcpObservability.grpcInit(
+            sink, config, channelInterceptorFactory, serverInterceptorFactory);
+        // Added the assert statement to fix the PR build/check warnings.
+        assertThat(gcpObservability).isNotNull();
         List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
         assertThat(configurators).hasSize(1);
         ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
