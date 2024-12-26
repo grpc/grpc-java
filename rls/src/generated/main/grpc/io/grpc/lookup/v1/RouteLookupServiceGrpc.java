@@ -187,7 +187,7 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service RouteLookupService.
+   * A stub to allow clients to do limited synchronous rpc calls to service RouteLookupService.
    */
   public static final class RouteLookupServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<RouteLookupServiceBlockingStub> {

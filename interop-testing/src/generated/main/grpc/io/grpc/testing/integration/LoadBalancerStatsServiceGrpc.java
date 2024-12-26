@@ -264,7 +264,7 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service LoadBalancerStatsService.
+   * A stub to allow clients to do limited synchronous rpc calls to service LoadBalancerStatsService.
    * <pre>
    * A service used to obtain stats for verifying LB behavior.
    * </pre>

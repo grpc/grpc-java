@@ -178,7 +178,7 @@ public final class AnotherReflectableServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service AnotherReflectableService.
+   * A stub to allow clients to do limited synchronous rpc calls to service AnotherReflectableService.
    */
   public static final class AnotherReflectableServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<AnotherReflectableServiceBlockingStub> {

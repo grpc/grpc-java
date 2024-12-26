@@ -407,7 +407,7 @@ public final class WorkerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service WorkerService.
+   * A stub to allow clients to do limited synchronous rpc calls to service WorkerService.
    */
   public static final class WorkerServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {

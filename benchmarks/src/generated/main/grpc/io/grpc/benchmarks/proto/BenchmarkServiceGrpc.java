@@ -461,7 +461,7 @@ public final class BenchmarkServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service BenchmarkService.
+   * A stub to allow clients to do limited synchronous rpc calls to service BenchmarkService.
    */
   public static final class BenchmarkServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub> {
