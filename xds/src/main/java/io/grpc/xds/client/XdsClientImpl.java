@@ -960,7 +960,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
       ControlPlaneClient cpcClosed = serverCpClientMap.get(serverInfo);
       if (cpcClosed == null) {
-        logger.log(XdsLogLevel.DEBUG, "Couldn't find CPC for {0}", serverInfo);
+        logger.log(XdsLogLevel.DEBUG,
+            "Couldn't find closing CPC for {0}, so skipping cleanup and reporting", serverInfo);
         return;
       }
 
