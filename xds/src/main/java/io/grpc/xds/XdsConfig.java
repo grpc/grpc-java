@@ -26,6 +26,7 @@ import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.io.Closeable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Represents the xDS configuration tree for a specified Listener.
@@ -34,11 +35,31 @@ public class XdsConfig {
   final LdsUpdate listener;
   final RdsUpdate route;
   final Map<String, StatusOr<XdsClusterConfig>> clusters;
+  private final int hashCode;
 
   XdsConfig(LdsUpdate listener, RdsUpdate route, Map<String, StatusOr<XdsClusterConfig>> clusters) {
     this.listener = listener;
     this.route = route;
     this.clusters = clusters;
+
+    hashCode = Objects.hash(listener, route, clusters);
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (!(obj instanceof XdsConfig)) {
+      return false;
+    }
+
+    XdsConfig o = (XdsConfig) obj;
+
+    return Objects.equals(listener, o.listener) && Objects.equals(route, o.route)
+        && Objects.equals(clusters, o.clusters);
+  }
+
+  @Override
+  public int hashCode() {
+    return hashCode;
   }
 
   public static class XdsClusterConfig {

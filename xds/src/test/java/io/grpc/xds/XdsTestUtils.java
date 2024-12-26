@@ -17,7 +17,10 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.AdditionalAnswers.delegatesTo;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -26,13 +29,18 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import com.google.rpc.Code;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.Node;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
-import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
@@ -52,6 +60,8 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
@@ -59,6 +69,17 @@ import org.mockito.Mockito;
 import org.mockito.verification.VerificationMode;
 
 public class XdsTestUtils {
+  private static final Logger log = Logger.getLogger(XdsTestUtils.class.getName());
+  private static final String SCHEME = "test-xds";
+  private static final String RDS_NAME = "route-config.googleapis.com";
+  private static final String CLUSTER_NAME = "cluster0";
+  private static final String EDS_NAME = "eds-service-0";
+  private static final String SERVER_LISTENER = "grpc/server?udpa.resource.listening_address=";
+  private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
+      "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
+          + ".HttpConnectionManager";
+
+
   static BindableService createLrsService(AtomicBoolean lrsEnded,
                                           Queue<LrsRpcCall> loadReportCalls) {
     return new LoadReportingServiceGrpc.LoadReportingServiceImplBase() {
@@ -100,29 +121,33 @@ public class XdsTestUtils {
     return true;
   }
 
-  static BindableService createAdsService(
-      AtomicBoolean adsEnded, Queue<DiscoveryRpcCall> resourceDiscoveryCalls) {
-    return new AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase() {
-      @Override
-      public StreamObserver<DiscoveryRequest> streamAggregatedResources(
-          final StreamObserver<DiscoveryResponse> responseObserver) {
-        assertThat(adsEnded.get()).isTrue();  // ensure previous call was ended
-        adsEnded.set(false);
-        @SuppressWarnings("unchecked")
-        StreamObserver<DiscoveryRequest> requestObserver =
-            mock(StreamObserver.class, delegatesTo(new MockStreamObserver()));
-        DiscoveryRpcCall call = new DiscoveryRpcCall(requestObserver, responseObserver);
-        resourceDiscoveryCalls.offer(call);
-        Context.current().addListener(
-            new CancellationListener() {
-              @Override
-              public void cancelled(Context context) {
-                adsEnded.set(true);
-              }
-            }, MoreExecutors.directExecutor());
-        return requestObserver;
-      }
-    };
+  static void setAdsConfig(XdsTestControlPlaneService service, String serverName) {
+    setAdsConfig(service, serverName, RDS_NAME, CLUSTER_NAME, EDS_NAME, "data-host", 1234);
+  }
+
+  static void setAdsConfig(XdsTestControlPlaneService service, String serverName, String rdsName,
+  String clusterName, String edsName, String endpointHostname, int endpointPort) {
+
+    Listener serverListener = ControlPlaneRule.buildServerListener();
+    Listener clientListener = ControlPlaneRule.buildClientListener(serverName, serverName, rdsName);
+    service.setXdsConfig(ADS_TYPE_URL_LDS,
+        ImmutableMap.of(SERVER_LISTENER, serverListener, serverName, clientListener));
+
+    RouteConfiguration routeConfig =
+        ControlPlaneRule.buildRouteConfiguration(serverName, rdsName, clusterName);
+    service.setXdsConfig(ADS_TYPE_URL_RDS, ImmutableMap.of(rdsName, routeConfig));;
+
+    Cluster cluster = ControlPlaneRule.buildCluster(clusterName, edsName);
+    service.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.<String, Message>of(clusterName, cluster));
+
+    ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
+        serverName, endpointHostname, endpointPort);
+    service.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.<String, Message>of(edsName, clusterLoadAssignment));
+
+    log.log(Level.FINE, String.format("Set ADS config for %s with address %s:%d",
+        serverName, endpointHostname, endpointPort));
+
   }
 
   static class MockStreamObserver implements StreamObserver<DiscoveryRequest> {

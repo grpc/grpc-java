@@ -231,23 +231,4 @@ public class CommonBootstrapperTestUtils {
         .build();
   }
 
-  private static class MockStreamObserver implements StreamObserver<DiscoveryRequest> {
-    private final List<DiscoveryRequest> requests = new ArrayList<>();
-
-    @Override
-    public void onNext(DiscoveryRequest value) {
-      requests.add(value);
-    }
-
-    @Override
-    public void onError(Throwable t) {
-      // Ignore
-    }
-
-    @Override
-    public void onCompleted() {
-      // Ignore
-    }
-  }
-
 }

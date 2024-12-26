@@ -21,6 +21,8 @@ import static io.grpc.xds.client.CommonBootstrapperTestUtils.LDS_RESOURCE;
 import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.BindableService;
 import io.grpc.ChannelCredentials;
@@ -43,6 +45,7 @@ import java.util.Collections;
 import java.util.Queue;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 import org.junit.After;
@@ -78,6 +81,7 @@ public class XdsDependencyManagerTest {
   private XdsClientImpl xdsClient;
   private XdsDependencyManager xdsDependencyManager;
   private TestWatcher xdsConfigWatcher;
+  private Server xdsServer;
 
   private final FakeClock fakeClock = new FakeClock();
   private final BlockingDeque<XdsTestUtils.DiscoveryRpcCall> resourceDiscoveryCalls =
@@ -86,8 +90,7 @@ public class XdsDependencyManagerTest {
   private final Queue<XdsTestUtils.LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   private final AtomicBoolean adsEnded = new AtomicBoolean(true);
   private final AtomicBoolean lrsEnded = new AtomicBoolean(true);
-  private final BindableService adsService =
-      XdsTestUtils.createAdsService(adsEnded, resourceDiscoveryCalls);
+  private final XdsTestControlPlaneService controlPlaneService = new XdsTestControlPlaneService();
   private final BindableService lrsService =
       XdsTestUtils.createLrsService(lrsEnded, loadReportCalls);
 
@@ -95,17 +98,20 @@ public class XdsDependencyManagerTest {
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
+  private TestWatcher testWatcher;
 
 
   @Before
   public void setUp() throws Exception {
-    Server xdsServer = cleanupRule.register(InProcessServerBuilder
+    xdsServer = cleanupRule.register(InProcessServerBuilder
         .forName(serverName)
-        .addService(adsService)
+        .addService(controlPlaneService)
         .addService(lrsService)
         .directExecutor()
         .build()
         .start());
+
+    XdsTestUtils.setAdsConfig(controlPlaneService, serverName);
 
     channel = cleanupRule.register(
         InProcessChannelBuilder.forName(serverName).directExecutor().build());
@@ -116,16 +122,19 @@ public class XdsDependencyManagerTest {
         Collections.singletonList(SERVER_URI), xdsTransportFactory, fakeClock,
         new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
 
-    xdsConfigWatcher = mock(TestWatcher.class, delegatesTo(new TestWatcher()));
+    testWatcher = new TestWatcher();
+    xdsConfigWatcher = mock(TestWatcher.class, delegatesTo(testWatcher));
   }
 
   @After
-  public void tearDown() {
+  public void tearDown() throws InterruptedException {
     if (xdsDependencyManager != null) {
       xdsDependencyManager.shutdown();
     }
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
+
+    xdsServer.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
 
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
@@ -133,27 +142,42 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
-  public void xdsDependencyManager() {
+  public void verify_basic_config() {
     xdsDependencyManager = new XdsDependencyManager(
         xdsClient, xdsConfigWatcher, syncContext, null, LDS_RESOURCE);
+
+    verify(xdsConfigWatcher, timeout(1000)).onUpdate(getDefaultXdsConfig());
 
     xdsDependencyManager.shutdown();
   }
 
+  private static XdsConfig getDefaultXdsConfig() {
+    return null; // TODO replace with actual config
+  }
+
   private static class TestWatcher implements XdsDependencyManager.XdsConfigWatcher {
+    XdsConfig lastConfig;
+    int numUpdates = 0;
+    int numError = 0;
+    int numDoesNotExist = 0;
+
     @Override
     public void onUpdate(XdsConfig config) {
       log.info("Config changed: " + config);
+      lastConfig = config;
+      numUpdates++;
     }
 
     @Override
     public void onError(String resourceContext, Status status) {
       log.info(String.format("Error %s for %s: ",  status, resourceContext));
+      numError++;
     }
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
       log.info("Resource does not exist: " + resourceName);
+      numDoesNotExist++;
     }
   }
 }
