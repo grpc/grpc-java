@@ -14,10 +14,6 @@
 
 buildscript {
     // Configuration for building
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/maven2/" }
-    }
     dependencies {
         classpath 'com.squareup.okhttp:okhttp:2.7.4'
     }
@@ -32,13 +28,6 @@ plugins {
 }
 
 description = 'gRPC: gae interop testing (jdk8)'
-
-repositories {
-    // repositories for Jar's you access in your code
-    mavenLocal()
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/" }
-}
 
 dependencies {
     providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
