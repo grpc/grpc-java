@@ -428,7 +428,7 @@ public abstract class XdsClient {
     void handleStreamClosed(Status error, boolean shouldTryFallback);
   }
 
-  public interface ResourceStore {
+  interface ResourceStore {
 
     /**
      * Returns the collection of resources currently subscribed to which have an authority matching
