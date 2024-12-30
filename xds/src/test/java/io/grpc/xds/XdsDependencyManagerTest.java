@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.client.CommonBootstrapperTestUtils.LDS_RESOURCE;
 import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.mock;
@@ -144,7 +143,7 @@ public class XdsDependencyManagerTest {
   @Test
   public void verify_basic_config() {
     xdsDependencyManager = new XdsDependencyManager(
-        xdsClient, xdsConfigWatcher, syncContext, null, LDS_RESOURCE);
+        xdsClient, xdsConfigWatcher, syncContext, null, serverName);
 
     verify(xdsConfigWatcher, timeout(1000)).onUpdate(getDefaultXdsConfig());
 

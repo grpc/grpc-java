@@ -26,6 +26,7 @@ import io.grpc.InternalLogId;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
+import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
@@ -38,18 +39,19 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
  * This class acts as a layer of indirection between the XdsClient and the NameResolver. It
  * maintains the watchers for the xds resources and when an update is received, it either requests
- * referenced resources or updates the XdsConfig and notifies the XdsConfigWatcher.
+ * referenced resources or updates the XdsConfig and notifies the XdsConfigWatcher.  Each instance
+ * applies to a single data plane authority.
  */
 @SuppressWarnings("unused") // TODO remove when changes for A74 are fully implemented
 final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegistry {
+  public static final XdsClusterResource CLUSTER_RESOURCE = XdsClusterResource.getInstance();
+  public static final XdsEndpointResource ENDPOINT_RESOURCE = XdsEndpointResource.getInstance();
   private final XdsClient xdsClient;
   private final XdsConfigWatcher xdsConfigWatcher;
   private final SynchronizationContext syncContext;
@@ -88,6 +90,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     return subscription;
   }
 
+  private boolean hasWatcher(XdsResourceType<?> type, String resourceName) {
+    TypeWatchers<?> typeWatchers = resourceWatchers.get(type);
+    return typeWatchers != null && typeWatchers.watchers.containsKey(resourceName);
+  }
+
   @SuppressWarnings("unchecked")
   private <T extends ResourceUpdate> void addWatcher(XdsWatcherBase<T> watcher) {
     XdsResourceType<T> type = watcher.type;
@@ -105,7 +112,12 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     });
   }
 
+  @SuppressWarnings("unchecked")
   private <T extends ResourceUpdate> void cancelWatcher(XdsWatcherBase<T> watcher) {
+    if (watcher == null) {
+      return;
+    }
+
     XdsResourceType<T> type = watcher.type;
     String resourceName = watcher.resourceName;
 
@@ -148,6 +160,16 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     if (subscriptions.isEmpty()) {
       clusterSubscriptions.remove(clusterName);
       // TODO release XdsClient watches for this cluster and its endpoint
+      XdsWatcherBase<?> cdsWatcher =
+          resourceWatchers.get(CLUSTER_RESOURCE).watchers.remove(clusterName);
+      if (cdsWatcher != null && cdsWatcher.getData() != null && cdsWatcher.getData().hasValue()) {
+        String edsServiceName =
+            ((XdsClusterResource.CdsUpdate) cdsWatcher.getData().getValue()).edsServiceName();
+        XdsWatcherBase<?> edsWatcher =
+            resourceWatchers.get(ENDPOINT_RESOURCE).watchers.remove(edsServiceName);
+        cancelWatcher(edsWatcher);
+      }
+      cancelWatcher(cdsWatcher);
       maybePublishConfig();
     }
   }
@@ -157,15 +179,17 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
    * the watchers.
    */
   private void maybePublishConfig() {
-    boolean waitingOnResource = resourceWatchers.values().stream()
-        .flatMap(typeWatchers -> typeWatchers.watchers.values().stream())
-        .anyMatch(watcher -> !watcher.hasResult());
-    if (waitingOnResource) {
-      return;
-    }
+    syncContext.execute(() -> {
+      boolean waitingOnResource = resourceWatchers.values().stream()
+          .flatMap(typeWatchers -> typeWatchers.watchers.values().stream())
+          .anyMatch(watcher -> !watcher.hasResult());
+      if (waitingOnResource) {
+        return;
+      }
 
-    buildConfig();
-    xdsConfigWatcher.onUpdate(lastXdsConfig);
+      buildConfig();
+      xdsConfigWatcher.onUpdate(lastXdsConfig);
+    });
   }
 
   private void buildConfig() {
@@ -183,9 +207,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         .forEach(watcher -> builder.setRoute(watcher.getData().getValue()));
 
     Map<String, ? extends XdsWatcherBase<?>> edsWatchers =
-        resourceWatchers.get(XdsEndpointResource.getInstance()).watchers;
+        resourceWatchers.get(ENDPOINT_RESOURCE).watchers;
     Map<String, ? extends XdsWatcherBase<?>> cdsWatchers =
-        resourceWatchers.get(XdsClusterResource.getInstance()).watchers;
+        resourceWatchers.get(CLUSTER_RESOURCE).watchers;
 
     // Iterate CDS watchers
     for (XdsWatcherBase<?> watcher : cdsWatchers.values()) {
@@ -214,11 +238,10 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   private static class TypeWatchers<T extends ResourceUpdate> {
-    Map<String, XdsWatcherBase<T>> watchers;
-    XdsResourceType<T> resourceType;
+    final Map<String, XdsWatcherBase<T>> watchers = new HashMap<>();
+    final XdsResourceType<T> resourceType;
 
     TypeWatchers(XdsResourceType<T> resourceType) {
-      watchers = new HashMap<>();
       this.resourceType = resourceType;
     }
 
@@ -226,7 +249,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       watchers.put(resourceName, watcher);
     }
   }
-
 
   public interface XdsConfigWatcher {
 
@@ -329,21 +351,23 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
       String rdsName = httpConnectionManager.rdsName();
 
-      boolean changedRdsName = rdsName != null && !rdsName.equals(this.rdsName);
-      if (changedRdsName) {
-        cleanUpRdsWatcher();
-      }
+      syncContext.execute(() -> {
+        boolean changedRdsName = rdsName != null && !rdsName.equals(this.rdsName);
+        if (changedRdsName) {
+          cleanUpRdsWatcher();
+        }
 
-      if (virtualHosts != null) {
-        updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
-            httpConnectionManager.httpFilterConfigs());
-      } else if (changedRdsName) {
-        this.rdsName = rdsName;
-        addWatcher(new RdsWatcher(rdsName));
-        logger.log(XdsLogger.XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-      }
-      // TODO: process the update and add an RdsWatcher if needed
-      //   If none needed call maybePublishConfig()
+        if (virtualHosts != null) {
+          updateRoutes(virtualHosts);
+        } else if (changedRdsName) {
+          this.rdsName = rdsName;
+          addWatcher(new RdsWatcher(rdsName));
+          logger.log(XdsLogger.XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
+        }
+
+        setData(update);
+        maybePublishConfig();
+      });
     }
 
     @Override
@@ -356,112 +380,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     public void onResourceDoesNotExist(String resourceName) {
       handleDoesNotExist(resourceName);
       xdsConfigWatcher.onResourceDoesNotExist(toContextString());
-    }
-
-    // called in syncContext // TODO should be made available to RdsWatcher
-    private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
-                              @Nullable List<Filter.NamedFilterConfig> filterConfigs) {
-      String authority = dataPlaneAuthority;
-
-      // TODO this is a copy from XdsNameResolver, change to what we need here.
-      VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
-      if (virtualHost == null) {
-        String error = "Failed to find virtual host matching hostname: " + authority;
-        logger.log(XdsLogger.XdsLogLevel.WARNING, error);
-        cleanUpRoutes(error);
-        return;
-      }
-
-      List<VirtualHost.Route> routes = virtualHost.routes();
-
-      // Populate all clusters to which requests can be routed to through the virtual host.
-      Set<String> clusters = new HashSet<>();
-      // uniqueName -> clusterName
-      Map<String, String> clusterNameMap = new HashMap<>();
-      // uniqueName -> pluginConfig
-      Map<String, RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig> rlsPluginConfigMap = new HashMap<>();
-      for (VirtualHost.Route route : routes) {
-        VirtualHost.Route.RouteAction action = route.routeAction();
-        String prefixedName;
-        if (action != null) {
-          if (action.cluster() != null) {
-            prefixedName = prefixedClusterName(action.cluster());
-            clusters.add(prefixedName);
-            clusterNameMap.put(prefixedName, action.cluster());
-          } else if (action.weightedClusters() != null) {
-            for (VirtualHost.Route.RouteAction.ClusterWeight weighedCluster : action.weightedClusters()) {
-              prefixedName = prefixedClusterName(weighedCluster.name());
-              clusters.add(prefixedName);
-              clusterNameMap.put(prefixedName, weighedCluster.name());
-            }
-          } else if (action.namedClusterSpecifierPluginConfig() != null) {
-            ClusterSpecifierPlugin.PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
-            if (pluginConfig instanceof RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig) {
-              prefixedName = prefixedClusterSpecifierPluginName(
-                  action.namedClusterSpecifierPluginConfig().name());
-              clusters.add(prefixedName);
-              rlsPluginConfigMap.put(prefixedName, (RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig) pluginConfig);
-            }
-          }
-        }
-      }
-
-      // Updates channel's load balancing config whenever the set of selectable clusters changes.
-      boolean shouldUpdateResult = existingClusters == null;
-      Set<String> addedClusters =
-          existingClusters == null ? clusters : Sets.difference(clusters, existingClusters);
-      Set<String> deletedClusters =
-          existingClusters == null
-          ? Collections.emptySet() : Sets.difference(existingClusters, clusters);
-      existingClusters = clusters;
-      for (String cluster : addedClusters) {
-        if (clusterRefs.containsKey(cluster)) {
-          clusterRefs.get(cluster).refCount.incrementAndGet();
-        } else {
-          if (clusterNameMap.containsKey(cluster)) {
-            clusterRefs.put(
-                cluster,
-                XdsNameResolver.ClusterRefState.forCluster(new AtomicInteger(1), clusterNameMap.get(cluster)));
-          }
-          if (rlsPluginConfigMap.containsKey(cluster)) {
-            clusterRefs.put(
-                cluster,
-                XdsNameResolver.ClusterRefState.forRlsPlugin(
-                    new AtomicInteger(1), rlsPluginConfigMap.get(cluster)));
-          }
-          shouldUpdateResult = true;
-        }
-      }
-      for (String cluster : clusters) {
-        RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig rlsPluginConfig = rlsPluginConfigMap.get(cluster);
-        if (!Objects.equals(rlsPluginConfig, clusterRefs.get(cluster).rlsPluginConfig)) {
-          XdsNameResolver.ClusterRefState newClusterRefState =
-              XdsNameResolver.ClusterRefState.forRlsPlugin(clusterRefs.get(cluster).refCount, rlsPluginConfig);
-          clusterRefs.put(cluster, newClusterRefState);
-          shouldUpdateResult = true;
-        }
-      }
-      // Update service config to include newly added clusters.
-      if (shouldUpdateResult) {
-        updateResolutionResult();
-      }
-      // Make newly added clusters selectable by config selector and deleted clusters no longer
-      // selectable.
-      routingConfig =
-          new XdsNameResolver.RoutingConfig(
-              httpMaxStreamDurationNano, routes, filterConfigs,
-              virtualHost.filterConfigOverrides());
-      shouldUpdateResult = false;
-      for (String cluster : deletedClusters) {
-        int count = clusterRefs.get(cluster).refCount.decrementAndGet();
-        if (count == 0) {
-          clusterRefs.remove(cluster);
-          shouldUpdateResult = true;
-        }
-      }
-      if (shouldUpdateResult) {
-        updateResolutionResult();
-      }
     }
 
     private void cleanUpRdsWatcher() {
@@ -484,8 +402,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onChanged(RdsUpdate update) {
-      // TODO: process the update and add CdsWatchers for all virtual hosts as needed
-      //  If none needed call maybePublishConfig()
+      setData(update);
+      syncContext.execute(() -> {
+        updateRoutes(update.virtualHosts);
+        maybePublishConfig();
+      });
     }
 
     @Override
@@ -503,14 +424,52 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private class CdsWatcher extends XdsWatcherBase<XdsClusterResource.CdsUpdate> {
 
-    private CdsWatcher(String resourceName) {
-      super(XdsClusterResource.getInstance(), resourceName);
+    CdsWatcher(String resourceName) {
+      super(CLUSTER_RESOURCE, resourceName);
     }
 
     @Override
     public void onChanged(XdsClusterResource.CdsUpdate update) {
-      // TODO: process the update and add an EdsWatcher if needed
-      //  else call maybePublishConfig()
+      syncContext.execute(() -> {
+        switch (update.clusterType()) {
+          case EDS:
+            setData(update);
+            if (!hasWatcher(ENDPOINT_RESOURCE, update.edsServiceName())) {
+              addWatcher(new EdsWatcher(update.edsServiceName()));
+            } else {
+              maybePublishConfig();
+            }
+            break;
+          case LOGICAL_DNS:
+            setData(update);
+            maybePublishConfig();
+            // no eds needed
+            break;
+          case AGGREGATE:
+            if (data.hasValue()) {
+              TypeWatchers<?> cdsWatchers = resourceWatchers.get(CLUSTER_RESOURCE);
+              Set<String> oldNames = new HashSet<>(data.getValue().prioritizedClusterNames());
+              Set<String> newNames = new HashSet<>(update.prioritizedClusterNames());
+
+              setData(update);
+
+              Set<String> addedClusters = Sets.difference(newNames, oldNames);
+              Set<String> deletedClusters = Sets.difference(oldNames, newNames);
+              addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster)));
+              deletedClusters.forEach((cluster) -> cancelWatcher(getCluster(cluster)));
+
+              if (!addedClusters.isEmpty()) {
+                maybePublishConfig();
+              }
+            } else {
+              setData(update);
+              update.prioritizedClusterNames().forEach(name -> addWatcher(new CdsWatcher(name)));
+            }
+            break;
+          default:
+            throw new AssertionError("Unknown cluster type: " + update.clusterType());
+        }
+      });
     }
 
     @Override
@@ -522,13 +481,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private class EdsWatcher extends XdsWatcherBase<XdsEndpointResource.EdsUpdate> {
     private EdsWatcher(String resourceName) {
-      super(XdsEndpointResource.getInstance(), resourceName);
+      super(ENDPOINT_RESOURCE, resourceName);
     }
 
     @Override
     public void onChanged(XdsEndpointResource.EdsUpdate update) {
-      // TODO: process the update
-      maybePublishConfig();
+      syncContext.execute(() -> {
+        setData(update);
+        maybePublishConfig();
+      });
     }
 
     @Override
@@ -536,4 +497,76 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       handleDoesNotExist(resourceName);
     }
   }
+
+  private void updateRoutes(List<VirtualHost> virtualHosts) {
+    String authority = dataPlaneAuthority;
+
+    VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
+    if (virtualHost == null) {
+      String error = "Failed to find virtual host matching hostname: " + authority;
+      logger.log(XdsLogger.XdsLogLevel.WARNING, error);
+      cleanUpRoutes(error);
+      xdsConfigWatcher.onError(
+          "xDS node ID:" + dataPlaneAuthority, Status.UNAVAILABLE.withDescription(error));
+      return;
+    }
+
+    // Get all cluster names to which requests can be routed through the virtual host.
+    Set<String> clusters = new HashSet<>();
+    for (VirtualHost.Route route : virtualHost.routes()) {
+      VirtualHost.Route.RouteAction action = route.routeAction();
+      if (action == null) {
+        continue;
+      }
+      if (action.cluster() != null) {
+        clusters.add(action.cluster());
+      } else if (action.weightedClusters() != null) {
+        for (ClusterWeight weighedCluster : action.weightedClusters()) {
+          clusters.add(weighedCluster.name());
+        }
+      }
+    }
+
+    // Get existing cluster names
+    TypeWatchers<?> clusterWatchers = resourceWatchers.get(CLUSTER_RESOURCE);
+    Set<String> oldClusters =
+        (clusterWatchers != null) ? clusterWatchers.watchers.keySet() : Collections.emptySet();
+
+    // Calculate diffs.
+    Set<String> addedClusters =
+        oldClusters == null ? clusters : Sets.difference(clusters, oldClusters);
+    Set<String> deletedClusters =
+        oldClusters == null ? Collections.emptySet() : Sets.difference(oldClusters, clusters);
+
+    addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster)));
+    deletedClusters.forEach(watcher -> cancelWatcher(getCluster(watcher)));
+  }
+
+  // Must be in SyncContext
+  private void cleanUpRoutes(String error) {
+    // Remove RdsWatcher & CDS Watchers
+    TypeWatchers<?> rdsWatcher = resourceWatchers.get(XdsRouteConfigureResource.getInstance());
+    if (rdsWatcher != null) {
+      for (XdsWatcherBase<?> watcher : rdsWatcher.watchers.values()) {
+        cancelWatcher(watcher);
+      }
+    }
+
+    // Remove all CdsWatchers
+    TypeWatchers<?> cdsWatcher = resourceWatchers.get(CLUSTER_RESOURCE);
+    if (cdsWatcher != null) {
+      for (XdsWatcherBase<?> watcher : cdsWatcher.watchers.values()) {
+        cancelWatcher(watcher);
+      }
+    }
+  }
+
+  private static String prefixedClusterName(String name) {
+    return "cluster:" + name;
+  }
+
+  private XdsWatcherBase<?> getCluster(String clusterName) {
+    return resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
+  }
+
 }

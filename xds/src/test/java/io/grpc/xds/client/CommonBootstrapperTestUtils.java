@@ -18,15 +18,12 @@ package io.grpc.xds.client;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
-import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.TimeProvider;
-import io.grpc.stub.StreamObserver;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;

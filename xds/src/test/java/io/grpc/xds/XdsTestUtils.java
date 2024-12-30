@@ -126,7 +126,8 @@ public class XdsTestUtils {
   }
 
   static void setAdsConfig(XdsTestControlPlaneService service, String serverName, String rdsName,
-  String clusterName, String edsName, String endpointHostname, int endpointPort) {
+                           String clusterName, String edsName, String endpointHostname,
+                           int endpointPort) {
 
     Listener serverListener = ControlPlaneRule.buildServerListener();
     Listener clientListener = ControlPlaneRule.buildClientListener(serverName, serverName, rdsName);
