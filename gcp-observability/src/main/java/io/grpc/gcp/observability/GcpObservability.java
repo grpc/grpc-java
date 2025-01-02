@@ -146,6 +146,11 @@ public final class GcpObservability implements AutoCloseable {
     }
   }
 
+  /**
+   * Method to close along with sleep time explicitly.
+   *
+   * @param sleepTime sleepTime
+   */
   public void closeWithSleepTime(long sleepTime) {
     synchronized (GcpObservability.class) {
       sink.close();
