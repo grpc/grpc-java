@@ -38,6 +38,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsTransportFactory;
 import java.util.ArrayDeque;
 import java.util.Collections;
@@ -98,7 +99,7 @@ public class XdsDependencyManagerTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private TestWatcher testWatcher;
-
+  private XdsConfig defaultXdsConfig; // set in setUp()
 
   @Before
   public void setUp() throws Exception {
@@ -123,6 +124,7 @@ public class XdsDependencyManagerTest {
 
     testWatcher = new TestWatcher();
     xdsConfigWatcher = mock(TestWatcher.class, delegatesTo(testWatcher));
+    defaultXdsConfig = XdsTestUtils.getDefaultXdsConfig(serverName);
   }
 
   @After
@@ -141,17 +143,11 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
-  public void verify_basic_config() {
+  public void verify_basic_config() throws Exception {
     xdsDependencyManager = new XdsDependencyManager(
-        xdsClient, xdsConfigWatcher, syncContext, null, serverName);
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
 
-    verify(xdsConfigWatcher, timeout(1000)).onUpdate(getDefaultXdsConfig());
-
-    xdsDependencyManager.shutdown();
-  }
-
-  private static XdsConfig getDefaultXdsConfig() {
-    return null; // TODO replace with actual config
+    verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
   }
 
   private static class TestWatcher implements XdsDependencyManager.XdsConfigWatcher {
@@ -162,20 +158,20 @@ public class XdsDependencyManagerTest {
 
     @Override
     public void onUpdate(XdsConfig config) {
-      log.info("Config changed: " + config);
+      log.fine("Config changed: " + config);
       lastConfig = config;
       numUpdates++;
     }
 
     @Override
     public void onError(String resourceContext, Status status) {
-      log.info(String.format("Error %s for %s: ",  status, resourceContext));
+      log.fine(String.format("Error %s for %s: ",  status, resourceContext));
       numError++;
     }
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
-      log.info("Resource does not exist: " + resourceName);
+      log.fine("Resource does not exist: " + resourceName);
       numDoesNotExist++;
     }
   }

@@ -71,7 +71,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     this.xdsClient = xdsClient;
     this.xdsConfigWatcher = xdsConfigWatcher;
     this.syncContext = syncContext;
-    this.dataPlaneAuthority = dataPlaneAuthority;
+    this.dataPlaneAuthority = checkNotNull(dataPlaneAuthority, "dataPlaneAuthority");
 
     // start the ball rolling
     addWatcher(new LdsWatcher(listenerName));
@@ -138,6 +138,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     for (TypeWatchers<?> watchers : resourceWatchers.values()) {
       shutdownWatchersForType(watchers);
     }
+    resourceWatchers.clear();
   }
 
   private <T extends ResourceUpdate> void shutdownWatchersForType(TypeWatchers<T> watchers) {

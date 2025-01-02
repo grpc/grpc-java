@@ -62,6 +62,15 @@ public class XdsConfig {
     return hashCode;
   }
 
+  @Override
+  public String toString() {
+    StringBuilder builder = new StringBuilder();
+    builder.append("XdsConfig{listener=").append(listener)
+        .append(", route=").append(route)
+        .append(", clusters={").append(clusters).append("}}");
+    return builder.toString();
+  }
+
   public static class XdsClusterConfig {
     final String clusterName;
     final CdsUpdate clusterResource;
@@ -72,6 +81,31 @@ public class XdsConfig {
       this.clusterName = clusterName;
       this.clusterResource = clusterResource;
       this.endpoint = endpoint;
+    }
+
+    @Override
+    public int hashCode() {
+      return clusterName.hashCode() + clusterResource.hashCode() + endpoint.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof XdsClusterConfig)) {
+        return false;
+      }
+      XdsClusterConfig o = (XdsClusterConfig) obj;
+      return Objects.equals(clusterName, o.clusterName)
+          && Objects.equals(clusterResource, o.clusterResource)
+          && Objects.equals(endpoint, o.endpoint);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder builder = new StringBuilder();
+      builder.append("XdsClusterConfig{clusterName=").append(clusterName)
+          .append(", clusterResource=").append(clusterResource)
+          .append(", endpoint=").append(endpoint).append("}");
+      return builder.toString();
     }
   }
 

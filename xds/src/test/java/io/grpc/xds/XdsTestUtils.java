@@ -32,6 +32,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import com.google.rpc.Code;
@@ -40,7 +41,10 @@ import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
@@ -49,14 +53,26 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.StatusOr;
+import io.grpc.internal.JsonParser;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.EnvoyProtoData;
+import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -78,6 +94,12 @@ public class XdsTestUtils {
   private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
+  public static final String ENDPOINT_HOSTNAME = "data-host";
+  public static final int ENDPOINT_PORT = 1234;
+
+  private static final PickFirstLoadBalancerProvider PICK_FIRST_LOAD_BALANCER_PROVIDER =
+      new PickFirstLoadBalancerProvider();
+  public static final WrrLocalityLoadBalancerProvider WRR_LOCALITY_LOAD_BALANCER_PROVIDER = new WrrLocalityLoadBalancerProvider();
 
 
   static BindableService createLrsService(AtomicBoolean lrsEnded,
@@ -122,7 +144,8 @@ public class XdsTestUtils {
   }
 
   static void setAdsConfig(XdsTestControlPlaneService service, String serverName) {
-    setAdsConfig(service, serverName, RDS_NAME, CLUSTER_NAME, EDS_NAME, "data-host", 1234);
+    setAdsConfig(service, serverName, RDS_NAME, CLUSTER_NAME, EDS_NAME, ENDPOINT_HOSTNAME,
+        ENDPOINT_PORT);
   }
 
   static void setAdsConfig(XdsTestControlPlaneService service, String serverName, String rdsName,
@@ -135,7 +158,7 @@ public class XdsTestUtils {
         ImmutableMap.of(SERVER_LISTENER, serverListener, serverName, clientListener));
 
     RouteConfiguration routeConfig =
-        ControlPlaneRule.buildRouteConfiguration(serverName, rdsName, clusterName);
+        buildRouteConfiguration(serverName, rdsName, clusterName);
     service.setXdsConfig(ADS_TYPE_URL_RDS, ImmutableMap.of(rdsName, routeConfig));;
 
     Cluster cluster = ControlPlaneRule.buildCluster(clusterName, edsName);
@@ -151,23 +174,81 @@ public class XdsTestUtils {
 
   }
 
-  static class MockStreamObserver implements StreamObserver<DiscoveryRequest> {
-    private final List<DiscoveryRequest> requests = new ArrayList<>();
+  static XdsConfig getDefaultXdsConfig(String serverHostName)
+      throws XdsResourceType.ResourceInvalidException, IOException {
+    XdsConfig.XdsConfigBuilder builder = new XdsConfig.XdsConfigBuilder();
 
-    @Override
-    public void onNext(DiscoveryRequest value) {
-      requests.add(value);
-    }
+    Filter.NamedFilterConfig routerFilterConfig = new Filter.NamedFilterConfig(
+        serverHostName, RouterFilter.ROUTER_CONFIG);
 
-    @Override
-    public void onError(Throwable t) {
-      // Ignore
-    }
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
+        0L, RDS_NAME, Collections.singletonList(routerFilterConfig));
+    XdsListenerResource.LdsUpdate ldsUpdate =
+        XdsListenerResource.LdsUpdate.forApiListener(httpConnectionManager);
 
-    @Override
-    public void onCompleted() {
-      // Ignore
-    }
+    ConfigOrError<LbConfig> wrrLbConfig = getWrrLbConfig();
+
+    RouteConfiguration routeConfiguration =
+        buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
+    Bootstrapper.ServerInfo serverInfo = null;
+    XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, "0", "0", null, null, null);
+    XdsRouteConfigureResource.RdsUpdate rdsUpdate =
+        XdsRouteConfigureResource.processRouteConfiguration(
+        routeConfiguration, FilterRegistry.getDefaultRegistry(), args);
+
+    // Need to create endpoints to create locality endpoints map to create edsUpdate
+    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
+    LbEndpoint lbEndpoint =
+        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
+    lbEndpointsMap.put(
+        Locality.create("", "", ""),
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
+
+    // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
+    XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
+        EDS_NAME, lbEndpointsMap, Collections.emptyList());
+    XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
+        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null)
+        .lbPolicyConfig(getWrrLbConfigAsMap()).build();
+    XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
+        CLUSTER_NAME, cdsUpdate, StatusOr.fromValue(edsUpdate));
+
+    builder.setListener(ldsUpdate)
+        .setRoute(rdsUpdate)
+        .addCluster(CLUSTER_NAME, StatusOr.fromValue(clusterConfig));
+
+    return builder.build();
+  }
+
+  private static ConfigOrError<LbConfig> getWrrLbConfig() throws IOException {
+    Map<String, ?> lbParsed = getWrrLbConfigAsMap();
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbParsed);
+
+    return ConfigOrError.fromConfig(lbConfig);
+  }
+
+  private static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
+    String lbConfigStr = "{\"wrr_locality_experimental\" : "
+        + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
+
+    return ImmutableMap.copyOf((Map<String, ?>) JsonParser.parse(lbConfigStr));
+  }
+
+  static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
+                                                    String clusterName) {
+    io.envoyproxy.envoy.config.route.v3.VirtualHost.Builder vhBuilder = io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
+        .setName(rdsName)
+        .addDomains(authority)
+        .addRoutes(
+            Route.newBuilder()
+                .setMatch(
+                    RouteMatch.newBuilder().setPrefix("/").build())
+                .setRoute(
+                    RouteAction.newBuilder().setCluster(clusterName)
+                        .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
+                        .build()));
+    io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
+    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
   }
 
   /**
