@@ -146,6 +146,21 @@ public final class GcpObservability implements AutoCloseable {
     }
   }
 
+  public void closeWithSleepTime(long sleepTime) {
+    synchronized (GcpObservability.class) {
+      sink.close();
+      if (config.isEnableCloudMonitoring() || config.isEnableCloudTracing()) {
+        try {
+          Thread.sleep(sleepTime);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          logger.log(Level.SEVERE, "Caught exception during sleep", e);
+        }
+      }
+      instance = null;
+    }
+  }
+
   // TODO(dnvindhya): Remove <channel/server>InterceptorFactory and replace with respective
   // interceptors
   private void setProducer(

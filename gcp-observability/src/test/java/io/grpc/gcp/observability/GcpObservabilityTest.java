@@ -199,9 +199,6 @@ public class GcpObservabilityTest {
       try {
         GcpObservability gcpObservability = GcpObservability.grpcInit(
             sink, config, channelInterceptorFactory, serverInterceptorFactory);
-        // Added the assert statement to fix the PR build/check warnings for
-        // unused variable gcpObservability.
-        assertThat(gcpObservability).isNotNull();
         List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
         assertThat(configurators).hasSize(1);
         ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
@@ -211,6 +208,7 @@ public class GcpObservabilityTest {
         assertThat(list.get(2)).isInstanceOf(ConditionalClientInterceptor.class);
         assertThat(configurator.serverInterceptors).hasSize(1);
         assertThat(configurator.tracerFactories).hasSize(2);
+        gcpObservability.closeWithSleepTime(3000);
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
@@ -264,4 +262,26 @@ public class GcpObservabilityTest {
       return next.startCall(call, headers);
     }
   }
+
+  @Test
+  public void closeWithSleepTime() throws Exception {
+    long sleepTime = 1000L;
+    Sink sink = mock(Sink.class);
+    ObservabilityConfig config = mock(ObservabilityConfig.class);
+    when(config.isEnableCloudLogging()).thenReturn(false);
+    when(config.isEnableCloudMonitoring()).thenReturn(false);
+    when(config.isEnableCloudTracing()).thenReturn(false);
+    when(config.getSampler()).thenReturn(Samplers.neverSample());
+
+    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+        mock(InternalLoggingChannelInterceptor.Factory.class);
+    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+        mock(InternalLoggingServerInterceptor.Factory.class);
+    GcpObservability gcpObservability =
+        GcpObservability.grpcInit(
+            sink, config, channelInterceptorFactory, serverInterceptorFactory);
+    gcpObservability.closeWithSleepTime(sleepTime);
+    verify(sink).close();
+  }
+
 }
