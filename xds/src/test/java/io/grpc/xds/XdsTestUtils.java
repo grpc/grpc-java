@@ -55,17 +55,16 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.StatusOr;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
-import io.grpc.xds.Endpoints.LbEndpoint;
-import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -86,21 +85,12 @@ import org.mockito.verification.VerificationMode;
 
 public class XdsTestUtils {
   private static final Logger log = Logger.getLogger(XdsTestUtils.class.getName());
-  private static final String SCHEME = "test-xds";
   private static final String RDS_NAME = "route-config.googleapis.com";
   private static final String CLUSTER_NAME = "cluster0";
   private static final String EDS_NAME = "eds-service-0";
   private static final String SERVER_LISTENER = "grpc/server?udpa.resource.listening_address=";
-  private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
-      "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
-          + ".HttpConnectionManager";
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
-
-  private static final PickFirstLoadBalancerProvider PICK_FIRST_LOAD_BALANCER_PROVIDER =
-      new PickFirstLoadBalancerProvider();
-  public static final WrrLocalityLoadBalancerProvider WRR_LOCALITY_LOAD_BALANCER_PROVIDER = new WrrLocalityLoadBalancerProvider();
-
 
   static BindableService createLrsService(AtomicBoolean lrsEnded,
                                           Queue<LrsRpcCall> loadReportCalls) {
@@ -186,8 +176,6 @@ public class XdsTestUtils {
     XdsListenerResource.LdsUpdate ldsUpdate =
         XdsListenerResource.LdsUpdate.forApiListener(httpConnectionManager);
 
-    ConfigOrError<LbConfig> wrrLbConfig = getWrrLbConfig();
-
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
     Bootstrapper.ServerInfo serverInfo = null;
@@ -236,17 +224,18 @@ public class XdsTestUtils {
 
   static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
                                                     String clusterName) {
-    io.envoyproxy.envoy.config.route.v3.VirtualHost.Builder vhBuilder = io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
-        .setName(rdsName)
-        .addDomains(authority)
-        .addRoutes(
-            Route.newBuilder()
-                .setMatch(
-                    RouteMatch.newBuilder().setPrefix("/").build())
-                .setRoute(
-                    RouteAction.newBuilder().setCluster(clusterName)
-                        .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
-                        .build()));
+    io.envoyproxy.envoy.config.route.v3.VirtualHost.Builder vhBuilder =
+        io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
+            .setName(rdsName)
+            .addDomains(authority)
+            .addRoutes(
+                Route.newBuilder()
+                    .setMatch(
+                        RouteMatch.newBuilder().setPrefix("/").build())
+                    .setRoute(
+                        RouteAction.newBuilder().setCluster(clusterName)
+                            .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
+                            .build()));
     io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
     return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
   }

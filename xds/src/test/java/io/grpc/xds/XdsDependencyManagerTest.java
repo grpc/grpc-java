@@ -24,8 +24,6 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.BindableService;
-import io.grpc.ChannelCredentials;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -38,10 +36,11 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
-import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsTransportFactory;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -54,8 +53,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -64,15 +61,9 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class XdsDependencyManagerTest {
   private static final Logger log = Logger.getLogger(XdsDependencyManagerTest.class.getName());
-  private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
-
-  //  private ControlPlaneRule xdsServerRule=new ControlPlaneRule().setServerHostName("xds-server");
 
   @Mock
   private XdsClientMetricReporter xdsClientMetricReporter;
-
-  @Captor
-  private ArgumentCaptor<Status> errorCaptor;
 
   private final SynchronizationContext syncContext =
       new SynchronizationContext(mock(Thread.UncaughtExceptionHandler.class));
@@ -143,11 +134,12 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
-  public void verify_basic_config() throws Exception {
+  public void verify_basic_config() {
     xdsDependencyManager = new XdsDependencyManager(
         xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
 
     verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
+    testWatcher.verifyStats(1, 0, 0);
   }
 
   private static class TestWatcher implements XdsDependencyManager.XdsConfigWatcher {
@@ -173,6 +165,14 @@ public class XdsDependencyManagerTest {
     public void onResourceDoesNotExist(String resourceName) {
       log.fine("Resource does not exist: " + resourceName);
       numDoesNotExist++;
+    }
+
+    private List<Integer> getStats() {
+      return Arrays.asList(numUpdates, numError, numDoesNotExist);
+    }
+
+    private void verifyStats(int updt, int err, int notExist) {
+      assertThat(getStats()).isEqualTo(Arrays.asList(updt, err, notExist));
     }
   }
 }

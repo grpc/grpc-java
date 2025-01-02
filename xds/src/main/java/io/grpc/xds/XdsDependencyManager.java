@@ -79,6 +79,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   @Override
   public ClusterSubscription subscribeToCluster(String clusterName) {
+
     checkNotNull(clusterName, "clusterName");
     ClusterSubscription subscription = new ClusterSubscription(clusterName);
 
@@ -160,18 +161,44 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     subscriptions.remove(subscription);
     if (subscriptions.isEmpty()) {
       clusterSubscriptions.remove(clusterName);
-      // TODO release XdsClient watches for this cluster and its endpoint
       XdsWatcherBase<?> cdsWatcher =
-          resourceWatchers.get(CLUSTER_RESOURCE).watchers.remove(clusterName);
-      if (cdsWatcher != null && cdsWatcher.getData() != null && cdsWatcher.getData().hasValue()) {
-        String edsServiceName =
-            ((XdsClusterResource.CdsUpdate) cdsWatcher.getData().getValue()).edsServiceName();
-        XdsWatcherBase<?> edsWatcher =
-            resourceWatchers.get(ENDPOINT_RESOURCE).watchers.remove(edsServiceName);
-        cancelWatcher(edsWatcher);
-      }
-      cancelWatcher(cdsWatcher);
+          resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
+      cancelClusterWatcherTree((CdsWatcher) cdsWatcher);
+
       maybePublishConfig();
+    }
+  }
+
+  private void cancelClusterWatcherTree(CdsWatcher root) {
+    checkNotNull(root, "root");
+    cancelWatcher(root);
+
+    if (root.getData() == null || !root.getData().hasValue()) {
+      return;
+    }
+
+    XdsClusterResource.CdsUpdate cdsUpdate = root.getData().getValue();
+    switch (cdsUpdate.clusterType()) {
+      case EDS:
+        String edsServiceName = cdsUpdate.edsServiceName();
+        EdsWatcher edsWatcher =
+            (EdsWatcher) resourceWatchers.get(ENDPOINT_RESOURCE).watchers.get(edsServiceName);
+        cancelWatcher(edsWatcher);
+        break;
+      case AGGREGATE:
+        for (String cluster : cdsUpdate.prioritizedClusterNames()) {
+          CdsWatcher clusterWatcher =
+              (CdsWatcher) resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(cluster);
+          if (clusterWatcher != null) {
+            cancelClusterWatcherTree(clusterWatcher);
+          }
+        }
+        break;
+      case LOGICAL_DNS:
+        // no eds needed
+        break;
+      default:
+        throw new AssertionError("Unknown cluster type: " + cdsUpdate.clusterType());
     }
   }
 
