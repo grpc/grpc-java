@@ -263,15 +263,16 @@ public class GcpObservabilityTest {
     }
   }
 
+ // Test to verify the closeWithSleepTime method along with sleep time explicitly.
   @Test
   public void closeWithSleepTime() throws Exception {
     long sleepTime = 1000L;
     Sink sink = mock(Sink.class);
-    ObservabilityConfig config = mock(ObservabilityConfig.class);
-    when(config.isEnableCloudLogging()).thenReturn(false);
-    when(config.isEnableCloudMonitoring()).thenReturn(false);
-    when(config.isEnableCloudTracing()).thenReturn(false);
-    when(config.getSampler()).thenReturn(Samplers.neverSample());
+    ObservabilityConfig observabilityConfig = mock(ObservabilityConfig.class);
+    when(observabilityConfig.isEnableCloudLogging()).thenReturn(false);
+    when(observabilityConfig.isEnableCloudMonitoring()).thenReturn(false);
+    when(observabilityConfig.isEnableCloudTracing()).thenReturn(false);
+    when(observabilityConfig.getSampler()).thenReturn(Samplers.neverSample());
 
     InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
         mock(InternalLoggingChannelInterceptor.Factory.class);
@@ -279,9 +280,8 @@ public class GcpObservabilityTest {
         mock(InternalLoggingServerInterceptor.Factory.class);
     GcpObservability gcpObservability =
         GcpObservability.grpcInit(
-            sink, config, channelInterceptorFactory, serverInterceptorFactory);
+            sink, observabilityConfig, channelInterceptorFactory, serverInterceptorFactory);
     gcpObservability.closeWithSleepTime(sleepTime);
     verify(sink).close();
   }
-
 }
