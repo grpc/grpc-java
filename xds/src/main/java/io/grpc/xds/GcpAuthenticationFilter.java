@@ -106,7 +106,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
 
-        /*String clusterName = callOptions.getOption(InternalXdsAttributes.ATTR_CLUSTER_NAME);
+        /*String clusterName = callOptions.getOption(XdsAttributes.ATTR_CLUSTER_NAME);
         if (clusterName == null) {
           return next.newCall(method, callOptions);
         }*/
