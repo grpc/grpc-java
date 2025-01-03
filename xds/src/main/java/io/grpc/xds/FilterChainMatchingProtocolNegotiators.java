@@ -17,8 +17,8 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.InternalXdsAttributes.ATTR_DRAIN_GRACE_NANOS;
-import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
+import static io.grpc.xds.XdsAttributes.ATTR_DRAIN_GRACE_NANOS;
+import static io.grpc.xds.XdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG;
 import static io.grpc.xds.internal.security.SecurityProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
