@@ -167,10 +167,9 @@ final class ControlPlaneClient {
     resourceStore.startMissingResourceTimers(resources, resourceType);
 
     if (resources.isEmpty()) {
-      // The resource type no longer has subscribing resources; clean up references to it.
-      // Except for nonces. If the resource type becomes used again the control plane can ignore
-      // requests for old/missing nonces. Old type's nonces are dropped when the ADS stream is
-      // restarted.
+      // The resource type no longer has subscribing resources; clean up references to it, except
+      // for nonces. If the resource type becomes used again the control plane can ignore requests
+      // for old/missing nonces. Old type's nonces are dropped when the ADS stream is restarted.
       versions.remove(resourceType);
     }
   }
