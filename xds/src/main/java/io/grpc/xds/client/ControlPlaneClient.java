@@ -156,9 +156,10 @@ final class ControlPlaneClient {
     }
     adsStream.sendDiscoveryRequest(resourceType, resources);
     if (resources.isEmpty()) {
-      // The resource type no longer has subscribing resources; clean up references to it
+      // The resource type no longer has subscribing resources; clean up references to it, except
+      // for nonces. If the resource type becomes used again the control plane can ignore requests
+      // for old/missing nonces. Old type's nonces are dropped when the ADS stream is restarted.
       versions.remove(resourceType);
-      adsStream.respNonces.remove(resourceType);
     }
   }
 
@@ -284,7 +285,10 @@ final class ControlPlaneClient {
     // Nonce in each response is echoed back in the following ACK/NACK request. It is
     // used for management server to identify which response the client is ACKing/NACking.
     // To avoid confusion, client-initiated requests will always use the nonce in
-    // most recently received responses of each resource type.
+    // most recently received responses of each resource type. Nonces are never deleted from the
+    // map; nonces are only discarded once the stream closes because xds_protocol says "the
+    // management server should not send a DiscoveryResponse for any DiscoveryRequest that has a
+    // stale nonce."
     private final Map<XdsResourceType<?>, String> respNonces = new HashMap<>();
     private final StreamingCall<DiscoveryRequest, DiscoveryResponse> call;
     private final MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
