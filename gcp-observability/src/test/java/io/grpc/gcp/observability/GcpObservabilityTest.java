@@ -196,9 +196,9 @@ public class GcpObservabilityTest {
           mock(InternalLoggingServerInterceptor.Factory.class);
       when(serverInterceptorFactory.create()).thenReturn(serverInterceptor);
 
-      try (GcpObservability unused =
-          GcpObservability.grpcInit(
-              sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+      try {
+        GcpObservability gcpObservability = GcpObservability.grpcInit(
+            sink, config, channelInterceptorFactory, serverInterceptorFactory);
         List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
         assertThat(configurators).hasSize(1);
         ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
@@ -208,6 +208,7 @@ public class GcpObservabilityTest {
         assertThat(list.get(2)).isInstanceOf(ConditionalClientInterceptor.class);
         assertThat(configurator.serverInterceptors).hasSize(1);
         assertThat(configurator.tracerFactories).hasSize(2);
+        gcpObservability.closeWithSleepTime(3000);
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
@@ -260,5 +261,27 @@ public class GcpObservabilityTest {
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       return next.startCall(call, headers);
     }
+  }
+
+ // Test to verify the closeWithSleepTime method along with sleep time explicitly.
+  @Test
+  public void closeWithSleepTime() throws Exception {
+    long sleepTime = 1000L;
+    Sink sink = mock(Sink.class);
+    ObservabilityConfig observabilityConfig = mock(ObservabilityConfig.class);
+    when(observabilityConfig.isEnableCloudLogging()).thenReturn(false);
+    when(observabilityConfig.isEnableCloudMonitoring()).thenReturn(false);
+    when(observabilityConfig.isEnableCloudTracing()).thenReturn(false);
+    when(observabilityConfig.getSampler()).thenReturn(Samplers.neverSample());
+
+    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
+        mock(InternalLoggingChannelInterceptor.Factory.class);
+    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
+        mock(InternalLoggingServerInterceptor.Factory.class);
+    GcpObservability gcpObservability =
+        GcpObservability.grpcInit(
+            sink, observabilityConfig, channelInterceptorFactory, serverInterceptorFactory);
+    gcpObservability.closeWithSleepTime(sleepTime);
+    verify(sink).close();
   }
 }
