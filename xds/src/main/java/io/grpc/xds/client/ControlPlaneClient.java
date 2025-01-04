@@ -453,16 +453,6 @@ final class ControlPlaneClient {
         stopwatch.reset();
       }
 
-      // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
-      // to avoid TSAN races, since tests may wait until callbacks are called but then would run
-      // concurrently with the stopwatch and schedule.
-
-      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
-
-      rpcRetryTimer =
-          syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
-
       Status newStatus = status;
       if (responseReceived) {
         // A closed ADS stream after a successful response is not considered an error. Servers may
@@ -490,9 +480,17 @@ final class ControlPlaneClient {
             newStatus.getCode(), newStatus.getDescription(), newStatus.getCause());
       }
 
-      closed = true;
+      close(newStatus.asException());
+
+      // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
+      // to avoid TSAN races, since tests may wait until callbacks are called but then would run
+      // concurrently with the stopwatch and schedule.
+      long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
+      rpcRetryTimer =
+          syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+
       xdsResponseHandler.handleStreamClosed(newStatus, !responseReceived);
-      cleanUp();
     }
 
     private void close(Exception error) {
