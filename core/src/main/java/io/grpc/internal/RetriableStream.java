@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
@@ -34,11 +35,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -187,6 +184,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           // For hedging only, not needed for normal retry
           for (Substream substream : savedDrainedSubstreams) {
             if (substream != winningSubstream) {
+              substream.stream.flush();
               substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
             }
           }
@@ -295,6 +293,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     int chunk = 0x80;
     List<BufferEntry> list = null;
     boolean streamStarted = false;
+    boolean needsFlush = false;
     Runnable onReadyRunnable = null;
 
     while (true) {
@@ -311,6 +310,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
         if (index == savedState.buffer.size()) { // I'm drained
           state = savedState.substreamDrained(substream);
+          substream.stream.flush();
           if (!isReady()) {
             return;
           }
@@ -326,6 +326,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
 
         if (substream.closed) {
+          substream.stream.flush();
+//          if (needsFlush) {
+//            substream.stream.flush();
+//          }
           return;
         }
 
@@ -344,6 +348,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (bufferEntry instanceof RetriableStream.StartEntry) {
           streamStarted = true;
         }
+
+        if (bufferEntry instanceof RetriableStream.SendMessageEntry) {
+          needsFlush = true;
+        }
+        if (bufferEntry instanceof RetriableStream.FlushEntry) {
+          needsFlush = false;
+        }
+
         savedState = state;
         if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
           // committed but not me, to be cancelled
@@ -355,6 +367,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
     }
 
+    substream.stream.flush();
+//    if (needsFlush) {
+//      substream.stream.flush();
+//    }
+
     if (onReadyRunnable != null) {
       listenerSerializeExecutor.execute(onReadyRunnable);
       return;
@@ -364,6 +381,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       // Start stream so inFlightSubStreams is decremented in Sublistener.closed()
       substream.stream.start(new Sublistener(substream));
     }
+
     substream.stream.cancel(
         state.winningSubstream == substream ? cancellationStatus : CANCELLED_BECAUSE_COMMITTED);
   }
@@ -519,17 +537,32 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(final Status reason) {
-    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
-    noopSubstream.stream = new NoopClientStream();
-    Runnable runnable = commit(noopSubstream);
-
-    if (runnable != null) {
-      synchronized (lock) {
-        state = state.substreamDrained(noopSubstream);
+    // Handle everything the same way, e.g. isHedging vs not.
+    // If no stream or in flight not-drained stream, commit noop, safeCloseMasterListener, and return.
+    // If drained stream, commit it and fall through.
+    Substream drainedSubstreamToCommit;
+    synchronized (lock) {
+      drainedSubstreamToCommit = Iterables.getFirst(state.drainedSubstreams, null);
+    }
+    if (drainedSubstreamToCommit != null) {
+      Runnable runnable = commit(drainedSubstreamToCommit);
+      if (runnable != null) {
+        runnable.run();
+      } else {
       }
-      runnable.run();
-      safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
-      return;
+    } else { // No substream exists or no drained substreams exist; treat this case the same way.
+      Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
+      noopSubstream.stream = new NoopClientStream();
+      Runnable runnable = commit(noopSubstream);
+
+      if (runnable != null) {
+        synchronized (lock) {
+          state = state.substreamDrained(noopSubstream);
+        }
+        runnable.run();
+        safeCloseMasterListener(reason, RpcProgress.PROCESSED, new Metadata());
+        return;
+      }
     }
 
     Substream winningSubstreamToCancel = null;
@@ -542,6 +575,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state = state.cancelled();
     }
     if (winningSubstreamToCancel != null) {
+      winningSubstreamToCancel.stream.flush();
       winningSubstreamToCancel.stream.cancel(reason);
     }
   }
@@ -569,6 +603,25 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     throw new IllegalStateException("RetriableStream.writeMessage() should not be called directly");
   }
 
+  class SendMessageEntry implements BufferEntry {
+    private final ReqT message;
+
+    SendMessageEntry(ReqT message) {
+      this.message = message;
+    }
+
+    @Override
+    public void runWith(Substream substream) {
+      substream.stream.writeMessage(method.streamRequest(message));
+      if (isHedging) {
+        // TODO(ejona): Workaround Netty memory leak. Message writes always need to be followed by
+        // flushes (or half close), but retry appears to have a code path that the flushes may
+        // not happen. The code needs to be fixed and this removed. See #9340.
+        substream.stream.flush();
+      }
+    }
+  }
+
   final void sendMessage(final ReqT message) {
     State savedState = state;
     if (savedState.passThrough) {
@@ -576,18 +629,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       return;
     }
 
-    class SendMessageEntry implements BufferEntry {
-      @Override
-      public void runWith(Substream substream) {
-        substream.stream.writeMessage(method.streamRequest(message));
-        // TODO(ejona): Workaround Netty memory leak. Message writes always need to be followed by
-        // flushes (or half close), but retry appears to have a code path that the flushes may
-        // not happen. The code needs to be fixed and this removed. See #9340.
-        substream.stream.flush();
-      }
-    }
-
-    delayOrExecute(new SendMessageEntry());
+    delayOrExecute(new SendMessageEntry(message));
   }
 
   @Override
@@ -608,19 +650,19 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     delayOrExecute(new RequestEntry());
   }
 
+  static class FlushEntry implements BufferEntry {
+    @Override
+    public void runWith(Substream substream) {
+      substream.stream.flush();
+    }
+  }
+
   @Override
   public final void flush() {
     State savedState = state;
     if (savedState.passThrough) {
       savedState.winningSubstream.stream.flush();
       return;
-    }
-
-    class FlushEntry implements BufferEntry {
-      @Override
-      public void runWith(Substream substream) {
-        substream.stream.flush();
-      }
     }
 
     delayOrExecute(new FlushEntry());
@@ -1156,7 +1198,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     /**
      * Unmodifiable collection of all the open substreams that are drained. Singleton once
-     * passThrough; Empty if committed but not passTrough.
+     * passThrough; Empty if committed but not passThrough.
      */
     final Collection<Substream> drainedSubstreams;
 
@@ -1207,7 +1249,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               || (drainedSubstreams.size() == 1 && drainedSubstreams.contains(winningSubstream))
               || (drainedSubstreams.size() == 0 && winningSubstream.closed),
           "passThrough should imply winningSubstream is drained");
-      checkState(!cancelled || winningSubstream != null, "cancelled should imply committed");
     }
 
     @CheckReturnValue

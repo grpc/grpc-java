@@ -285,14 +285,10 @@ public class RetriableStreamTest {
     retriableStream.sendMessage("msg3");
     retriableStream.request(456);
 
-    inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
-    inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
+    inOrder.verify(mockStream1, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream1).request(345);
     inOrder.verify(mockStream1, times(2)).flush();
     inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
     inOrder.verify(mockStream1).request(456);
     inOrder.verifyNoMoreInteractions();
 
@@ -325,19 +321,12 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
+    inOrder.verify(mockStream2, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream2).request(345);
     inOrder.verify(mockStream2, times(2)).flush();
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
     inOrder.verify(mockStream2).request(456);
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
+    inOrder.verify(mockStream2, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream2).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -347,10 +336,7 @@ public class RetriableStreamTest {
 
     // mockStream1 is closed so it is not in the drainedSubstreams
     verifyNoMoreInteractions(mockStream1);
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
+    inOrder.verify(mockStream2, times(2)).writeMessage(any(InputStream.class));
 
     // retry2
     doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(2);
@@ -384,19 +370,12 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor3 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream3).start(sublistenerCaptor3.capture());
-    inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
-    inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
+    inOrder.verify(mockStream3, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream3).request(345);
     inOrder.verify(mockStream3, times(2)).flush();
     inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
     inOrder.verify(mockStream3).request(456);
-    for (int i = 0; i < 7; i++) {
-      inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-      inOrder.verify(mockStream3).flush(); // Memory leak workaround
-    }
+    inOrder.verify(mockStream3, times(7)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream3).isReady();
     inOrder.verifyNoMoreInteractions();
 
@@ -2111,14 +2090,10 @@ public class RetriableStreamTest {
     hedgingStream.sendMessage("msg3");
     hedgingStream.request(456);
 
-    inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
-    inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
+    inOrder.verify(mockStream1, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream1).request(345);
     inOrder.verify(mockStream1, times(2)).flush();
     inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
     inOrder.verify(mockStream1).request(456);
     inOrder.verifyNoMoreInteractions();
 
@@ -2141,14 +2116,10 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream2).start(sublistenerCaptor2.capture());
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
-    inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
+    inOrder.verify(mockStream2, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream2).request(345);
     inOrder.verify(mockStream2, times(2)).flush();
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
     inOrder.verify(mockStream2).request(456);
     inOrder.verify(mockStream1).isReady();
     inOrder.verify(mockStream2).isReady();
@@ -2159,13 +2130,9 @@ public class RetriableStreamTest {
     hedgingStream.sendMessage("msg2 after hedge2 starts");
 
     inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
     inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
     inOrder.verifyNoMoreInteractions();
 
 
@@ -2187,19 +2154,12 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor3 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream3).start(sublistenerCaptor3.capture());
-    inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
-    inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
+    inOrder.verify(mockStream3, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream3).request(345);
     inOrder.verify(mockStream3, times(2)).flush();
     inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
     inOrder.verify(mockStream3).request(456);
-    inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
-    inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
+    inOrder.verify(mockStream3, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream1).isReady();
     inOrder.verify(mockStream2).isReady();
     inOrder.verify(mockStream3).isReady();
@@ -2208,11 +2168,8 @@ public class RetriableStreamTest {
     // send one more message
     hedgingStream.sendMessage("msg1 after hedge3 starts");
     inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
     inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
 
     // hedge3 receives nonFatalStatus
     sublistenerCaptor3.getValue().closed(
@@ -2222,9 +2179,7 @@ public class RetriableStreamTest {
     // send one more message
     hedgingStream.sendMessage("msg1 after hedge3 fails");
     inOrder.verify(mockStream1).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream1).flush(); // Memory leak workaround
     inOrder.verify(mockStream2).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream2).flush(); // Memory leak workaround
 
     // the hedge mockStream4 starts
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
@@ -2244,19 +2199,12 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor4 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     inOrder.verify(mockStream4).start(sublistenerCaptor4.capture());
-    inOrder.verify(mockStream4).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream4).flush(); // Memory leak workaround
-    inOrder.verify(mockStream4).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream4).flush(); // Memory leak workaround
+    inOrder.verify(mockStream4, times(2)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream4).request(345);
     inOrder.verify(mockStream4, times(2)).flush();
     inOrder.verify(mockStream4).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream4).flush(); // Memory leak workaround
     inOrder.verify(mockStream4).request(456);
-    for (int i = 0; i < 4; i++) {
-      inOrder.verify(mockStream4).writeMessage(any(InputStream.class));
-      inOrder.verify(mockStream4).flush(); // Memory leak workaround
-    }
+    inOrder.verify(mockStream4, times(4)).writeMessage(any(InputStream.class));
     inOrder.verify(mockStream1).isReady();
     inOrder.verify(mockStream2).isReady();
     inOrder.verify(mockStream4).isReady();
@@ -2379,7 +2327,6 @@ public class RetriableStreamTest {
 
     hedgingStream.sendMessage("msg1 after commit");
     inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
-    inOrder.verify(mockStream3).flush(); // Memory leak workaround
     inOrder.verifyNoMoreInteractions();
 
     Metadata heders = new Metadata();
