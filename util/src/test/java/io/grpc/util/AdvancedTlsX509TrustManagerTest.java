@@ -37,7 +37,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -185,14 +184,19 @@ public class AdvancedTlsX509TrustManagerTest {
   }
 
   private void replaceFile(File source, File target) throws IOException {
-    try (InputStream in = new BufferedInputStream(
-        new FileInputStream(source)); OutputStream os = new BufferedOutputStream(
-        new FileOutputStream(target))) {
+    FileInputStream in = new FileInputStream(source);
+    FileOutputStream out = new FileOutputStream(target);
+    InputStream is = new BufferedInputStream(in);
+    OutputStream os = new BufferedOutputStream(out);
+    try {
       int b;
-      while ((b = in.read()) != -1) {
+      while ((b = is.read()) != -1) {
         os.write(b);
       }
       os.flush();
+    } finally {
+      is.close();
+      os.close();
     }
   }
 
