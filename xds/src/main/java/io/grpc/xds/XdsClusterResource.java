@@ -44,9 +44,9 @@ import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.ClusterMetadataRegistry.ClusterMetadataValueParser;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
@@ -203,12 +203,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       throws InvalidProtocolBufferException {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
 
-    ClusterMetadataRegistry registry = ClusterMetadataRegistry.getInstance();
+    MetadataRegistry registry = MetadataRegistry.getInstance();
     // Process typed_filter_metadata
     for (Map.Entry<String, Any> entry : metadata.getTypedFilterMetadataMap().entrySet()) {
       String key = entry.getKey();
       Any value = entry.getValue();
-      ClusterMetadataValueParser parser = registry.findParser(value.getTypeUrl());
+      MetadataValueParser parser = registry.findParser(value.getTypeUrl());
       if (parser != null) {
         Object parsedValue = parser.parse(value);
         parsedMetadata.put(key, parsedValue);

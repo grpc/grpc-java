@@ -16,24 +16,28 @@
 
 package io.grpc.xds.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import java.util.List;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class ProtobufJsonConverterTest {
 
   @Test
   public void testEmptyStruct() {
     Struct emptyStruct = Struct.newBuilder().build();
     Map<String, Object> result = ProtobufJsonConverter.convertToJson(emptyStruct);
-    assertTrue(result.isEmpty());
+    assertThat(result).isEmpty();
   }
 
   @Test
@@ -59,22 +63,15 @@ public class ProtobufJsonConverterTest {
 
     Map<String, Object> result = ProtobufJsonConverter.convertToJson(struct);
 
-    assertEquals("stringValue", result.get("stringKey"));
-    assertEquals(123.45, result.get("numberKey"));
-    assertEquals(true, result.get("boolKey"));
-    assertNull(result.get("nullKey"));
+    Map<String, Object> goldenResult = new HashMap<>();
+    goldenResult.put("stringKey", "stringValue");
+    goldenResult.put("numberKey", 123.45);
+    goldenResult.put("boolKey", true);
+    goldenResult.put("nullKey", null);
+    goldenResult.put("structKey", ImmutableMap.of("nestedKey", "nestedValue"));
+    goldenResult.put("listKey", Arrays.asList(1.0, "two", false));
 
-    Object nestedStruct = result.get("structKey");
-    assertTrue(nestedStruct instanceof Map);
-    assertEquals("nestedValue", ((Map<?, ?>) nestedStruct).get("nestedKey"));
-
-    Object objList = result.get("listKey");
-    assertTrue(objList instanceof List);
-    List<?> list = (List<?>) objList;
-    assertEquals(3, list.size());
-    assertEquals(1.0, list.get(0));
-    assertEquals("two", list.get(1));
-    assertEquals(false, list.get(2));
+    assertEquals(goldenResult, result);
   }
 
   @Test(expected = IllegalArgumentException.class)

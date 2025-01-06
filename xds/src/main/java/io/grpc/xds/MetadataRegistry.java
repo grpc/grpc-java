@@ -26,36 +26,36 @@ import java.util.Map;
 /**
  * Registry for parsing cluster metadata values.
  *
- * <p>This class maintains a mapping of type URLs to {@link ClusterMetadataValueParser} instances,
+ * <p>This class maintains a mapping of type URLs to {@link MetadataValueParser} instances,
  * allowing for the parsing of different metadata types.
  */
-final class ClusterMetadataRegistry {
-  private static final ClusterMetadataRegistry INSTANCE = new ClusterMetadataRegistry();
+final class MetadataRegistry {
+  private static final MetadataRegistry INSTANCE = new MetadataRegistry();
 
-  private final Map<String, ClusterMetadataValueParser> supportedParsers = new HashMap<>();
+  private final Map<String, MetadataValueParser> supportedParsers = new HashMap<>();
 
-  private ClusterMetadataRegistry() {
+  private MetadataRegistry() {
     registerParser(new AudienceMetadataParser());
   }
 
-  static ClusterMetadataRegistry getInstance() {
+  static MetadataRegistry getInstance() {
     return INSTANCE;
   }
 
-  ClusterMetadataValueParser findParser(String typeUrl) {
+  MetadataValueParser findParser(String typeUrl) {
     return supportedParsers.get(typeUrl);
   }
 
   @VisibleForTesting
-  void registerParser(ClusterMetadataValueParser parser) {
+  void registerParser(MetadataValueParser parser) {
     supportedParsers.put(parser.getTypeUrl(), parser);
   }
 
-  void removeParser(ClusterMetadataValueParser parser) {
+  void removeParser(MetadataValueParser parser) {
     supportedParsers.remove(parser.getTypeUrl());
   }
 
-  interface ClusterMetadataValueParser {
+  interface MetadataValueParser {
 
     String getTypeUrl();
 

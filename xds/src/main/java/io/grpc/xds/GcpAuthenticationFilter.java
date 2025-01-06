@@ -36,8 +36,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.auth.MoreCallCredentials;
-import io.grpc.xds.ClusterMetadataRegistry.ClusterMetadataValueParser;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
+import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -222,7 +222,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
     }
   }
 
-  static class AudienceMetadataParser implements ClusterMetadataValueParser {
+  static class AudienceMetadataParser implements MetadataValueParser {
 
     @Override
     public String getTypeUrl() {
