@@ -48,7 +48,7 @@ import javax.annotation.Nullable;
  * referenced resources or updates the XdsConfig and notifies the XdsConfigWatcher.  Each instance
  * applies to a single data plane authority.
  */
-@SuppressWarnings("unused") // TODO remove when changes for A74 are fully implemented
+//@SuppressWarnings("unused") // TODO remove when changes for A74 are fully implemented
 final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegistry {
   public static final XdsClusterResource CLUSTER_RESOURCE = XdsClusterResource.getInstance();
   public static final XdsEndpointResource ENDPOINT_RESOURCE = XdsEndpointResource.getInstance();
@@ -308,7 +308,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
   }
 
-  @SuppressWarnings("ClassCanBeStatic")
+  @SuppressWarnings({"ClassCanBeStatic", "unused"})
   private abstract class XdsWatcherBase<T extends ResourceUpdate>
       implements ResourceWatcher<T> {
     private final XdsResourceType<T> type;
@@ -367,7 +367,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private class LdsWatcher extends XdsWatcherBase<XdsListenerResource.LdsUpdate> {
     String rdsName;
-    XdsListenerResource.LdsUpdate currentLdsUpdate;
 
     private LdsWatcher(String resourceName) {
       super(XdsListenerResource.getInstance(), resourceName);
@@ -475,7 +474,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
             break;
           case AGGREGATE:
             if (data.hasValue()) {
-              TypeWatchers<?> cdsWatchers = resourceWatchers.get(CLUSTER_RESOURCE);
               Set<String> oldNames = new HashSet<>(data.getValue().prioritizedClusterNames());
               Set<String> newNames = new HashSet<>(update.prioritizedClusterNames());
 
@@ -533,7 +531,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     if (virtualHost == null) {
       String error = "Failed to find virtual host matching hostname: " + authority;
       logger.log(XdsLogger.XdsLogLevel.WARNING, error);
-      cleanUpRoutes(error);
+      cleanUpRoutes();
       xdsConfigWatcher.onError(
           "xDS node ID:" + dataPlaneAuthority, Status.UNAVAILABLE.withDescription(error));
       return;
@@ -571,7 +569,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   // Must be in SyncContext
-  private void cleanUpRoutes(String error) {
+  private void cleanUpRoutes() {
     // Remove RdsWatcher & CDS Watchers
     TypeWatchers<?> rdsWatcher = resourceWatchers.get(XdsRouteConfigureResource.getInstance());
     if (rdsWatcher != null) {
@@ -589,11 +587,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
   }
 
-  private static String prefixedClusterName(String name) {
-    return "cluster:" + name;
-  }
-
-  @SuppressWarnings("unchecked")
   private CdsWatcher getCluster(String clusterName) {
     return (CdsWatcher) resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
   }
