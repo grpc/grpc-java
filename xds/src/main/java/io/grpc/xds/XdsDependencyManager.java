@@ -484,7 +484,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
               Set<String> addedClusters = Sets.difference(newNames, oldNames);
               Set<String> deletedClusters = Sets.difference(oldNames, newNames);
               addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster)));
-              deletedClusters.forEach((cluster) -> cancelWatcher(getCluster(cluster)));
+              deletedClusters.forEach((cluster) -> cancelClusterWatcherTree(getCluster(cluster)));
 
               if (!addedClusters.isEmpty()) {
                 maybePublishConfig();
@@ -567,7 +567,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         oldClusters == null ? Collections.emptySet() : Sets.difference(oldClusters, clusters);
 
     addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster)));
-    deletedClusters.forEach(watcher -> cancelWatcher(getCluster(watcher)));
+    deletedClusters.forEach(watcher -> cancelClusterWatcherTree(getCluster(watcher)));
   }
 
   // Must be in SyncContext
@@ -593,8 +593,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     return "cluster:" + name;
   }
 
-  private XdsWatcherBase<?> getCluster(String clusterName) {
-    return resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
+  @SuppressWarnings("unchecked")
+  private CdsWatcher getCluster(String clusterName) {
+    return (CdsWatcher) resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
   }
 
 }

@@ -42,8 +42,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.BlockingDeque;
-import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
@@ -53,6 +51,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -75,8 +75,6 @@ public class XdsDependencyManagerTest {
   private Server xdsServer;
 
   private final FakeClock fakeClock = new FakeClock();
-  private final BlockingDeque<XdsTestUtils.DiscoveryRpcCall> resourceDiscoveryCalls =
-      new LinkedBlockingDeque<>(1);
   private final String serverName = InProcessServerBuilder.generateName();
   private final Queue<XdsTestUtils.LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   private final AtomicBoolean adsEnded = new AtomicBoolean(true);
@@ -140,6 +138,21 @@ public class XdsDependencyManagerTest {
 
     verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
     testWatcher.verifyStats(1, 0, 0);
+  }
+
+  @Test
+  public void verify_config_update() {
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+
+    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
+    testWatcher.verifyStats(1, 0, 0);
+
+    XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS2", "CDS2", "EDS2",
+        XdsTestUtils.ENDPOINT_HOSTNAME + "2", XdsTestUtils.ENDPOINT_PORT + 2);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(ArgumentMatchers.notNull());
+    testWatcher.verifyStats(2, 0, 0);
   }
 
   private static class TestWatcher implements XdsDependencyManager.XdsConfigWatcher {

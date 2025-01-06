@@ -24,18 +24,14 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
-import com.google.rpc.Code;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
@@ -46,7 +42,6 @@ import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
-import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -55,14 +50,10 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.StatusOr;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.client.Bootstrapper;
-import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
@@ -80,8 +71,6 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
-import org.mockito.Mockito;
-import org.mockito.verification.VerificationMode;
 
 public class XdsTestUtils {
   private static final Logger log = Logger.getLogger(XdsTestUtils.class.getName());
@@ -155,7 +144,7 @@ public class XdsTestUtils {
     service.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.<String, Message>of(clusterName, cluster));
 
     ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-        serverName, endpointHostname, endpointPort);
+        serverName, endpointHostname, endpointPort, edsName);
     service.setXdsConfig(ADS_TYPE_URL_EDS,
         ImmutableMap.<String, Message>of(edsName, clusterLoadAssignment));
 
@@ -208,13 +197,7 @@ public class XdsTestUtils {
     return builder.build();
   }
 
-  private static ConfigOrError<LbConfig> getWrrLbConfig() throws IOException {
-    Map<String, ?> lbParsed = getWrrLbConfigAsMap();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbParsed);
-
-    return ConfigOrError.fromConfig(lbConfig);
-  }
-
+  @SuppressWarnings("unchecked")
   private static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
     String lbConfigStr = "{\"wrr_locality_experimental\" : "
         + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
@@ -328,60 +311,6 @@ public class XdsTestUtils {
       }
       Collections.sort(actual);
       return actual.equals(expected);
-    }
-  }
-
-  static class DiscoveryRpcCall  {
-    StreamObserver<DiscoveryRequest> requestObserver;
-    StreamObserver<DiscoveryResponse> responseObserver;
-
-    private DiscoveryRpcCall(StreamObserver<DiscoveryRequest> requestObserver,
-                               StreamObserver<DiscoveryResponse> responseObserver) {
-      this.requestObserver = requestObserver;
-      this.responseObserver = responseObserver;
-    }
-
-    protected void verifyRequest(
-        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
-        EnvoyProtoData.Node node, VerificationMode verificationMode) {
-      verify(requestObserver, verificationMode).onNext(argThat(new DiscoveryRequestMatcher(
-          node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce, null, null)));
-    }
-
-    protected void verifyRequestNack(
-        XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
-        EnvoyProtoData.Node node, List<String> errorMessages) {
-      verify(requestObserver, Mockito.timeout(2000)).onNext(argThat(new DiscoveryRequestMatcher(
-          node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce,
-          Code.INVALID_ARGUMENT_VALUE, errorMessages)));
-    }
-
-    protected void verifyNoMoreRequest() {
-      verifyNoMoreInteractions(requestObserver);
-    }
-
-    protected void sendResponse(
-        XdsResourceType<?> type, List<Any> resources, String versionInfo, String nonce) {
-      DiscoveryResponse response =
-          DiscoveryResponse.newBuilder()
-              .setVersionInfo(versionInfo)
-              .addAllResources(resources)
-              .setTypeUrl(type.typeUrl())
-              .setNonce(nonce)
-              .build();
-      responseObserver.onNext(response);
-    }
-
-    protected void sendError(Throwable t) {
-      responseObserver.onError(t);
-    }
-
-    protected void sendCompleted() {
-      responseObserver.onCompleted();
-    }
-
-    protected boolean isReady() {
-      return ((ServerCallStreamObserver)responseObserver).isReady();
     }
   }
 
