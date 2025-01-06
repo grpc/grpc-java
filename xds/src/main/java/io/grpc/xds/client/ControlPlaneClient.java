@@ -280,7 +280,7 @@ final class ControlPlaneClient {
   private class AdsStream implements EventHandler<DiscoveryResponse> {
     private boolean responseReceived;
     private boolean closed;
-    // Response nonce for the most recently received discovery responses of each resource type.
+    // Response nonce for the most recently received discovery responses of each resource type URL.
     // Client initiated requests start response nonce with empty string.
     // Nonce in each response is echoed back in the following ACK/NACK request. It is
     // used for management server to identify which response the client is ACKing/NACking.
@@ -289,7 +289,7 @@ final class ControlPlaneClient {
     // map; nonces are only discarded once the stream closes because xds_protocol says "the
     // management server should not send a DiscoveryResponse for any DiscoveryRequest that has a
     // stale nonce."
-    private final Map<XdsResourceType<?>, String> respNonces = new HashMap<>();
+    private final Map<String, String> respNonces = new HashMap<>();
     private final StreamingCall<DiscoveryRequest, DiscoveryResponse> call;
     private final MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
         AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod();
@@ -337,7 +337,7 @@ final class ControlPlaneClient {
     final void sendDiscoveryRequest(XdsResourceType<?> type, Collection<String> resources) {
       logger.log(XdsLogLevel.INFO, "Sending {0} request for resources: {1}", type, resources);
       sendDiscoveryRequest(type, versions.getOrDefault(type, ""), resources,
-          respNonces.getOrDefault(type, ""), null);
+          respNonces.getOrDefault(type.typeUrl(), ""), null);
     }
 
     @Override
@@ -352,6 +352,7 @@ final class ControlPlaneClient {
         public void run() {
           // Reset flag as message has been received on a stream
           streamClosedNoResponse = false;
+          respNonces.put(response.getTypeUrl(), response.getNonce());
           XdsResourceType<?> type = fromTypeUrl(response.getTypeUrl());
           if (logger.isLoggable(XdsLogLevel.DEBUG)) {
             logger.log(
@@ -387,7 +388,6 @@ final class ControlPlaneClient {
         return;
       }
       responseReceived = true;
-      respNonces.put(type, nonce);
       ProcessingTracker processingTracker = new ProcessingTracker(
           () -> call.startRecvMessage(), syncContext);
       xdsResponseHandler.handleResourceResponse(type, serverInfo, versionInfo, resources, nonce,
