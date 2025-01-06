@@ -27,6 +27,8 @@ import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.TaskCloseable;
 import java.io.InputStream;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -34,6 +36,8 @@ import javax.annotation.concurrent.GuardedBy;
  * application thread.
  */
 public abstract class AbstractStream implements Stream {
+  private static final Logger log = Logger.getLogger(AbstractStream.class.getName());
+
   /** The framer to use for sending messages. */
   protected abstract Framer framer();
 
@@ -371,6 +375,12 @@ public abstract class AbstractStream implements Stream {
       boolean doNotify;
       synchronized (onReadyLock) {
         doNotify = isReady();
+        if (!doNotify && log.isLoggable(Level.FINEST)) {
+          log.log(Level.FINEST,
+              "Stream not ready so skip notifying listener.\n"
+                  + "details: allocated/deallocated:{0}/{3}, sent queued: {1}, ready thresh: {2}",
+              new Object[] {allocated, numSentBytesQueued, onReadyThreshold, deallocated});
+        }
       }
       if (doNotify) {
         listener().onReady();
