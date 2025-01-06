@@ -48,7 +48,6 @@ import javax.annotation.Nullable;
  * referenced resources or updates the XdsConfig and notifies the XdsConfigWatcher.  Each instance
  * applies to a single data plane authority.
  */
-//@SuppressWarnings("unused") // TODO remove when changes for A74 are fully implemented
 final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegistry {
   public static final XdsClusterResource CLUSTER_RESOURCE = XdsClusterResource.getInstance();
   public static final XdsEndpointResource ENDPOINT_RESOURCE = XdsEndpointResource.getInstance();
