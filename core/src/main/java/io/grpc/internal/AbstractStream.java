@@ -377,8 +377,8 @@ public abstract class AbstractStream implements Stream {
         doNotify = isReady();
         if (!doNotify && log.isLoggable(Level.FINEST)) {
           log.log(Level.FINEST,
-              "Stream not ready so skip notifying listener.\n" +
-                  "details: allocated/deallocated:{0}/{3}, sent queued: {1}, ready thresh: {2}",
+              "Stream not ready so skip notifying listener.\n"
+                  + "details: allocated/deallocated:{0}/{3}, sent queued: {1}, ready thresh: {2}",
               new Object[] {allocated, numSentBytesQueued, onReadyThreshold, deallocated});
         }
       }
