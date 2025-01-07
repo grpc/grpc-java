@@ -66,7 +66,7 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-/** Unit tests for {@link XdsNameResolverProvider}. */
+/** Unit tests for {@link XdsDependencyManager}. */
 @RunWith(JUnit4.class)
 public class XdsDependencyManagerTest {
   private static final Logger log = Logger.getLogger(XdsDependencyManagerTest.class.getName());
