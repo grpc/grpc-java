@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.XdsClient.canonifyResourceName;
 import static io.grpc.xds.client.XdsClient.isResourceNameValid;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -41,11 +40,7 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
   static final String TYPE_URL_RESOURCE =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
   protected static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
-  @VisibleForTesting
-  public static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
 
-  protected static final String TYPE_URL_CLUSTER_CONFIG =
-      "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
   protected static final String TYPE_URL_TYPED_STRUCT_UDPA =
       "type.googleapis.com/udpa.type.v1.TypedStruct";
   protected static final String TYPE_URL_TYPED_STRUCT =
@@ -247,55 +242,6 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       this.unpackedResources = unpackedResources;
       this.invalidResources = invalidResources;
       this.errors = errors;
-    }
-  }
-
-  @VisibleForTesting
-  public static final class StructOrError<T> {
-
-    /**
-    * Returns a {@link StructOrError} for the successfully converted data object.
-    */
-    public static <T> StructOrError<T> fromStruct(T struct) {
-      return new StructOrError<>(struct);
-    }
-
-    /**
-     * Returns a {@link StructOrError} for the failure to convert the data object.
-     */
-    public static <T> StructOrError<T> fromError(String errorDetail) {
-      return new StructOrError<>(errorDetail);
-    }
-
-    private final String errorDetail;
-    private final T struct;
-
-    private StructOrError(T struct) {
-      this.struct = checkNotNull(struct, "struct");
-      this.errorDetail = null;
-    }
-
-    private StructOrError(String errorDetail) {
-      this.struct = null;
-      this.errorDetail = checkNotNull(errorDetail, "errorDetail");
-    }
-
-    /**
-     * Returns struct if exists, otherwise null.
-     */
-    @VisibleForTesting
-    @Nullable
-    public T getStruct() {
-      return struct;
-    }
-
-    /**
-     * Returns error detail if exists, otherwise null.
-     */
-    @VisibleForTesting
-    @Nullable
-    public String getErrorDetail() {
-      return errorDetail;
     }
   }
 }

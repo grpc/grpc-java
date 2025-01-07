@@ -589,8 +589,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             builder.maxHedgedAttempts,
             loadBalancerFactory);
     this.authorityOverride = builder.authorityOverride;
-    this.nameResolverArgs =
-        NameResolver.Args.newBuilder()
+    this.metricRecorder = new MetricRecorderImpl(builder.metricSinks,
+        MetricInstrumentRegistry.getDefaultRegistry());
+    NameResolver.Args.Builder nameResolverArgsBuilder = NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
@@ -599,7 +600,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
-            .build();
+            .setMetricRecorder(this.metricRecorder);
+    builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
+    this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
         targetUri, authorityOverride, nameResolverProvider, nameResolverArgs);
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
@@ -671,8 +674,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
       serviceConfigUpdated = true;
     }
-    this.metricRecorder = new MetricRecorderImpl(builder.metricSinks,
-        MetricInstrumentRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting

@@ -32,6 +32,7 @@ import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.BootstrapperImpl;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsInitializationException;
@@ -61,10 +62,12 @@ public class GrpcBootstrapperImplTest {
   private String originalBootstrapPathFromSysProp;
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
+  private boolean originalExperimentalXdsFallbackFlag;
 
   @Before
   public void setUp() {
     saveEnvironment();
+    originalExperimentalXdsFallbackFlag = CommonBootstrapperTestUtils.setEnableXdsFallback(true);
     bootstrapper.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
   }
 
@@ -81,6 +84,7 @@ public class GrpcBootstrapperImplTest {
     bootstrapper.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
     bootstrapper.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     bootstrapper.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
+    CommonBootstrapperTestUtils.setEnableXdsFallback(originalExperimentalXdsFallbackFlag);
   }
 
   @Test
@@ -670,6 +674,26 @@ public class GrpcBootstrapperImplTest {
     assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
+  }
+
+  @Test
+  public void serverFeatures_ignoresUnknownValues() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [null, {}, 3, true, \"unexpected\", \"trusted_xds_server\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.isTrustedXdsServer()).isTrue();
   }
 
   @Test

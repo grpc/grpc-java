@@ -28,6 +28,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
@@ -1698,9 +1699,28 @@ public abstract class AbstractInteropTest {
     private Status status = Status.OK;
   }
 
+
+  private static class ThreadResults {
+    private int threadFailures = 0;
+    private int iterationsDone = 0;
+    private Histogram latencies = new Histogram(4);
+
+    public int getThreadFailures() {
+      return threadFailures;
+    }
+
+    public int getIterationsDone() {
+      return iterationsDone;
+    }
+
+    public Histogram getLatencies() {
+      return latencies;
+    }
+  }
+
   private SoakIterationResult performOneSoakIteration(
       TestServiceGrpc.TestServiceBlockingStub soakStub, int soakRequestSize, int soakResponseSize)
-      throws Exception {
+      throws InterruptedException {
     long startNs = System.nanoTime();
     Status status = Status.OK;
     try {
@@ -1724,71 +1744,67 @@ public abstract class AbstractInteropTest {
   }
 
   /**
-    * Runs large unary RPCs in a loop with configurable failure thresholds
-    * and channel creation behavior.
+   * Runs large unary RPCs in a loop with configurable failure thresholds
+   * and channel creation behavior.
    */
   public void performSoakTest(
       String serverUri,
-      boolean resetChannelPerIteration,
       int soakIterations,
       int maxFailures,
       int maxAcceptablePerIterationLatencyMs,
       int minTimeMsBetweenRpcs,
       int overallTimeoutSeconds,
       int soakRequestSize,
-      int soakResponseSize)
-      throws Exception {
-    int iterationsDone = 0;
-    int totalFailures = 0;
-    Histogram latencies = new Histogram(4 /* number of significant value digits */);
-    long startNs = System.nanoTime();
-    ManagedChannel soakChannel = createChannel();
-    TestServiceGrpc.TestServiceBlockingStub soakStub = TestServiceGrpc
-        .newBlockingStub(soakChannel)
-        .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-    for (int i = 0; i < soakIterations; i++) {
-      if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
-        break;
-      }
-      long earliestNextStartNs = System.nanoTime()
-          + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-      if (resetChannelPerIteration) {
-        soakChannel.shutdownNow();
-        soakChannel.awaitTermination(10, TimeUnit.SECONDS);
-        soakChannel = createChannel();
-        soakStub = TestServiceGrpc
-            .newBlockingStub(soakChannel)
-            .withInterceptors(recordClientCallInterceptor(clientCallCapture));
-      }
-      SoakIterationResult result = 
-          performOneSoakIteration(soakStub, soakRequestSize, soakResponseSize);
-      SocketAddress peer = clientCallCapture
-          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
-      StringBuilder logStr = new StringBuilder(
-          String.format(
-              Locale.US,
-              "soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
-              i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
-      if (!result.getStatus().equals(Status.OK)) {
-        totalFailures++;
-        logStr.append(String.format(" failed: %s", result.getStatus()));
-      } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
-        totalFailures++;
-        logStr.append(
-            " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
-      } else {
-        logStr.append(" succeeded");
-      }
-      System.err.println(logStr.toString());
-      iterationsDone++;
-      latencies.recordValue(result.getLatencyMs());
-      long remainingNs = earliestNextStartNs - System.nanoTime();
-      if (remainingNs > 0) {
-        TimeUnit.NANOSECONDS.sleep(remainingNs);
-      }
+      int soakResponseSize,
+      int numThreads,
+      Function<ManagedChannel, ManagedChannel> createNewChannel)
+      throws InterruptedException {
+    if (soakIterations % numThreads != 0) {
+      throw new IllegalArgumentException("soakIterations must be evenly divisible by numThreads.");
     }
-    soakChannel.shutdownNow();
-    soakChannel.awaitTermination(10, TimeUnit.SECONDS);
+    ManagedChannel sharedChannel = createChannel();
+    long startNs = System.nanoTime();
+    Thread[] threads = new Thread[numThreads];
+    int soakIterationsPerThread = soakIterations / numThreads;
+    List<ThreadResults> threadResultsList = new ArrayList<>(numThreads);
+    for (int i = 0; i < numThreads; i++) {
+      threadResultsList.add(new ThreadResults());
+    }
+    for (int threadInd = 0; threadInd < numThreads; threadInd++) {
+      final int currentThreadInd = threadInd;
+      threads[threadInd] = new Thread(() -> {
+        try {
+          executeSoakTestInThread(
+              soakIterationsPerThread,
+              startNs,
+              minTimeMsBetweenRpcs,
+              soakRequestSize,
+              soakResponseSize,
+              maxAcceptablePerIterationLatencyMs,
+              overallTimeoutSeconds,
+              serverUri,
+              threadResultsList.get(currentThreadInd),
+              sharedChannel,
+              createNewChannel);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException("Thread interrupted: " + e.getMessage(), e);
+        }
+      });
+      threads[threadInd].start();
+    }
+    for (Thread thread : threads) {
+      thread.join();
+    }
+
+    int totalFailures = 0;
+    int iterationsDone = 0;
+    Histogram latencies = new Histogram(4);
+    for (ThreadResults threadResult :threadResultsList) {
+      totalFailures += threadResult.getThreadFailures();
+      iterationsDone += threadResult.getIterationsDone();
+      latencies.add(threadResult.getLatencies());
+    }
     System.err.println(
         String.format(
             Locale.US,
@@ -1820,6 +1836,77 @@ public abstract class AbstractInteropTest {
                 + "threshold: %d.",
             serverUri, totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
+    shutdownChannel(sharedChannel);
+  }
+
+  private void shutdownChannel(ManagedChannel channel) throws InterruptedException {
+    if (channel != null) {
+      channel.shutdownNow();
+      channel.awaitTermination(10, TimeUnit.SECONDS);
+    }
+  }
+
+  protected ManagedChannel createNewChannel(ManagedChannel currentChannel) {
+    try {
+      shutdownChannel(currentChannel);
+      return createChannel();
+    } catch (InterruptedException e) {
+      throw new RuntimeException("Interrupted while creating a new channel", e);
+    }
+  }
+
+  private void executeSoakTestInThread(
+      int soakIterationsPerThread,
+      long startNs,
+      int minTimeMsBetweenRpcs,
+      int soakRequestSize,
+      int soakResponseSize,
+      int maxAcceptablePerIterationLatencyMs,
+      int overallTimeoutSeconds,
+      String serverUri,
+      ThreadResults threadResults,
+      ManagedChannel sharedChannel,
+      Function<ManagedChannel, ManagedChannel> maybeCreateChannel) throws InterruptedException {
+    ManagedChannel currentChannel = sharedChannel;
+    for (int i = 0; i < soakIterationsPerThread; i++) {
+      if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
+        break;
+      }
+      long earliestNextStartNs = System.nanoTime()
+          + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
+
+      currentChannel = maybeCreateChannel.apply(currentChannel);
+      TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
+          .newBlockingStub(currentChannel)
+              .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+      SoakIterationResult result = performOneSoakIteration(currentStub,
+          soakRequestSize, soakResponseSize);
+      SocketAddress peer = clientCallCapture
+          .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+      StringBuilder logStr = new StringBuilder(
+          String.format(
+              Locale.US,
+              "thread id: %d soak iteration: %d elapsed_ms: %d peer: %s server_uri: %s",
+              Thread.currentThread().getId(),
+              i, result.getLatencyMs(), peer != null ? peer.toString() : "null", serverUri));
+      if (!result.getStatus().equals(Status.OK)) {
+        threadResults.threadFailures++;
+        logStr.append(String.format(" failed: %s", result.getStatus()));
+      } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
+        threadResults.threadFailures++;
+        logStr.append(
+            " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
+      } else {
+        logStr.append(" succeeded");
+      }
+      System.err.println(logStr.toString());
+      threadResults.iterationsDone++;
+      threadResults.getLatencies().recordValue(result.getLatencyMs());
+      long remainingNs = earliestNextStartNs - System.nanoTime();
+      if (remainingNs > 0) {
+        TimeUnit.NANOSECONDS.sleep(remainingNs);
+      }
+    }
   }
 
   private static void assertSuccess(StreamRecorder<?> recorder) {

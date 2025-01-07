@@ -26,7 +26,11 @@ dependencies {
     shadow configurations.implementation.getDependencies().minus([xdsDependency])
     shadow project(path: ':grpc-xds', configuration: 'shadow')
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("jar").configure {

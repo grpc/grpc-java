@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
@@ -98,6 +99,7 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * Common {@link ProtocolNegotiator}s used by gRPC.
@@ -696,6 +698,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
+    @IgnoreJRERequirement
     protected void handlerAdded0(ChannelHandlerContext ctx) {
       SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
       SSLParameters sslParams = sslEngine.getSSLParameters();
@@ -807,7 +810,7 @@ final class ProtocolNegotiators {
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
       X509ExtendedTrustManager x509ExtendedTrustManager) {
-    return tls(sslContext, null, Optional.empty(),
+    return tls(sslContext, null, Optional.absent(),
         x509ExtendedTrustManager);
   }
 

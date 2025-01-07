@@ -272,13 +272,13 @@ public class ClusterResolverLoadBalancerTest {
     // Endpoints in locality1 have no endpoint-level weight specified, so all endpoints within
     // locality1 are equally weighted.
     assertThat(addr1.getAddresses()).isEqualTo(endpoint1.getAddresses());
-    assertThat(addr1.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr1.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(10);
     assertThat(addr2.getAddresses()).isEqualTo(endpoint2.getAddresses());
-    assertThat(addr2.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr2.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(10);
     assertThat(addr3.getAddresses()).isEqualTo(endpoint3.getAddresses());
-    assertThat(addr3.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr3.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(50 * 60);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
@@ -342,7 +342,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
+            .get(XdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
 
   @Test
@@ -368,7 +368,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(InternalXdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
+            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
 
@@ -468,16 +468,16 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childProvider3.getPolicyName()).isEqualTo("round_robin");
 
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality1) {
-        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+      if (eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY) == locality1) {
+        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
             .isEqualTo(70);
       }
-      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality2) {
-        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+      if (eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY) == locality2) {
+        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
             .isEqualTo(10);
       }
-      if (eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY) == locality3) {
-        assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT))
+      if (eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY) == locality3) {
+        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
             .isEqualTo(20);
       }
     }
@@ -659,7 +659,7 @@ public class ClusterResolverLoadBalancerTest {
 
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
+      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
     }
   }
 
@@ -740,9 +740,9 @@ public class ClusterResolverLoadBalancerTest {
         Collections.<DropOverload>emptyList(), "pick_first");
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
-        .get(InternalXdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
+        .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
     assertThat(childBalancer.addresses.get(1).getAttributes()
-        .get(InternalXdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
+        .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
 
   }
 
@@ -1068,7 +1068,7 @@ public class ClusterResolverLoadBalancerTest {
             .setAttributes(
                 // Other attributes not used by cluster_resolver LB are omitted.
                 Attributes.newBuilder()
-                    .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build());

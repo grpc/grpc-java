@@ -38,7 +38,9 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -57,7 +59,6 @@ import java.io.InputStream;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import java.util.stream.Collectors;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -217,14 +218,15 @@ public class NettyServerStreamTest extends NettyStreamTestBase<NettyServerStream
     // Ensure there's no CancelServerStreamCommand enqueued with flush=false.
     verify(writeQueue, never()).enqueue(any(CancelServerStreamCommand.class), eq(false));
 
-    List<CancelServerStreamCommand> commands = Mockito.mockingDetails(writeQueue).getInvocations()
-        .stream()
-        // Get enqueue() innovations only.
-        .filter(invocation -> invocation.getMethod().getName().equals("enqueue"))
-        // Find the cancel commands.
-        .filter(invocation -> invocation.getArgument(0) instanceof CancelServerStreamCommand)
-        .map(invocation -> invocation.getArgument(0, CancelServerStreamCommand.class))
-        .collect(Collectors.toList());
+    List<CancelServerStreamCommand> commands = Lists.newArrayList(
+        Iterables.transform(
+          Iterables.filter(
+            Mockito.mockingDetails(writeQueue).getInvocations(),
+            // Get enqueue() innovations only
+            invocation -> invocation.getMethod().getName().equals("enqueue")
+              // Find the cancel commands.
+              && invocation.getArgument(0) instanceof CancelServerStreamCommand),
+          invocation -> invocation.getArgument(0, CancelServerStreamCommand.class)));
 
     assertWithMessage("Expected exactly one CancelClientStreamCommand").that(commands).hasSize(1);
     return commands.get(0);

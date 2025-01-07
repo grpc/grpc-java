@@ -28,11 +28,13 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -276,7 +278,12 @@ public abstract class NameResolver {
   /**
    * Information that a {@link Factory} uses to create a {@link NameResolver}.
    *
-   * <p>Note this class doesn't override neither {@code equals()} nor {@code hashCode()}.
+   * <p>Args applicable to all {@link NameResolver}s are defined here using ordinary setters and
+   * getters. This container can also hold externally-defined "custom" args that aren't so widely
+   * useful or that would be inappropriate dependencies for this low level API. See {@link
+   * Args#getArg} for more.
+   *
+   * <p>Note this class overrides neither {@code equals()} nor {@code hashCode()}.
    *
    * @since 1.21.0
    */
@@ -290,24 +297,21 @@ public abstract class NameResolver {
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
+    @Nullable private final MetricRecorder metricRecorder;
+    @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
 
-    private Args(
-        Integer defaultPort,
-        ProxyDetector proxyDetector,
-        SynchronizationContext syncContext,
-        ServiceConfigParser serviceConfigParser,
-        @Nullable ScheduledExecutorService scheduledExecutorService,
-        @Nullable ChannelLogger channelLogger,
-        @Nullable Executor executor,
-        @Nullable String overrideAuthority) {
-      this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
-      this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
-      this.syncContext = checkNotNull(syncContext, "syncContext not set");
-      this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
-      this.scheduledExecutorService = scheduledExecutorService;
-      this.channelLogger = channelLogger;
-      this.executor = executor;
-      this.overrideAuthority = overrideAuthority;
+    private Args(Builder builder) {
+      this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
+      this.proxyDetector = checkNotNull(builder.proxyDetector, "proxyDetector not set");
+      this.syncContext = checkNotNull(builder.syncContext, "syncContext not set");
+      this.serviceConfigParser =
+          checkNotNull(builder.serviceConfigParser, "serviceConfigParser not set");
+      this.scheduledExecutorService = builder.scheduledExecutorService;
+      this.channelLogger = builder.channelLogger;
+      this.executor = builder.executor;
+      this.overrideAuthority = builder.overrideAuthority;
+      this.metricRecorder = builder.metricRecorder;
+      this.customArgs = cloneCustomArgs(builder.customArgs);
     }
 
     /**
@@ -316,6 +320,7 @@ public abstract class NameResolver {
      *
      * @since 1.21.0
      */
+    // <p>TODO: Only meaningful for InetSocketAddress producers. Make this a custom arg?
     public int getDefaultPort() {
       return defaultPort;
     }
@@ -369,6 +374,30 @@ public abstract class NameResolver {
     }
 
     /**
+     * Returns the value of a custom arg named 'key', or {@code null} if it's not set.
+     *
+     * <p>While ordinary {@link Args} should be universally useful and meaningful, custom arguments
+     * can apply just to resolvers of a certain URI scheme, just to resolvers producing a particular
+     * type of {@link java.net.SocketAddress}, or even an individual {@link NameResolver} subclass.
+     * Custom args are identified by an instance of {@link Args.Key} which should be a constant
+     * defined in a java package and class appropriate for the argument's scope.
+     *
+     * <p>{@link Args} are normally reserved for information in *support* of name resolution, not
+     * the name to be resolved itself. However, there are rare cases where all or part of the target
+     * name can't be represented by any standard URI scheme or can't be encoded as a String at all.
+     * Custom args, in contrast, can hold arbitrary Java types, making them a useful work around in
+     * these cases.
+     *
+     * <p>Custom args can also be used simply to avoid adding inappropriate deps to the low level
+     * io.grpc package.
+     */
+    @SuppressWarnings("unchecked") // Cast is safe because all put()s go through the setArg() API.
+    @Nullable
+    public <T> T getArg(Key<T> key) {
+      return customArgs != null ? (T) customArgs.get(key) : null;
+    }
+
+    /**
      * Returns the {@link ChannelLogger} for the Channel served by this NameResolver.
      *
      * @since 1.26.0
@@ -405,6 +434,14 @@ public abstract class NameResolver {
       return overrideAuthority;
     }
 
+    /**
+     * Returns the {@link MetricRecorder} that the channel uses to record metrics.
+     */
+    @Nullable
+    public MetricRecorder getMetricRecorder() {
+      return metricRecorder;
+    }
+
 
     @Override
     public String toString() {
@@ -413,10 +450,12 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
+          .add("customArgs", customArgs)
           .add("scheduledExecutorService", scheduledExecutorService)
           .add("channelLogger", channelLogger)
           .add("executor", executor)
           .add("overrideAuthority", overrideAuthority)
+          .add("metricRecorder", metricRecorder)
           .toString();
     }
 
@@ -435,6 +474,8 @@ public abstract class NameResolver {
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
       builder.setOverrideAuthority(overrideAuthority);
+      builder.setMetricRecorder(metricRecorder);
+      builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }
 
@@ -461,6 +502,8 @@ public abstract class NameResolver {
       private ChannelLogger channelLogger;
       private Executor executor;
       private String overrideAuthority;
+      private MetricRecorder metricRecorder;
+      private IdentityHashMap<Key<?>, Object> customArgs;
 
       Builder() {
       }
@@ -547,16 +590,65 @@ public abstract class NameResolver {
         return this;
       }
 
+      /** See {@link Args#getArg(Key)}. */
+      public <T> Builder setArg(Key<T> key, T value) {
+        checkNotNull(key, "key");
+        checkNotNull(value, "value");
+        if (customArgs == null) {
+          customArgs = new IdentityHashMap<>();
+        }
+        customArgs.put(key, value);
+        return this;
+      }
+
+      /**
+       * See {@link Args#getMetricRecorder()}. This is an optional field.
+       */
+      public Builder setMetricRecorder(MetricRecorder metricRecorder) {
+        this.metricRecorder = metricRecorder;
+        return this;
+      }
+
       /**
        * Builds an {@link Args}.
        *
        * @since 1.21.0
        */
       public Args build() {
-        return
-            new Args(
-                defaultPort, proxyDetector, syncContext, serviceConfigParser,
-                scheduledExecutorService, channelLogger, executor, overrideAuthority);
+        return new Args(this);
+      }
+    }
+
+    /**
+     * Identifies an externally-defined custom argument that can be stored in {@link Args}.
+     *
+     * <p>Uses reference equality so keys should be defined as global constants.
+     *
+     * @param <T> type of values that can be stored under this key
+     */
+    @Immutable
+    @SuppressWarnings("UnusedTypeParameter")
+    public static final class Key<T> {
+      private final String debugString;
+
+      private Key(String debugString) {
+        this.debugString = debugString;
+      }
+
+      @Override
+      public String toString() {
+        return debugString;
+      }
+
+      /**
+       * Creates a new instance of {@link Key}.
+       *
+       * @param debugString a string used to describe the key, used for debugging.
+       * @param <T> Key type
+       * @return a new instance of Key
+       */
+      public static <T> Key<T> create(String debugString) {
+        return new Key<>(debugString);
       }
     }
   }
@@ -853,5 +945,11 @@ public abstract class NameResolver {
             .toString();
       }
     }
+  }
+
+  @Nullable
+  private static IdentityHashMap<Args.Key<?>, Object> cloneCustomArgs(
+          @Nullable IdentityHashMap<Args.Key<?>, Object> customArgs) {
+    return customArgs != null ? new IdentityHashMap<>(customArgs) : null;
   }
 }

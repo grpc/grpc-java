@@ -21,13 +21,28 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.69.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.71.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/maven2/" }
-        mavenCentral()
-        mavenLocal()
+            url "https://maven-central.storage-download.googleapis.com/maven2/"
+            metadataSources {
+                mavenPom()
+                ignoreGradleMetadataRedirection()
+            }
+        }
+        mavenCentral() {
+            metadataSources {
+                mavenPom()
+                ignoreGradleMetadataRedirection()
+            }
+        }
+        mavenLocal() {
+            metadataSources {
+                mavenPom()
+                ignoreGradleMetadataRedirection()
+            }
+        }
     }
 
     tasks.withType(JavaCompile).configureEach {

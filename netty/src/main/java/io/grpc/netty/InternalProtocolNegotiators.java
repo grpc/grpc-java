@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import com.google.common.base.Optional;
 import io.grpc.ChannelLogger;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
@@ -24,7 +25,6 @@ import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
-import java.util.Optional;
 import java.util.concurrent.Executor;
 
 /**
@@ -72,7 +72,7 @@ public final class InternalProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext) {
-    return tls(sslContext, null, Optional.empty());
+    return tls(sslContext, null, Optional.absent());
   }
 
   /**
@@ -170,7 +170,7 @@ public final class InternalProtocolNegotiators {
       ChannelHandler next, SslContext sslContext, String authority,
       ChannelLogger negotiationLogger) {
     return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger,
-        Optional.empty(), null);
+        Optional.absent(), null);
   }
 
   public static class ProtocolNegotiationHandler

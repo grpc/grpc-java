@@ -78,6 +78,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /** Client for xDS interop tests. */
 public final class XdsTestClient {
@@ -261,6 +262,7 @@ public final class XdsTestClient {
     }
   }
 
+  @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   private void run() {
     if (enableCsmObservability) {
       csmObservability = CsmObservability.newBuilder()

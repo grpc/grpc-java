@@ -152,6 +152,7 @@ public class CallOptionsTest {
   }
 
   @Test
+  @IgnoreJRERequirement
   public void withDeadlineAfterDuration() {
     Deadline actual = CallOptions.DEFAULT.withDeadlineAfter(Duration.ofMinutes(1L)).getDeadline();
     Deadline expected = Deadline.after(1, MINUTES);

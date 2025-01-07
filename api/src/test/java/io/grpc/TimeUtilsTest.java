@@ -25,6 +25,7 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link TimeUtils}. */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class TimeUtilsTest {
 
   @Test

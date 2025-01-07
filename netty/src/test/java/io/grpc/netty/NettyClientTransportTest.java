@@ -39,6 +39,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.Optional;
 import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
@@ -114,7 +115,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -817,7 +817,7 @@ public class NettyClientTransportTest {
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool,
-        Optional.empty(), null);
+        Optional.absent(), null);
     // after starting the client, the Executor in the client pool should be used
     assertEquals(true, clientExecutorPool.isInUse());
     final NettyClientTransport transport = newTransport(negotiator);

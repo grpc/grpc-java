@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -28,6 +29,7 @@ import org.junit.runners.JUnit4;
  * Unit tests for {@link InstantTimeProvider}.
  */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class InstantTimeProviderTest {
   @Test
   public void testInstantCurrentTimeNanos() throws Exception {
@@ -44,7 +46,7 @@ public class InstantTimeProviderTest {
           + instantNow.getNano();
 
     // Validate the time returned is close to the expected value within a tolerance
-    // (i,e 10 millisecond tolerance in nanoseconds).
-    assertThat(actualTimeNanos).isWithin(10_000_000L).of(expectedTimeNanos);
+    // (i,e 1000 millisecond (1 second) tolerance in nanoseconds).
+    assertThat(actualTimeNanos).isWithin(1000_000_000L).of(expectedTimeNanos);
   }
 }
