@@ -200,8 +200,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         if (GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false)) {
           return new FailingClientStream(verificationStatus, tracers);
         }
-        channelLogger.log(ChannelLogger.ChannelLogLevel.WARNING, "Authority '{}' specified via call" +
-                " options for rpc did not match peer certificate's subject names.");
+        channelLogger.log(ChannelLogger.ChannelLogLevel.WARNING, "Authority '{}' specified via "
+                + "call options for rpc did not match peer certificate's subject names.");
       }
     }
     StatsTraceContext statsTraceCtx =
