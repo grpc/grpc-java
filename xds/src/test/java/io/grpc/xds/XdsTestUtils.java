@@ -33,7 +33,6 @@ import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
-import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
@@ -41,7 +40,6 @@ import io.envoyproxy.envoy.config.route.v3.Route;
 import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
-import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -60,15 +58,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
@@ -221,71 +216,6 @@ public class XdsTestUtils {
                             .build()));
     io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
     return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
-  }
-
-  /**
-   * Matches a {@link DiscoveryRequest} with the same node metadata, versionInfo, typeUrl,
-   * response nonce and collection of resource names regardless of order.
-   */
-  static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
-    private final Node node;
-    private final String versionInfo;
-    private final String typeUrl;
-    private final Set<String> resources;
-    private final String responseNonce;
-    @Nullable
-    private final Integer errorCode;
-    private final List<String> errorMessages;
-
-    private DiscoveryRequestMatcher(
-        Node node, String versionInfo, List<String> resources,
-        String typeUrl, String responseNonce, @Nullable Integer errorCode,
-        @Nullable List<String> errorMessages) {
-      this.node = node;
-      this.versionInfo = versionInfo;
-      this.resources = new HashSet<>(resources);
-      this.typeUrl = typeUrl;
-      this.responseNonce = responseNonce;
-      this.errorCode = errorCode;
-      this.errorMessages = errorMessages != null ? errorMessages : ImmutableList.<String>of();
-    }
-
-    @Override
-    public boolean matches(DiscoveryRequest argument) {
-      if (!typeUrl.equals(argument.getTypeUrl())) {
-        return false;
-      }
-      if (!versionInfo.equals(argument.getVersionInfo())) {
-        return false;
-      }
-      if (!responseNonce.equals(argument.getResponseNonce())) {
-        return false;
-      }
-      if (!resources.equals(new HashSet<>(argument.getResourceNamesList()))) {
-        return false;
-      }
-      if (errorCode == null && argument.hasErrorDetail()) {
-        return false;
-      }
-      if (errorCode != null
-          && !matchErrorDetail(argument.getErrorDetail(), errorCode, errorMessages)) {
-        return false;
-      }
-      return node.equals(argument.getNode());
-    }
-
-    @Override
-    public String toString() {
-      return "DiscoveryRequestMatcher{"
-          + "node=" + node
-          + ", versionInfo='" + versionInfo + '\''
-          + ", typeUrl='" + typeUrl + '\''
-          + ", resources=" + resources
-          + ", responseNonce='" + responseNonce + '\''
-          + ", errorCode=" + errorCode
-          + ", errorMessages=" + errorMessages
-          + '}';
-    }
   }
 
   /**

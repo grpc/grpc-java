@@ -148,11 +148,13 @@ public class XdsDependencyManagerTest {
     InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
     testWatcher.verifyStats(1, 0, 0);
+    assertThat(testWatcher.lastConfig).isEqualTo(defaultXdsConfig);
 
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS2", "CDS2", "EDS2",
         XdsTestUtils.ENDPOINT_HOSTNAME + "2", XdsTestUtils.ENDPOINT_PORT + 2);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(ArgumentMatchers.notNull());
     testWatcher.verifyStats(2, 0, 0);
+    assertThat(testWatcher.lastConfig).isNotEqualTo(defaultXdsConfig);
   }
 
   private static class TestWatcher implements XdsDependencyManager.XdsConfigWatcher {
