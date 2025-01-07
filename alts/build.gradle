@@ -2,8 +2,8 @@ plugins {
     id "java-library"
     id "maven-publish"
 
-    id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
+    id "com.gradleup.shadow"
     id "ru.vyarus.animalsniffer"
 }
 

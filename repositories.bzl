@@ -12,16 +12,16 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.29.0",
-    "com.google.auth:google-auth-library-credentials:1.23.0",
-    "com.google.auth:google-auth-library-oauth2-http:1.23.0",
+    "com.google.api.grpc:proto-google-common-protos:2.48.0",
+    "com.google.auth:google-auth-library-credentials:1.24.1",
+    "com.google.auth:google-auth-library-oauth2-http:1.24.1",
     "com.google.auto.value:auto-value-annotations:1.11.0",
     "com.google.auto.value:auto-value:1.11.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:2.11.0",
-    "com.google.errorprone:error_prone_annotations:2.28.0",
+    "com.google.errorprone:error_prone_annotations:2.30.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:33.2.1-android",
+    "com.google.guava:guava:33.3.1-android",
     "com.google.re2j:re2j:1.7",
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
@@ -141,10 +141,10 @@ def grpc_java_repositories(bzlmod = False):
     if not native.existing_rule("envoy_api"):
         http_archive(
             name = "envoy_api",
-            sha256 = "cb7cd388eaa297320d392c872ceb82571dee71f4b6f1c4546b0c0a399636f523",
-            strip_prefix = "data-plane-api-874e3aa8c3aa5086b6bffa2166e0e0077bb32f71",
+            sha256 = "f439add0cc01f718d53d6feb4d0972ac0d48b3e145c18b53439a3b5148a0cb6e",
+            strip_prefix = "data-plane-api-55f8b2351962d84c84a6534da67da1dd9f671c50",
             urls = [
-                "https://github.com/envoyproxy/data-plane-api/archive/874e3aa8c3aa5086b6bffa2166e0e0077bb32f71.tar.gz",
+                "https://github.com/envoyproxy/data-plane-api/archive/55f8b2351962d84c84a6534da67da1dd9f671c50.tar.gz",
             ],
         )
 

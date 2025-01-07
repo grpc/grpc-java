@@ -37,6 +37,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.KnownLength;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
@@ -53,6 +54,7 @@ import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Map;
@@ -107,7 +109,7 @@ public class OpenTelemetryMetricsModuleTest {
       { 0L, 1024L, 2048L, 4096L, 16384L, 65536L, 262144L, 1048576L, 4194304L, 16777216L,
       67108864L, 268435456L, 1073741824L, 4294967296L };
 
-  private static final class StringInputStream extends InputStream {
+  private static final class StringInputStream extends InputStream implements KnownLength {
     final String string;
 
     StringInputStream(String string) {
@@ -117,6 +119,11 @@ public class OpenTelemetryMetricsModuleTest {
     @Override
     public int read() {
       throw new UnsupportedOperationException("should not be called");
+    }
+
+    @Override
+    public int available() throws IOException {
+      return string == null ? 0 : string.length();
     }
   }
 

@@ -23,7 +23,6 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.robolectric.Shadows.shadowOf;
-import static org.robolectric.annotation.LooperMode.Mode.PAUSED;
 
 import android.os.IBinder;
 import android.os.Looper;
@@ -44,14 +43,12 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.LooperMode;
 
 /**
  * Low-level server-side transport tests for binder channel. Like BinderChannelSmokeTest, this
  * convers edge cases not exercised by AbstractTransportTest, but it deals with the
  * binderTransport.BinderServerTransport directly.
  */
-@LooperMode(PAUSED)
 @RunWith(RobolectricTestRunner.class)
 public final class BinderServerTransportTest {
 

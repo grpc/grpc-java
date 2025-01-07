@@ -31,6 +31,7 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.grpc.s2a.internal.handshaker.S2AProtocolNegotiatorFactory;
+import io.grpc.s2a.internal.handshaker.S2AStub;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -59,6 +60,7 @@ public final class S2AChannelCredentials {
     private final String s2aAddress;
     private final ChannelCredentials s2aChannelCredentials;
     private @Nullable S2AIdentity localIdentity = null;
+    private @Nullable S2AStub stub = null;
 
     Builder(String s2aAddress, ChannelCredentials s2aChannelCredentials) {
       this.s2aAddress = s2aAddress;
@@ -104,6 +106,16 @@ public final class S2AChannelCredentials {
       return this;
     }
 
+    /**
+     * Sets the stub to use to communicate with S2A. This is only used for testing that the
+     * stream to S2A gets closed.
+     */
+    public Builder setStub(S2AStub stub) {
+      checkNotNull(stub);
+      this.stub = stub;
+      return this;
+    }
+
     public ChannelCredentials build() {
       return InternalNettyChannelCredentials.create(buildProtocolNegotiatorFactory());
     }
@@ -113,7 +125,7 @@ public final class S2AChannelCredentials {
           SharedResourcePool.forResource(
               S2AHandshakerServiceChannel.getChannelResource(s2aAddress, s2aChannelCredentials));
       checkNotNull(s2aChannelPool, "s2aChannelPool");
-      return S2AProtocolNegotiatorFactory.createClientFactory(localIdentity, s2aChannelPool);
+      return S2AProtocolNegotiatorFactory.createClientFactory(localIdentity, s2aChannelPool, stub);
     }
   }
 

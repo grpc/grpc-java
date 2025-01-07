@@ -39,6 +39,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.KnownLength;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -73,6 +74,7 @@ import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import io.opentelemetry.sdk.trace.data.EventData;
 import io.opentelemetry.sdk.trace.data.SpanData;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.List;
@@ -102,7 +104,7 @@ public class OpenTelemetryTracingModuleTest {
   private static final CallOptions CALL_OPTIONS =
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
 
-  private static class StringInputStream extends InputStream {
+  private static class StringInputStream extends InputStream implements KnownLength {
     final String string;
 
     StringInputStream(String string) {
@@ -111,9 +113,14 @@ public class OpenTelemetryTracingModuleTest {
 
     @Override
     public int read() {
-      // InProcessTransport doesn't actually read bytes from the InputStream.  The InputStream is
+      // InProcessTransport doesn't actually read bytes from the InputStream. The InputStream is
       // passed to the InProcess server and consumed by MARSHALLER.parse().
       throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public int available() throws IOException {
+      return string == null ? 0 : string.length();
     }
   }
 

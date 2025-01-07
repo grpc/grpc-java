@@ -21,7 +21,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.68.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.69.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -311,7 +311,7 @@ subprojects {
         }
     }
 
-    plugins.withId("com.github.johnrengelman.shadow") {
+    plugins.withId("com.gradleup.shadow") {
         tasks.named("shadowJar").configure {
             // Do a dance to remove Class-Path. This needs to run after the doFirst() from the
             // shadow plugin that adds Class-Path and before the core jar action. Using doFirst will

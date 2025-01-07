@@ -33,56 +33,11 @@ import org.junit.runners.JUnit4;
 /** Tests for {@link MetadataExchanger}. */
 @RunWith(JUnit4.class)
 public final class MetadataExchangerTest {
-  @Test
-  public void getMeshId_findsMeshId() {
-    assertThat(MetadataExchanger.getMeshId(() ->
-        "{\"node\":{\"id\":\"projects/12/networks/mesh:mine/nodes/uu-id\"}}"))
-        .isEqualTo("mine");
-    assertThat(MetadataExchanger.getMeshId(() ->
-          "{\"node\":{\"id\":\"projects/1234567890/networks/mesh:mine/nodes/uu-id\", "
-          + "\"unknown\": \"\"}, \"unknown\": \"\"}"))
-        .isEqualTo("mine");
-  }
-
-  @Test
-  public void getMeshId_returnsNullOnBadMeshId() {
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "[\"node\"]"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":[\"id\"]}}"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":{\"id\":[\"projects/12/networks/mesh:mine/nodes/uu-id\"]}}"))
-        .isNull();
-
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"NODE\":{\"id\":\"projects/12/networks/mesh:mine/nodes/uu-id\"}}"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":{\"ID\":\"projects/12/networks/mesh:mine/nodes/uu-id\"}}"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":{\"id\":\"projects/12/networks/mesh:mine\"}}"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":{\"id\":\"PROJECTS/12/networks/mesh:mine/nodes/uu-id\"}}"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":{\"id\":\"projects/12/NETWORKS/mesh:mine/nodes/uu-id\"}}"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":{\"id\":\"projects/12/networks/MESH:mine/nodes/uu-id\"}}"))
-        .isNull();
-    assertThat(MetadataExchanger.getMeshId(
-            () -> "{\"node\":{\"id\":\"projects/12/networks/mesh:mine/NODES/uu-id\"}}"))
-        .isNull();
-  }
 
   @Test
   public void enablePluginForChannel_matches() {
     MetadataExchanger exchanger =
-        new MetadataExchanger(Attributes.builder().build(), (name) -> null, () -> "");
+        new MetadataExchanger(Attributes.builder().build(), (name) -> null);
     assertThat(exchanger.enablePluginForChannel("xds:///testing")).isTrue();
     assertThat(exchanger.enablePluginForChannel("xds:/testing")).isTrue();
     assertThat(exchanger.enablePluginForChannel(
@@ -92,7 +47,7 @@ public final class MetadataExchangerTest {
   @Test
   public void enablePluginForChannel_doesNotMatch() {
     MetadataExchanger exchanger =
-        new MetadataExchanger(Attributes.builder().build(), (name) -> null, () -> "");
+        new MetadataExchanger(Attributes.builder().build(), (name) -> null);
     assertThat(exchanger.enablePluginForChannel("dns:///localhost")).isFalse();
     assertThat(exchanger.enablePluginForChannel("xds:///[]")).isFalse();
     assertThat(exchanger.enablePluginForChannel("xds://my-xds-server/testing")).isFalse();
@@ -101,7 +56,7 @@ public final class MetadataExchangerTest {
   @Test
   public void addLabels_receivedWrongType() {
     MetadataExchanger exchanger =
-        new MetadataExchanger(Attributes.builder().build(), (name) -> null, () -> "");
+        new MetadataExchanger(Attributes.builder().build(), (name) -> null);
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of("x-envoy-peer-metadata", Metadata.ASCII_STRING_MARSHALLER),
         BaseEncoding.base64().encode(Struct.newBuilder()
@@ -122,7 +77,7 @@ public final class MetadataExchangerTest {
   @Test
   public void addLabelsFromExchange_unknownGcpType() {
     MetadataExchanger exchanger =
-        new MetadataExchanger(Attributes.builder().build(), (name) -> null, () -> "");
+        new MetadataExchanger(Attributes.builder().build(), (name) -> null);
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of("x-envoy-peer-metadata", Metadata.ASCII_STRING_MARSHALLER),
         BaseEncoding.base64().encode(Struct.newBuilder()
@@ -153,8 +108,7 @@ public final class MetadataExchangerTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "myservice1",
-            "CSM_WORKLOAD_NAME", "myworkload1")::get,
-        () -> "");
+            "CSM_WORKLOAD_NAME", "myworkload1")::get);
     Metadata metadata = new Metadata();
     exchanger.newClientCallPlugin().addMetadata(metadata);
 
@@ -182,8 +136,7 @@ public final class MetadataExchangerTest {
             .build(),
         ImmutableMap.of(
             "CSM_CANONICAL_SERVICE_NAME", "myservice1",
-            "CSM_WORKLOAD_NAME", "myworkload1")::get,
-        () -> "");
+            "CSM_WORKLOAD_NAME", "myworkload1")::get);
     Metadata metadata = new Metadata();
     exchanger.newClientCallPlugin().addMetadata(metadata);
 

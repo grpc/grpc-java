@@ -24,13 +24,18 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPIFFE_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_1_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_FILE;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
@@ -66,31 +71,52 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
+import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
 import io.netty.handler.ssl.NotSslRecordException;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.TrustManagerFactory;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 /**
  * Unit tests for {@link XdsChannelCredentials} and {@link XdsServerBuilder} for plaintext/TLS/mTLS
  * modes.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class XdsSecurityClientServerTest {
+
+  @Parameter
+  public Boolean enableSpiffe;
+  private Boolean originalEnableSpiffe;
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
@@ -103,11 +129,27 @@ public class XdsSecurityClientServerTest {
   private FakeXdsClientPoolFactory fakePoolFactory = new FakeXdsClientPoolFactory(xdsClient);
   private static final String OVERRIDE_AUTHORITY = "foo.test.google.fr";
 
+  @Parameters(name = "enableSpiffe={0}")
+  public static Collection<Boolean> data() {
+    return ImmutableList.of(true, false);
+  }
+
+  @Before
+  public void setUp() throws IOException {
+    saveEnvironment();
+    FileWatcherCertificateProviderProvider.enableSpiffe = enableSpiffe;
+  }
+
+  private void saveEnvironment() {
+    originalEnableSpiffe = FileWatcherCertificateProviderProvider.enableSpiffe;
+  }
+
   @After
-  public void tearDown() {
+  public void tearDown() throws IOException {
     if (fakeNameResolverFactory != null) {
       NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverFactory);
     }
+    FileWatcherCertificateProviderProvider.enableSpiffe = originalEnableSpiffe;
   }
 
   @Test
@@ -134,13 +176,125 @@ public class XdsSecurityClientServerTest {
   @Test
   public void tlsClientServer_noClientAuthentication() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
-        setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+            null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, false);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, false);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  /**
+   * Use system root ca cert for TLS channel - no mTLS.
+   * Uses common_tls_context.combined_validation_context in upstream_tls_context.
+   */
+  @Test
+  public void tlsClientServer_useSystemRootCerts_useCombinedValidationContext() throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, true);
+
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+      assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath);
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  /**
+   * Use system root ca cert for TLS channel - no mTLS.
+   * Uses common_tls_context.validation_context in upstream_tls_context.
+   */
+  @Test
+  public void tlsClientServer_useSystemRootCerts_validationContext() throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa().toAbsolutePath();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, false);
+
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+      assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath.toAbsolutePath());
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  /**
+   * Use system root ca cert for TLS channel - mTLS.
+   * Uses common_tls_context.combined_validation_context in upstream_tls_context.
+   */
+  @Test
+  public void tlsClientServer_useSystemRootCerts_requireClientAuth() throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa().toAbsolutePath();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, true);
+
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+      assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath.toAbsolutePath());
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  private Path getCacertFilePathForTestCa()
+      throws IOException, KeyStoreException, CertificateException, NoSuchAlgorithmException {
+    KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keystore.load(null, null);
+    InputStream caCertStream = getClass().getResource("/certs/ca.pem").openStream();
+    keystore.setCertificateEntry("testca", CertificateFactory.getInstance("X.509")
+        .generateCertificate(caCertStream));
+    caCertStream.close();
+    File trustStoreFile = File.createTempFile("testca-truststore", "jks");
+    FileOutputStream out = new FileOutputStream(trustStoreFile);
+    keystore.store(out, "changeit".toCharArray());
+    out.close();
+    return trustStoreFile.toPath();
+  }
+
+  @Test
+  public void tlsClientServer_Spiffe_noClientAuthentication() throws Exception {
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
+            null, null, false, false);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    // for TLS, client only needs trustCa, so BAD certs don't matter
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_MAP_FILE, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -148,16 +302,42 @@ public class XdsSecurityClientServerTest {
   }
 
   @Test
+  public void tlsClientServer_Spiffe_noClientAuthentication_wrongServerCert() throws Exception {
+    if (!enableSpiffe) {
+      return;
+    }
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+            null, false, false);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    // for TLS, client only needs trustCa, so BAD certs don't matter
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_MAP_FILE, false);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    try {
+      unaryRpc("buddy", blockingStub);
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre.getStatus().getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+      assertThat(sre.getCause().getCause().getMessage())
+          .contains("Failed to extract SPIFFE ID from peer leaf certificate");
+    }
+  }
+
+  @Test
   public void requireClientAuth_noClientCert_expectException()
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =
-        setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, true, true);
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+            null, true, true);
     buildServerWithTlsContext(downstreamTlsContext);
 
     // for TLS, client only uses trustCa
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, false);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -179,12 +359,12 @@ public class XdsSecurityClientServerTest {
   @Test
   public void noClientAuth_sendBadClientCert_passes() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
-        setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+            null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        BAD_CLIENT_KEY_FILE,
-        BAD_CLIENT_PEM_FILE, true);
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, null, true);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -194,8 +374,7 @@ public class XdsSecurityClientServerTest {
   @Test
   public void mtls_badClientCert_expectException() throws Exception {
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        BAD_CLIENT_KEY_FILE,
-        BAD_CLIENT_PEM_FILE, true);
+        BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, null, true);
     try {
       performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
       fail("exception expected");
@@ -211,20 +390,58 @@ public class XdsSecurityClientServerTest {
     }
   }
 
-  /** mTLS - client auth enabled - using {@link XdsChannelCredentials} API. */
+  /** mTLS with Spiffe Trust Bundle - client auth enabled - using {@link XdsChannelCredentials}
+   * API. */
+  @Test
+  public void mtlsClientServer_Spiffe_withClientAuthentication_withXdsChannelCreds()
+      throws Exception {
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
+            null, SPIFFE_TRUST_MAP_1_FILE, true, true);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        CLIENT_KEY_FILE, CLIENT_SPIFFE_PEM_FILE, SPIFFE_TRUST_MAP_1_FILE, true);
+
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
+  public void mtlsClientServer_Spiffe_badClientCert_expectException()
+      throws Exception {
+    DownstreamTlsContext downstreamTlsContext =
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_SPIFFE_PEM_FILE, null, null, null,
+            null, SPIFFE_TRUST_MAP_1_FILE, true, true);
+    buildServerWithTlsContext(downstreamTlsContext);
+
+    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
+        CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, SPIFFE_TRUST_MAP_1_FILE, true);
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    try {
+      assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+      fail("exception expected");
+    } catch (StatusRuntimeException sre) {
+      assertThat(sre.getStatus().getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+      assertThat(sre.getMessage()).contains("ssl exception");
+    }
+  }
+
   @Test
   public void mtlsClientServer_withClientAuthentication_withXdsChannelCreds()
       throws Exception {
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, true);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, true);
     performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
   }
 
   @Test
   public void tlsServer_plaintextClient_expectException() throws Exception {
     DownstreamTlsContext downstreamTlsContext =
-        setBootstrapInfoAndBuildDownstreamTlsContext(null, null, null, null, false, false);
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+            null, false, false);
     buildServerWithTlsContext(downstreamTlsContext);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
@@ -244,8 +461,7 @@ public class XdsSecurityClientServerTest {
 
     // for TLS, client only needs trustCa
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, false);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -263,8 +479,7 @@ public class XdsSecurityClientServerTest {
   public void mtlsClientServer_changeServerContext_expectException()
       throws Exception {
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, true);
+        CLIENT_KEY_FILE, CLIENT_PEM_FILE, null, true);
 
     performMtlsTestAndGetListenerWatcher(upstreamTlsContext, "cert-instance-name2",
             BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
@@ -291,8 +506,8 @@ public class XdsSecurityClientServerTest {
       String privateKey2, String cert2, String trustCa2)
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =
-        setBootstrapInfoAndBuildDownstreamTlsContext(certInstanceName2, privateKey2, cert2,
-            trustCa2, true, true);
+        setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, certInstanceName2,
+            privateKey2, cert2, trustCa2, null, true, false);
 
     buildServerWithFallbackServerCredentials(
             InsecureServerCredentials.create(), downstreamTlsContext);
@@ -303,24 +518,47 @@ public class XdsSecurityClientServerTest {
   }
 
   private DownstreamTlsContext setBootstrapInfoAndBuildDownstreamTlsContext(
-      String certInstanceName2,
-      String privateKey2,
-      String cert2, String trustCa2, boolean hasRootCert, boolean requireClientCertificate) {
+      String cert1, String certInstanceName2, String privateKey2,
+      String cert2, String trustCa2, String spiffeFile,
+      boolean hasRootCert, boolean requireClientCertificate) {
     bootstrapInfoForServer = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-server", SERVER_1_KEY_FILE,
-            SERVER_1_PEM_FILE, CA_PEM_FILE, certInstanceName2, privateKey2, cert2, trustCa2);
+            cert1, CA_PEM_FILE, certInstanceName2, privateKey2, cert2, trustCa2, spiffeFile);
     return CommonTlsContextTestsUtil.buildDownstreamTlsContext(
         "google_cloud_private_spiffe-server", hasRootCert, requireClientCertificate);
   }
 
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContext(String clientKeyFile,
-      String clientPemFile,
-      boolean hasIdentityCert) {
+      String clientPemFile, String spiffeFile, boolean hasIdentityCert) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, spiffeFile);
     return CommonTlsContextTestsUtil
         .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert);
+  }
+
+  private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(
+      String clientKeyFile,
+      String clientPemFile,
+      boolean useCombinedValidationContext) {
+    bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
+            CA_PEM_FILE, null, null, null, null, null);
+    if (useCombinedValidationContext) {
+      return CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
+          "google_cloud_private_spiffe-client", "ROOT", null,
+          null, null,
+          CertificateValidationContext.newBuilder()
+              .setSystemRootCerts(
+                  CertificateValidationContext.SystemRootCerts.newBuilder().build())
+              .build());
+    }
+    return CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
+        "google_cloud_private_spiffe-client", "ROOT", null,
+        null, null, CertificateValidationContext.newBuilder()
+            .setSystemRootCerts(
+                CertificateValidationContext.SystemRootCerts.newBuilder().build())
+            .build());
   }
 
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
@@ -448,6 +686,34 @@ public class XdsSecurityClientServerTest {
     });
     xdsClient.ldsResource.get(8000, TimeUnit.MILLISECONDS);
     return settableFuture;
+  }
+
+  private void setTrustStoreSystemProperties(String trustStoreFilePath) throws Exception {
+    System.setProperty("javax.net.ssl.trustStore", trustStoreFilePath);
+    System.setProperty("javax.net.ssl.trustStorePassword", "changeit");
+    System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+    createDefaultTrustManager();
+  }
+
+  private void clearTrustStoreSystemProperties() throws Exception {
+    System.clearProperty("javax.net.ssl.trustStore");
+    System.clearProperty("javax.net.ssl.trustStorePassword");
+    System.clearProperty("javax.net.ssl.trustStoreType");
+    createDefaultTrustManager();
+  }
+
+  /**
+   * Workaround the JDK's TrustManagerStore race. TrustManagerStore has a cache for the default
+   * certs based on the system properties. But updating the cache is not thread-safe and can cause a
+   * half-updated cache to appear fully-updated. When both the client and server initialize their
+   * trust store simultaneously, one can see a half-updated value. Creating the trust manager here
+   * fixes the cache while no other threads are running and thus the client and server threads won't
+   * race to update it. See https://github.com/grpc/grpc-java/issues/11678.
+   */
+  private void createDefaultTrustManager() throws Exception {
+    TrustManagerFactory factory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    factory.init((KeyStore) null);
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

@@ -133,7 +133,7 @@ import org.junit.rules.Timeout;
 /**
  * Abstract base class for all GRPC transport tests.
  *
- * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
+ * <p>New tests should avoid using Mockito to support running on AppEngine.
  */
 public abstract class AbstractInteropTest {
   private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());

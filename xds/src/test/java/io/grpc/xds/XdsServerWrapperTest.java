@@ -1035,7 +1035,8 @@ public class XdsServerWrapperTest {
             "/FooService/barMethod",
             "foo.google.com",
             Route.RouteAction.forCluster(
-                "cluster", Collections.<Route.RouteAction.HashPolicy>emptyList(), null, null));
+                "cluster", Collections.<Route.RouteAction.HashPolicy>emptyList(), null, null,
+                false));
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
         Attributes.newBuilder()

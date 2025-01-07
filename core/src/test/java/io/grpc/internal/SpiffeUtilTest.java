@@ -17,12 +17,28 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
+import com.google.common.base.Optional;
+import io.grpc.internal.SpiffeUtil.SpiffeBundle;
+import io.grpc.internal.SpiffeUtil.SpiffeId;
+import io.grpc.testing.TlsTesting;
+import io.grpc.util.CertificateUtils;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
@@ -159,7 +175,8 @@ public class SpiffeUtilTest {
           SpiffeUtil.parse(longTrustDomain.toString()));
       assertEquals("Trust Domain maximum length is 255 characters", iae.getMessage());
 
-      StringBuilder longSpiffe = new StringBuilder(String.format("spiffe://mydomain%scom/", "%21"));
+      @SuppressWarnings("OrphanedFormatString")
+      StringBuilder longSpiffe = new StringBuilder("spiffe://mydomain%21com/");
       for (int i = 0; i < 405; i++) {
         longSpiffe.append("qwert");
       }
@@ -191,6 +208,159 @@ public class SpiffeUtilTest {
           SpiffeUtil.parse("spiffe://example.com/us!"));
       assertEquals("Individual path segments must contain only letters, numbers, dots, dashes, and "
           + "underscores ([a-zA-Z0-9.-_])", iae.getMessage());
+    }
+  }
+
+  public static class CertificateApiTest {
+    private static final String SPIFFE_PEM_FILE = "spiffe_cert.pem";
+    private static final String MULTI_URI_SAN_PEM_FILE = "spiffe_multi_uri_san_cert.pem";
+    private static final String SERVER_0_PEM_FILE = "server0.pem";
+    private static final String TEST_DIRECTORY_PREFIX = "io/grpc/internal/";
+    private static final String SPIFFE_TRUST_BUNDLE = "spiffebundle.json";
+    private static final String SPIFFE_TRUST_BUNDLE_MALFORMED = "spiffebundle_malformed.json";
+    private static final String SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT =
+        "spiffebundle_corrupted_cert.json";
+    private static final String SPIFFE_TRUST_BUNDLE_WRONG_KTY = "spiffebundle_wrong_kty.json";
+    private static final String SPIFFE_TRUST_BUNDLE_WRONG_KID = "spiffebundle_wrong_kid.json";
+    private static final String SPIFFE_TRUST_BUNDLE_WRONG_USE = "spiffebundle_wrong_use.json";
+    private static final String SPIFFE_TRUST_BUNDLE_WRONG_MULTI_CERTS =
+        "spiffebundle_wrong_multi_certs.json";
+    private static final String SPIFFE_TRUST_BUNDLE_DUPLICATES = "spiffebundle_duplicates.json";
+    private static final String SPIFFE_TRUST_BUNDLE_WRONG_ROOT = "spiffebundle_wrong_root.json";
+    private static final String SPIFFE_TRUST_BUNDLE_WRONG_SEQ = "spiffebundle_wrong_seq_type.json";
+    private static final String DOMAIN_ERROR_MESSAGE =
+        " Certificate loading for trust domain 'google.com' failed.";
+
+
+    @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
+
+    private X509Certificate[] spiffeCert;
+    private X509Certificate[] multipleUriSanCert;
+    private X509Certificate[] serverCert0;
+
+    @Before
+    public void setUp() throws Exception {
+      spiffeCert = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SPIFFE_PEM_FILE));
+      multipleUriSanCert = CertificateUtils.getX509Certificates(TlsTesting
+          .loadCert(MULTI_URI_SAN_PEM_FILE));
+      serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
+    }
+
+    private String copyFileToTmp(String fileName) throws Exception {
+      Path tempFilePath = tempFolder.newFile(fileName).toPath();
+      try (InputStream resourceStream = SpiffeUtilTest.class.getClassLoader()
+          .getResourceAsStream(TEST_DIRECTORY_PREFIX + fileName)) {
+        Files.copy(resourceStream, tempFilePath, StandardCopyOption.REPLACE_EXISTING);
+      }
+      return tempFilePath.toString();
+    }
+
+    @Test
+    public void extractSpiffeIdSuccessTest() throws Exception {
+      Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(spiffeCert);
+      assertTrue(spiffeId.isPresent());
+      assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
+      assertEquals("/client/workload/1", spiffeId.get().getPath());
+    }
+
+    @Test
+    public void extractSpiffeIdFailureTest() throws Exception {
+      Optional<SpiffeUtil.SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(serverCert0);
+      assertFalse(spiffeId.isPresent());
+      IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .extractSpiffeId(multipleUriSanCert));
+      assertEquals("Multiple URI SAN values found in the leaf cert.", iae.getMessage());
+
+    }
+
+    @Test
+    public void extractSpiffeIdFromChainTest() throws Exception {
+      // Check that the SPIFFE ID is extracted only from the leaf cert in the chain (spiffeCert
+      // contains it, but serverCert0 does not).
+      X509Certificate[] leafWithSpiffeChain = new X509Certificate[]{spiffeCert[0], serverCert0[0]};
+      assertTrue(SpiffeUtil.extractSpiffeId(leafWithSpiffeChain).isPresent());
+      X509Certificate[] leafWithoutSpiffeChain =
+          new X509Certificate[]{serverCert0[0], spiffeCert[0]};
+      assertFalse(SpiffeUtil.extractSpiffeId(leafWithoutSpiffeChain).isPresent());
+    }
+
+    @Test
+    public void extractSpiffeIdParameterValidityTest() {
+      NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil
+          .extractSpiffeId(null));
+      assertEquals("certChain", npe.getMessage());
+      IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .extractSpiffeId(new X509Certificate[]{}));
+      assertEquals("certChain can't be empty", iae.getMessage());
+    }
+
+    @Test
+    public void loadTrustBundleFromFileSuccessTest() throws Exception {
+      SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE));
+      assertEquals(2, tb.getSequenceNumbers().size());
+      assertEquals(12035488L, (long) tb.getSequenceNumbers().get("example.com"));
+      assertEquals(-1L, (long) tb.getSequenceNumbers().get("test.example.com"));
+      assertEquals(3, tb.getBundleMap().size());
+      assertEquals(0, tb.getBundleMap().get("test.google.com.au").size());
+      assertEquals(1, tb.getBundleMap().get("example.com").size());
+      assertEquals(2, tb.getBundleMap().get("test.example.com").size());
+      Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(tb.getBundleMap().get("example.com")
+              .toArray(new X509Certificate[0]));
+      assertTrue(spiffeId.isPresent());
+      assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
+    }
+
+    @Test
+    public void loadTrustBundleFromFileFailureTest() {
+      // Check the exception if JSON root element is different from 'trust_domains'
+      NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_ROOT)));
+      assertEquals("Mandatory trust_domains element is missing", npe.getMessage());
+      // Check the exception if JSON root element is different from 'trust_domains'
+      ClassCastException cce = assertThrows(ClassCastException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_SEQ)));
+      assertTrue(cce.getMessage().contains("Number expected to be long"));
+      // Check the exception if JSON file doesn't contain an object
+      IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_MALFORMED)));
+      assertTrue(iae.getMessage().contains("SPIFFE Trust Bundle should be a JSON object."));
+      // Check the exception if JSON contains duplicates
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_DUPLICATES)));
+      assertEquals("Duplicate key found: google.com", iae.getMessage());
+      // Check the exception if 'x5c' value cannot be parsed
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT)));
+      assertEquals("Certificate can't be parsed." + DOMAIN_ERROR_MESSAGE, iae.getMessage());
+      // Check the exception if 'kty' value differs from 'RSA'
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_KTY)));
+      assertEquals("'kty' parameter must be 'RSA' but 'null' found." + DOMAIN_ERROR_MESSAGE,
+          iae.getMessage());
+      // Check the exception if 'kid' has a value
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_KID)));
+      assertEquals("'kid' parameter must not be set." + DOMAIN_ERROR_MESSAGE, iae.getMessage());
+      // Check the exception if 'use' value differs from 'x509-svid'
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_USE)));
+      assertEquals("'use' parameter must be 'x509-svid' but 'i_am_not_x509-svid' found."
+          + DOMAIN_ERROR_MESSAGE, iae.getMessage());
+      // Check the exception if multiple certs are provided for 'x5c'
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_MULTI_CERTS)));
+      assertEquals("Exactly 1 certificate is expected, but 2 found." + DOMAIN_ERROR_MESSAGE,
+          iae.getMessage());
+    }
+
+    @Test
+    public void loadTrustBundleFromFileParameterValidityTest() {
+      NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(null));
+      assertEquals("trustBundleFile", npe.getMessage());
+      NoSuchFileException nsfe = assertThrows(NoSuchFileException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile("i_do_not_exist"));
+      assertEquals("i_do_not_exist", nsfe.getMessage());
     }
   }
 }

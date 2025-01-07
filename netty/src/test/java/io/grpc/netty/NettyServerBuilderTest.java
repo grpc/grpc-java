@@ -101,6 +101,22 @@ public class NettyServerBuilderTest {
   }
 
   @Test
+  public void failIfSoftInboundMetadataSizeNonPositive() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("softLimitHeaderListSize must be positive");
+
+    builder.maxInboundMetadataSize(0, 100);
+  }
+
+  @Test
+  public void failIfMaxInboundMetadataSizeSmallerThanSoft() {
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("must be greater than softLimitHeaderListSize");
+
+    builder.maxInboundMetadataSize(100, 80);
+  }
+
+  @Test
   public void failIfMaxConnectionIdleNegative() {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("max connection idle must be positive");

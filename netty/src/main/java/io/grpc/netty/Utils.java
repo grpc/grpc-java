@@ -23,6 +23,7 @@ import static io.grpc.internal.TransportFrameUtil.toRawSerializedHeaders;
 import static io.netty.channel.ChannelOption.SO_LINGER;
 import static io.netty.channel.ChannelOption.SO_TIMEOUT;
 import static io.netty.util.CharsetUtil.UTF_8;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -91,7 +92,9 @@ class Utils {
       = new DefaultEventLoopGroupResource(1, "grpc-nio-boss-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> NIO_WORKER_EVENT_LOOP_GROUP
       = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
-
+  private static final int HEADER_ENTRY_OVERHEAD = 32;
+  private static final byte[] binaryHeaderSuffixBytes =
+      Metadata.BINARY_HEADER_SUFFIX.getBytes(US_ASCII);
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
@@ -193,6 +196,61 @@ class Utils {
       return InternalMetadata.newMetadata(h.numHeaders(), h.namesAndValues());
     }
     return InternalMetadata.newMetadata(convertHeadersToArray(http2Headers));
+  }
+
+  public static int getH2HeadersSize(Http2Headers http2Headers) {
+    if (http2Headers instanceof GrpcHttp2InboundHeaders) {
+      GrpcHttp2InboundHeaders h = (GrpcHttp2InboundHeaders) http2Headers;
+      int size = 0;
+      for (int i = 0; i < h.numHeaders(); i++) {
+        size += h.namesAndValues()[2 * i].length;
+        size +=
+            maybeAddBinaryHeaderOverhead(h.namesAndValues()[2 * i], h.namesAndValues()[2 * i + 1]);
+        size += HEADER_ENTRY_OVERHEAD;
+      }
+      return size;
+    }
+
+    // the binary header is not decoded yet, no need to add overhead.
+    int size = 0;
+    for (Map.Entry<CharSequence, CharSequence> entry : http2Headers) {
+      size += entry.getKey().length();
+      size += entry.getValue().length();
+      size += HEADER_ENTRY_OVERHEAD;
+    }
+    return size;
+  }
+
+  private static int maybeAddBinaryHeaderOverhead(byte[] name, byte[] value) {
+    if (endsWith(name, binaryHeaderSuffixBytes)) {
+      return value.length * 4 / 3;
+    }
+    return value.length;
+  }
+
+  private static boolean endsWith(byte[] bytes, byte[] suffix) {
+    if (bytes == null || suffix == null || bytes.length < suffix.length) {
+      return false;
+    }
+
+    for (int i = 0; i < suffix.length; i++) {
+      if (bytes[bytes.length - suffix.length + i] != suffix[i]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  public static boolean shouldRejectOnMetadataSizeSoftLimitExceeded(
+      int h2HeadersSize, int softLimitHeaderListSize, int maxHeaderListSize) {
+    if (h2HeadersSize < softLimitHeaderListSize) {
+      return false;
+    }
+    double failProbability =
+        (double) (h2HeadersSize - softLimitHeaderListSize) / (double) (maxHeaderListSize
+            - softLimitHeaderListSize);
+    return Math.random() < failProbability;
   }
 
   @CheckReturnValue
