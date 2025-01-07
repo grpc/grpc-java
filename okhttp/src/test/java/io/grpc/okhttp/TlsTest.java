@@ -427,7 +427,8 @@ public class TlsTest {
     }
   }
 
-  /** Used to capture the fact that checkServerTrusted has been called for the per-rpc authority verification. */
+  /** Used to capture the fact that checkServerTrusted has been called for the per-rpc authority
+   *  verification. */
   private static class FakeX509ExtendedTrustManager extends X509ExtendedTrustManager {
     private final X509ExtendedTrustManager delegate;
     private boolean checkServerTrustedCalled;
@@ -437,32 +438,34 @@ public class TlsTest {
     }
 
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
-    }
-
-    @Override
-    public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
+    public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
+            throws CertificateException {
       delegate.checkServerTrusted(chain, authType, socket);
       this.checkServerTrustedCalled = true;
     }
 
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
-    }
-
-    @Override
-    public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
+    public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+            throws CertificateException {
       delegate.checkServerTrusted(chain, authType, engine);
     }
 
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-
+    public void checkServerTrusted(X509Certificate[] chain, String authType)
+            throws CertificateException {
+      delegate.checkServerTrusted(chain, authType);
     }
 
     @Override
-    public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-      delegate.checkServerTrusted(chain, authType);
+    public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) {
+    }
+
+    @Override
+    public void checkClientTrusted(X509Certificate[] chain, String authType) {
+    }
+
+    @Override
+    public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) {
     }
 
     @Override
