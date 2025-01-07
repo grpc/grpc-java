@@ -967,7 +967,7 @@ public class NettyClientTransportTest {
             TlsTesting.loadCert("ca.pem")).get());
   }
 
-  private static Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
+  private static java.util.Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
       throws GeneralSecurityException {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     try {

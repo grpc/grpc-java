@@ -1034,7 +1034,7 @@ public class ProtocolNegotiatorsTest {
   private ClientTlsProtocolNegotiator getClientTlsProtocolNegotiator() throws SSLException {
     return new ClientTlsProtocolNegotiator(GrpcSslContexts.forClient().trustManager(
         TlsTesting.loadCert("ca.pem")).build(),
-        null, Optional.empty(), null);
+        null, Optional.absent(), null);
   }
 
   @Test
@@ -1043,7 +1043,7 @@ public class ProtocolNegotiatorsTest {
     ClientTlsProtocolNegotiator negotiator = new ClientTlsProtocolNegotiator(
         GrpcSslContexts.forClient().trustManager(
             TlsTesting.loadCert("ca.pem")).build(),
-        null, Optional.empty(), mockX509ExtendedTrustManager);
+        null, Optional.absent(), mockX509ExtendedTrustManager);
     SSLEngine mockSslEngine = mock(SSLEngine.class);
     negotiator.setSslEngine(mockSslEngine);
     SSLSession mockSslSession = mock(SSLSession.class);
