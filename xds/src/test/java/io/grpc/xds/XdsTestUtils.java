@@ -29,6 +29,7 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
@@ -40,6 +41,7 @@ import io.envoyproxy.envoy.config.route.v3.Route;
 import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -69,7 +71,7 @@ import org.mockito.InOrder;
 
 public class XdsTestUtils {
   private static final Logger log = Logger.getLogger(XdsTestUtils.class.getName());
-  private static final String RDS_NAME = "route-config.googleapis.com";
+  static final String RDS_NAME = "route-config.googleapis.com";
   private static final String CLUSTER_NAME = "cluster0";
   private static final String EDS_NAME = "eds-service-0";
   private static final String SERVER_LISTENER = "grpc/server?udpa.resource.listening_address=";
@@ -146,6 +148,41 @@ public class XdsTestUtils {
     log.log(Level.FINE, String.format("Set ADS config for %s with address %s:%d",
         serverName, endpointHostname, endpointPort));
 
+  }
+
+  static String getEdsNameForCluster(String clusterName) {
+    return "eds_" + clusterName;
+  }
+
+  static void setAggregateCdsConfig(XdsTestControlPlaneService service, String serverName,
+                                    String clusterName, List<String> children) {
+    Map<String, Message> clusterMap = new HashMap<>();
+
+    ClusterConfig rootConfig = ClusterConfig.newBuilder().addAllClusters(children).build();
+    Cluster.CustomClusterType type =
+        Cluster.CustomClusterType.newBuilder()
+            .setName(XdsClusterResource.AGGREGATE_CLUSTER_TYPE_NAME)
+            .setTypedConfig(Any.pack(rootConfig))
+            .build();
+    Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
+    builder.setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN);
+    Cluster cluster = builder.build();
+    clusterMap.put(clusterName, cluster);
+
+    for (String child : children) {
+      Cluster childCluster = ControlPlaneRule.buildCluster(child, getEdsNameForCluster(child));
+      clusterMap.put(child, childCluster);
+    }
+
+    service.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+
+    Map<String, Message> edsMap = new HashMap<>();
+    for (String child : children) {
+      ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
+          serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
+      edsMap.put(getEdsNameForCluster(child), clusterLoadAssignment);
+    }
+    service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
   }
 
   static XdsConfig getDefaultXdsConfig(String serverHostName)

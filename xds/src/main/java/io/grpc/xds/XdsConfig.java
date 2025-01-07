@@ -85,7 +85,8 @@ public class XdsConfig {
 
     @Override
     public int hashCode() {
-      return clusterName.hashCode() + clusterResource.hashCode() + endpoint.hashCode();
+      int endpointHash = (endpoint != null) ? endpoint.hashCode() : 0;
+      return clusterName.hashCode() + clusterResource.hashCode() + endpointHash;
     }
 
     @Override
@@ -106,6 +107,18 @@ public class XdsConfig {
           .append(", clusterResource=").append(clusterResource)
           .append(", endpoint=").append(endpoint).append("}");
       return builder.toString();
+    }
+
+    public String getClusterName() {
+      return clusterName;
+    }
+
+    public CdsUpdate getClusterResource() {
+      return clusterResource;
+    }
+
+    public StatusOr<EdsUpdate> getEndpoint() {
+      return endpoint;
     }
   }
 

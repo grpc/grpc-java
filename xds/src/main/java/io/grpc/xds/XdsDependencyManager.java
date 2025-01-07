@@ -247,9 +247,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         XdsConfig.XdsClusterConfig clusterConfig;
         String edsName = cdsUpdate.getValue().edsServiceName();
         EdsWatcher edsWatcher = (EdsWatcher) edsWatchers.get(edsName);
-        assert edsWatcher != null;
-        clusterConfig = new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate.getValue(),
-            edsWatcher.getData());
+
+        // Only EDS type clusters have endpoint data
+        StatusOr<XdsEndpointResource.EdsUpdate> data =
+            edsWatcher != null ? edsWatcher.getData() : null;
+        clusterConfig = new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate.getValue(), data);
         builder.addCluster(clusterName, StatusOr.fromValue(clusterConfig));
       } else {
         builder.addCluster(clusterName, StatusOr.fromStatus(cdsUpdate.getStatus()));
@@ -472,7 +474,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
             // no eds needed
             break;
           case AGGREGATE:
-            if (data.hasValue()) {
+            if (data != null && data.hasValue()) {
               Set<String> oldNames = new HashSet<>(data.getValue().prioritizedClusterNames());
               Set<String> newNames = new HashSet<>(update.prioritizedClusterNames());
 
@@ -488,7 +490,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
               }
             } else {
               setData(update);
-              update.prioritizedClusterNames().forEach(name -> addWatcher(new CdsWatcher(name)));
+              for (String name : update.prioritizedClusterNames()) {
+                addWatcher(new CdsWatcher(name));
+              }
             }
             break;
           default:
