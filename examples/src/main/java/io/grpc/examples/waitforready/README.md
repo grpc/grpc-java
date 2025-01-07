@@ -3,11 +3,21 @@ gRPC Wait-For-Ready Example
 
 This example gives the usage and implementation of the Wait-For-Ready feature.
 
-This is a feature which can be used on a stub which will cause the RPCs to wait for the server to become available before sending the request.
+This feature can be activated on a client stub, ensuring that Remote Procedure Calls (RPCs) are held until the server is ready to receive them. 
+By waiting for the server to become available before sending requests, this mechanism enhances reliability, 
+particularly in situations where server availability may be delayed or unpredictable.
 
-When an RPC is created when the channel has failed to connect to the server, without Wait-for-Ready it will immediately return a failure, 
-with Wait-for-Ready it will simply be queued until the connection becomes ready. 
-The default is without Wait-for-Ready.
+When an RPC is initiated and the channel fails to connect to the server, its behavior depends on the Wait-for-Ready option:
+
+- Without Wait-for-Ready (Default Behavior):
+
+  - The RPC will immediately fail if the channel cannot establish a connection, providing prompt feedback about the connectivity issue.
+
+- With Wait-for-Ready:
+  
+  - The RPC will not fail immediately. Instead, it will be queued and will wait until the connection is successfully established.
+    This approach is beneficial for handling temporary network disruptions more gracefully, ensuring the RPC is eventually executed once the connection is ready.
+
 
 Example gives the Simple client that requests a greeting from the HelloWorldServer and defines waitForReady on the stub.
 
