@@ -151,12 +151,16 @@ public final class GcpObservability implements AutoCloseable {
    *
    * @param sleepTime sleepTime
    */
-  public void closeWithSleepTime(long sleepTime) {
+  protected void closeWithSleepTime(long sleepTime, TimeUnit timeUnit) {
     synchronized (GcpObservability.class) {
+      if (instance == null) {
+        throw new IllegalStateException("GcpObservability already closed!");
+      }
       sink.close();
       if (config.isEnableCloudMonitoring() || config.isEnableCloudTracing()) {
         try {
-          Thread.sleep(sleepTime);
+          long sleepTimeMillis = TimeUnit.MILLISECONDS.convert(sleepTime, timeUnit);
+          Thread.sleep(sleepTimeMillis);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           logger.log(Level.SEVERE, "Caught exception during sleep", e);

@@ -49,6 +49,7 @@ import java.util.regex.Pattern;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import java.util.concurrent.TimeUnit;
 
 @RunWith(JUnit4.class)
 public class GcpObservabilityTest {
@@ -208,7 +209,13 @@ public class GcpObservabilityTest {
         assertThat(list.get(2)).isInstanceOf(ConditionalClientInterceptor.class);
         assertThat(configurator.serverInterceptors).hasSize(1);
         assertThat(configurator.tracerFactories).hasSize(2);
-        gcpObservability.closeWithSleepTime(3000);
+        gcpObservability.closeWithSleepTime(3000, TimeUnit.MILLISECONDS);
+        try {
+          gcpObservability.close();
+          fail("Expected IllegalStateException to be thrown on second close");
+        } catch (IllegalStateException e) {
+          assertThat(e.getMessage()).isEqualTo("GcpObservability already closed!");
+        }
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
@@ -281,7 +288,6 @@ public class GcpObservabilityTest {
     GcpObservability gcpObservability =
         GcpObservability.grpcInit(
             sink, observabilityConfig, channelInterceptorFactory, serverInterceptorFactory);
-    gcpObservability.closeWithSleepTime(sleepTime);
-    verify(sink).close();
+    gcpObservability.closeWithSleepTime(3000, TimeUnit.MILLISECONDS);
   }
 }
