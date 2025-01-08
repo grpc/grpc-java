@@ -1,11 +1,9 @@
 gRPC Route Guide Example
 =====================
 
-This example gives the usage and implementation of route guide server and client to demonstrate 
-how to use grpc libraries to perform all 4 types (unary, client streaming, server streaming and bidirectional) of RPC services and methods.
-
-This also gets the default features file (https://github.com/grpc/grpc-java/blob/master/examples/src/main/resources/io/grpc/examples/routeguide/route_guide_db.json) from common utility class 
-which internally loads from classpath along with getting the latitude and longitude for given point.
+This example illustrates how to implement and use a gRPC server and client for a RouteGuide service, 
+which demonstrates all 4 types of gRPC methods (unary, client streaming, server streaming, and bidirectional streaming).
+Additionally, the service loads geographic features from a JSON file [route_guide_db.json](https://github.com/grpc/grpc-java/blob/master/examples/src/main/resources/io/grpc/examples/routeguide/route_guide_db.json) and retrieves features based on latitude and longitude.
 
 The route_guide.proto file defines a gRPC service with 4 types of RPC methods, showcasing different communication patterns between client and server.
 1. Unary RPC
