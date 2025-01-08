@@ -21,6 +21,7 @@ import static io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType.AGGREGATE;
 import static io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType.EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static io.grpc.xds.XdsTestUtils.CLUSTER_NAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_HOSTNAME;
@@ -29,6 +30,8 @@ import static io.grpc.xds.XdsTestUtils.getEdsNameForCluster;
 import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -39,6 +42,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.grpc.BindableService;
@@ -290,6 +294,55 @@ public class XdsDependencyManagerTest {
 
     verify(xdsConfigWatcher, never()).onResourceDoesNotExist(any());
     testWatcher.verifyStats(1, 0, 0);
+  }
+
+  @Test
+  public void testMissingLds() {
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, "badLdsName");
+
+    fakeClock.forwardTime(16, TimeUnit.SECONDS);
+    verify(xdsConfigWatcher, timeout(1000)).onResourceDoesNotExist(
+        toContextStr(XdsListenerResource.getInstance().typeName(),"badLdsName"));
+
+    testWatcher.verifyStats(0, 0, 1);
+  }
+
+  @Test
+  public void testMissingRds() {
+    Listener serverListener = ControlPlaneRule.buildServerListener();
+    Listener clientListener =
+        ControlPlaneRule.buildClientListener(serverName, serverName, "badRdsName");
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS,
+        ImmutableMap.of(XdsTestUtils.SERVER_LISTENER, serverListener, serverName, clientListener));
+
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+
+    fakeClock.forwardTime(16, TimeUnit.SECONDS);
+    verify(xdsConfigWatcher, timeout(1000)).onResourceDoesNotExist(
+        toContextStr(XdsRouteConfigureResource.getInstance().typeName(),"badRdsName"));
+
+    testWatcher.verifyStats(0, 0, 1);
+  }
+
+  @Test
+  public void testCorruptLds() {
+    String ldsResourceName =
+        "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
+
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, ldsResourceName);
+
+    Status expectedStatus = Status.INVALID_ARGUMENT.withDescription(
+        "Wrong configuration: xds server does not exist for resource " + ldsResourceName);
+    String context = toContextStr(XdsListenerResource.getInstance().typeName(), ldsResourceName);
+    verify(xdsConfigWatcher, timeout(1000))
+        .onError(eq(context), argThat(new XdsTestUtils.StatusMatcher(expectedStatus)));
+
+    fakeClock.forwardTime(16, TimeUnit.SECONDS);
+    testWatcher.verifyStats(0,1, 0);
+
   }
 
   private static String toContextStr(String type, String resourceName) {

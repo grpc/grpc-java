@@ -48,6 +48,7 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
@@ -74,7 +75,7 @@ public class XdsTestUtils {
   static final String RDS_NAME = "route-config.googleapis.com";
   static final String CLUSTER_NAME = "cluster0";
   static final String EDS_NAME = "eds-service-0";
-  private static final String SERVER_LISTENER = "grpc/server?udpa.resource.listening_address=";
+  static final String SERVER_LISTENER = "grpc/server?udpa.resource.listening_address=";
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
 
@@ -303,6 +304,20 @@ public class XdsTestUtils {
               .setLoadReportingInterval(Durations.fromNanos(loadReportIntervalNano))
               .build();
       responseObserver.onNext(response);
+    }
+  }
+
+  static class StatusMatcher implements ArgumentMatcher<Status> {
+    private final Status expectedStatus;
+
+    StatusMatcher(Status expectedStatus) {
+      this.expectedStatus = expectedStatus;
+    }
+
+    @Override
+    public boolean matches(Status status) {
+      return status != null && expectedStatus.getCode().equals(status.getCode())
+          && expectedStatus.getDescription().equals(status.getDescription());
     }
   }
 }
