@@ -89,15 +89,15 @@ final class XdsConfig {
     return clusters;
   }
 
-  public static class XdsClusterConfig {
-    final String clusterName;
-    final CdsUpdate clusterResource;
-    final StatusOr<EdsUpdate> endpoint;
+  static final class XdsClusterConfig {
+    private final String clusterName;
+    private final CdsUpdate clusterResource;
+    private final StatusOr<EdsUpdate> endpoint; //Will be null for non-EDS clusters
 
     XdsClusterConfig(String clusterName, CdsUpdate clusterResource,
                       StatusOr<EdsUpdate> endpoint) {
-      this.clusterName = clusterName;
-      this.clusterResource = clusterResource;
+      this.clusterName = checkNotNull(clusterName, "clusterName");
+      this.clusterResource = checkNotNull(clusterResource, "clusterResource");
       this.endpoint = endpoint;
     }
 
@@ -140,18 +140,18 @@ final class XdsConfig {
     }
   }
 
-  static class XdsConfigBuilder {
+  static final class XdsConfigBuilder {
     private LdsUpdate listener;
     private RdsUpdate route;
     private Map<String, StatusOr<XdsClusterConfig>> clusters = new HashMap<>();
 
     XdsConfigBuilder setListener(LdsUpdate listener) {
-      this.listener = listener;
+      this.listener = checkNotNull(listener, "listener");
       return this;
     }
 
     XdsConfigBuilder setRoute(RdsUpdate route) {
-      this.route = route;
+      this.route = checkNotNull(route, "route");
       return this;
     }
 

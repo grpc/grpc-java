@@ -63,8 +63,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   private final Map<XdsResourceType<?>, TypeWatchers<?>> resourceWatchers = new HashMap<>();
 
   XdsDependencyManager(XdsClient xdsClient, XdsConfigWatcher xdsConfigWatcher,
-                              SynchronizationContext syncContext, String dataPlaneAuthority,
-                              String listenerName) {
+                       SynchronizationContext syncContext, String dataPlaneAuthority,
+                       String listenerName) {
     logId = InternalLogId.allocate("xds-dependency-manager", listenerName);
     logger = XdsLogger.withLogId(logId);
     this.xdsClient = checkNotNull(xdsClient, "xdsClient");
@@ -209,6 +209,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
    * the watchers.
    */
   private void maybePublishConfig() {
+    syncContext.throwIfNotInThisSynchronizationContext();
     boolean waitingOnResource = resourceWatchers.values().stream()
         .flatMap(typeWatchers -> typeWatchers.watchers.values().stream())
         .anyMatch(watcher -> !watcher.hasResult());
@@ -381,23 +382,21 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
       String rdsName = httpConnectionManager.rdsName();
 
-      syncContext.execute(() -> {
-        boolean changedRdsName = rdsName != null && !rdsName.equals(this.rdsName);
-        if (changedRdsName) {
-          cleanUpRdsWatcher();
-        }
+      boolean changedRdsName = rdsName != null && !rdsName.equals(this.rdsName);
+      if (changedRdsName) {
+        cleanUpRdsWatcher();
+      }
 
-        if (virtualHosts != null) {
-          updateRoutes(virtualHosts);
-        } else if (changedRdsName) {
-          this.rdsName = rdsName;
-          addWatcher(new RdsWatcher(rdsName));
-          logger.log(XdsLogger.XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-        }
+      if (virtualHosts != null) {
+        updateRoutes(virtualHosts);
+      } else if (changedRdsName) {
+        this.rdsName = rdsName;
+        addWatcher(new RdsWatcher(rdsName));
+        logger.log(XdsLogger.XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
+      }
 
-        setData(update);
-        maybePublishConfig();
-      });
+      setData(update);
+      maybePublishConfig();
     }
 
     @Override
@@ -433,10 +432,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     @Override
     public void onChanged(RdsUpdate update) {
       setData(update);
-      syncContext.execute(() -> {
-        updateRoutes(update.virtualHosts);
-        maybePublishConfig();
-      });
+      updateRoutes(update.virtualHosts);
+      maybePublishConfig();
     }
 
     @Override
@@ -460,55 +457,51 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onChanged(XdsClusterResource.CdsUpdate update) {
-      syncContext.execute(() -> {
-        switch (update.clusterType()) {
-          case EDS:
+      switch (update.clusterType()) {
+        case EDS:
+          setData(update);
+          if (!hasWatcher(ENDPOINT_RESOURCE, update.edsServiceName())) {
+            addWatcher(new EdsWatcher(update.edsServiceName()));
+          } else {
+            maybePublishConfig();
+          }
+          break;
+        case LOGICAL_DNS:
+          setData(update);
+          maybePublishConfig();
+          // no eds needed
+          break;
+        case AGGREGATE:
+          if (data != null && data.hasValue()) {
+            Set<String> oldNames = new HashSet<>(data.getValue().prioritizedClusterNames());
+            Set<String> newNames = new HashSet<>(update.prioritizedClusterNames());
+
             setData(update);
-            if (!hasWatcher(ENDPOINT_RESOURCE, update.edsServiceName())) {
-              addWatcher(new EdsWatcher(update.edsServiceName()));
-            } else {
+
+            Set<String> addedClusters = Sets.difference(newNames, oldNames);
+            Set<String> deletedClusters = Sets.difference(oldNames, newNames);
+            addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster)));
+            deletedClusters.forEach((cluster) -> cancelClusterWatcherTree(getCluster(cluster)));
+
+            if (!addedClusters.isEmpty()) {
               maybePublishConfig();
             }
-            break;
-          case LOGICAL_DNS:
+          } else {
             setData(update);
-            maybePublishConfig();
-            // no eds needed
-            break;
-          case AGGREGATE:
-            if (data != null && data.hasValue()) {
-              Set<String> oldNames = new HashSet<>(data.getValue().prioritizedClusterNames());
-              Set<String> newNames = new HashSet<>(update.prioritizedClusterNames());
-
-              setData(update);
-
-              Set<String> addedClusters = Sets.difference(newNames, oldNames);
-              Set<String> deletedClusters = Sets.difference(oldNames, newNames);
-              addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster)));
-              deletedClusters.forEach((cluster) -> cancelClusterWatcherTree(getCluster(cluster)));
-
-              if (!addedClusters.isEmpty()) {
-                maybePublishConfig();
-              }
-            } else {
-              setData(update);
-              for (String name : update.prioritizedClusterNames()) {
-                addWatcher(new CdsWatcher(name));
-              }
+            for (String name : update.prioritizedClusterNames()) {
+              addWatcher(new CdsWatcher(name));
             }
-            break;
-          default:
-            throw new AssertionError("Unknown cluster type: " + update.clusterType());
-        }
-      });
+          }
+          break;
+        default:
+          throw new AssertionError("Unknown cluster type: " + update.clusterType());
+      }
     }
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
-      syncContext.execute(() -> {
-        handleDoesNotExist(resourceName);
-        maybePublishConfig();
-      });
+      handleDoesNotExist(resourceName);
+      maybePublishConfig();
     }
   }
 
@@ -519,18 +512,14 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onChanged(XdsEndpointResource.EdsUpdate update) {
-      syncContext.execute(() -> {
-        setData(update);
-        maybePublishConfig();
-      });
+      setData(update);
+      maybePublishConfig();
     }
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
-      syncContext.execute(() -> {
-        handleDoesNotExist(resourceName);
-        maybePublishConfig();
-      });
+      handleDoesNotExist(resourceName);
+      maybePublishConfig();
     }
   }
 

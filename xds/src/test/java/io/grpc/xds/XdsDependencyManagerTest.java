@@ -208,14 +208,14 @@ public class XdsDependencyManagerTest {
         testWatcher.lastConfig.getClusters();
     assertThat(lastConfigClusters).hasSize(childNames.size() + 1);
     StatusOr<XdsConfig.XdsClusterConfig> rootC = lastConfigClusters.get(rootName);
-    XdsClusterResource.CdsUpdate rootUpdate = rootC.getValue().clusterResource;
+    XdsClusterResource.CdsUpdate rootUpdate = rootC.getValue().getClusterResource();
     assertThat(rootUpdate.clusterType()).isEqualTo(AGGREGATE);
     assertThat(rootUpdate.prioritizedClusterNames()).isEqualTo(childNames);
 
     for (String childName : childNames) {
       assertThat(lastConfigClusters).containsKey(childName);
       XdsClusterResource.CdsUpdate childResource =
-          lastConfigClusters.get(childName).getValue().clusterResource;
+          lastConfigClusters.get(childName).getValue().getClusterResource();
       assertThat(childResource.clusterType()).isEqualTo(EDS);
       assertThat(childResource.edsServiceName()).isEqualTo(getEdsNameForCluster(childName));
 
@@ -283,9 +283,9 @@ public class XdsDependencyManagerTest {
     // Check that missing EDS reported Status, the other one is present and the garbage EDS is not
     Status expectedEdsStatus = Status.UNAVAILABLE.withDescription(
         "No " + toContextStr(ENDPOINT_TYPE_NAME , XdsTestUtils.EDS_NAME + 1));
-    assertThat(returnedClusters.get(0).getValue().endpoint.hasValue()).isTrue();
-    assertThat(returnedClusters.get(1).getValue().endpoint.hasValue()).isFalse();
-    assertThat(returnedClusters.get(1).getValue().endpoint.getStatus().toString())
+    assertThat(returnedClusters.get(0).getValue().getEndpoint().hasValue()).isTrue();
+    assertThat(returnedClusters.get(1).getValue().getEndpoint().hasValue()).isFalse();
+    assertThat(returnedClusters.get(1).getValue().getEndpoint().getStatus().toString())
         .isEqualTo(expectedEdsStatus.toString());
 
     verify(xdsConfigWatcher, never()).onResourceDoesNotExist(any());
