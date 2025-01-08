@@ -136,7 +136,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         (RouteConfiguration) unpackedMessage, FilterRegistry.getDefaultRegistry(), args);
   }
 
-  static RdsUpdate processRouteConfiguration(
+  private static RdsUpdate processRouteConfiguration(
       RouteConfiguration routeConfig, FilterRegistry filterRegistry, XdsResourceType.Args args)
       throws ResourceInvalidException {
     return new RdsUpdate(extractVirtualHosts(routeConfig, filterRegistry, args));
