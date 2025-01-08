@@ -20,7 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.google.common.truth.Expect;
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.S2AConnectionException;
+import io.grpc.s2a.internal.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.S2AStub;
+import io.grpc.s2a.internal.handshaker.SslContextFactory;
 import io.netty.handler.ssl.OpenSslSessionContext;
 import io.netty.handler.ssl.SslContext;
 import java.security.GeneralSecurityException;

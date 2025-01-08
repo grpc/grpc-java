@@ -19,7 +19,9 @@ package io.grpc.s2a.handshaker;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.S2AStub;
+import io.grpc.s2a.internal.handshaker.S2ATrustManager;
 import java.io.ByteArrayInputStream;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;

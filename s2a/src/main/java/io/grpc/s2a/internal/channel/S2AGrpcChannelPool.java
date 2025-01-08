@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.channel;
+package io.grpc.s2a.internal.channel;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;

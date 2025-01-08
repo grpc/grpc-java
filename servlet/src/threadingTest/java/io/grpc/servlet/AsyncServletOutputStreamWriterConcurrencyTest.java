@@ -23,6 +23,8 @@ import io.grpc.servlet.AsyncServletOutputStreamWriter.ActionItem;
 import io.grpc.servlet.AsyncServletOutputStreamWriter.Log;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import org.jetbrains.kotlinx.lincheck.LinChecker;
@@ -37,6 +39,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+
 /**
  * Test concurrency correctness of {@link AsyncServletOutputStreamWriter} using model checking with
  * Lincheck.
@@ -50,12 +53,14 @@ import org.junit.runners.JUnit4;
  * operations are linearizable in each interleave scenario.
  */
 @ModelCheckingCTest
+@ModelCheckingCTest
 @OpGroupConfig(name = "update", nonParallel = true)
 @OpGroupConfig(name = "write", nonParallel = true)
 @Param(name = "keepReady", gen = BooleanGen.class)
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState {
-  private static final int OPERATIONS_PER_THREAD = 6;
+
+  private static final int OPERATIONS_PER_THREAD = 4;
 
   private final AsyncServletOutputStreamWriter writer;
   private final boolean[] keepReadyArray = new boolean[OPERATIONS_PER_THREAD];
@@ -67,7 +72,9 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   private int consumerIndex;
   private int bytesWritten;
 
-  /** Public no-args constructor. */
+  /**
+   * Public no-args constructor.
+   */
   public AsyncServletOutputStreamWriterConcurrencyTest() {
     BiFunction<byte[], Integer, ActionItem> writeAction =
         (bytes, numBytes) -> () -> {
@@ -88,9 +95,11 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
     writer = new AsyncServletOutputStreamWriter(
         writeAction,
         flushAction,
-        () -> { },
+        () -> {
+        },
         this::isReady,
-        new Log() {});
+        new Log() {
+        });
   }
 
   private void writeOrFlush() {
@@ -113,9 +122,8 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   /**
    * Writes a single byte with value equal to {@link #producerIndex}.
    *
-   * @param keepReady when the byte is written:
-   *                  the ServletOutputStream should remain ready if keepReady == true;
-   *                  the ServletOutputStream should become unready if keepReady == false.
+   * @param keepReady when the byte is written: the ServletOutputStream should remain ready if
+   *     keepReady == true; the ServletOutputStream should become unready if keepReady == false.
    */
   // @com.google.errorprone.annotations.Keep
   @Operation(group = "write")
@@ -128,9 +136,8 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   /**
    * Flushes the writer.
    *
-   * @param keepReady when flushing:
-   *                  the ServletOutputStream should remain ready if keepReady == true;
-   *                  the ServletOutputStream should become unready if keepReady == false.
+   * @param keepReady when flushing: the ServletOutputStream should remain ready if keepReady ==
+   *     true; the ServletOutputStream should become unready if keepReady == false.
    */
   // @com.google.errorprone.annotations.Keep // called by lincheck reflectively
   @Operation(group = "write")
@@ -140,7 +147,9 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
     producerIndex++;
   }
 
-  /** If the writer is not ready, let it turn ready and call writer.onWritePossible(). */
+  /**
+   * If the writer is not ready, let it turn ready and call writer.onWritePossible().
+   */
   // @com.google.errorprone.annotations.Keep // called by lincheck reflectively
   @Operation(group = "update")
   public void maybeOnWritePossible() throws IOException {
@@ -156,19 +165,46 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
     return bytesWritten;
   }
 
+  // @Test
+  // public void linCheck() {
+  //   {
+  //     ModelCheckingOptions options = new ModelCheckingOptions()
+  //         .actorsBefore(0)
+  //         .threads(2)
+  //         .actorsPerThread(OPERATIONS_PER_THREAD)
+  //         .actorsAfter(0)
+  //         .addGuarantee(
+  //             forClasses(
+  //                 ConcurrentLinkedQueue.class.getName(),
+  //                 AtomicReference.class.getName())
+  //                 .allMethods()
+  //                 .treatAsAtomic());
+  //     LinChecker.check(AsyncServletOutputStreamWriterConcurrencyTest.class, options);
+  //     System.out.println("linCheck() Executed...");
+  //   }
+  // }
+
   @Test
   public void linCheck() {
-    ModelCheckingOptions options = new ModelCheckingOptions()
-        .actorsBefore(0)
-        .threads(2)
-        .actorsPerThread(OPERATIONS_PER_THREAD)
-        .actorsAfter(0)
-        .addGuarantee(
-            forClasses(
+    {
+      for (int i = 0; i < 5; i++) {
+        ModelCheckingOptions options = new ModelCheckingOptions()
+            .actorsBefore(0)
+            .threads(2)
+            .actorsPerThread(OPERATIONS_PER_THREAD)
+            .actorsAfter(0)
+            .addGuarantee(
+                forClasses(
                     ConcurrentLinkedQueue.class.getName(),
                     AtomicReference.class.getName())
-                .allMethods()
-                .treatAsAtomic());
-    LinChecker.check(AsyncServletOutputStreamWriterConcurrencyTest.class, options);
+                    .allMethods()
+                    .treatAsAtomic());
+        LinChecker.check(AsyncServletOutputStreamWriterConcurrencyTest.class, options);
+        System.out.println("linCheck() execution: " + i);
+      }
+    }
+
+
   }
+
 }

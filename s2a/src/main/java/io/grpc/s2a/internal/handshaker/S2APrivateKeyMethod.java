@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -22,7 +22,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.ByteString;
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.handshaker.OffloadPrivateKeyOperationReq;
+import io.grpc.s2a.handshaker.SessionReq;
+import io.grpc.s2a.handshaker.SessionResp;
+import io.grpc.s2a.handshaker.SignatureAlgorithm;
 import io.netty.handler.ssl.OpenSslPrivateKeyMethod;
 import java.io.IOException;
 import java.util.Optional;
@@ -40,7 +43,7 @@ import javax.net.ssl.SSLEngine;
  * GrpcSslContexts.configure(SslContextBuilder.forClient());}.
  */
 @NotThreadSafe
-final class S2APrivateKeyMethod implements OpenSslPrivateKeyMethod {
+public final class S2APrivateKeyMethod implements OpenSslPrivateKeyMethod {
   private final S2AStub stub;
   private final Optional<S2AIdentity> localIdentity;
   private static final ImmutableMap<Integer, SignatureAlgorithm>
@@ -65,7 +68,8 @@ final class S2APrivateKeyMethod implements OpenSslPrivateKeyMethod {
               OpenSslPrivateKeyMethod.SSL_SIGN_RSA_PSS_RSAE_SHA512,
               SignatureAlgorithm.S2A_SSL_SIGN_RSA_PSS_RSAE_SHA512);
 
-  public static S2APrivateKeyMethod create(S2AStub stub, Optional<S2AIdentity> localIdentity) {
+  public static S2APrivateKeyMethod create(
+      S2AStub stub, Optional<S2AIdentity> localIdentity) {
     checkNotNull(stub);
     return new S2APrivateKeyMethod(stub, localIdentity);
   }
@@ -84,7 +88,7 @@ final class S2APrivateKeyMethod implements OpenSslPrivateKeyMethod {
    * @throws UnsupportedOperationException if the algorithm is not supported by S2A.
    */
   @VisibleForTesting
-  static SignatureAlgorithm convertOpenSslSignAlgToS2ASignAlg(int signatureAlgorithm) {
+  public static SignatureAlgorithm convertOpenSslSignAlgToS2ASignAlg(int signatureAlgorithm) {
     SignatureAlgorithm sig = OPENSSL_TO_S2A_SIGNATURE_ALGORITHM_MAP.get(signatureAlgorithm);
     if (sig == null) {
       throw new UnsupportedOperationException(

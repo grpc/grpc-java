@@ -22,6 +22,8 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.Channel;
 import io.grpc.internal.ObjectPool;
+import io.grpc.s2a.internal.channel.S2AChannelPool;
+import io.grpc.s2a.internal.channel.S2AGrpcChannelPool;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;

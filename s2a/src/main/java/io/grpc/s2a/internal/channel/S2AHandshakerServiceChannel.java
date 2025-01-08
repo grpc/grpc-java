@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.channel;
+package io.grpc.s2a.internal.channel;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -122,12 +122,12 @@ public final class S2AHandshakerServiceChannel {
    * Manages a channel using a {@link ManagedChannel} instance.
    */
   @VisibleForTesting
-  static class HandshakerServiceChannel extends Channel {
+  public static class HandshakerServiceChannel extends Channel {
     private static final Logger logger =
           Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
     private final ManagedChannel delegate;
 
-    static HandshakerServiceChannel create(ManagedChannel delegate) {
+    public static HandshakerServiceChannel create(ManagedChannel delegate) {
       checkNotNull(delegate);
       return new HandshakerServiceChannel(delegate);
     }

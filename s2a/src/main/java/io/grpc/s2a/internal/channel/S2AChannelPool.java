@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.channel;
+package io.grpc.s2a.internal.channel;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Channel;

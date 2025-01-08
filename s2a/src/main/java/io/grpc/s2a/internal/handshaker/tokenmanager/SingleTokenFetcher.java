@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker.tokenmanager;
+package io.grpc.s2a.internal.handshaker.tokenmanager;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import java.util.Optional;
 
-/** Fetches a single access token via an environment variable. */
+/**
+ * Fetches a single access token via an environment variable.
+ */
 @SuppressWarnings("NonFinalStaticField")
 public final class SingleTokenFetcher implements TokenFetcher {
+
   private static final String ENVIRONMENT_VARIABLE = "S2A_ACCESS_TOKEN";
   private static String accessToken = System.getenv(ENVIRONMENT_VARIABLE);
 
@@ -39,6 +42,11 @@ public final class SingleTokenFetcher implements TokenFetcher {
   @VisibleForTesting
   public static void setAccessToken(String token) {
     accessToken = token;
+  }
+
+  @VisibleForTesting
+  public static String getAccessToken() {
+    return accessToken;
   }
 
   private SingleTokenFetcher(String token) {

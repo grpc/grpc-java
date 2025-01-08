@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -22,6 +22,9 @@ import static com.google.common.base.Verify.verify;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.s2a.handshaker.S2AServiceGrpc;
+import io.grpc.s2a.handshaker.SessionReq;
+import io.grpc.s2a.handshaker.SessionResp;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Optional;
@@ -31,9 +34,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.NotThreadSafe;
 
-/** Reads and writes messages to and from the S2A. */
+/**
+ * Reads and writes messages to and from the S2A.
+ */
 @NotThreadSafe
-class S2AStub implements AutoCloseable {
+public class S2AStub implements AutoCloseable {
+
   private static final Logger logger = Logger.getLogger(S2AStub.class.getName());
   private static final long HANDSHAKE_RPC_DEADLINE_SECS = 20;
   private final StreamObserver<SessionResp> reader = new Reader();
@@ -43,13 +49,14 @@ class S2AStub implements AutoCloseable {
   private boolean doneReading = false;
   private boolean doneWriting = false;
 
-  static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
+  @VisibleForTesting
+  public static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
     checkNotNull(serviceStub);
     return new S2AStub(serviceStub);
   }
 
   @VisibleForTesting
-  static S2AStub newInstanceForTesting(StreamObserver<SessionReq> writer) {
+  public static S2AStub newInstanceForTesting(StreamObserver<SessionReq> writer) {
     checkNotNull(writer);
     return new S2AStub(writer);
   }
@@ -63,12 +70,12 @@ class S2AStub implements AutoCloseable {
   }
 
   @VisibleForTesting
-  StreamObserver<SessionResp> getReader() {
+  public StreamObserver<SessionResp> getReader() {
     return reader;
   }
 
   @VisibleForTesting
-  BlockingQueue<Result> getResponses() {
+  public BlockingQueue<Result> getResponses() {
     return responses;
   }
 
@@ -79,10 +86,10 @@ class S2AStub implements AutoCloseable {
    *
    * @param req the {@code SessionReq} message to be sent to the S2A server.
    * @return the {@code SessionResp} message received from the S2A server.
-   * @throws ConnectionClosedException if {@code reader} or {@code writer} calls their {@code
-   *     onCompleted} method.
-   * @throws IOException if an unexpected response is received, or if the {@code reader} or {@code
-   *     writer} calls their {@code onError} method.
+   * @throws ConnectionClosedException if {@code reader} or {@code writer} calls their
+   *     {@code onCompleted} method.
+   * @throws IOException if an unexpected response is received, or if the {@code reader} or
+   *     {@code writer} calls their {@code onError} method.
    */
   public SessionResp send(SessionReq req) throws IOException, InterruptedException {
     if (doneWriting && doneReading) {
@@ -138,7 +145,9 @@ class S2AStub implements AutoCloseable {
     }
   }
 
-  /** Create a new writer if the writer is null. */
+  /**
+   * Create a new writer if the writer is null.
+   */
   private void createWriterIfNull() {
     if (writer == null) {
       writer =
@@ -150,9 +159,10 @@ class S2AStub implements AutoCloseable {
   }
 
   private class Reader implements StreamObserver<SessionResp> {
+
     /**
-     * Places a {@code SessionResp} message in the {@code responses} queue, or an {@code
-     * IOException} if reading is complete.
+     * Places a {@code SessionResp} message in the {@code responses} queue, or an
+     * {@code IOException} if reading is complete.
      *
      * @param resp the {@code SessionResp} message received from the S2A handshaker module.
      */
@@ -165,7 +175,8 @@ class S2AStub implements AutoCloseable {
     /**
      * Places a {@code Throwable} in the {@code responses} queue.
      *
-     * @param t the {@code Throwable} caught when reading the stream to the S2A handshaker module.
+     * @param t the {@code Throwable} caught when reading the stream to the S2A handshaker
+     *     module.
      */
     @Override
     public void onError(Throwable t) {
@@ -187,6 +198,7 @@ class S2AStub implements AutoCloseable {
   }
 
   private static final class Result {
+
     private final Optional<SessionResp> response;
     private final Optional<Throwable> throwable;
 
@@ -204,7 +216,9 @@ class S2AStub implements AutoCloseable {
       this.throwable = throwable;
     }
 
-    /** Throws {@code throwable} if present, and returns {@code response} otherwise. */
+    /**
+     * Throws {@code throwable} if present, and returns {@code response} otherwise.
+     */
     SessionResp getResultOrThrow() throws IOException {
       if (throwable.isPresent()) {
         if (throwable.get() instanceof ConnectionClosedException) {

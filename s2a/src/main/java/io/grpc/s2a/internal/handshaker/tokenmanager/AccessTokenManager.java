@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker.tokenmanager;
+package io.grpc.s2a.internal.handshaker.tokenmanager;
 
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import java.lang.reflect.Method;
 import java.util.Optional;
 import javax.annotation.concurrent.ThreadSafe;
@@ -32,7 +32,7 @@ public final class AccessTokenManager {
     Optional<?> tokenFetcher;
     try {
       Class<?> singleTokenFetcherClass =
-          Class.forName("io.grpc.s2a.handshaker.tokenmanager.SingleTokenFetcher");
+          Class.forName("io.grpc.s2a.internal.handshaker.tokenmanager.SingleTokenFetcher");
       Method createTokenFetcher = singleTokenFetcherClass.getMethod("create");
       tokenFetcher = (Optional) createTokenFetcher.invoke(null);
     } catch (ClassNotFoundException e) {

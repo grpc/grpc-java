@@ -156,15 +156,15 @@ final class XdsNameResolver extends NameResolver {
 
     // The name might have multiple slashes so encode it before verifying.
     serviceAuthority = checkNotNull(name, "name");
-    this.encodedServiceAuthority = 
-      GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
+    this.encodedServiceAuthority =
+        GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
 
     this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
     this.xdsClientPoolFactory = bootstrapOverride == null ? checkNotNull(xdsClientPoolFactory,
-            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
+        "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
     this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
@@ -209,7 +209,7 @@ final class XdsNameResolver extends NameResolver {
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     if (!XdsClient.isResourceNameValid(ldsResourceName, XdsListenerResource.getInstance().typeUrl())
-        ) {
+    ) {
       listener.onError(Status.INVALID_ARGUMENT.withDescription(
           "invalid listener resource URI for service authority: " + serviceAuthority));
       return;
@@ -372,6 +372,7 @@ final class XdsNameResolver extends NameResolver {
   }
 
   private final class ConfigSelector extends InternalConfigSelector {
+
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
       String cluster = null;
@@ -385,7 +386,7 @@ final class XdsNameResolver extends NameResolver {
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
         for (Route route : routingCfg.routes) {
           if (RoutingUtils.matchRoute(
-                  route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
+              route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               headers, random)) {
             selectedRoute = route;
             selectedOverrideConfigs.putAll(route.filterConfigOverrides());
@@ -466,6 +467,7 @@ final class XdsNameResolver extends NameResolver {
       final String finalCluster = cluster;
       final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), headers);
       class ClusterSelectionInterceptor implements ClientInterceptor {
+
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
             final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions,
@@ -555,7 +557,7 @@ final class XdsNameResolver extends NameResolver {
         } else if (policy.type() == HashPolicy.Type.CHANNEL_ID) {
           newHash = hashFunc.hashLong(randomChannelId);
         }
-        if (newHash != null ) {
+        if (newHash != null) {
           // Rotating the old value prevents duplicate hash rules from cancelling each other out
           // and preserves all of the entropy.
           long oldHash = hash != null ? ((hash << 1L) | (hash >> 63L)) : 0;
@@ -613,6 +615,7 @@ final class XdsNameResolver extends NameResolver {
   }
 
   private static final class FailingConfigSelector extends InternalConfigSelector {
+
     private final Result result;
 
     public FailingConfigSelector(Status error) {
@@ -626,6 +629,7 @@ final class XdsNameResolver extends NameResolver {
   }
 
   private class ResolveState implements ResourceWatcher<XdsListenerResource.LdsUpdate> {
+
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
     private final String ldsResourceName;
@@ -664,12 +668,12 @@ final class XdsNameResolver extends NameResolver {
 
     @Override
     public void onError(final Status error) {
-      if (stopped || receivedConfig) {
+      if (stopped) {
         return;
       }
       listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
           String.format("Unable to load LDS %s. xDS server returned: %s: %s",
-          ldsResourceName, error.getCode(), error.getDescription())));
+              ldsResourceName, error.getCode(), error.getDescription())));
     }
 
     @Override
@@ -819,9 +823,9 @@ final class XdsNameResolver extends NameResolver {
           error + ", xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
       listener.onResult(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
-            .set(InternalConfigSelector.KEY,
-              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(errorWithNodeId)))
-            .build())
+              .set(InternalConfigSelector.KEY,
+                  new FailingConfigSelector(Status.UNAVAILABLE.withDescription(errorWithNodeId)))
+              .build())
           .setServiceConfig(emptyServiceConfig)
           .build());
       receivedConfig = true;
@@ -842,6 +846,7 @@ final class XdsNameResolver extends NameResolver {
      * update.
      */
     private class RouteDiscoveryState implements ResourceWatcher<RdsUpdate> {
+
       private final String resourceName;
       private final long httpMaxStreamDurationNano;
       @Nullable
@@ -865,12 +870,12 @@ final class XdsNameResolver extends NameResolver {
 
       @Override
       public void onError(final Status error) {
-        if (RouteDiscoveryState.this != routeDiscoveryState || receivedConfig) {
+        if (RouteDiscoveryState.this != routeDiscoveryState) {
           return;
         }
         listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
             String.format("Unable to load RDS %s. xDS server returned: %s: %s",
-            resourceName, error.getCode(), error.getDescription())));
+                resourceName, error.getCode(), error.getDescription())));
       }
 
       @Override
@@ -889,10 +894,12 @@ final class XdsNameResolver extends NameResolver {
    * VirtualHost-level configuration for request routing.
    */
   private static class RoutingConfig {
+
     private final long fallbackTimeoutNano;
     final List<Route> routes;
     // Null if HttpFilter is not supported.
-    @Nullable final List<NamedFilterConfig> filterChain;
+    @Nullable
+    final List<NamedFilterConfig> filterChain;
     final Map<String, FilterConfig> virtualHostOverrideConfig;
 
     private static RoutingConfig empty = new RoutingConfig(
@@ -910,6 +917,7 @@ final class XdsNameResolver extends NameResolver {
   }
 
   private static class ClusterRefState {
+
     final AtomicInteger refCount;
     @Nullable
     final String traditionalCluster;

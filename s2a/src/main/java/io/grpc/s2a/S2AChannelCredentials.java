@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
@@ -30,9 +31,10 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyChannelCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
-import io.grpc.s2a.channel.S2AHandshakerServiceChannel;
-import io.grpc.s2a.handshaker.S2AIdentity;
-import io.grpc.s2a.handshaker.S2AProtocolNegotiatorFactory;
+import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
+import io.grpc.s2a.internal.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.S2AProtocolNegotiatorFactory;
+import io.grpc.s2a.internal.handshaker.S2AStub;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -60,6 +62,7 @@ public final class S2AChannelCredentials {
     private ObjectPool<Channel> s2aChannelPool;
     private ChannelCredentials s2aChannelCredentials;
     private @Nullable S2AIdentity localIdentity = null;
+    private S2AStub stub;
 
     Builder(String s2aAddress) {
       this.s2aAddress = s2aAddress;
@@ -110,6 +113,13 @@ public final class S2AChannelCredentials {
     @CanIgnoreReturnValue
     public Builder setS2AChannelCredentials(ChannelCredentials s2aChannelCredentials) {
       this.s2aChannelCredentials = s2aChannelCredentials;
+      return this;
+    }
+
+    @VisibleForTesting
+    Builder setStub(S2AStub stub) {
+      checkNotNull(stub);
+      this.stub = stub;
       return this;
     }
 

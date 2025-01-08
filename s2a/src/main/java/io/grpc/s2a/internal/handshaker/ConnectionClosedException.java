@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import java.io.IOException;
 
 /** Indicates that a connection has been closed. */
 @SuppressWarnings("serial") // This class is never serialized.
-final class ConnectionClosedException extends IOException {
+public final class ConnectionClosedException extends IOException {
   public ConnectionClosedException(String errorMessage) {
     super(errorMessage);
   }

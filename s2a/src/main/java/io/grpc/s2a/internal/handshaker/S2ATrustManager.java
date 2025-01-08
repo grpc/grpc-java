@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.handshaker.SessionReq;
+import io.grpc.s2a.handshaker.SessionResp;
+import io.grpc.s2a.handshaker.ValidatePeerCertificateChainReq;
 import io.grpc.s2a.handshaker.ValidatePeerCertificateChainReq.VerificationMode;
+import io.grpc.s2a.handshaker.ValidatePeerCertificateChainResp;
 import java.io.IOException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
@@ -34,12 +37,12 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Offloads verification of the peer certificate chain to S2A. */
 @NotThreadSafe
-final class S2ATrustManager implements X509TrustManager {
+public final class S2ATrustManager implements X509TrustManager {
   private final Optional<S2AIdentity> localIdentity;
   private final S2AStub stub;
   private final String hostname;
 
-  static S2ATrustManager createForClient(
+  public static S2ATrustManager createForClient(
       S2AStub stub, String hostname, Optional<S2AIdentity> localIdentity) {
     checkNotNull(stub);
     checkNotNull(hostname);

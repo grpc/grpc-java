@@ -39,7 +39,9 @@ import javax.annotation.Nullable;
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletOutputStream;
 
-/** Handles write actions from the container thread and the application thread. */
+/**
+ * Handles write actions from the container thread and the application thread.
+ */
 final class AsyncServletOutputStreamWriter {
 
   /**
@@ -58,9 +60,9 @@ final class AsyncServletOutputStreamWriter {
    * </pre>
    *
    * <p>There are two threads, the container thread (calling {@code onWritePossible()}) and the
-   * application thread (calling {@code runOrBuffer()}) that read and update the
-   * writeState. Only onWritePossible() may turn {@code readyAndDrained} from false to true, and
-   * only runOrBuffer() may turn it from true to false.
+   * application thread (calling {@code runOrBuffer()}) that read and update the writeState. Only
+   * onWritePossible() may turn {@code readyAndDrained} from false to true, and only runOrBuffer()
+   * may turn it from true to false.
    */
   private final AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
 
@@ -132,10 +134,13 @@ final class AsyncServletOutputStreamWriter {
   }
 
   /**
-   * Constructor without java.util.logging and javax.servlet.* dependency, so that Lincheck can run.
+   * Constructor without java.util.logging and javax.servlet.* dependency, so that Lincheck can
+   * run.
    *
-   * @param writeAction Provides an {@link ActionItem} to write given bytes with specified length.
-   * @param isReady Indicates whether the writer can write bytes at the moment (asynchronously).
+   * @param writeAction Provides an {@link ActionItem} to write given bytes with specified
+   *     length.
+   * @param isReady Indicates whether the writer can write bytes at the moment
+   *     (asynchronously).
    */
   @VisibleForTesting
   AsyncServletOutputStreamWriter(
@@ -151,17 +156,23 @@ final class AsyncServletOutputStreamWriter {
     this.log = log;
   }
 
-  /** Called from application thread. */
+  /**
+   * Called from application thread.
+   */
   void writeBytes(byte[] bytes, int numBytes) throws IOException {
     runOrBuffer(writeAction.apply(bytes, numBytes));
   }
 
-  /** Called from application thread. */
+  /**
+   * Called from application thread.
+   */
   void flush() throws IOException {
     runOrBuffer(flushAction);
   }
 
-  /** Called from application thread. */
+  /**
+   * Called from application thread.
+   */
   void complete() {
     try {
       runOrBuffer(completeAction);
@@ -170,7 +181,9 @@ final class AsyncServletOutputStreamWriter {
     }
   }
 
-  /** Called from the container thread {@link javax.servlet.WriteListener#onWritePossible()}. */
+  /**
+   * Called from the container thread {@link javax.servlet.WriteListener#onWritePossible()}.
+   */
   void onWritePossible() throws IOException {
     log.finest("onWritePossible: ENTRY. The servlet output stream becomes ready");
     assureReadyAndDrainedTurnsFalse();
@@ -204,6 +217,7 @@ final class AsyncServletOutputStreamWriter {
       parkingThread = Thread.currentThread();
       // Try to sleep for an extremely long time to avoid writeState being changed at exactly
       // the time when sleep time expires (in extreme scenario, such as #9917).
+      //LockSupport.parkNanos(Duration.ofMinutes(1).toNanos()); //Previous changes
       LockSupport.parkNanos(Duration.ofHours(1).toNanos()); // should return immediately
     }
     parkingThread = null;
@@ -244,22 +258,28 @@ final class AsyncServletOutputStreamWriter {
     }
   }
 
-  /** Write actions, e.g. writeBytes, flush, complete. */
+  /**
+   * Write actions, e.g. writeBytes, flush, complete.
+   */
   @FunctionalInterface
   @VisibleForTesting
   interface ActionItem {
+
     void run() throws IOException;
   }
 
   @VisibleForTesting // Lincheck test can not run with java.util.logging dependency.
   interface Log {
+
     default boolean isLoggable(Level level) {
-      return false; 
+      return false;
     }
 
-    default void fine(String str, Object...params) {}
+    default void fine(String str, Object... params) {
+    }
 
-    default void finest(String str, Object...params) {}
+    default void finest(String str, Object... params) {
+    }
   }
 
   private static final class WriteState {
@@ -274,9 +294,9 @@ final class AsyncServletOutputStreamWriter {
      * check of {@link javax.servlet.ServletOutputStream#isReady()} is true.
      *
      * <p>readyAndDrained turns from true to false when:
-     * {@code runOrBuffer()} exits while either the action item is written directly to the
-     * servlet output stream and the check of {@link javax.servlet.ServletOutputStream#isReady()}
-     * right after that returns false, or the action item is buffered into the writeChain.
+     * {@code runOrBuffer()} exits while either the action item is written directly to the servlet
+     * output stream and the check of {@link javax.servlet.ServletOutputStream#isReady()} right
+     * after that returns false, or the action item is buffered into the writeChain.
      */
     final boolean readyAndDrained;
 
@@ -285,8 +305,8 @@ final class AsyncServletOutputStreamWriter {
     }
 
     /**
-     * Only {@code onWritePossible()} can set readyAndDrained to true, and only {@code
-     * runOrBuffer()} can set it to false.
+     * Only {@code onWritePossible()} can set readyAndDrained to true, and only
+     * {@code runOrBuffer()} can set it to false.
      */
     @CheckReturnValue
     WriteState withReadyAndDrained(boolean readyAndDrained) {

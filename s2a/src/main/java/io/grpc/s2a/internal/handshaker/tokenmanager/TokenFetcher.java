@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker.tokenmanager;
 
-/** Exception that denotes a runtime error that was encountered when talking to the S2A server. */
-@SuppressWarnings("serial") // This class is never serialized.
-public class S2AConnectionException extends RuntimeException {
-  S2AConnectionException(String message) {
-    super(message);
-  }
+import io.grpc.s2a.internal.handshaker.S2AIdentity;
+
+/** Fetches tokens used to authenticate to S2A. */
+interface TokenFetcher {
+  /** Returns an access token when no identity is specified. */
+  String getDefaultToken();
+
+  /** Returns an access token for the given identity. */  
+  String getToken(S2AIdentity identity);
 }

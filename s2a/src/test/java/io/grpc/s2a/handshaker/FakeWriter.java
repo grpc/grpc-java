@@ -22,6 +22,7 @@ import static io.grpc.s2a.handshaker.TLSVersion.TLS_VERSION_1_3;
 import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.ByteString;
+import io.grpc.s2a.internal.handshaker.S2AConnectionException;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.security.KeyFactory;

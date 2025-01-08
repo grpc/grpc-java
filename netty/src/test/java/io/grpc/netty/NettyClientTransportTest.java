@@ -128,7 +128,9 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class NettyClientTransportTest {
-  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final SslContext SSL_CONTEXT = createSslContext();
 
@@ -143,7 +145,9 @@ public class NettyClientTransportTest {
   private final InternalChannelz channelz = new InternalChannelz();
   private Runnable tooManyPingsRunnable = new Runnable() {
     // Throwing is useless in this method, because Netty doesn't propagate the exception
-    @Override public void run() {}
+    @Override
+    public void run() {
+    }
   };
   private Attributes eagAttributes = Attributes.EMPTY;
 
@@ -415,7 +419,7 @@ public class NettyClientTransportTest {
     new Rpc(transport).halfClose().waitForResponse();
 
     // Create 3 streams, but don't half-close. The transport will buffer the second and third.
-    Rpc[] rpcs = new Rpc[] { new Rpc(transport), new Rpc(transport), new Rpc(transport) };
+    Rpc[] rpcs = new Rpc[]{new Rpc(transport), new Rpc(transport), new Rpc(transport)};
 
     // Wait for the response for the stream that was actually created.
     rpcs[0].waitForResponse();
@@ -439,7 +443,10 @@ public class NettyClientTransportTest {
   }
 
   public static class CantConstructChannel extends NioSocketChannel {
-    /** Constructor. It doesn't work. Feel free to try. But it doesn't work. */
+
+    /**
+     * Constructor. It doesn't work. Feel free to try. But it doesn't work.
+     */
     public CantConstructChannel() {
       // Use an Error because we've seen cases of channels failing to construct due to classloading
       // problems (like mixing different versions of Netty), and those involve Errors.
@@ -447,7 +454,9 @@ public class NettyClientTransportTest {
     }
   }
 
-  private static class CantConstructChannelError extends Error {}
+  private static class CantConstructChannelError extends Error {
+
+  }
 
   @Test
   public void failingToConstructChannelShouldFailGracefully() throws Exception {
@@ -601,6 +610,7 @@ public class NettyClientTransportTest {
 
   @Test
   public void maxHeaderListSizeShouldBeEnforcedOnServer() throws Exception {
+
     startServer(100, 1);
 
     NettyClientTransport transport = newTransport(newNegotiator());
@@ -615,6 +625,7 @@ public class NettyClientTransportTest {
       Status status = Status.fromThrowable(e);
       assertEquals(status.toString(), Status.Code.INTERNAL, status.getCode());
     }
+
   }
 
   @Test
@@ -866,6 +877,7 @@ public class NettyClientTransportTest {
   }
 
   private static class Rpc {
+
     static final String MESSAGE = "hello";
     static final MethodDescriptor<String, String> METHOD =
         MethodDescriptor.<String, String>newBuilder()
@@ -885,7 +897,8 @@ public class NettyClientTransportTest {
     Rpc(NettyClientTransport transport, Metadata headers) {
       stream = transport.newStream(
           METHOD, headers, CallOptions.DEFAULT,
-          new ClientStreamTracer[]{ new ClientStreamTracer() {} });
+          new ClientStreamTracer[]{new ClientStreamTracer() {
+          }});
       stream.start(listener);
       stream.request(1);
       stream.writeMessage(new ByteArrayInputStream(MESSAGE.getBytes(UTF_8)));
@@ -907,6 +920,7 @@ public class NettyClientTransportTest {
   }
 
   private static final class TestClientStreamListener implements ClientStreamListener {
+
     final SettableFuture<Void> closedFuture = SettableFuture.create();
     final SettableFuture<Void> responseFuture = SettableFuture.create();
 
@@ -938,6 +952,7 @@ public class NettyClientTransportTest {
   }
 
   private static final class EchoServerStreamListener implements ServerStreamListener {
+
     final ServerStream stream;
     final Metadata headers;
 
@@ -972,9 +987,10 @@ public class NettyClientTransportTest {
   }
 
   private final class EchoServerListener implements ServerListener {
+
     final List<NettyServerTransport> transports = new ArrayList<>();
     final List<EchoServerStreamListener> streamListeners =
-            Collections.synchronizedList(new ArrayList<EchoServerStreamListener>());
+        Collections.synchronizedList(new ArrayList<EchoServerStreamListener>());
 
     @Override
     public ServerTransportListener transportCreated(final ServerTransport transport) {
@@ -996,7 +1012,8 @@ public class NettyClientTransportTest {
         }
 
         @Override
-        public void transportTerminated() {}
+        public void transportTerminated() {
+        }
       };
     }
 
@@ -1006,6 +1023,7 @@ public class NettyClientTransportTest {
   }
 
   private static final class StringMarshaller implements Marshaller<String> {
+
     static final StringMarshaller INSTANCE = new StringMarshaller();
 
     @Override
@@ -1042,6 +1060,7 @@ public class NettyClientTransportTest {
   }
 
   private static class NoopProtocolNegotiator implements ProtocolNegotiator {
+
     GrpcHttp2ConnectionHandler grpcHandler;
     NoopHandler handler;
 
@@ -1057,7 +1076,8 @@ public class NettyClientTransportTest {
     }
 
     @Override
-    public void close() {}
+    public void close() {
+    }
   }
 
   private static final class SocketPicker extends LocalSocketPicker {
@@ -1072,9 +1092,11 @@ public class NettyClientTransportTest {
   private static final class FakeChannelLogger extends ChannelLogger {
 
     @Override
-    public void log(ChannelLogLevel level, String message) {}
+    public void log(ChannelLogLevel level, String message) {
+    }
 
     @Override
-    public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+    public void log(ChannelLogLevel level, String messageFormat, Object... args) {
+    }
   }
 }

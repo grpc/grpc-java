@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import com.google.common.collect.ImmutableSet;
+import io.grpc.s2a.handshaker.Ciphersuite;
+import io.grpc.s2a.handshaker.TLSVersion;
 
 /** Converts proto messages to Netty strings. */
-final class ProtoUtil {
+public final class ProtoUtil {
   /**
    * Converts {@link Ciphersuite} to its {@link String} representation.
    *
@@ -27,7 +29,7 @@ final class ProtoUtil {
    * @return a {@link String} representing the ciphersuite.
    * @throws AssertionError if the {@link Ciphersuite} is not one of the supported ciphersuites.
    */
-  static String convertCiphersuite(Ciphersuite ciphersuite) {
+  public static String convertCiphersuite(Ciphersuite ciphersuite) {
     switch (ciphersuite) {
       case CIPHERSUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
         return "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256";
@@ -54,7 +56,7 @@ final class ProtoUtil {
    * @return a {@link String} representation of the TLS version.
    * @throws AssertionError if the {@code tlsVersion} is not one of the supported TLS versions.
    */
-  static String convertTlsProtocolVersion(TLSVersion tlsVersion) {
+  public static String convertTlsProtocolVersion(TLSVersion tlsVersion) {
     switch (tlsVersion) {
       case TLS_VERSION_1_3:
         return "TLSv1.3";
@@ -74,7 +76,7 @@ final class ProtoUtil {
    * Builds a set of strings representing all {@link TLSVersion}s between {@code minTlsVersion} and
    * {@code maxTlsVersion}.
    */
-  static ImmutableSet<String> buildTlsProtocolVersionSet(
+  public static ImmutableSet<String> buildTlsProtocolVersionSet(
       TLSVersion minTlsVersion, TLSVersion maxTlsVersion) {
     ImmutableSet.Builder<String> tlsVersions = ImmutableSet.<String>builder();
     for (TLSVersion tlsVersion : TLSVersion.values()) {

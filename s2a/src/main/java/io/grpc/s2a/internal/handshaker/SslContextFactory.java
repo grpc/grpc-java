@@ -14,14 +14,19 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.collect.ImmutableSet;
 import io.grpc.netty.GrpcSslContexts;
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.handshaker.AuthenticationMechanism;
+import io.grpc.s2a.handshaker.ConnectionSide;
+import io.grpc.s2a.handshaker.GetTlsConfigurationReq;
+import io.grpc.s2a.handshaker.GetTlsConfigurationResp;
+import io.grpc.s2a.handshaker.SessionReq;
+import io.grpc.s2a.handshaker.SessionResp;
 import io.netty.handler.ssl.OpenSslContextOption;
 import io.netty.handler.ssl.OpenSslSessionContext;
 import io.netty.handler.ssl.OpenSslX509KeyManagerFactory;
@@ -41,7 +46,7 @@ import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLSessionContext;
 
 /** Creates {@link SslContext} objects with TLS configurations from S2A server. */
-final class SslContextFactory {
+public final class SslContextFactory {
 
   /**
    * Creates {@link SslContext} objects for client with TLS configurations from S2A server.
@@ -55,7 +60,7 @@ final class SslContextFactory {
    * @throws IOException if an unexpected response from S2A server is received.
    * @throws InterruptedException if {@code stub} is closed.
    */
-  static SslContext createForClient(
+  public static SslContext createForClient(
       S2AStub stub, String targetName, Optional<S2AIdentity> localIdentity)
       throws IOException,
           InterruptedException,

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -37,9 +37,9 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.InternalProtocolNegotiators.ProtocolNegotiationHandler;
-import io.grpc.s2a.channel.S2AChannelPool;
-import io.grpc.s2a.channel.S2AGrpcChannelPool;
-import io.grpc.s2a.handshaker.S2AIdentity;
+import io.grpc.s2a.handshaker.S2AServiceGrpc;
+import io.grpc.s2a.internal.channel.S2AChannelPool;
+import io.grpc.s2a.internal.channel.S2AGrpcChannelPool;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -55,7 +55,8 @@ import javax.annotation.Nullable;
 /** Factory for performing negotiation of a secure channel using the S2A. */
 @ThreadSafe
 public final class S2AProtocolNegotiatorFactory {
-  @VisibleForTesting static final int DEFAULT_PORT = 443;
+  @VisibleForTesting
+  public static final int DEFAULT_PORT = 443;
   private static final AsciiString SCHEME = AsciiString.of("https");
 
   /**
@@ -98,14 +99,14 @@ public final class S2AProtocolNegotiatorFactory {
 
   /** Negotiates the TLS handshake using S2A. */
   @VisibleForTesting
-  static final class S2AProtocolNegotiator implements ProtocolNegotiator {
+  public static final class S2AProtocolNegotiator implements ProtocolNegotiator {
 
     private final S2AChannelPool channelPool;
     private final Optional<S2AIdentity> localIdentity;
     private final ListeningExecutorService service =
         MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(1));
 
-    static S2AProtocolNegotiator createForClient(
+    public static S2AProtocolNegotiator createForClient(
         S2AChannelPool channelPool, @Nullable S2AIdentity localIdentity) {
       checkNotNull(channelPool, "Channel pool should not be null.");
       if (localIdentity == null) {
@@ -116,7 +117,7 @@ public final class S2AProtocolNegotiatorFactory {
     }
 
     @VisibleForTesting
-    static @Nullable String getHostNameFromAuthority(@Nullable String authority) {
+    public static @Nullable String getHostNameFromAuthority(@Nullable String authority) {
       if (authority == null) {
         return null;
       }
@@ -150,7 +151,7 @@ public final class S2AProtocolNegotiatorFactory {
   }
 
   @VisibleForTesting
-  static class BufferReadsHandler extends ChannelInboundHandlerAdapter {
+  public static class BufferReadsHandler extends ChannelInboundHandlerAdapter {
     private final List<Object> reads = new ArrayList<>();
     private boolean readComplete;
 

@@ -32,7 +32,6 @@ import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.s2a.MtlsToS2AChannelCredentials;
 import io.grpc.s2a.S2AChannelCredentials;
-import io.grpc.s2a.handshaker.FakeS2AServer;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;

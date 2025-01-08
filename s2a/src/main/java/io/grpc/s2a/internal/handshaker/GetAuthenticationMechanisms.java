@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.handshaker;
+package io.grpc.s2a.internal.handshaker;
 
 import com.google.errorprone.annotations.Immutable;
-import io.grpc.s2a.handshaker.S2AIdentity;
-import io.grpc.s2a.handshaker.tokenmanager.AccessTokenManager;
+//import io.grpc.s2a.internal.handshaker.GetAuthenticationMechanisms;
+import io.grpc.s2a.handshaker.AuthenticationMechanism;
+import io.grpc.s2a.internal.handshaker.tokenmanager.AccessTokenManager;
 import java.util.Optional;
 
 /** Retrieves the authentication mechanism for a given local identity. */
 @Immutable
-final class GetAuthenticationMechanisms {
+public final class GetAuthenticationMechanisms {
   private static final Optional<AccessTokenManager> TOKEN_MANAGER = AccessTokenManager.create();
 
   /**
@@ -32,7 +33,8 @@ final class GetAuthenticationMechanisms {
    * @param localIdentity the identity for which to fetch a token.
    * @return an {@link AuthenticationMechanism} for the given local identity.
    */
-  static Optional<AuthenticationMechanism> getAuthMechanism(Optional<S2AIdentity> localIdentity) {
+  public static Optional<AuthenticationMechanism> getAuthMechanism(
+      Optional<S2AIdentity> localIdentity) {
     if (!TOKEN_MANAGER.isPresent()) {
       return Optional.empty();
     }
