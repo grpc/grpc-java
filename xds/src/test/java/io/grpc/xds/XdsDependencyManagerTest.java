@@ -19,17 +19,28 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType.AGGREGATE;
 import static io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType.EDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
+import static io.grpc.xds.XdsTestUtils.CLUSTER_NAME;
+import static io.grpc.xds.XdsTestUtils.ENDPOINT_HOSTNAME;
+import static io.grpc.xds.XdsTestUtils.ENDPOINT_PORT;
 import static io.grpc.xds.XdsTestUtils.getEdsNameForCluster;
 import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
+import com.google.protobuf.Message;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -46,8 +57,10 @@ import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsTransportFactory;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -60,7 +73,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
+import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -70,6 +85,8 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class XdsDependencyManagerTest {
   private static final Logger log = Logger.getLogger(XdsDependencyManagerTest.class.getName());
+  public static final String CLUSTER_TYPE_NAME = XdsClusterResource.getInstance().typeName();
+  public static final String ENDPOINT_TYPE_NAME = XdsEndpointResource.getInstance().typeName();
 
   @Mock
   private XdsClientMetricReporter xdsClientMetricReporter;
@@ -98,6 +115,9 @@ public class XdsDependencyManagerTest {
   public final MockitoRule mocks = MockitoJUnit.rule();
   private TestWatcher testWatcher;
   private XdsConfig defaultXdsConfig; // set in setUp()
+
+  @Captor
+  private ArgumentCaptor<XdsConfig> xdsConfigCaptor;
 
   @Before
   public void setUp() throws Exception {
@@ -160,7 +180,7 @@ public class XdsDependencyManagerTest {
     assertThat(testWatcher.lastConfig).isEqualTo(defaultXdsConfig);
 
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS2", "CDS2", "EDS2",
-        XdsTestUtils.ENDPOINT_HOSTNAME + "2", XdsTestUtils.ENDPOINT_PORT + 2);
+        ENDPOINT_HOSTNAME + "2", ENDPOINT_PORT + 2);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(ArgumentMatchers.notNull());
     testWatcher.verifyStats(2, 0, 0);
     assertThat(testWatcher.lastConfig).isNotEqualTo(defaultXdsConfig);
@@ -185,7 +205,7 @@ public class XdsDependencyManagerTest {
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(any());
 
     Map<String, StatusOr<XdsConfig.XdsClusterConfig>> lastConfigClusters =
-        testWatcher.lastConfig.clusters;
+        testWatcher.lastConfig.getClusters();
     assertThat(lastConfigClusters).hasSize(childNames.size() + 1);
     StatusOr<XdsConfig.XdsClusterConfig> rootC = lastConfigClusters.get(rootName);
     XdsClusterResource.CdsUpdate rootUpdate = rootC.getValue().clusterResource;
@@ -204,6 +224,76 @@ public class XdsDependencyManagerTest {
       assertThat(endpoint.hasValue()).isTrue();
       assertThat(endpoint.getValue().clusterName).isEqualTo(getEdsNameForCluster(childName));
     }
+  }
+
+  @Test
+  public void testMissingCdsAndEds() {
+    // update config so that agg cluster references 2 existing & 1 non-existing cluster
+    List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
+    ClusterConfig rootConfig = ClusterConfig.newBuilder().addAllClusters(childNames).build();
+    Cluster.CustomClusterType type =
+        Cluster.CustomClusterType.newBuilder()
+            .setName(XdsClusterResource.AGGREGATE_CLUSTER_TYPE_NAME)
+            .setTypedConfig(Any.pack(rootConfig))
+            .build();
+    Cluster.Builder builder =
+        Cluster.newBuilder().setName(CLUSTER_NAME).setClusterType(type);
+    builder.setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN);
+    Cluster cluster = builder.build();
+    Map<String, Message> clusterMap = new HashMap<>();
+    Map<String, Message> edsMap = new HashMap<>();
+
+    clusterMap.put(CLUSTER_NAME, cluster);
+    for (int i = 0; i < childNames.size() - 1; i++) {
+      String edsName = XdsTestUtils.EDS_NAME + i;
+      Cluster child = ControlPlaneRule.buildCluster(childNames.get(i), edsName);
+      clusterMap.put(childNames.get(i), child);
+    }
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+
+    // Update config so that one of the 2 "valid" clusters has an EDS resource, the other does not
+    // and there is an EDS that doesn't have matching clusters
+    ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
+        serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, XdsTestUtils.EDS_NAME + 0);
+    edsMap.put(XdsTestUtils.EDS_NAME + 0, clusterLoadAssignment);
+    clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
+        serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, "garbageEds");
+    edsMap.put("garbageEds", clusterLoadAssignment);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+
+    fakeClock.forwardTime(16, TimeUnit.SECONDS);
+    verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+
+    List<StatusOr<XdsConfig.XdsClusterConfig>> returnedClusters = new ArrayList<>();
+    for (String childName : childNames) {
+      returnedClusters.add(xdsConfigCaptor.getValue().getClusters().get(childName));
+    }
+
+    // Check that missing cluster reported Status and the other 2 are present
+    Status expectedClusterStatus = Status.UNAVAILABLE.withDescription(
+        "No " + toContextStr(CLUSTER_TYPE_NAME , childNames.get(2)));
+    StatusOr<XdsConfig.XdsClusterConfig> missingCluster = returnedClusters.get(2);
+    assertThat(missingCluster.getStatus().toString()).isEqualTo(expectedClusterStatus.toString());
+    assertThat(returnedClusters.get(0).hasValue()).isTrue();
+    assertThat(returnedClusters.get(1).hasValue()).isTrue();
+
+    // Check that missing EDS reported Status, the other one is present and the garbage EDS is not
+    Status expectedEdsStatus = Status.UNAVAILABLE.withDescription(
+        "No " + toContextStr(ENDPOINT_TYPE_NAME , XdsTestUtils.EDS_NAME + 1));
+    assertThat(returnedClusters.get(0).getValue().endpoint.hasValue()).isTrue();
+    assertThat(returnedClusters.get(1).getValue().endpoint.hasValue()).isFalse();
+    assertThat(returnedClusters.get(1).getValue().endpoint.getStatus().toString())
+        .isEqualTo(expectedEdsStatus.toString());
+
+    verify(xdsConfigWatcher, never()).onResourceDoesNotExist(any());
+    testWatcher.verifyStats(1, 0, 0);
+  }
+
+  private static String toContextStr(String type, String resourceName) {
+    return type + " resource: " + resourceName;
   }
 
   private static class TestWatcher implements XdsDependencyManager.XdsConfigWatcher {

@@ -72,8 +72,8 @@ import org.mockito.InOrder;
 public class XdsTestUtils {
   private static final Logger log = Logger.getLogger(XdsTestUtils.class.getName());
   static final String RDS_NAME = "route-config.googleapis.com";
-  private static final String CLUSTER_NAME = "cluster0";
-  private static final String EDS_NAME = "eds-service-0";
+  static final String CLUSTER_NAME = "cluster0";
+  static final String EDS_NAME = "eds-service-0";
   private static final String SERVER_LISTENER = "grpc/server?udpa.resource.listening_address=";
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
@@ -202,8 +202,7 @@ public class XdsTestUtils {
     Bootstrapper.ServerInfo serverInfo = null;
     XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, "0", "0", null, null, null);
     XdsRouteConfigureResource.RdsUpdate rdsUpdate =
-        XdsRouteConfigureResource.processRouteConfiguration(
-        routeConfiguration, FilterRegistry.getDefaultRegistry(), args);
+        XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
 
     // Need to create endpoints to create locality endpoints map to create edsUpdate
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();

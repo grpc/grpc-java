@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.collect.ImmutableMap;
 import io.grpc.StatusOr;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
@@ -31,13 +32,18 @@ import java.util.Objects;
 /**
  * Represents the xDS configuration tree for a specified Listener.
  */
-public class XdsConfig {
-  final LdsUpdate listener;
-  final RdsUpdate route;
-  final Map<String, StatusOr<XdsClusterConfig>> clusters;
+final class XdsConfig {
+  private final LdsUpdate listener;
+  private final RdsUpdate route;
+  private final ImmutableMap<String, StatusOr<XdsClusterConfig>> clusters;
   private final int hashCode;
 
   XdsConfig(LdsUpdate listener, RdsUpdate route, Map<String, StatusOr<XdsClusterConfig>> clusters) {
+    this(listener, route, ImmutableMap.copyOf(clusters));
+  }
+
+  public XdsConfig(LdsUpdate listener, RdsUpdate route, ImmutableMap<String,
+      StatusOr<XdsClusterConfig>> clusters) {
     this.listener = listener;
     this.route = route;
     this.clusters = clusters;
@@ -53,8 +59,8 @@ public class XdsConfig {
 
     XdsConfig o = (XdsConfig) obj;
 
-    return Objects.equals(listener, o.listener) && Objects.equals(route, o.route)
-        && Objects.equals(clusters, o.clusters);
+    return hashCode() == o.hashCode() && Objects.equals(listener, o.listener)
+        && Objects.equals(route, o.route) && Objects.equals(clusters, o.clusters);
   }
 
   @Override
@@ -67,8 +73,20 @@ public class XdsConfig {
     StringBuilder builder = new StringBuilder();
     builder.append("XdsConfig{listener=").append(listener)
         .append(", route=").append(route)
-        .append(", clusters={").append(clusters).append("}}");
+        .append(", clusters=").append(clusters).append("}");
     return builder.toString();
+  }
+
+  public LdsUpdate getListener() {
+    return listener;
+  }
+
+  public RdsUpdate getRoute() {
+    return route;
+  }
+
+  public ImmutableMap<String, StatusOr<XdsClusterConfig>> getClusters() {
+    return clusters;
   }
 
   public static class XdsClusterConfig {
@@ -138,6 +156,8 @@ public class XdsConfig {
     }
 
     XdsConfigBuilder addCluster(String name, StatusOr<XdsClusterConfig> clusterConfig) {
+      checkNotNull(name, "name");
+      checkNotNull(clusterConfig, "clusterConfig");
       clusters.put(name, clusterConfig);
       return this;
     }
