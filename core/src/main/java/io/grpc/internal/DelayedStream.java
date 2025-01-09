@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -30,7 +31,6 @@ import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.GuardedBy;
 
 /**

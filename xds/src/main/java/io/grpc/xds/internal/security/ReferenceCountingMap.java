@@ -20,9 +20,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import java.util.HashMap;
 import java.util.Map;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**

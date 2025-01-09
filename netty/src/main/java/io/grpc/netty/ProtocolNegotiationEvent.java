@@ -20,10 +20,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz.Security;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /**
