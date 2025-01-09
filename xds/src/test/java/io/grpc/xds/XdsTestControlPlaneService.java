@@ -119,6 +119,11 @@ final class XdsTestControlPlaneService extends
     });
   }
 
+  ImmutableMap<String, Message> getCurrentConfig(String type) {
+    HashMap<String, Message> hashMap = xdsResources.get(type);
+    return (hashMap != null) ? ImmutableMap.copyOf(hashMap) : ImmutableMap.of();
+  }
+
   @Override
   public StreamObserver<DiscoveryRequest> streamAggregatedResources(
       final StreamObserver<DiscoveryResponse> responseObserver) {

@@ -186,6 +186,44 @@ public class XdsTestUtils {
     service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
   }
 
+  static void addAggregateToExistingConfig(XdsTestControlPlaneService service, String rootName, List<String> children) {
+    Map<String, Message> clusterMap = new HashMap<>(service.getCurrentConfig(ADS_TYPE_URL_CDS));
+    if (clusterMap.containsKey(rootName)) {
+      throw new IllegalArgumentException("Root cluster " + rootName + " already exists");
+    }
+    ClusterConfig rootConfig = ClusterConfig.newBuilder().addAllClusters(children).build();
+    Cluster.CustomClusterType type =
+        Cluster.CustomClusterType.newBuilder()
+            .setName(XdsClusterResource.AGGREGATE_CLUSTER_TYPE_NAME)
+            .setTypedConfig(Any.pack(rootConfig))
+            .build();
+    Cluster.Builder builder = Cluster.newBuilder().setName(rootName).setClusterType(type);
+    builder.setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN);
+    Cluster cluster = builder.build();
+    clusterMap.put(rootName, cluster);
+
+    for (String child : children) {
+      if (clusterMap.containsKey(child)) {
+        continue;
+      }
+      Cluster childCluster = ControlPlaneRule.buildCluster(child, getEdsNameForCluster(child));
+      clusterMap.put(child, childCluster);
+    }
+
+    service.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+
+    Map<String, Message> edsMap = new HashMap<>(service.getCurrentConfig(ADS_TYPE_URL_EDS));
+    for (String child : children) {
+      if (edsMap.containsKey(getEdsNameForCluster(child))) {
+        continue;
+      }
+      ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
+          child, ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
+      edsMap.put(getEdsNameForCluster(child), clusterLoadAssignment);
+    }
+    service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+  }
+
   static XdsConfig getDefaultXdsConfig(String serverHostName)
       throws XdsResourceType.ResourceInvalidException, IOException {
     XdsConfig.XdsConfigBuilder builder = new XdsConfig.XdsConfigBuilder();

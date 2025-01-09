@@ -26,7 +26,9 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static io.grpc.xds.XdsTestUtils.CLUSTER_NAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_HOSTNAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_PORT;
+import static io.grpc.xds.XdsTestUtils.RDS_NAME;
 import static io.grpc.xds.XdsTestUtils.getEdsNameForCluster;
+import static io.grpc.xds.client.CommonBootstrapperTestUtils.RDS_RESOURCE;
 import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,7 +39,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -60,14 +65,18 @@ import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsTransportFactory;
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
@@ -228,6 +237,69 @@ public class XdsDependencyManagerTest {
       assertThat(endpoint.hasValue()).isTrue();
       assertThat(endpoint.getValue().clusterName).isEqualTo(getEdsNameForCluster(childName));
     }
+  }
+
+  @Test
+  public void testComplexRegisteredAggregate() throws IOException {
+    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+
+    // Do initialization
+    String rootName1 = "root_c";
+    List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
+    XdsTestUtils.addAggregateToExistingConfig(controlPlaneService, rootName1, childNames);
+
+    String rootName2 = "root_2";
+    List<String> childNames2 = Arrays.asList("clusterA", "clusterX");
+    XdsTestUtils.addAggregateToExistingConfig(controlPlaneService, rootName2, childNames2);
+
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(any());
+
+    Closeable subscription1 = xdsDependencyManager.subscribeToCluster(rootName1);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(any());
+
+    Closeable subscription2 = xdsDependencyManager.subscribeToCluster(rootName2);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    testWatcher.verifyStats(3, 0, 0);
+    Set<String> expectedClusters = new HashSet<>();
+    expectedClusters.addAll(ImmutableList.of(rootName1, rootName2, CLUSTER_NAME));
+    expectedClusters.addAll(childNames);
+    expectedClusters.addAll(childNames2);
+    assertThat(xdsConfigCaptor.getValue().getClusters().keySet()).isEqualTo(expectedClusters);
+
+    // Close 1 subscription shouldn't affect the other or RDS subscriptions
+    subscription1.close();
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    Set<String> expectedClusters2 = new HashSet<>();
+    expectedClusters.addAll(ImmutableList.of(rootName2, CLUSTER_NAME));
+    expectedClusters.addAll(childNames2);
+    assertThat(xdsConfigCaptor.getValue().getClusters().keySet()).isEqualTo(expectedClusters2);
+
+    subscription2.close();
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
+  }
+
+  @Test
+  public void testDelayedSubscription() {
+    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
+
+    String rootName1 = "root_c";
+    List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
+
+    Closeable subscription1 = xdsDependencyManager.subscribeToCluster(rootName1);
+    fakeClock.forwardTime(16, TimeUnit.SECONDS);
+    inOrder.verify(xdsConfigWatcher).onUpdate(xdsConfigCaptor.capture());
+    assertThat(xdsConfigCaptor.getValue().getClusters().get(rootName1).toString()).isEqualTo(
+        StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
+            "No " + toContextStr(CLUSTER_TYPE_NAME, rootName1))).toString());
+
+    XdsTestUtils.addAggregateToExistingConfig(controlPlaneService, rootName1, childNames);
+    inOrder.verify(xdsConfigWatcher).onUpdate(xdsConfigCaptor.capture());
+    assertThat(xdsConfigCaptor.getValue().getClusters().get(rootName1).hasValue()).isTrue();
   }
 
   @Test
