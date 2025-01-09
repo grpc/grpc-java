@@ -24,6 +24,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
+import com.google.common.io.Files;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
@@ -178,26 +179,9 @@ public class AdvancedTlsX509TrustManagerTest {
     fakeClock.forwardTime(1, TimeUnit.MINUTES);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
 
-    replaceFile(serverCert1File, serverCert0File);
+    Files.copy(serverCert1File, serverCert0File);
     fakeClock.forwardTime(1, TimeUnit.MINUTES);
     assertArrayEquals(serverCert1, trustManager.getAcceptedIssuers());
-  }
-
-  private void replaceFile(File source, File target) throws IOException {
-    FileInputStream in = new FileInputStream(source);
-    FileOutputStream out = new FileOutputStream(target);
-    InputStream is = new BufferedInputStream(in);
-    OutputStream os = new BufferedOutputStream(out);
-    try {
-      int b;
-      while ((b = is.read()) != -1) {
-        os.write(b);
-      }
-      os.flush();
-    } finally {
-      is.close();
-      os.close();
-    }
   }
 
   private static class TestHandler extends Handler {
