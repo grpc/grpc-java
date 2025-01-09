@@ -16,8 +16,8 @@
 
 package io.grpc.binder;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Status;
-import javax.annotation.CheckReturnValue;
 
 /**
  * Decides whether a given Android UID is authorized to access some resource.

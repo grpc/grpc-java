@@ -20,9 +20,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicReferenceArray;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
