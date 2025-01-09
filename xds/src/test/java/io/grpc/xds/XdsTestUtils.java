@@ -186,7 +186,8 @@ public class XdsTestUtils {
     service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
   }
 
-  static void addAggregateToExistingConfig(XdsTestControlPlaneService service, String rootName, List<String> children) {
+  static void addAggregateToExistingConfig(XdsTestControlPlaneService service, String rootName,
+                                           List<String> children) {
     Map<String, Message> clusterMap = new HashMap<>(service.getCurrentConfig(ADS_TYPE_URL_CDS));
     if (clusterMap.containsKey(rootName)) {
       throw new IllegalArgumentException("Root cluster " + rootName + " already exists");

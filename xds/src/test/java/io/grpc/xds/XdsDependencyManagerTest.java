@@ -26,9 +26,7 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static io.grpc.xds.XdsTestUtils.CLUSTER_NAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_HOSTNAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_PORT;
-import static io.grpc.xds.XdsTestUtils.RDS_NAME;
 import static io.grpc.xds.XdsTestUtils.getEdsNameForCluster;
-import static io.grpc.xds.client.CommonBootstrapperTestUtils.RDS_RESOURCE;
 import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,10 +37,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -72,7 +68,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -262,18 +257,17 @@ public class XdsDependencyManagerTest {
     Closeable subscription2 = xdsDependencyManager.subscribeToCluster(rootName2);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
     testWatcher.verifyStats(3, 0, 0);
-    Set<String> expectedClusters = new HashSet<>();
-    expectedClusters.addAll(ImmutableList.of(rootName1, rootName2, CLUSTER_NAME));
-    expectedClusters.addAll(childNames);
-    expectedClusters.addAll(childNames2);
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    Set<String> expectedClusters = builder.add(rootName1).add(rootName2).add(CLUSTER_NAME)
+            .addAll(childNames).addAll(childNames2).build();
     assertThat(xdsConfigCaptor.getValue().getClusters().keySet()).isEqualTo(expectedClusters);
 
     // Close 1 subscription shouldn't affect the other or RDS subscriptions
     subscription1.close();
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
-    Set<String> expectedClusters2 = new HashSet<>();
-    expectedClusters.addAll(ImmutableList.of(rootName2, CLUSTER_NAME));
-    expectedClusters.addAll(childNames2);
+    builder = ImmutableSet.builder();
+    Set<String> expectedClusters2 =
+        builder.add(rootName2).add(CLUSTER_NAME).addAll(childNames2).build();
     assertThat(xdsConfigCaptor.getValue().getClusters().keySet()).isEqualTo(expectedClusters2);
 
     subscription2.close();
@@ -291,6 +285,7 @@ public class XdsDependencyManagerTest {
     List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
 
     Closeable subscription1 = xdsDependencyManager.subscribeToCluster(rootName1);
+    assertThat(subscription1).isNotNull();
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsConfigCaptor.capture());
     assertThat(xdsConfigCaptor.getValue().getClusters().get(rootName1).toString()).isEqualTo(

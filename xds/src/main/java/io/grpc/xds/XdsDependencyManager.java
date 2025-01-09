@@ -611,7 +611,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   // Must be in SyncContext
   private void cleanUpRoutes() {
     // Remove RdsWatcher & CDS Watchers
-    TypeWatchers<?> rdsResourceWatcher = resourceWatchers.get(XdsRouteConfigureResource.getInstance());
+    TypeWatchers<?> rdsResourceWatcher =
+        resourceWatchers.get(XdsRouteConfigureResource.getInstance());
     if (rdsResourceWatcher == null) {
       return;
     }
