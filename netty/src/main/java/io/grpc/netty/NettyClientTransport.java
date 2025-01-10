@@ -63,6 +63,7 @@ import java.nio.channels.ClosedChannelException;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -70,6 +71,8 @@ import javax.annotation.Nullable;
  */
 class NettyClientTransport implements ConnectionClientTransport {
 
+  private static final boolean enablePerRpcAuthorityCheck =
+          GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false);
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress remoteAddress;
@@ -105,6 +108,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
+  private final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
 
   NettyClientTransport(
       SocketAddress address,
@@ -197,11 +201,11 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (callOptions.getAuthority() != null) {
       Status verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
       if (!verificationStatus.isOk()) {
-        if (GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false)) {
+        if (enablePerRpcAuthorityCheck) {
           return new FailingClientStream(verificationStatus, tracers);
         }
-        channelLogger.log(ChannelLogger.ChannelLogLevel.WARNING, "Authority '{}' specified via "
-                + "call options for rpc did not match peer certificate's subject names.");
+        logger.warning("Authority verification for the rpc failed (This will be an error in the "
+                + "future) with error status: " + verificationStatus.getDescription());
       }
     }
     StatsTraceContext statsTraceCtx =

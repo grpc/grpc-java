@@ -110,7 +110,6 @@ import java.security.KeyStore;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -125,7 +124,6 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
 import org.junit.After;
@@ -146,6 +144,15 @@ public class NettyClientTransportTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final SslContext SSL_CONTEXT = createSslContext();
+  private static final Class<?> x509ExtendedTrustManagerClass;
+
+  static {
+    try {
+      x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException(e);
+    }
+  }
 
   @Mock
   private ManagedClientTransport.Listener clientTransportListener;
@@ -846,8 +853,7 @@ public class NettyClientTransportTest {
     try {
       startServer();
       InputStream caCert = TlsTesting.loadCert("ca.pem");
-      X509TrustManager x509ExtendedTrustManager =
-              (X509TrustManager) getX509ExtendedTrustManager(caCert).get();
+      X509TrustManager x509ExtendedTrustManager = (X509TrustManager) getX509ExtendedTrustManager(caCert);
       ProtocolNegotiators.FromChannelCredentialsResult result =
               ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
                       .trustManager(new FakeTrustManager(x509ExtendedTrustManager)).build());
@@ -963,11 +969,10 @@ public class NettyClientTransportTest {
     InputStream caCert = TlsTesting.loadCert("ca.pem");
     SslContext clientContext = GrpcSslContexts.forClient().trustManager(caCert).build();
     return ProtocolNegotiators.tls(clientContext,
-        (X509ExtendedTrustManager) getX509ExtendedTrustManager(
-            TlsTesting.loadCert("ca.pem")).get());
+        (X509TrustManager) getX509ExtendedTrustManager(TlsTesting.loadCert("ca.pem")));
   }
 
-  private static java.util.Optional<TrustManager> getX509ExtendedTrustManager(InputStream rootCerts)
+  private static TrustManager getX509ExtendedTrustManager(InputStream rootCerts)
       throws GeneralSecurityException {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     try {
@@ -985,8 +990,12 @@ public class NettyClientTransportTest {
     TrustManagerFactory trustManagerFactory =
         TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     trustManagerFactory.init(ks);
-    return Arrays.stream(trustManagerFactory.getTrustManagers())
-        .filter(trustManager -> trustManager instanceof X509ExtendedTrustManager).findFirst();
+    for (TrustManager trustManager : trustManagerFactory.getTrustManagers()) {
+      if (x509ExtendedTrustManagerClass.isInstance(trustManager)) {
+        return trustManager;
+      }
+    }
+    return null;
   }
 
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator) {
