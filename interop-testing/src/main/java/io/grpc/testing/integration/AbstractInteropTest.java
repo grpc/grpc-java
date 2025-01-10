@@ -167,7 +167,7 @@ public abstract class AbstractInteropTest {
       new AtomicReference<>();
   private final AtomicReference<ClientCall<?, ?>> clientCallCapture =
       new AtomicReference<>();
-  private final ThreadLocal<ClientCall<?, ?>> threadClientCallCapture =
+  private static final ThreadLocal<ClientCall<?, ?>> threadClientCallCapture =
       new ThreadLocal<>();
   private final AtomicReference<Metadata> requestHeadersCapture =
       new AtomicReference<>();
