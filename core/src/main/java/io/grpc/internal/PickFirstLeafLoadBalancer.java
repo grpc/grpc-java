@@ -60,17 +60,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
+  private final boolean enableHappyEyeballs = !isSerializingRetries()
+      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
-  private final Index addressIndex = Index.create(ImmutableList.of());
+  private final Index addressIndex = new Index(ImmutableList.of(), this.enableHappyEyeballs);
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
   private ScheduledHandle scheduleConnectionTask = null;
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
-  private final boolean enableHappyEyeballs = !isSerializingRetries()
-      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   private boolean notAPetiolePolicy = true; // means not under a petiole policy
   private final BackoffPolicy.Provider bkoffPolProvider = new ExponentialBackoffPolicy.Provider();
   private BackoffPolicy reconnectPolicy;
@@ -611,241 +611,86 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
-  interface Index {
-    static Index create(List<EquivalentAddressGroup> groups) {
-      if (PickFirstLoadBalancerProvider.isEnabledHappyEyeballs()) {
-        return new IndexHappyEyeballs(groups);
-      } else {
-        return new IndexNonHE(groups);
-      }
-    }
-
-    boolean isValid();
-
-    boolean isAtBeginning();
-
-    /**
-     * Move to next address in group.  If last address in group move to first address of next group.
-     *
-     * @return false if went off end of the list, otherwise true
-     */
-    boolean increment();
-
-    void reset();
-
-    SocketAddress getCurrentAddress();
-
-    Attributes getCurrentEagAttributes();
-
-    List<EquivalentAddressGroup> getCurrentEagAsList();
-
-    /**
-     * Update to new groups, resetting the current index.
-     */
-    void updateGroups(List<EquivalentAddressGroup> newGroups);
-
-    /**
-     * Returns false if the needle was not found and the current index was left unchanged.
-     */
-    boolean seekTo(SocketAddress needle);
-
-    int size();
-
-    int getGroupIndex();
-  }
-
-  /**
-   * IndexNonHE as in 'i', the pointer to an entry. Not a "search index."
-   * All updates should be done in a synchronization context.
-   */
   @VisibleForTesting
-  private static final class IndexNonHE implements Index {
-    private List<EquivalentAddressGroup> addressGroups;
-    private int size;
-    private int groupIndex;
-    private int addressIndex;
+  static final class Index {
+    private List<UnwrappedEag> orderedAddresses = new ArrayList<>();
+    private int activeElement = 0;
+    private boolean enableHappyEyeballs;
 
-    public IndexNonHE(List<EquivalentAddressGroup> groups) {
+    Index(List<EquivalentAddressGroup> groups, boolean enableHappyEyeballs) {
+      this.enableHappyEyeballs = enableHappyEyeballs;
       updateGroups(groups);
     }
 
-    @Override
-    public boolean isValid() {
-      // Is invalid if empty or has incremented off the end
-      return groupIndex < addressGroups.size();
-    }
-
-    @Override
-    public boolean isAtBeginning() {
-      return groupIndex == 0 && addressIndex == 0;
-    }
-
-    /**
-     * Move to next address in group.  If last address in group move to first address of next group.
-     * @return false if went off end of the list, otherwise true
-     */
-    @Override
-    public boolean increment() {
+    boolean increment() {
       if (!isValid()) {
         return false;
       }
 
-      EquivalentAddressGroup group = addressGroups.get(groupIndex);
-      addressIndex++;
-      if (addressIndex >= group.getAddresses().size()) {
-        groupIndex++;
-        addressIndex = 0;
-        return groupIndex < addressGroups.size();
-      }
-
-      return true;
-    }
-
-    @Override
-    public void reset() {
-      groupIndex = 0;
-      addressIndex = 0;
-    }
-
-    @Override
-    public SocketAddress getCurrentAddress() {
-      if (!isValid()) {
-        throw new IllegalStateException("Index is past the end of the address group list");
-      }
-      return addressGroups.get(groupIndex).getAddresses().get(addressIndex);
-    }
-
-    @Override
-    public Attributes getCurrentEagAttributes() {
-      if (!isValid()) {
-        throw new IllegalStateException("Index is off the end of the address group list");
-      }
-      return addressGroups.get(groupIndex).getAttributes();
-    }
-
-    @Override
-    public List<EquivalentAddressGroup> getCurrentEagAsList() {
-      return Collections.singletonList(
-          new EquivalentAddressGroup(getCurrentAddress(), getCurrentEagAttributes()));
-    }
-
-    /**
-     * Update to new groups, resetting the current index.
-     */
-    @Override
-    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
-      addressGroups = checkNotNull(newGroups, "newGroups");
-      reset();
-      int size = 0;
-      for (EquivalentAddressGroup eag : newGroups) {
-        size += eag.getAddresses().size();
-      }
-      this.size = size;
-    }
-
-    /**
-     * Returns false if the needle was not found and the current index was left unchanged.
-     */
-    @Override
-    public boolean seekTo(SocketAddress needle) {
-      for (int i = 0; i < addressGroups.size(); i++) {
-        EquivalentAddressGroup group = addressGroups.get(i);
-        int j = group.getAddresses().indexOf(needle);
-        if (j == -1) {
-          continue;
-        }
-        this.groupIndex = i;
-        this.addressIndex = j;
-        return true;
-      }
-      return false;
-    }
-
-    @Override
-    public int size() {
-      return size;
-    }
-
-    @Override
-    public int getGroupIndex() {
-      return groupIndex;
-    }
-  }
-
-  private static final class IndexHappyEyeballs implements Index {
-    private List<EquivalentAddressGroup> addressGroups;
-    private List<InterleavedEntry> interleavedAddresses = new ArrayList<>();
-    private int interleavedIndex = 0;
-
-    public IndexHappyEyeballs(List<EquivalentAddressGroup> groups) {
-      updateGroups(groups);
-    }
-
-    @Override
-    public boolean increment() {
-      if (!isValid()) {
-        return false;
-      }
-
-      interleavedIndex++;
+      activeElement++;
 
       return isValid();
     }
 
-    @Override
-    public boolean isValid() {
-      return interleavedIndex < interleavedAddresses.size();
+    boolean isValid() {
+      return activeElement < orderedAddresses.size();
     }
 
-    @Override
-    public boolean isAtBeginning() {
-      return interleavedIndex == 0;
+    boolean isAtBeginning() {
+      return activeElement == 0;
     }
 
-    @Override
-    public void reset() {
-      interleavedIndex = 0;
+    void reset() {
+      activeElement = 0;
     }
 
-    @Override
-    public SocketAddress getCurrentAddress() {
+    SocketAddress getCurrentAddress() {
       if (!isValid()) {
         throw new IllegalStateException("Index is past the end of the address group list");
       }
-      return interleavedAddresses.get(interleavedIndex).address;
+      return orderedAddresses.get(activeElement).address;
     }
 
-    @Override
-    public Attributes getCurrentEagAttributes() {
-      return getCurrentEag().getAttributes();
+    Attributes getCurrentEagAttributes() {
+      return orderedAddresses.get(activeElement).attributes;
     }
 
-    @Override
-    public List<EquivalentAddressGroup> getCurrentEagAsList() {
+    private List<EquivalentAddressGroup> getCurrentEagAsList() {
       return Collections.singletonList(getCurrentEag());
-    }
-
-    @Override
-    public int getGroupIndex() {
-      if (!isValid()) {
-        throw new IllegalStateException("Index is past the end of the address group list");
-      }
-      return interleavedAddresses.get(interleavedIndex).addressGroup;
     }
 
     private EquivalentAddressGroup getCurrentEag() {
       if (!isValid()) {
         throw new IllegalStateException("Index is past the end of the address group list");
       }
-      return addressGroups.get(interleavedAddresses.get(interleavedIndex).addressGroup);
+      return orderedAddresses.get(activeElement).asEag();
     }
 
-    @Override
-    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
-      addressGroups = checkNotNull(newGroups, "newGroups");
+    void updateGroups(List<EquivalentAddressGroup> newGroups) {
+      checkNotNull(newGroups, "newGroups");
+      orderedAddresses = enableHappyEyeballs
+                             ? updateGroupsHE(newGroups)
+                             : updateGroupsNonHE(newGroups);
+      reset();
+    }
+
+    private List<UnwrappedEag> updateGroupsNonHE(List<EquivalentAddressGroup> newGroups) {
+      List<UnwrappedEag> entries = new ArrayList<>();
+      for (int g = 0; g < newGroups.size(); g++) {
+        EquivalentAddressGroup eag = newGroups.get(g);
+        for (int a = 0; a < eag.getAddresses().size(); a++) {
+          SocketAddress addr = eag.getAddresses().get(a);
+          entries.add(new UnwrappedEag(eag.getAttributes(), addr));
+        }
+      }
+
+      return entries;
+    }
+
+    private List<UnwrappedEag> updateGroupsHE(List<EquivalentAddressGroup> newGroups) {
       Boolean firstIsV6 = null;
-      List<InterleavedEntry> v4Entries = new ArrayList<>();
-      List<InterleavedEntry> v6Entries = new ArrayList<>();
+      List<UnwrappedEag> v4Entries = new ArrayList<>();
+      List<UnwrappedEag> v6Entries = new ArrayList<>();
       for (int g = 0; g <  newGroups.size(); g++) {
         EquivalentAddressGroup eag = newGroups.get(g);
         for (int a = 0; a < eag.getAddresses().size(); a++) {
@@ -856,26 +701,23 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             if (firstIsV6 == null) {
               firstIsV6 = false;
             }
-            v4Entries.add(new InterleavedEntry(g, addr));
+            v4Entries.add(new UnwrappedEag(eag.getAttributes(), addr));
           } else {
             if (firstIsV6 == null) {
               firstIsV6 = true;
             }
-            v6Entries.add(new InterleavedEntry(g, addr));
+            v6Entries.add(new UnwrappedEag(eag.getAttributes(), addr));
           }
         }
       }
 
-      this.interleavedAddresses =
-          firstIsV6 != null && firstIsV6
+      return firstIsV6 != null && firstIsV6
           ? interleave(v6Entries, v4Entries)
           : interleave(v4Entries, v6Entries);
-
-      reset();
     }
 
-    private static List<InterleavedEntry> interleave(List<InterleavedEntry> firstFamily,
-                                                     List<InterleavedEntry> secondFamily) {
+    private List<UnwrappedEag> interleave(List<UnwrappedEag> firstFamily,
+                                          List<UnwrappedEag> secondFamily) {
       if (firstFamily.isEmpty()) {
         return secondFamily;
       }
@@ -883,7 +725,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         return firstFamily;
       }
 
-      List<InterleavedEntry> result = new ArrayList<>();
+      List<UnwrappedEag> result = new ArrayList<>();
       for (int i = 0; i < Math.max(firstFamily.size(), secondFamily.size()); i++) {
         if (i < firstFamily.size()) {
           result.add(firstFamily.get(i));
@@ -895,37 +737,43 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return result;
     }
 
-    @Override
-    public boolean seekTo(SocketAddress needle) {
+    boolean seekTo(SocketAddress needle) {
       checkNotNull(needle, "needle");
-      for (int i = 0; i < interleavedAddresses.size(); i++) {
-        if (interleavedAddresses.get(i).address.equals(needle)) {
-          this.interleavedIndex = i;
+      for (int i = 0; i < orderedAddresses.size(); i++) {
+        if (orderedAddresses.get(i).address.equals(needle)) {
+          this.activeElement = i;
           return true;
         }
       }
       return false;
     }
 
-    @Override
-    public int size() {
-      return interleavedAddresses.size();
+    int size() {
+      return orderedAddresses.size();
     }
 
-    private static final class InterleavedEntry {
-      private final int addressGroup;
+    int getActiveElement() {
+      return activeElement;
+    }
+
+    private final class UnwrappedEag {
+      private final Attributes attributes;
       private final SocketAddress address;
 
-      public InterleavedEntry(int addressGroup, SocketAddress address) {
-        this.addressGroup = addressGroup;
+      public UnwrappedEag(Attributes attributes, SocketAddress address) {
+        this.attributes = attributes;
         this.address = address;
+      }
+
+      private EquivalentAddressGroup asEag() {
+        return new EquivalentAddressGroup(address, attributes);
       }
     }
   }
 
   @VisibleForTesting
-  int getGroupIndex() {
-    return addressIndex.getGroupIndex();
+  int getIndexLocation() {
+    return addressIndex.activeElement;
   }
 
   @VisibleForTesting

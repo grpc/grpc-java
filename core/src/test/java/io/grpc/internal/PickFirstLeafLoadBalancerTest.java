@@ -2620,7 +2620,7 @@ public class PickFirstLeafLoadBalancerTest {
     forwardTimeByBackoffDelay(); // should trigger retry again
     for (int i = 0; i < subchannels.length; i++) {
       inOrder.verify(subchannels[i]).requestConnection();
-      assertEquals(i, loadBalancer.getGroupIndex());
+      assertEquals(i, loadBalancer.getIndexLocation());
       listeners[i].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error)); // cascade
     }
   }
@@ -2636,10 +2636,10 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr3 = new FakeSocketAddress("addr3");
     SocketAddress addr4 = new FakeSocketAddress("addr4");
     SocketAddress addr5 = new FakeSocketAddress("addr5");
-    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1, addr2), attr1),
         new EquivalentAddressGroup(Arrays.asList(addr3), attr2),
-        new EquivalentAddressGroup(Arrays.asList(addr4, addr5), attr3)));
+        new EquivalentAddressGroup(Arrays.asList(addr4, addr5), attr3)), enableHappyEyeballs);
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1);
     assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attr1);
     assertThat(index.isAtBeginning()).isTrue();
@@ -2696,9 +2696,9 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr1 = new FakeSocketAddress("addr1");
     SocketAddress addr2 = new FakeSocketAddress("addr2");
     SocketAddress addr3 = new FakeSocketAddress("addr3");
-    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1)),
-        new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
+        new EquivalentAddressGroup(Arrays.asList(addr2, addr3))), enableHappyEyeballs);
     index.increment();
     index.increment();
     // We want to make sure both groupIndex and addressIndex are reset
@@ -2713,9 +2713,9 @@ public class PickFirstLeafLoadBalancerTest {
     SocketAddress addr1 = new FakeSocketAddress("addr1");
     SocketAddress addr2 = new FakeSocketAddress("addr2");
     SocketAddress addr3 = new FakeSocketAddress("addr3");
-    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
+    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
         new EquivalentAddressGroup(Arrays.asList(addr1, addr2)),
-        new EquivalentAddressGroup(Arrays.asList(addr3))));
+        new EquivalentAddressGroup(Arrays.asList(addr3))), enableHappyEyeballs);
     assertThat(index.seekTo(addr3)).isTrue();
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr3);
     assertThat(index.seekTo(addr1)).isTrue();
@@ -2736,47 +2736,57 @@ public class PickFirstLeafLoadBalancerTest {
     InetSocketAddress addr4_4 = new InetSocketAddress("10.1.1.4", 1234);
     InetSocketAddress addr4_6 = new InetSocketAddress("f38:1:4", 1234);
 
-    PickFirstLeafLoadBalancer.Index index = PickFirstLeafLoadBalancer.Index.create(Arrays.asList(
-        new EquivalentAddressGroup(Arrays.asList(addr1_4, addr1_6)),
-        new EquivalentAddressGroup(Arrays.asList(addr2_4)),
-        new EquivalentAddressGroup(Arrays.asList(addr3_4)),
-        new EquivalentAddressGroup(Arrays.asList(addr4_4, addr4_6))));
+    Attributes attrs1 = Attributes.newBuilder().build();
+    Attributes attrs2 = Attributes.newBuilder().build();
+    Attributes attrs3 = Attributes.newBuilder().build();
+    Attributes attrs4 = Attributes.newBuilder().build();
+
+    PickFirstLeafLoadBalancer.Index index = new PickFirstLeafLoadBalancer.Index(Arrays.asList(
+        new EquivalentAddressGroup(Arrays.asList(addr1_4, addr1_6), attrs1),
+        new EquivalentAddressGroup(Arrays.asList(addr2_4), attrs2),
+        new EquivalentAddressGroup(Arrays.asList(addr3_4), attrs3),
+        new EquivalentAddressGroup(Arrays.asList(addr4_4, addr4_6), attrs4)), enableHappyEyeballs);
 
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1_4);
+    assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attrs1);
     assertThat(index.isAtBeginning()).isTrue();
 
     index.increment();
-    assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1_6);
-    assertThat(index.isAtBeginning()).isFalse();
     assertThat(index.isValid()).isTrue();
-    assertThat(index.getGroupIndex()).isEqualTo(0);
+    assertThat(index.getCurrentAddress()).isSameInstanceAs(addr1_6);
+    assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attrs1);
+    assertThat(index.isAtBeginning()).isFalse();
 
     index.increment();
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2_4);
-    assertThat(index.getGroupIndex()).isEqualTo(1);
+    assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attrs2);
 
     index.increment();
     if (enableHappyEyeballs) {
       assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_6);
-      assertThat(index.getGroupIndex()).isEqualTo(3);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attrs4);
     } else {
       assertThat(index.getCurrentAddress()).isSameInstanceAs(addr3_4);
-      assertThat(index.getGroupIndex()).isEqualTo(2);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attrs3);
     }
 
     index.increment();
     if (enableHappyEyeballs) {
       assertThat(index.getCurrentAddress()).isSameInstanceAs(addr3_4);
-      assertThat(index.getGroupIndex()).isEqualTo(2);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attrs3);
     } else {
       assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_4);
-      assertThat(index.getGroupIndex()).isEqualTo(3);
+      assertThat(index.getCurrentEagAttributes()).isSameInstanceAs(attrs4);
     }
 
     // Move to last entry
     assertThat(index.increment()).isTrue();
     assertThat(index.isValid()).isTrue();
-    assertThat(index.getGroupIndex()).isEqualTo(3);
+    if (enableHappyEyeballs) {
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_4);
+    } else {
+      assertThat(index.getCurrentAddress()).isSameInstanceAs(addr4_6);
+    }
 
     // Move off of the end
     assertThat(index.increment()).isFalse();
