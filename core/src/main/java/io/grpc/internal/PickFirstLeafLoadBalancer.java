@@ -752,11 +752,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return orderedAddresses.size();
     }
 
-    int getActiveElement() {
-      return activeElement;
-    }
-
-    private final class UnwrappedEag {
+    private static final class UnwrappedEag {
       private final Attributes attributes;
       private final SocketAddress address;
 
