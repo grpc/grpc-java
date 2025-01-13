@@ -303,7 +303,8 @@ final class ServletServerStream extends AbstractServerStream {
         try {
           asyncCtx.complete();
         } catch (IllegalStateException ignored) {
-          // Tomcat can throw "Calling [asyncComplete()] is not valid for a request with Async state [COMPLETING]"
+          // Tomcat can throw:
+          // Calling [asyncComplete()] is not valid for a request with Async state [COMPLETING]
         }
         countDownLatch.countDown();
       });
