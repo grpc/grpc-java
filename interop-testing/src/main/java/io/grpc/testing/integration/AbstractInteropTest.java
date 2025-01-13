@@ -1874,7 +1874,7 @@ public abstract class AbstractInteropTest {
       }
       long earliestNextStartNs = System.nanoTime()
           + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-      // recordClientCallInterceptor takes an AtomicReference
+      // recordClientCallInterceptor takes an AtomicReference.
       AtomicReference<ClientCall<?, ?>> soakThreadClientCallCapture = new AtomicReference<>();
       currentChannel = maybeCreateChannel.apply(currentChannel);
       TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
