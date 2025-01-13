@@ -31,7 +31,7 @@ public class StatusRuntimeExceptionTest {
   @Test
   public void internalCtorRemovesStack() {
     StackTraceElement[] trace =
-        new StatusRuntimeException(Status.CANCELLED, null, false) {}.getStackTrace();
+        new InternalStatusRuntimeException(Status.CANCELLED, null) {}.getStackTrace();
 
     assertThat(trace).isEmpty();
   }

@@ -50,6 +50,7 @@ import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.Locality;
+import io.envoyproxy.envoy.config.core.v3.Metadata;
 import io.envoyproxy.envoy.config.core.v3.PathConfigSource;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
 import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
@@ -84,6 +85,7 @@ import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.Audience;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
@@ -127,6 +129,7 @@ import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
@@ -140,7 +143,6 @@ import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
-import io.grpc.xds.client.XdsResourceType.StructOrError;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
@@ -939,7 +941,7 @@ public class GrpcXdsClientImplDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
                     .setFilterState(
                         FilterState.newBuilder()
-                            .setKey(XdsResourceType.HASH_POLICY_FILTER_STATE_KEY)))
+                            .setKey(XdsRouteConfigureResource.HASH_POLICY_FILTER_STATE_KEY)))
             .addHashPolicy(
                 io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
                     .setQueryParameter(
@@ -2341,6 +2343,173 @@ public class GrpcXdsClientImplDataTest {
     XdsClusterResource.processCluster(cluster3, null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
   }
+
+  @Test
+  public void processCluster_parsesMetadata()
+      throws ResourceInvalidException, InvalidProtocolBufferException {
+    MetadataRegistry metadataRegistry = MetadataRegistry.getInstance();
+
+    MetadataValueParser testParser =
+        new MetadataValueParser() {
+          @Override
+          public String getTypeUrl() {
+            return "type.googleapis.com/test.Type";
+          }
+
+          @Override
+          public Object parse(Any value) {
+            assertThat(value.getValue().toStringUtf8()).isEqualTo("test");
+            return value.getValue().toStringUtf8() + "_processed";
+          }
+        };
+    metadataRegistry.registerParser(testParser);
+
+    Any typedFilterMetadata = Any.newBuilder()
+        .setTypeUrl("type.googleapis.com/test.Type")
+        .setValue(ByteString.copyFromUtf8("test"))
+        .build();
+
+    Struct filterMetadata = Struct.newBuilder()
+        .putFields("key1", Value.newBuilder().setStringValue("value1").build())
+        .putFields("key2", Value.newBuilder().setNumberValue(42).build())
+        .build();
+
+    Metadata metadata = Metadata.newBuilder()
+        .putTypedFilterMetadata("TYPED_FILTER_METADATA", typedFilterMetadata)
+        .putFilterMetadata("FILTER_METADATA", filterMetadata)
+        .build();
+
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .setMetadata(metadata)
+        .build();
+
+    CdsUpdate update = XdsClusterResource.processCluster(
+        cluster, null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
+
+    ImmutableMap<String, Object> expectedParsedMetadata = ImmutableMap.of(
+        "TYPED_FILTER_METADATA", "test_processed",
+        "FILTER_METADATA", ImmutableMap.of(
+            "key1", "value1",
+            "key2", 42.0));
+    assertThat(update.parsedMetadata()).isEqualTo(expectedParsedMetadata);
+    metadataRegistry.removeParser(testParser);
+  }
+
+  @Test
+  public void processCluster_parsesAudienceMetadata()
+      throws ResourceInvalidException, InvalidProtocolBufferException {
+    MetadataRegistry.getInstance();
+
+    Audience audience = Audience.newBuilder()
+        .setUrl("https://example.com")
+        .build();
+
+    Any audienceMetadata = Any.newBuilder()
+        .setTypeUrl("type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.Audience")
+        .setValue(audience.toByteString())
+        .build();
+
+    Struct filterMetadata = Struct.newBuilder()
+        .putFields("key1", Value.newBuilder().setStringValue("value1").build())
+        .putFields("key2", Value.newBuilder().setNumberValue(42).build())
+        .build();
+
+    Metadata metadata = Metadata.newBuilder()
+        .putTypedFilterMetadata("AUDIENCE_METADATA", audienceMetadata)
+        .putFilterMetadata("FILTER_METADATA", filterMetadata)
+        .build();
+
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .setMetadata(metadata)
+        .build();
+
+    CdsUpdate update = XdsClusterResource.processCluster(
+        cluster, null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
+
+    ImmutableMap<String, Object> expectedParsedMetadata = ImmutableMap.of(
+        "AUDIENCE_METADATA", "https://example.com",
+        "FILTER_METADATA", ImmutableMap.of(
+            "key1", "value1",
+            "key2", 42.0));
+    assertThat(update.parsedMetadata()).isEqualTo(expectedParsedMetadata);
+  }
+
+  @Test
+  public void processCluster_metadataKeyCollision_resolvesToTypedMetadata()
+      throws ResourceInvalidException, InvalidProtocolBufferException {
+    MetadataRegistry metadataRegistry = MetadataRegistry.getInstance();
+
+    MetadataValueParser testParser =
+        new MetadataValueParser() {
+          @Override
+          public String getTypeUrl() {
+            return "type.googleapis.com/test.Type";
+          }
+
+          @Override
+          public Object parse(Any value) {
+            return "typedMetadataValue";
+          }
+        };
+    metadataRegistry.registerParser(testParser);
+
+    Any typedFilterMetadata = Any.newBuilder()
+        .setTypeUrl("type.googleapis.com/test.Type")
+        .setValue(ByteString.copyFromUtf8("test"))
+        .build();
+
+    Struct filterMetadata = Struct.newBuilder()
+        .putFields("key1", Value.newBuilder().setStringValue("filterMetadataValue").build())
+        .build();
+
+    Metadata metadata = Metadata.newBuilder()
+        .putTypedFilterMetadata("key1", typedFilterMetadata)
+        .putFilterMetadata("key1", filterMetadata)
+        .build();
+
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .setMetadata(metadata)
+        .build();
+
+    CdsUpdate update = XdsClusterResource.processCluster(
+        cluster, null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
+
+    ImmutableMap<String, Object> expectedParsedMetadata = ImmutableMap.of(
+        "key1", "typedMetadataValue");
+    assertThat(update.parsedMetadata()).isEqualTo(expectedParsedMetadata);
+    metadataRegistry.removeParser(testParser);
+  }
+
 
   @Test
   public void parseServerSideListener_invalidTrafficDirection() throws ResourceInvalidException {

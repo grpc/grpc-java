@@ -248,6 +248,7 @@ public class SynchronizationContextTest {
   }
 
   @Test
+  @IgnoreJRERequirement
   public void scheduleDuration() {
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =
@@ -265,6 +266,7 @@ public class SynchronizationContextTest {
   }
 
   @Test
+  @IgnoreJRERequirement
   public void scheduleWithFixedDelayDuration() {
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =

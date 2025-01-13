@@ -30,7 +30,11 @@ dependencies {
             project(':grpc-testing-proto'),
             testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core'))
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("compileJava").configure {

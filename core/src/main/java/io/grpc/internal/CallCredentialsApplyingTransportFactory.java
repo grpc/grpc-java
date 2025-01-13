@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
@@ -38,7 +39,6 @@ import java.util.Collection;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.annotation.concurrent.GuardedBy;
 
 final class CallCredentialsApplyingTransportFactory implements ClientTransportFactory {
   private final ClientTransportFactory delegate;

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -28,7 +29,6 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
-import io.grpc.xds.InternalXdsAttributes;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -62,6 +62,12 @@ public final class SecurityProtocolNegotiators {
   public static final Attributes.Key<SslContextProviderSupplier>
           ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
           Attributes.Key.create("io.grpc.xds.internal.security.server.sslContextProviderSupplier");
+
+  /** Attribute key for SslContextProviderSupplier (used from client) for a subchannel. */
+  @Grpc.TransportAttr
+  public static final Attributes.Key<SslContextProviderSupplier>
+      ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER =
+          Attributes.Key.create("io.grpc.xds.internal.security.SslContextProviderSupplier");
 
   /**
    * Returns a {@link InternalProtocolNegotiator.ClientFactory}.
@@ -130,8 +136,7 @@ public final class SecurityProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       // check if SslContextProviderSupplier was passed via attributes
       SslContextProviderSupplier localSslContextProviderSupplier =
-          grpcHandler.getEagAttributes().get(
-              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+          grpcHandler.getEagAttributes().get(ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (localSslContextProviderSupplier == null) {
         checkNotNull(
             fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");

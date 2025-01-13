@@ -16,9 +16,9 @@
 
 package io.grpc.internal;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Status;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 

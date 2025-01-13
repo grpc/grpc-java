@@ -22,6 +22,7 @@ import static io.grpc.census.internal.ObservabilityCensusConstants.API_LATENCY_P
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -62,7 +63,6 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Provides factories for {@link StreamTracer} that records stats to Census.

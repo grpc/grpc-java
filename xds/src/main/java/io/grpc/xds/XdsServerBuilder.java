@@ -19,8 +19,8 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.xds.InternalXdsAttributes.ATTR_DRAIN_GRACE_NANOS;
-import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
+import static io.grpc.xds.XdsAttributes.ATTR_DRAIN_GRACE_NANOS;
+import static io.grpc.xds.XdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;

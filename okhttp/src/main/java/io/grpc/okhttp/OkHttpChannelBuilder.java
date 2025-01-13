@@ -23,6 +23,7 @@ import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
@@ -73,7 +74,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;

@@ -755,8 +755,8 @@ public class XdsNameResolverTest {
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster2),
         (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
-    assertThat(result.getAttributes().get(InternalXdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     // Simulates making a call1 RPC.
     Result selectResult = configSelector.selectConfig(
@@ -1156,7 +1156,7 @@ public class XdsNameResolverTest {
     assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectClusterResult(call1, configSelector, cluster2, 20.0);
     assertCallSelectClusterResult(call1, configSelector, cluster1, 20.0);
@@ -1207,7 +1207,7 @@ public class XdsNameResolverTest {
                 ImmutableList.of(ImmutableMap.of("rls_experimental", expectedRlsLbConfig)))));
     assertThat(clusterManagerLbConfig).isEqualTo(expectedClusterManagerLbConfig);
 
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectRlsPluginResult(
         call1, configSelector, "rls-plugin-foo", 20.0);
@@ -1345,8 +1345,8 @@ public class XdsNameResolverTest {
     assertThat(result.getAddressesOrError().getValue()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
-    assertThat(result.getAttributes().get(InternalXdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
   }
 

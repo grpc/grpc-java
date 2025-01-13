@@ -18,6 +18,7 @@ package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -30,7 +31,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**

@@ -56,7 +56,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
 
   @VisibleForTesting
-  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, false);
+  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
 
   protected final XdsLogger logger;
 
@@ -248,7 +248,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
       boolean ignoreResourceDeletion = false;
-      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
+      // "For forward compatibility reasons, the client will ignore any entry in the list that it
+      // does not understand, regardless of type."
+      List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);

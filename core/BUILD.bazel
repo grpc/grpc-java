@@ -17,7 +17,6 @@ java_library(
     srcs = glob([
         "src/main/java/io/grpc/internal/*.java",
     ]),
-    javacopts = ["-Xep:DoNotCall:OFF"],  # Remove once requiring Bazel 3.4.0+; allows non-final
     resources = glob([
         "src/bazel-internal/resources/**",
     ]),
