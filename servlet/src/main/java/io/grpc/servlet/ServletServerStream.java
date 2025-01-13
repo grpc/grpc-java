@@ -300,7 +300,11 @@ final class ServletServerStream extends AbstractServerStream {
       close(Status.CANCELLED.withCause(status.asRuntimeException()), new Metadata());
       CountDownLatch countDownLatch = new CountDownLatch(1);
       transportState.runOnTransportThread(() -> {
-        asyncCtx.complete();
+        try {
+          asyncCtx.complete();
+        } catch (IllegalStateException ignored) {
+          // Tomcat can throw "Calling [asyncComplete()] is not valid for a request with Async state [COMPLETING]"
+        }
         countDownLatch.countDown();
       });
       try {

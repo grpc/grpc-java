@@ -124,7 +124,11 @@ final class AsyncServletOutputStreamWriter {
       transportState.runOnTransportThread(
           () -> {
             transportState.complete();
-            asyncContext.complete();
+            try {
+              asyncContext.complete();
+            } catch (IllegalStateException ignored) {
+              // Tomcat can throw "Calling [asyncComplete()] is not valid for a request with Async state [COMPLETING]"
+            }
             log.fine("call completed");
           });
     };
@@ -254,7 +258,7 @@ final class AsyncServletOutputStreamWriter {
   @VisibleForTesting // Lincheck test can not run with java.util.logging dependency.
   interface Log {
     default boolean isLoggable(Level level) {
-      return false; 
+      return false;
     }
 
     default void fine(String str, Object...params) {}
