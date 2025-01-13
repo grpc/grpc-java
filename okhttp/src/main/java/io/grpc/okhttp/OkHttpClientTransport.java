@@ -77,13 +77,14 @@ import io.grpc.okhttp.internal.proxy.Request;
 import io.perfmark.PerfMark;
 import java.io.EOFException;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.Deque;
@@ -116,7 +117,6 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509ExtendedTrustManager;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -166,6 +166,23 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     errorToStatus.put(ErrorCode.INADEQUATE_SECURITY,
         Status.PERMISSION_DENIED.withDescription("Inadequate security"));
     return Collections.unmodifiableMap(errorToStatus);
+  }
+
+  private static Class<?> x509ExtendedTrustManagerClass;
+  private static Method checkServerTrustedMethod;
+
+  static {
+    try {
+      x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
+      checkServerTrustedMethod = x509ExtendedTrustManagerClass.getMethod("checkServerTrusted",
+              X509Certificate[].class, String.class, Socket.class);
+    } catch (ClassNotFoundException e) {
+      // Per-rpc authority override via call options will be disallowed.
+    } catch (NoSuchMethodException e) {
+      // Should never happen.
+      Logger.getLogger(OkHttpClientTransport.class.getName()).warning("Method checkServerTrusted "
+              + "not found in javax.net.ssl.X509ExtendedTrustManager");
+    }
   }
 
   private final InetSocketAddress address;
@@ -453,8 +470,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         TrustManager x509ExtendedTrustManager = null;
         boolean warningLogged = false;
         try {
-          x509ExtendedTrustManager = getX509ExtendedTrustManager(
-                  (TlsChannelCredentials) channelCredentials);
+          x509ExtendedTrustManager = x509ExtendedTrustManagerClass != null
+                  ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials) : null;
         } catch (GeneralSecurityException e) {
           if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
             return new FailingClientStream(Status.UNAVAILABLE.withDescription(
@@ -482,11 +499,18 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             for (int i = 0; i < peerCertificates.length; i++) {
               x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
             }
-            ((X509ExtendedTrustManager) x509ExtendedTrustManager).checkServerTrusted(
-                    x509PeerCertificates, "RSA",
-                    new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
-            peerVerificationStatus = Status.OK;
-          } catch (SSLPeerUnverifiedException | CertificateException e) {
+            // Should never happen
+            if (checkServerTrustedMethod == null) {
+              peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                      "Method checkServerTrusted not found in "
+                              + "javax.net.ssl.X509ExtendedTrustManager");
+            } else {
+              checkServerTrustedMethod.invoke(x509ExtendedTrustManager, x509PeerCertificates,
+                      "RSA", new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
+              peerVerificationStatus = Status.OK;
+            }
+          } catch (SSLPeerUnverifiedException | InvocationTargetException
+                   | IllegalAccessException e) {
             peerVerificationStatus = Status.UNAVAILABLE.withDescription(
                     String.format("Failure in verifying authority '%s' against peer during rpc",
                             callOptions.getAuthority())).withCause(e);
@@ -533,7 +557,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       tm = tmf.getTrustManagers();
     }
     for (TrustManager trustManager: tm) {
-      if (trustManager instanceof X509ExtendedTrustManager) {
+      if (x509ExtendedTrustManagerClass.isInstance(trustManager)) {
         return trustManager;
       }
     }
