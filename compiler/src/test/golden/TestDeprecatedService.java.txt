@@ -8,7 +8,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.70.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.71.0-SNAPSHOT)",
     comments = "Source: grpc/testing/compiler/test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 @java.lang.Deprecated
@@ -210,7 +210,7 @@ public final class TestDeprecatedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service TestDeprecatedService.
+   * A stub to allow clients to do limited synchronous rpc calls to service TestDeprecatedService.
    * <pre>
    * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
    * </pre>

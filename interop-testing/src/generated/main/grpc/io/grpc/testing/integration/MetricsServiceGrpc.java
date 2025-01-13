@@ -254,7 +254,7 @@ public final class MetricsServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service MetricsService.
+   * A stub to allow clients to do limited synchronous rpc calls to service MetricsService.
    */
   public static final class MetricsServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {

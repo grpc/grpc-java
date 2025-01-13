@@ -16,10 +16,10 @@
 
 package io.grpc;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A registry for {@link Configurator} instances.

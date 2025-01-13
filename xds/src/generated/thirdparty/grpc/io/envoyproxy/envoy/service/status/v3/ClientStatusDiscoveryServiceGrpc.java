@@ -258,7 +258,7 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service ClientStatusDiscoveryService.
+   * A stub to allow clients to do limited synchronous rpc calls to service ClientStatusDiscoveryService.
    * <pre>
    * CSDS is Client Status Discovery Service. It can be used to get the status of
    * an xDS-compliant client from the management server's point of view. It can

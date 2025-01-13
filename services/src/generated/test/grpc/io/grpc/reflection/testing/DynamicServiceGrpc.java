@@ -202,7 +202,7 @@ public final class DynamicServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service DynamicService.
+   * A stub to allow clients to do limited synchronous rpc calls to service DynamicService.
    * <pre>
    * A DynamicService
    * </pre>

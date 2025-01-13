@@ -206,7 +206,7 @@ public final class UnimplementedServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service UnimplementedService.
+   * A stub to allow clients to do limited synchronous rpc calls to service UnimplementedService.
    * <pre>
    * A simple service NOT implemented at servers so clients can test for
    * that case.

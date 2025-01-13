@@ -192,7 +192,7 @@ public final class S2AServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service S2AService.
+   * A stub to allow clients to do limited synchronous rpc calls to service S2AService.
    */
   public static final class S2AServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<S2AServiceBlockingStub> {

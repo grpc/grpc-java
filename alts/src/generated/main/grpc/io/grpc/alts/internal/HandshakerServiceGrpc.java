@@ -204,7 +204,7 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do llimited synchronous rpc calls to service HandshakerService.
+   * A stub to allow clients to do limited synchronous rpc calls to service HandshakerService.
    */
   public static final class HandshakerServiceBlockingStub
       extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {

@@ -160,7 +160,7 @@ public class CdsLoadBalancer2Test {
             .setAttributes(
                 // Other attributes not used by cluster_resolver LB are omitted.
                 Attributes.newBuilder()
-                    .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                     .build())
             .setLoadBalancingPolicyConfig(new CdsConfig(CLUSTER))
             .build());
