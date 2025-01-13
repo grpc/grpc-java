@@ -35,7 +35,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.auth.MoreCallCredentials;
-import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,50 +46,63 @@ import javax.annotation.Nullable;
  * A {@link Filter} that injects a {@link CallCredentials} to handle
  * authentication for xDS credentials.
  */
-final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder {
+final class GcpAuthenticationFilter implements Filter {
 
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
 
-  @Override
-  public String[] typeUrls() {
-    return new String[] { TYPE_URL };
-  }
-
-  @Override
-  public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
-    GcpAuthnFilterConfig gcpAuthnProto;
-    if (!(rawProtoMessage instanceof Any)) {
-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
-    }
-    Any anyMessage = (Any) rawProtoMessage;
-
-    try {
-      gcpAuthnProto = anyMessage.unpack(GcpAuthnFilterConfig.class);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Invalid proto: " + e);
+  static final class Provider implements Filter.Provider {
+    @Override
+    public String[] typeUrls() {
+      return new String[]{TYPE_URL};
     }
 
-    long cacheSize = 10;
-    // Validate cache_config
-    if (gcpAuthnProto.hasCacheConfig()) {
-      TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
-      cacheSize = cacheConfig.getCacheSize().getValue();
-      if (cacheSize == 0) {
-        return ConfigOrError.fromError(
-            "cache_config.cache_size must be greater than zero");
+    @Override
+    public boolean isClientFilter() {
+      return true;
+    }
+
+    @Override
+    public GcpAuthenticationFilter newInstance() {
+      return new GcpAuthenticationFilter();
+    }
+
+    @Override
+    public ConfigOrError<GcpAuthenticationConfig> parseFilterConfig(Message rawProtoMessage) {
+      GcpAuthnFilterConfig gcpAuthnProto;
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
       }
-      // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
-      cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);
+      Any anyMessage = (Any) rawProtoMessage;
+
+      try {
+        gcpAuthnProto = anyMessage.unpack(GcpAuthnFilterConfig.class);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+
+      long cacheSize = 10;
+      // Validate cache_config
+      if (gcpAuthnProto.hasCacheConfig()) {
+        TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
+        cacheSize = cacheConfig.getCacheSize().getValue();
+        if (cacheSize == 0) {
+          return ConfigOrError.fromError(
+              "cache_config.cache_size must be greater than zero");
+        }
+        // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
+        cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);
+      }
+
+      GcpAuthenticationConfig config = new GcpAuthenticationConfig((int) cacheSize);
+      return ConfigOrError.fromConfig(config);
     }
 
-    GcpAuthenticationConfig config = new GcpAuthenticationConfig((int) cacheSize);
-    return ConfigOrError.fromConfig(config);
-  }
-
-  @Override
-  public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-    return parseFilterConfig(rawProtoMessage);
+    @Override
+    public ConfigOrError<GcpAuthenticationConfig> parseFilterConfigOverride(
+        Message rawProtoMessage) {
+      return parseFilterConfig(rawProtoMessage);
+    }
   }
 
   @Nullable
