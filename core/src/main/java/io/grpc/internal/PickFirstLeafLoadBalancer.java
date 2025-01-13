@@ -630,7 +630,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return activeElement == 0;
     }
 
-    boolean increment() {
+    public boolean increment() {
       if (!isValid()) {
         return false;
       }
@@ -640,22 +640,22 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return isValid();
     }
 
-    void reset() {
+    public void reset() {
       activeElement = 0;
     }
 
-    SocketAddress getCurrentAddress() {
+    public SocketAddress getCurrentAddress() {
       if (!isValid()) {
         throw new IllegalStateException("Index is past the end of the address group list");
       }
       return orderedAddresses.get(activeElement).address;
     }
 
-    Attributes getCurrentEagAttributes() {
+    public Attributes getCurrentEagAttributes() {
       return orderedAddresses.get(activeElement).attributes;
     }
 
-    private List<EquivalentAddressGroup> getCurrentEagAsList() {
+    public List<EquivalentAddressGroup> getCurrentEagAsList() {
       return Collections.singletonList(getCurrentEag());
     }
 
@@ -666,12 +666,27 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return orderedAddresses.get(activeElement).asEag();
     }
 
-    void updateGroups(List<EquivalentAddressGroup> newGroups) {
+    public void updateGroups(List<EquivalentAddressGroup> newGroups) {
       checkNotNull(newGroups, "newGroups");
       orderedAddresses = enableHappyEyeballs
                              ? updateGroupsHE(newGroups)
                              : updateGroupsNonHE(newGroups);
       reset();
+    }
+
+    boolean seekTo(SocketAddress needle) {
+      checkNotNull(needle, "needle");
+      for (int i = 0; i < orderedAddresses.size(); i++) {
+        if (orderedAddresses.get(i).address.equals(needle)) {
+          this.activeElement = i;
+          return true;
+        }
+      }
+      return false;
+    }
+
+    int size() {
+      return orderedAddresses.size();
     }
 
     private List<UnwrappedEag> updateGroupsNonHE(List<EquivalentAddressGroup> newGroups) {
@@ -735,21 +750,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         }
       }
       return result;
-    }
-
-    boolean seekTo(SocketAddress needle) {
-      checkNotNull(needle, "needle");
-      for (int i = 0; i < orderedAddresses.size(); i++) {
-        if (orderedAddresses.get(i).address.equals(needle)) {
-          this.activeElement = i;
-          return true;
-        }
-      }
-      return false;
-    }
-
-    int size() {
-      return orderedAddresses.size();
     }
 
     private static final class UnwrappedEag {
