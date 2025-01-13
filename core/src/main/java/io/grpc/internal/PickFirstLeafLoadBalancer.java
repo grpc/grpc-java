@@ -757,7 +757,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         return firstFamily;
       }
 
-      List<UnwrappedEag> result = new ArrayList<>();
+      List<UnwrappedEag> result = new ArrayList<>(firstFamily.size() + secondFamily.size());
       for (int i = 0; i < Math.max(firstFamily.size(), secondFamily.size()); i++) {
         if (i < firstFamily.size()) {
           result.add(firstFamily.get(i));
