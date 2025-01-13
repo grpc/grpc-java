@@ -612,12 +612,12 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * This contains both an ordered list of addresses and a pointer(i.e. index) to the current entry
+   * This contains both an ordered list of addresses and a pointer(i.e. index) to the current entry.
    * All updates should be done in a synchronization context.
    */
   @VisibleForTesting
   static final class Index {
-    private List<UnwrappedEag> orderedAddresses = new ArrayList<>();
+    private List<UnwrappedEag> orderedAddresses;
     private int activeElement = 0;
     private boolean enableHappyEyeballs;
 
@@ -660,6 +660,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     public Attributes getCurrentEagAttributes() {
+      if (!isValid()) {
+        throw new IllegalStateException("Index is off the end of the address group list");
+      }
       return orderedAddresses.get(activeElement).attributes;
     }
 
