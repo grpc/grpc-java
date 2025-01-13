@@ -71,6 +71,9 @@ public final class BlockingClientCall<ReqT, RespT> {
   private boolean writeClosed;
   private volatile Status closedStatus; // null if not closed
 
+  // Should synchronize closeLock when reading or updating writeClosed
+  private final Object closeLock = new Object();
+
   BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadSafeThreadlessExecutor executor) {
     this.call = call;
     this.executor = executor;
@@ -214,27 +217,40 @@ public final class BlockingClientCall<ReqT, RespT> {
     return write(false, request, timeout, unit);
   }
 
+  /**
+   * Run inside a synchronized block so that cancel and halfClose can't run in the middle resulting
+   * in a sendMessage after close or cancel.  Can't hold the closeLock while waiting for ready as
+   * otherwise we won't be able to do halfClose or cancel from the client side while waiting.
+   */
   private boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException, StatusException {
 
-    if (writeClosed) {
-      throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
+    // Optimization to avoid waiting for ready if writes are already closed
+    synchronized (closeLock) {
+      if (writeClosed) {
+        throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
+      }
     }
-
     long end = System.nanoTime() + unit.toNanos(timeout);
 
     Predicate<BlockingClientCall<ReqT, RespT>> predicate =
         (x) -> x.call.isReady() || x.closedStatus != null;
     executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
-    Status savedClosedStatus = closedStatus;
-    if (savedClosedStatus == null) {
-      call.sendMessage(request);
-      return true;
-    } else if (savedClosedStatus.isOk()) {
-      return false;
-    } else {
-      // Propagate any errors returned from the server
-      throw savedClosedStatus.asException();
+    synchronized (closeLock) {
+      Status savedClosedStatus = closedStatus;
+      if (savedClosedStatus == null && writeClosed) {
+        throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
+      }
+
+      if (savedClosedStatus == null) {
+        call.sendMessage(request);
+        return true;
+      } else if (savedClosedStatus.isOk()) {
+        return false;
+      } else {
+        // Propagate any errors returned from the server
+        throw savedClosedStatus.asException();
+      }
     }
   }
 
@@ -250,8 +266,10 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
    */
   public void cancel(String message, Throwable cause) {
-    writeClosed = true;
-    call.cancel(message, cause);
+    synchronized (closeLock) {
+      writeClosed = true;
+      call.cancel(message, cause);
+    }
   }
 
   /**
@@ -260,13 +278,15 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @see ClientCall#halfClose()
    */
   public void halfClose() {
-    if (writeClosed) {
-      throw new IllegalStateException(
-          "halfClose cannot be called after already half closed or cancelled");
-    }
+    synchronized (closeLock) {
+      if (writeClosed) {
+        throw new IllegalStateException(
+            "halfClose cannot be called after already half closed or cancelled");
+      }
 
-    writeClosed = true;
-    call.halfClose();
+      writeClosed = true;
+      call.halfClose();
+    }
   }
 
   /**
@@ -320,7 +340,9 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @return True if writes haven't been closed and the server hasn't closed the stream
    */
   private boolean isWriteLegal() {
-    return !writeClosed && closedStatus == null;
+    synchronized (closeLock) {
+      return !writeClosed && closedStatus == null;
+    }
   }
 
   ClientCall.Listener<RespT> getListener() {
