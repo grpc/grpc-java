@@ -611,6 +611,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+   * This contains both an ordered list of addresses and a pointer(i.e. index) to the current entry
+   * All updates should be done in a synchronization context.
+   */
   @VisibleForTesting
   static final class Index {
     private List<UnwrappedEag> orderedAddresses = new ArrayList<>();
@@ -630,6 +634,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return activeElement == 0;
     }
 
+    /**
+     * Move to next address in group.  If last address in group move to first address of next group.
+     * @return false if went off end of the list, otherwise true
+     */
     public boolean increment() {
       if (!isValid()) {
         return false;
@@ -666,6 +674,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return orderedAddresses.get(activeElement).asEag();
     }
 
+    /**
+     * Update to new groups, resetting the current index.
+     */
     public void updateGroups(List<EquivalentAddressGroup> newGroups) {
       checkNotNull(newGroups, "newGroups");
       orderedAddresses = enableHappyEyeballs
@@ -674,7 +685,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       reset();
     }
 
-    boolean seekTo(SocketAddress needle) {
+    /**
+     * Returns false if the needle was not found and the current index was left unchanged.
+     */
+    public boolean seekTo(SocketAddress needle) {
       checkNotNull(needle, "needle");
       for (int i = 0; i < orderedAddresses.size(); i++) {
         if (orderedAddresses.get(i).address.equals(needle)) {
@@ -685,7 +699,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return false;
     }
 
-    int size() {
+    public int size() {
       return orderedAddresses.size();
     }
 
