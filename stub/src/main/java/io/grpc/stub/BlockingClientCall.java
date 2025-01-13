@@ -218,9 +218,10 @@ public final class BlockingClientCall<ReqT, RespT> {
   }
 
   /**
-   * Run inside a synchronized block so that cancel and halfClose can't run in the middle resulting
-   * in a sendMessage after close or cancel.  Can't hold the closeLock while waiting for ready as
+   * Run inside a synchronized block so that cancel and halfClose can't run between checking for
+   * closeLock and call.sendMessage().  Can't hold the closeLock while waiting for ready as
    * otherwise we won't be able to do halfClose or cancel from the client side while waiting.
+   * Initial check doesn't need to be in sync block since checked later, but makes tsan happy.
    */
   private boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException, StatusException {
