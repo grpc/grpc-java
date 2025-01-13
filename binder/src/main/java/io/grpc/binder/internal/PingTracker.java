@@ -17,12 +17,12 @@
 package io.grpc.binder.internal;
 
 import com.google.common.base.Ticker;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientTransport.PingCallback;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Tracks an ongoing ping request for a client-side binder transport. We only handle a single active

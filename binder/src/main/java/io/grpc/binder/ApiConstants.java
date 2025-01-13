@@ -17,7 +17,9 @@
 package io.grpc.binder;
 
 import android.content.Intent;
+import android.os.UserHandle;
 import io.grpc.ExperimentalApi;
+import io.grpc.NameResolver;
 
 /** Constant parts of the gRPC binder transport public API. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
@@ -29,4 +31,16 @@ public final class ApiConstants {
    * themselves in a {@link android.app.Service#onBind(Intent)} call.
    */
   public static final String ACTION_BIND = "grpc.io.action.BIND";
+
+  /**
+   * Specifies the Android user in which target URIs should be resolved.
+   *
+   * <p>{@link UserHandle} can't reasonably be encoded in a target URI string. Instead, all
+   * {@link io.grpc.NameResolverProvider}s producing {@link AndroidComponentAddress}es should let
+   * clients address servers in another Android user using this argument.
+   *
+   * <p>See also {@link AndroidComponentAddress#getTargetUser()}.
+   */
+  public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
+      NameResolver.Args.Key.create("target-android-user");
 }

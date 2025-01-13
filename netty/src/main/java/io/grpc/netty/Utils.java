@@ -27,6 +27,7 @@ import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
@@ -68,7 +69,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 

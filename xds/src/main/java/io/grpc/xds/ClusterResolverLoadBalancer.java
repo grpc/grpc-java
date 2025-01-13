@@ -119,7 +119,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     if (xdsClientPool == null) {
-      xdsClientPool = resolvedAddresses.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL);
+      xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
       xdsClient = xdsClientPool.getObject();
     }
     ClusterResolverConfig config =
@@ -423,12 +423,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   String localityName = localityName(locality);
                   Attributes attr =
                       endpoint.eag().getAttributes().toBuilder()
-                          .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
-                          .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, localityName)
-                          .set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT,
+                          .set(XdsAttributes.ATTR_LOCALITY, locality)
+                          .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                          .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
                               localityLbInfo.localityWeight())
-                          .set(InternalXdsAttributes.ATTR_SERVER_WEIGHT, weight)
-                          .set(InternalXdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                          .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
+                          .set(XdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                           .build();
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
                       endpoint.eag().getAddresses(), attr);
@@ -630,9 +630,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 // to handle such it.
                 String localityName = localityName(LOGICAL_DNS_CLUSTER_LOCALITY);
                 Attributes attr = eag.getAttributes().toBuilder()
-                    .set(InternalXdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
-                    .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, localityName)
-                    .set(InternalXdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
+                    .set(XdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
+                    .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                    .set(XdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
                     .build();
                 eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
                 eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));

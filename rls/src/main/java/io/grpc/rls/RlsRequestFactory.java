@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Metadata;
 import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
@@ -30,7 +31,6 @@ import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.CheckReturnValue;
 
 /**
  * A RlsRequestFactory creates {@link RouteLookupRequest} using key builder map from {@link

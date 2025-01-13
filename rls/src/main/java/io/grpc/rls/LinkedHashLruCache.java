@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Ticker;
+import com.google.errorprone.annotations.CheckReturnValue;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -29,7 +30,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /**
