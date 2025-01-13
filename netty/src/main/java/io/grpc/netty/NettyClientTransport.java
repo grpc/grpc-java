@@ -204,8 +204,9 @@ class NettyClientTransport implements ConnectionClientTransport {
         if (enablePerRpcAuthorityCheck) {
           return new FailingClientStream(verificationStatus, tracers);
         }
-        logger.warning("Authority verification for the rpc failed (This will be an error in the "
-                + "future) with error status: " + verificationStatus.getDescription());
+        logger.warning(String.format("Authority verification for the rpc %s failed (this will be an" +
+                " error in the future) with error status: %s", method.getFullMethodName(),
+                verificationStatus.getDescription()));
       }
     }
     StatsTraceContext statsTraceCtx =
