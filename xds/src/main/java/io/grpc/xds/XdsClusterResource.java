@@ -67,6 +67,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
+  private static final String TYPE_URL_CLUSTER_CONFIG =
+      "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
@@ -213,7 +215,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           continue;
         }
         if (threshold.hasMaxRequests()) {
-          maxConcurrentRequests = (long) threshold.getMaxRequests().getValue();
+          maxConcurrentRequests = Integer.toUnsignedLong(threshold.getMaxRequests().getValue());
         }
       }
     }

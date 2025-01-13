@@ -36,6 +36,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
@@ -248,6 +249,7 @@ public class SynchronizationContextTest {
   }
 
   @Test
+  @IgnoreJRERequirement
   public void scheduleDuration() {
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =
@@ -265,6 +267,7 @@ public class SynchronizationContextTest {
   }
 
   @Test
+  @IgnoreJRERequirement
   public void scheduleWithFixedDelayDuration() {
     MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =

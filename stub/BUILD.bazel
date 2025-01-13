@@ -12,6 +12,7 @@ java_library(
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
+        artifact("org.codehaus.mojo:animal-sniffer-annotations"),
     ],
 )
 
