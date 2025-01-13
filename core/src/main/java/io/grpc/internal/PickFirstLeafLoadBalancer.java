@@ -622,6 +622,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       updateGroups(groups);
     }
 
+    public boolean isValid() {
+      return activeElement < orderedAddresses.size();
+    }
+
+    public boolean isAtBeginning() {
+      return activeElement == 0;
+    }
+
     boolean increment() {
       if (!isValid()) {
         return false;
@@ -630,14 +638,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       activeElement++;
 
       return isValid();
-    }
-
-    boolean isValid() {
-      return activeElement < orderedAddresses.size();
-    }
-
-    boolean isAtBeginning() {
-      return activeElement == 0;
     }
 
     void reset() {
