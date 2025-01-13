@@ -167,8 +167,6 @@ public abstract class AbstractInteropTest {
       new AtomicReference<>();
   private final AtomicReference<ClientCall<?, ?>> clientCallCapture =
       new AtomicReference<>();
-  private static final ThreadLocal<ClientCall<?, ?>> threadClientCallCapture =
-      new ThreadLocal<>();
   private final AtomicReference<Metadata> requestHeadersCapture =
       new AtomicReference<>();
   private final AtomicReference<Context> contextCapture =
@@ -1876,11 +1874,11 @@ public abstract class AbstractInteropTest {
       }
       long earliestNextStartNs = System.nanoTime()
           + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-
+      AtomicReference<ClientCall<?, ?>> threadClientCallCapture = new AtomicReference<>();
       currentChannel = maybeCreateChannel.apply(currentChannel);
       TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
           .newBlockingStub(currentChannel)
-              .withInterceptors(recordThreadClientCallInterceptor(threadClientCallCapture));
+              .withInterceptors(recordClientCallInterceptor(threadClientCallCapture));
       SoakIterationResult result = performOneSoakIteration(currentStub,
           soakRequestSize, soakResponseSize);
       SocketAddress peer = threadClientCallCapture
@@ -2297,22 +2295,6 @@ public abstract class AbstractInteropTest {
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
         ClientCall<ReqT, RespT> clientCall = next.newCall(method,callOptions);
         clientCallCapture.set(clientCall);
-        return clientCall;
-      }
-    };
-  }
-
-  /**
-   * Interceptor that works with ThreadLocal for thread-specific capture.
-   */
-  private static ClientInterceptor recordThreadClientCallInterceptor(
-      final ThreadLocal<ClientCall<?, ?>> threadClientCallCapture) {
-    return new ClientInterceptor() {
-      @Override
-      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-        ClientCall<ReqT, RespT> clientCall = next.newCall(method,callOptions);
-        threadClientCallCapture.set(clientCall);
         return clientCall;
       }
     };
