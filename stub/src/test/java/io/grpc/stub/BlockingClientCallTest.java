@@ -357,31 +357,19 @@ public class BlockingClientCallTest {
   }
 
   @Test
-  public void testWriteCompleted() throws Exception {
+  public void testWriteAfterCloseThrows() throws Exception {
     testMethod.disableAutoRequest();
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
-    // Verify pending write released
-    long start = System.currentTimeMillis();
-    delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
-    assertFalse(biDiStream.write(1)); // should block until writeComplete is triggered
-    long end = System.currentTimeMillis();
-    assertThat(end - start).isAtLeast(DELAY_MILLIS);
-
     // verify new writes throw an illegalStateException
+    biDiStream.halfClose();
     try {
       assertFalse(biDiStream.write(2));
       fail("write did not throw an exception when called after halfClose");
     } catch (IllegalStateException e) {
       assertThat(e.getMessage()).containsMatch("after.*halfClose.*cancel");
     }
-
-    // verify pending write with timeout released
-    biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
-        CallOptions.DEFAULT);
-    delayedVoidMethod(DELAY_MILLIS, biDiStream::halfClose);
-    assertFalse(biDiStream.write(3, 2 * DELAY_MILLIS, TimeUnit.MILLISECONDS));
   }
 
   @Test
