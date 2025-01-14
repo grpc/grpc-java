@@ -54,7 +54,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   public static final XdsClusterResource CLUSTER_RESOURCE = XdsClusterResource.getInstance();
   public static final String TOP_CDS_CONTEXT = toContextStr(CLUSTER_RESOURCE.typeName(), "");
   public static final XdsEndpointResource ENDPOINT_RESOURCE = XdsEndpointResource.getInstance();
-  public static final String CLUSTER_TYPE = XdsClusterResource.getInstance().typeName();
+  private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Matches core
   private final XdsClient xdsClient;
   private final XdsConfigWatcher xdsConfigWatcher;
   private final SynchronizationContext syncContext;
@@ -94,7 +94,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       Set<ClusterSubscription> localSubscriptions =
           clusterSubscriptions.computeIfAbsent(clusterName, k -> new HashSet<>());
       localSubscriptions.add(subscription);
-      addWatcher(new CdsWatcher(clusterName, TOP_CDS_CONTEXT));
+      addWatcher(new CdsWatcher(clusterName, TOP_CDS_CONTEXT, 1));
     });
 
     return subscription;
@@ -485,11 +485,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   private class CdsWatcher extends XdsWatcherBase<XdsClusterResource.CdsUpdate> {
-    List<String> parentContexts = new ArrayList<>();
+    Map<String, Integer> parentContexts = new HashMap<>();
 
-    CdsWatcher(String resourceName, String parentContext) {
+    CdsWatcher(String resourceName, String parentContext, int depth) {
       super(CLUSTER_RESOURCE, resourceName);
-      this.parentContexts.add(parentContext);
+      this.parentContexts.put(parentContext, depth);
     }
 
     @Override
@@ -518,11 +518,21 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
             Set<String> addedClusters = Sets.difference(newNames, oldNames);
             Set<String> deletedClusters = Sets.difference(oldNames, newNames);
-            addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster, parentContext)));
+            int depth = parentContexts.values().stream().max(Integer::compare).orElse(0) + 1;
+            if (depth > MAX_CLUSTER_RECURSION_DEPTH) {
+              logger.log(XdsLogger.XdsLogLevel.WARNING,
+                  "Cluster recursion depth limit exceeded for cluster {0}", resourceName());
+              Status error = Status.UNAVAILABLE.withDescription(
+                  "aggregate cluster graph exceeds max depth");
+              data = StatusOr.fromStatus(error);
+              throw error.asRuntimeException();
+            }
+            addedClusters.forEach(
+                (cluster) -> addWatcher(new CdsWatcher(cluster, parentContext, depth)));
             deletedClusters.forEach((cluster)
                 -> cancelClusterWatcherTree(getCluster(cluster), parentContext));
 
-            if (!addedClusters.isEmpty()) {
+            if (addedClusters.isEmpty()) {
               maybePublishConfig();
             }
           } else {
