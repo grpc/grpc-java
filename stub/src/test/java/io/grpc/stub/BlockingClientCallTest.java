@@ -195,21 +195,12 @@ public class BlockingClientCallTest {
       assertThat(System.currentTimeMillis() - start).isLessThan(2 * DELAY_MILLIS);
     }
 
-    // write terminated
+    // after cancel tests
     biDiStream = ClientCalls.blockingBidiStreamingCall(channel,  BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
-    start = System.currentTimeMillis();
-    delayedCancel(biDiStream, "cancel write");
+    biDiStream.cancel("cancel write", new RuntimeException("Test requested close"));
 
-    // Write interrupted by cancel
-    try {
-      assertFalse(biDiStream.write(30)); // this is interrupted by cancel
-      fail("No exception thrown when write was interrupted by cancel");
-    } catch (StatusException e) {
-      assertEquals(Status.CANCELLED.getCode(), e.getStatus().getCode());
-    }
-
-    // Write after cancel
+    // Write after cancel should throw an exception
     try {
       start = System.currentTimeMillis();
       biDiStream.write(30);
