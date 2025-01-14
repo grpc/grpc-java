@@ -307,14 +307,6 @@ public abstract class XdsClient {
   }
 
   /**
-   * For all subscriber's for the specified server, if the resource hasn't yet been
-   * resolved then start a timer for it.
-   */
-  protected void startSubscriberTimersIfNeeded(ServerInfo serverInfo) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
    * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
    * they are at the moment of the call.
    *
@@ -428,30 +420,39 @@ public abstract class XdsClient {
     /** Called when a xds response is received. */
     void handleResourceResponse(
         XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
-        List<Any> resources, String nonce, ProcessingTracker processingTracker);
+        List<Any> resources, String nonce, boolean isFirstResponse,
+        ProcessingTracker processingTracker);
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
-    void handleStreamClosed(Status error);
-
-    /** Called when the ADS stream has been recreated. */
-    // Must be synchronized.
-    void handleStreamRestarted(ServerInfo serverInfo);
+    void handleStreamClosed(Status error, boolean shouldTryFallback);
   }
 
-  public interface ResourceStore {
+  interface ResourceStore {
+
     /**
-     * Returns the collection of resources currently subscribing to or {@code null} if not
-     * subscribing to any resources for the given type.
+     * Returns the collection of resources currently subscribed to which have an authority matching
+     * one of those for which the ControlPlaneClient associated with the specified ServerInfo is
+     * the active one, or {@code null} if no such resources are currently subscribed to.
      *
      * <p>Note an empty collection indicates subscribing to resources of the given type with
      * wildcard mode.
+     *
+     * @param serverInfo the xds server to get the resources from
+     * @param type       the type of the resources that should be retrieved
      */
     // Must be synchronized.
     @Nullable
-    Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                                              XdsResourceType<? extends ResourceUpdate> type);
+    Collection<String> getSubscribedResources(
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type);
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
+
+    /**
+     * For any of the subscribers to one of the specified resources, if there isn't a result or
+     * an existing timer for the resource, start a timer for the resource.
+     */
+    void startMissingResourceTimers(Collection<String> resourceNames,
+                                    XdsResourceType<?> resourceType);
   }
 }

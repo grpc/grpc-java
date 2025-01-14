@@ -14,21 +14,29 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.ChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
-import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
 public class CommonBootstrapperTestUtils {
+  private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
+  private static final String SERVER_URI_CUSTOM_AUTHORITY = "trafficdirector2.googleapis.com";
+  private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   private static final String FILE_WATCHER_CONFIG = "{\"path\": \"/etc/secret/certs\"}";
   private static final String MESHCA_CONFIG =
       "{\n"
@@ -145,4 +153,71 @@ public class CommonBootstrapperTestUtils {
         .certProviders(certProviders)
         .build();
   }
+
+  public static boolean setEnableXdsFallback(boolean target) {
+    boolean oldValue = BootstrapperImpl.enableXdsFallback;
+    BootstrapperImpl.enableXdsFallback = target;
+    return oldValue;
+  }
+
+  public static XdsClientImpl createXdsClient(List<String> serverUris,
+                                              XdsTransportFactory xdsTransportFactory,
+                                              FakeClock fakeClock,
+                                              BackoffPolicy.Provider backoffPolicyProvider,
+                                              MessagePrettyPrinter messagePrinter,
+                                              XdsClientMetricReporter xdsClientMetricReporter) {
+    return createXdsClient(
+        buildBootStrap(serverUris),
+        xdsTransportFactory,
+        fakeClock,
+        backoffPolicyProvider,
+        messagePrinter,
+        xdsClientMetricReporter);
+  }
+
+  public static XdsClientImpl createXdsClient(Bootstrapper.BootstrapInfo bootstrapInfo,
+                                              XdsTransportFactory xdsTransportFactory,
+                                              FakeClock fakeClock,
+                                              BackoffPolicy.Provider backoffPolicyProvider,
+                                              MessagePrettyPrinter messagePrinter,
+                                              XdsClientMetricReporter xdsClientMetricReporter) {
+    return new XdsClientImpl(
+        xdsTransportFactory,
+        bootstrapInfo,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        fakeClock.getTimeProvider(),
+        messagePrinter,
+        new TlsContextManagerImpl(bootstrapInfo),
+        xdsClientMetricReporter);
+  }
+
+  public static Bootstrapper.BootstrapInfo buildBootStrap(List<String> serverUris) {
+
+    List<ServerInfo> serverInfos = new ArrayList<>();
+    for (String uri : serverUris) {
+      serverInfos.add(ServerInfo.create(uri, CHANNEL_CREDENTIALS, false, true));
+    }
+    EnvoyProtoData.Node node = EnvoyProtoData.Node.newBuilder().setId("node-id").build();
+
+    return Bootstrapper.BootstrapInfo.builder()
+        .servers(serverInfos)
+        .node(node)
+        .authorities(ImmutableMap.of(
+            "authority.xds.com",
+            Bootstrapper.AuthorityInfo.create(
+                "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
+            "",
+            Bootstrapper.AuthorityInfo.create(
+                "xdstp:///envoy.config.listener.v3.Listener/%s",
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+        .certProviders(ImmutableMap.of("cert-instance-name",
+            Bootstrapper.CertificateProviderInfo.create("file-watcher", ImmutableMap.of())))
+        .build();
+  }
+
 }

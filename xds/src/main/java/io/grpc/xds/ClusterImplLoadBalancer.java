@@ -52,6 +52,7 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
@@ -114,12 +115,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
-      xdsClientPool = attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL);
+      xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
       assert xdsClientPool != null;
       xdsClient = xdsClientPool.getObject();
     }
     if (callCounterProvider == null) {
-      callCounterProvider = attributes.get(InternalXdsAttributes.CALL_COUNTER_PROVIDER);
+      callCounterProvider = attributes.get(XdsAttributes.CALL_COUNTER_PROVIDER);
     }
 
     ClusterImplConfig config =
@@ -236,9 +237,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference);
       if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", false)) {
         String hostname = args.getAddresses().get(0).getAttributes()
-            .get(InternalXdsAttributes.ATTR_ADDRESS_NAME);
+            .get(XdsAttributes.ATTR_ADDRESS_NAME);
         if (hostname != null) {
-          attrsBuilder.set(InternalXdsAttributes.ATTR_ADDRESS_NAME, hostname);
+          attrsBuilder.set(XdsAttributes.ATTR_ADDRESS_NAME, hostname);
         }
       }
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrsBuilder.build()).build();
@@ -287,10 +288,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> newAddresses = new ArrayList<>();
       for (EquivalentAddressGroup eag : addresses) {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
-            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
+            XdsAttributes.ATTR_CLUSTER_NAME, cluster);
         if (sslContextProviderSupplier != null) {
           attrBuilder.set(
-              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+              SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
               sslContextProviderSupplier);
         }
         newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
@@ -299,8 +300,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     private ClusterLocality createClusterLocalityFromAttributes(Attributes addressAttributes) {
-      Locality locality = addressAttributes.get(InternalXdsAttributes.ATTR_LOCALITY);
-      String localityName = addressAttributes.get(InternalXdsAttributes.ATTR_LOCALITY_NAME);
+      Locality locality = addressAttributes.get(XdsAttributes.ATTR_LOCALITY);
+      String localityName = addressAttributes.get(XdsAttributes.ATTR_LOCALITY_NAME);
 
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
       // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
@@ -384,6 +385,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         args.getCallOptions().getOption(ClusterImplLoadBalancerProvider.FILTER_METADATA_CONSUMER)
             .accept(filterMetadata);
+        args.getPickDetailsConsumer().addOptionalLabel("grpc.xds.cluster", cluster);
         for (DropOverload dropOverload : dropPolicies) {
           int rand = random.nextInt(1_000_000);
           if (rand < dropOverload.dropsPerMillion()) {
@@ -431,7 +433,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             result = PickResult.withSubchannel(result.getSubchannel(),
                 result.getStreamTracerFactory(),
                 result.getSubchannel().getAttributes().get(
-                    InternalXdsAttributes.ATTR_ADDRESS_NAME));
+                    XdsAttributes.ATTR_ADDRESS_NAME));
           }
         }
         return result;

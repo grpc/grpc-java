@@ -32,6 +32,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
@@ -117,7 +118,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /** A communication channel for making outgoing RPCs. */
@@ -591,8 +591,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.authorityOverride = builder.authorityOverride;
     this.metricRecorder = new MetricRecorderImpl(builder.metricSinks,
         MetricInstrumentRegistry.getDefaultRegistry());
-    this.nameResolverArgs =
-        NameResolver.Args.newBuilder()
+    NameResolver.Args.Builder nameResolverArgsBuilder = NameResolver.Args.newBuilder()
             .setDefaultPort(builder.getDefaultPort())
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
@@ -601,8 +600,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
-            .setMetricRecorder(this.metricRecorder)
-            .build();
+            .setMetricRecorder(this.metricRecorder);
+    builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
+    this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
         targetUri, authorityOverride, nameResolverProvider, nameResolverArgs);
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");

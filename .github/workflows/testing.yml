@@ -79,14 +79,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          # Test with and without bzlmod. Bazel 6 doesn't support bzlmod, so use Bazel 7 instead
-          - bazel: 6.0.0
-            bzlmod: false
-          - bazel: 7.0.0
-            bzlmod: true
+        bzlmod: [true, false]
     env:
-      USE_BAZEL_VERSION: ${{ matrix.bazel }}
+      USE_BAZEL_VERSION: 7.0.0
 
     steps:
     - uses: actions/checkout@v4

@@ -31,6 +31,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CompressorRegistry;
@@ -75,7 +76,6 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Default implementation of {@link io.grpc.Server}, for creation by transports.
@@ -887,8 +887,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         // failed status has an exception we will create one here if needed.
         Throwable cancelCause = status.getCause();
         if (cancelCause == null) {
-          cancelCause = InternalStatus.asRuntimeException(
-              Status.CANCELLED.withDescription("RPC cancelled"), null, false);
+          cancelCause = InternalStatus.asRuntimeExceptionWithoutStacktrace(
+              Status.CANCELLED.withDescription("RPC cancelled"), null);
         }
 
         // The callExecutor might be busy doing user work. To avoid waiting, use an executor that

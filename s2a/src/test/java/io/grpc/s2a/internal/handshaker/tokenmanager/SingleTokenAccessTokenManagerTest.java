@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import java.util.Optional;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -30,9 +31,17 @@ public final class SingleTokenAccessTokenManagerTest {
   private static final S2AIdentity IDENTITY = S2AIdentity.fromSpiffeId("spiffe_id");
   private static final String TOKEN = "token";
 
+  private String originalAccessToken;
+
   @Before
   public void setUp() {
+    originalAccessToken = SingleTokenFetcher.getAccessToken();
     SingleTokenFetcher.setAccessToken(null);
+  }
+
+  @After
+  public void tearDown() {
+    SingleTokenFetcher.setAccessToken(originalAccessToken);
   }
 
   @Test

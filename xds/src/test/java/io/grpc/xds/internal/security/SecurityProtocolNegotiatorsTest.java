@@ -45,12 +45,11 @@ import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
-import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityHandler;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityProtocolNegotiator;
 import io.grpc.xds.internal.security.certprovider.CommonCertProviderTestUtils;
@@ -134,7 +133,7 @@ public class SecurityProtocolNegotiatorsTest {
     when(mockHandler.getEagAttributes())
         .thenReturn(
             Attributes.newBuilder()
-                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
                 .build());
     ChannelHandler newHandler = pn.newHandler(mockHandler);

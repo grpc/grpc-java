@@ -19,6 +19,7 @@ package io.grpc.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
@@ -39,7 +40,6 @@ import java.util.LinkedHashSet;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A client transport that queues requests before a real transport is available. When {@link

@@ -22,6 +22,7 @@ import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalLogId;
 import io.grpc.servlet.ServletServerStream.ServletTransportState;
 import java.io.IOException;
@@ -34,7 +35,6 @@ import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletOutputStream;

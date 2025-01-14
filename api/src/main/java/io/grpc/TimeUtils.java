@@ -21,6 +21,7 @@ import java.time.Duration;
 final class TimeUtils {
   private TimeUtils() {}
 
+  @IgnoreJRERequirement
   static long convertToNanos(Duration duration) {
     try {
       return duration.toNanos();

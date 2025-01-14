@@ -108,7 +108,7 @@ public class CsdsServiceTest {
       // because true->false return mutation prevents fetchClientStatus from completing the request.
       csdsStub = ClientStatusDiscoveryServiceGrpc
           .newBlockingStub(grpcServerRule.getChannel())
-          .withDeadline(Deadline.after(3, TimeUnit.SECONDS));
+          .withDeadline(Deadline.after(30, TimeUnit.SECONDS));
       csdsAsyncStub = ClientStatusDiscoveryServiceGrpc.newStub(grpcServerRule.getChannel());
     }
 
@@ -299,7 +299,7 @@ public class CsdsServiceTest {
       assertThat(response.getConfigCount()).isEqualTo(1);
       ClientConfig clientConfig = response.getConfig(0);
       verifyClientConfigNode(clientConfig);
-      verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+      assertThat(clientConfig.getGenericXdsConfigsList()).isEmpty();
       assertThat(clientConfig.getClientScope()).isEmpty();
     }
 
@@ -310,7 +310,7 @@ public class CsdsServiceTest {
       for (int i = 0; i < numExpected; i++) {
         ClientConfig clientConfig = response.getConfig(i);
         verifyClientConfigNode(clientConfig);
-        verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+        assertThat(clientConfig.getGenericXdsConfigsList()).isEmpty();
         clientScopes.add(clientConfig.getClientScope());
       }
 
@@ -382,16 +382,6 @@ public class CsdsServiceTest {
               .put(EDS, ImmutableMap.of("subscribedResourceName.EDS", METADATA_ACKED_EDS))
               .buildOrThrow();
         }
-
-        @Override
-        public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
-          return ImmutableMap.of(
-              LDS.typeUrl(), LDS,
-              RDS.typeUrl(), RDS,
-              CDS.typeUrl(), CDS,
-              EDS.typeUrl(), EDS
-          );
-        }
       };
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(fakeXdsClient,
           FAKE_CLIENT_SCOPE);
@@ -403,31 +393,31 @@ public class CsdsServiceTest {
       // is propagated to the correct resource types.
       int xdsConfigCount = clientConfig.getGenericXdsConfigsCount();
       assertThat(xdsConfigCount).isEqualTo(4);
-      Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(fakeXdsClient,
-          clientConfig);
-      assertThat(configDumps.keySet()).containsExactly(LDS, RDS, CDS, EDS);
+      Map<String, GenericXdsConfig> configDumps = mapConfigDumps(clientConfig);
+      assertThat(configDumps.keySet())
+          .containsExactly(LDS.typeUrl(), RDS.typeUrl(), CDS.typeUrl(), EDS.typeUrl());
 
       // LDS.
-      GenericXdsConfig genericXdsConfigLds = configDumps.get(LDS);
+      GenericXdsConfig genericXdsConfigLds = configDumps.get(LDS.typeUrl());
       assertThat(genericXdsConfigLds.getName()).isEqualTo("subscribedResourceName.LDS");
       assertThat(genericXdsConfigLds.getClientStatus()).isEqualTo(ClientResourceStatus.ACKED);
       assertThat(genericXdsConfigLds.getVersionInfo()).isEqualTo(VERSION_ACK_LDS);
       assertThat(genericXdsConfigLds.getXdsConfig()).isEqualTo(RAW_LISTENER);
 
       // RDS.
-      GenericXdsConfig genericXdsConfigRds = configDumps.get(RDS);
+      GenericXdsConfig genericXdsConfigRds = configDumps.get(RDS.typeUrl());
       assertThat(genericXdsConfigRds.getClientStatus()).isEqualTo(ClientResourceStatus.ACKED);
       assertThat(genericXdsConfigRds.getVersionInfo()).isEqualTo(VERSION_ACK_RDS);
       assertThat(genericXdsConfigRds.getXdsConfig()).isEqualTo(RAW_ROUTE_CONFIGURATION);
 
       // CDS.
-      GenericXdsConfig genericXdsConfigCds = configDumps.get(CDS);
+      GenericXdsConfig genericXdsConfigCds = configDumps.get(CDS.typeUrl());
       assertThat(genericXdsConfigCds.getClientStatus()).isEqualTo(ClientResourceStatus.ACKED);
       assertThat(genericXdsConfigCds.getVersionInfo()).isEqualTo(VERSION_ACK_CDS);
       assertThat(genericXdsConfigCds.getXdsConfig()).isEqualTo(RAW_CLUSTER);
 
       // RDS.
-      GenericXdsConfig genericXdsConfigEds = configDumps.get(EDS);
+      GenericXdsConfig genericXdsConfigEds = configDumps.get(EDS.typeUrl());
       assertThat(genericXdsConfigEds.getClientStatus()).isEqualTo(ClientResourceStatus.ACKED);
       assertThat(genericXdsConfigEds.getVersionInfo()).isEqualTo(VERSION_ACK_EDS);
       assertThat(genericXdsConfigEds.getXdsConfig()).isEqualTo(RAW_CLUSTER_LOAD_ASSIGNMENT);
@@ -438,21 +428,9 @@ public class CsdsServiceTest {
       ClientConfig clientConfig =
           CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES, FAKE_CLIENT_SCOPE);
       verifyClientConfigNode(clientConfig);
-      verifyClientConfigNoResources(XDS_CLIENT_NO_RESOURCES, clientConfig);
+      assertThat(clientConfig.getGenericXdsConfigsList()).isEmpty();
       assertThat(clientConfig.getClientScope()).isEqualTo(FAKE_CLIENT_SCOPE);
     }
-  }
-
-  /**
-   * Assuming {@link MetadataToProtoTests} passes, and metadata converted to corresponding
-   * config dumps correctly, perform a minimal verification of the general shape of ClientConfig.
-   */
-  private static void verifyClientConfigNoResources(FakeXdsClient xdsClient,
-                                                    ClientConfig clientConfig) {
-    int xdsConfigCount = clientConfig.getGenericXdsConfigsCount();
-    assertThat(xdsConfigCount).isEqualTo(0);
-    Map<XdsResourceType<?>, GenericXdsConfig> configDumps = mapConfigDumps(xdsClient, clientConfig);
-    assertThat(configDumps).isEmpty();
   }
 
   /**
@@ -465,21 +443,17 @@ public class CsdsServiceTest {
     assertThat(node).isEqualTo(BOOTSTRAP_NODE.toEnvoyProtoNode());
   }
 
-  private static Map<XdsResourceType<?>, GenericXdsConfig> mapConfigDumps(FakeXdsClient client,
-                                                                          ClientConfig config) {
-    Map<XdsResourceType<?>, GenericXdsConfig> xdsConfigMap = new HashMap<>();
+  private static Map<String, GenericXdsConfig> mapConfigDumps(ClientConfig config) {
+    Map<String, GenericXdsConfig> xdsConfigMap = new HashMap<>();
     List<GenericXdsConfig> xdsConfigList = config.getGenericXdsConfigsList();
     for (GenericXdsConfig genericXdsConfig : xdsConfigList) {
-      XdsResourceType<?> type = client.getSubscribedResourceTypesWithTypeUrl()
-          .get(genericXdsConfig.getTypeUrl());
-      assertThat(type).isNotNull();
-      assertThat(xdsConfigMap).doesNotContainKey(type);
-      xdsConfigMap.put(type, genericXdsConfig);
+      assertThat(xdsConfigMap).doesNotContainKey(genericXdsConfig.getTypeUrl());
+      xdsConfigMap.put(genericXdsConfig.getTypeUrl(), genericXdsConfig);
     }
     return xdsConfigMap;
   }
 
-  private static class FakeXdsClient extends XdsClient implements XdsClient.ResourceStore {
+  private static class FakeXdsClient extends XdsClient {
     protected Map<XdsResourceType<?>, Map<String, ResourceMetadata>>
         getSubscribedResourcesMetadata() {
       return ImmutableMap.of();
@@ -495,24 +469,11 @@ public class CsdsServiceTest {
     public BootstrapInfo getBootstrapInfo() {
       return BOOTSTRAP_INFO;
     }
-
-    @Nullable
-    @Override
-    public Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                  XdsResourceType<? extends ResourceUpdate> type) {
-      return null;
-    }
-
-    @Override
-    public Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl() {
-      return ImmutableMap.of();
-    }
   }
 
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     private final Map<String, XdsClient> xdsClientMap = new HashMap<>();
-    private boolean isOldStyle
-        ;
+    private boolean isOldStyle;
 
     private FakeXdsClientPoolFactory(@Nullable XdsClient xdsClient) {
       if (xdsClient != null) {

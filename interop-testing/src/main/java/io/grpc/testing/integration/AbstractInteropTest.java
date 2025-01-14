@@ -1874,14 +1874,15 @@ public abstract class AbstractInteropTest {
       }
       long earliestNextStartNs = System.nanoTime()
           + TimeUnit.MILLISECONDS.toNanos(minTimeMsBetweenRpcs);
-
+      // recordClientCallInterceptor takes an AtomicReference.
+      AtomicReference<ClientCall<?, ?>> soakThreadClientCallCapture = new AtomicReference<>();
       currentChannel = maybeCreateChannel.apply(currentChannel);
       TestServiceGrpc.TestServiceBlockingStub currentStub = TestServiceGrpc
           .newBlockingStub(currentChannel)
-              .withInterceptors(recordClientCallInterceptor(clientCallCapture));
+              .withInterceptors(recordClientCallInterceptor(soakThreadClientCallCapture));
       SoakIterationResult result = performOneSoakIteration(currentStub,
           soakRequestSize, soakResponseSize);
-      SocketAddress peer = clientCallCapture
+      SocketAddress peer = soakThreadClientCallCapture
           .get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
       StringBuilder logStr = new StringBuilder(
           String.format(
