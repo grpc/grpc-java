@@ -39,9 +39,11 @@ public class GrpcServlet extends HttpServlet {
   public static final String REMOVE_CONTEXT_PATH = "REMOVE_CONTEXT_PATH";
 
   private final ServletAdapter servletAdapter;
+  private final boolean removeContextPath;
 
   GrpcServlet(ServletAdapter servletAdapter) {
     this.servletAdapter = servletAdapter;
+    removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
   }
 
   /**
@@ -60,7 +62,6 @@ public class GrpcServlet extends HttpServlet {
   }
 
   private String getMethod(HttpServletRequest req) {
-    Boolean removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
     String method = req.getRequestURI();
     if (removeContextPath) {
       // remove context path used in application server

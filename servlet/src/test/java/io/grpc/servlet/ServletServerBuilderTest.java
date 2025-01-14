@@ -78,7 +78,7 @@ public class ServletServerBuilderTest {
     ServletServerBuilder serverBuilder =
         new ServletServerBuilder().scheduledExecutorService(scheduler);
     ServletAdapter servletAdapter = serverBuilder.buildServletAdapter();
-    servletAdapter.doPost("hello/world", request, response);
+    servletAdapter.doPost(request, response);
 
     verify(asyncContext).setTimeout(1);
 

@@ -104,6 +104,10 @@ public final class ServletAdapter {
     resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED, "GET method not supported");
   }
 
+  public void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    doPost(req.getRequestURI().substring(1), req, resp);
+  }
+
   /**
    * Call this method inside {@link javax.servlet.http.HttpServlet#doPost(HttpServletRequest,
    * HttpServletResponse)} to serve gRPC POST request.
