@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.XdsClient.ResourceUpdate;
 import static io.grpc.xds.client.XdsLogger.XdsLogLevel.DEBUG;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
@@ -34,14 +35,12 @@ import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -385,6 +384,12 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       transientError = false;
     }
 
+    protected void setDataAsStatus(Status status) {
+      checkNotNull(status, "status");
+      this.data = StatusOr.fromStatus(status);
+      transientError = true;
+    }
+
     boolean isTransientError() {
       return data != null && !data.hasValue() && transientError;
     }
@@ -413,7 +418,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
 
       if (virtualHosts != null) {
-        updateRoutes(virtualHosts, rdsName);
+        updateRoutes(virtualHosts, rdsName, getActiveVirtualHost());
       } else if (changedRdsName) {
         this.rdsName = rdsName;
         addWatcher(new RdsWatcher(rdsName));
@@ -456,8 +461,13 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onChanged(RdsUpdate update) {
+      RdsUpdate oldData = (data != null && data.hasValue()) ? data.getValue() : null;
+      VirtualHost oldVirtualHost =
+          (oldData != null)
+          ? RoutingUtils.findVirtualHostForHostName(oldData.virtualHosts, dataPlaneAuthority)
+          : null;
       setData(update);
-      updateRoutes(update.virtualHosts, resourceName());
+      updateRoutes(update.virtualHosts, resourceName(), oldVirtualHost);
       maybePublishConfig();
     }
 
@@ -473,14 +483,12 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       xdsConfigWatcher.onResourceDoesNotExist(toContextString());
     }
 
-    List<String> getCdsNames() {
+    ImmutableList<String> getCdsNames() {
       if (data == null || !data.hasValue() || data.getValue().virtualHosts == null) {
-        return Collections.emptyList();
+        return ImmutableList.of();
       }
 
-      return data.getValue().virtualHosts.stream()
-          .map(VirtualHost::name)
-          .collect(Collectors.toList());
+      return ImmutableList.copyOf(getClusterNamesFromVirtualHost(getActiveVirtualHost()));
     }
   }
 
@@ -510,40 +518,47 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
           break;
         case AGGREGATE:
           String parentContext = this.toContextString();
+          int depth = parentContexts.values().stream().max(Integer::compare).orElse(0) + 1;
+          if (depth > MAX_CLUSTER_RECURSION_DEPTH) {
+            logger.log(XdsLogger.XdsLogLevel.WARNING,
+                "Cluster recursion depth limit exceeded for cluster {0}", resourceName());
+            Status error = Status.UNAVAILABLE.withDescription(
+                "aggregate cluster graph exceeds max depth");
+            data = StatusOr.fromStatus(error);
+          }
           if (data != null && data.hasValue()) {
             Set<String> oldNames = new HashSet<>(data.getValue().prioritizedClusterNames());
             Set<String> newNames = new HashSet<>(update.prioritizedClusterNames());
 
-            setData(update);
 
-            Set<String> addedClusters = Sets.difference(newNames, oldNames);
             Set<String> deletedClusters = Sets.difference(oldNames, newNames);
-            int depth = parentContexts.values().stream().max(Integer::compare).orElse(0) + 1;
-            if (depth > MAX_CLUSTER_RECURSION_DEPTH) {
-              logger.log(XdsLogger.XdsLogLevel.WARNING,
-                  "Cluster recursion depth limit exceeded for cluster {0}", resourceName());
-              Status error = Status.UNAVAILABLE.withDescription(
-                  "aggregate cluster graph exceeds max depth");
-              data = StatusOr.fromStatus(error);
-              throw error.asRuntimeException();
-            }
-            addedClusters.forEach(
-                (cluster) -> addWatcher(new CdsWatcher(cluster, parentContext, depth)));
             deletedClusters.forEach((cluster)
                 -> cancelClusterWatcherTree(getCluster(cluster), parentContext));
 
-            if (addedClusters.isEmpty()) {
+            if (depth <= MAX_CLUSTER_RECURSION_DEPTH) {
+              setData(update);
+              Set<String> addedClusters = Sets.difference(newNames, oldNames);
+              addedClusters.forEach((cluster) -> addClusterWatcher(cluster, parentContext, depth));
+
+              if (addedClusters.isEmpty()) {
+                maybePublishConfig();
+              }
+            } else { // data was set to error status above
               maybePublishConfig();
             }
-          } else {
+
+          } else if (depth <= MAX_CLUSTER_RECURSION_DEPTH) {
             setData(update);
-            for (String name : update.prioritizedClusterNames()) {
-              addWatcher(new CdsWatcher(name, parentContext));
-            }
+            update.prioritizedClusterNames()
+                .forEach(name -> addClusterWatcher(name, parentContext, depth));
+            maybePublishConfig();
           }
           break;
         default:
-          throw new AssertionError("Unknown cluster type: " + update.clusterType());
+          Status error = Status.UNAVAILABLE.withDescription(
+              "aggregate cluster graph exceeds max depth");
+          data = StatusOr.fromStatus(error);
+          maybePublishConfig();
       }
     }
 
@@ -552,6 +567,19 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       handleDoesNotExist(resourceName);
       maybePublishConfig();
     }
+  }
+
+  private void addClusterWatcher(String clusterName, String parentContext, int depth) {
+    TypeWatchers<?> clusterWatchers = resourceWatchers.get(CLUSTER_RESOURCE);
+    if (clusterWatchers != null) {
+      CdsWatcher watcher = (CdsWatcher) clusterWatchers.watchers.get(clusterName);
+      if (watcher != null) {
+        watcher.parentContexts.put(parentContext, depth);
+        return;
+      }
+    }
+
+    addWatcher(new CdsWatcher(clusterName, parentContext, depth));
   }
 
   private class EdsWatcher extends XdsWatcherBase<XdsEndpointResource.EdsUpdate> {
@@ -572,17 +600,40 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
   }
 
-  private void updateRoutes(List<VirtualHost> virtualHosts, String rdsName) {
-    String authority = dataPlaneAuthority;
-
-    VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
+  private void updateRoutes(List<VirtualHost> virtualHosts, String rdsName,
+                            VirtualHost oldVirtualHost) {
+    VirtualHost virtualHost =
+        RoutingUtils.findVirtualHostForHostName(virtualHosts, dataPlaneAuthority);;
     if (virtualHost == null) {
-      String error = "Failed to find virtual host matching hostname: " + authority;
+      if (oldVirtualHost != null) {
+        cleanUpRoutes();
+      }
+      String error = "Failed to find virtual host matching hostname: " + dataPlaneAuthority;
       logger.log(XdsLogger.XdsLogLevel.WARNING, error);
       cleanUpRoutes();
       xdsConfigWatcher.onError(
           "xDS node ID:" + dataPlaneAuthority, Status.UNAVAILABLE.withDescription(error));
       return;
+    }
+
+    Set<String> newClusters = getClusterNamesFromVirtualHost(virtualHost);
+    Set<String> oldClusters = getClusterNamesFromVirtualHost(oldVirtualHost);
+
+    // Calculate diffs.
+    Set<String> addedClusters =
+        oldClusters == null ? newClusters : Sets.difference(newClusters, oldClusters);
+    Set<String> deletedClusters =
+        oldClusters == null ? Collections.emptySet() : Sets.difference(oldClusters, newClusters);
+
+    String rdsContext =
+        toContextStr(XdsRouteConfigureResource.getInstance().typeName(), rdsName);
+    addedClusters.forEach((cluster) -> addClusterWatcher(cluster, rdsContext, 1));
+    deletedClusters.forEach(watcher -> cancelClusterWatcherTree(getCluster(watcher), rdsContext));
+  }
+
+  private static Set<String> getClusterNamesFromVirtualHost(VirtualHost virtualHost) {
+    if (virtualHost == null) {
+      return Collections.emptySet();
     }
 
     // Get all cluster names to which requests can be routed through the virtual host.
@@ -601,21 +652,25 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
     }
 
-    // Get existing cluster names
-    TypeWatchers<?> clusterWatchers = resourceWatchers.get(CLUSTER_RESOURCE);
-    Set<String> oldClusters =
-        (clusterWatchers != null) ? clusterWatchers.watchers.keySet() : Collections.emptySet();
+    return clusters;
+  }
 
-    // Calculate diffs.
-    Set<String> addedClusters =
-        oldClusters == null ? clusters : Sets.difference(clusters, oldClusters);
-    Set<String> deletedClusters =
-        oldClusters == null ? Collections.emptySet() : Sets.difference(oldClusters, clusters);
+  @Nullable
+  private VirtualHost getActiveVirtualHost() {
+    TypeWatchers<?> rdsWatchers = resourceWatchers.get(XdsRouteConfigureResource.getInstance());
+    if (rdsWatchers == null) {
+      return null;
+    }
 
-    String rdsContext =
-        toContextStr(XdsRouteConfigureResource.getInstance().typeName(), rdsName);
-    addedClusters.forEach((cluster) -> addWatcher(new CdsWatcher(cluster, rdsContext)));
-    deletedClusters.forEach(watcher -> cancelClusterWatcherTree(getCluster(watcher), rdsContext));
+    RdsWatcher activeRdsWatcher =
+        (RdsWatcher) rdsWatchers.watchers.values().stream().findFirst().orElse(null);
+    if (activeRdsWatcher == null || !activeRdsWatcher.hasResult()
+        || !activeRdsWatcher.getData().hasValue()) {
+      return null;
+    }
+
+    return RoutingUtils.findVirtualHostForHostName(
+        activeRdsWatcher.getData().getValue().virtualHosts, dataPlaneAuthority);
   }
 
   // Must be in SyncContext
@@ -623,19 +678,19 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     // Remove RdsWatcher & CDS Watchers
     TypeWatchers<?> rdsResourceWatcher =
         resourceWatchers.get(XdsRouteConfigureResource.getInstance());
-    if (rdsResourceWatcher == null) {
+    if (rdsResourceWatcher == null || rdsResourceWatcher.watchers.isEmpty()) {
       return;
     }
-    for (XdsWatcherBase<?> watcher : rdsResourceWatcher.watchers.values()) {
-      cancelWatcher(watcher);
 
-      // Remove CdsWatchers pointed to by the RdsWatcher
-      RdsWatcher rdsWatcher = (RdsWatcher) watcher;
-      for (String cName : rdsWatcher.getCdsNames()) {
-        CdsWatcher cdsWatcher = getCluster(cName);
-        if (cdsWatcher != null) {
-          cancelClusterWatcherTree(cdsWatcher, rdsWatcher.toContextString());
-        }
+    XdsWatcherBase<?> watcher = rdsResourceWatcher.watchers.values().stream().findFirst().get();
+    cancelWatcher(watcher);
+
+    // Remove CdsWatchers pointed to by the RdsWatcher
+    RdsWatcher rdsWatcher = (RdsWatcher) watcher;
+    for (String cName : rdsWatcher.getCdsNames()) {
+      CdsWatcher cdsWatcher = getCluster(cName);
+      if (cdsWatcher != null) {
+        cancelClusterWatcherTree(cdsWatcher, rdsWatcher.toContextString());
       }
     }
   }
