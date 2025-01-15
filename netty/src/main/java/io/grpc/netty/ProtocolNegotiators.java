@@ -116,13 +116,12 @@ final class ProtocolNegotiators {
       EnumSet.of(
           TlsServerCredentials.Feature.MTLS, TlsServerCredentials.Feature.CUSTOM_MANAGERS);
   private static Class<?> x509ExtendedTrustManagerClass;
-  private static final Logger logger = Logger.getLogger(ProtocolNegotiators.class.getName());
+
   static {
     try {
       x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
     } catch (ClassNotFoundException e) {
-      logger.info("javax.net.ssl.X509ExtendedTrustManager is not available. Authority override via call options" +
-              "via call options will not be allowed.");
+      // Will disallow per-rpc authority override via call option.
     }
   }
 
@@ -591,17 +590,20 @@ final class ProtocolNegotiators {
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
     private static final Logger logger = Logger.getLogger(ClientTlsProtocolNegotiator.class.getName());
-    private static Method checkServerTrustedMethod;
+    private static final Method checkServerTrustedMethod;
     static {
+      Method method = null;
       try {
         Class<?> x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
-        checkServerTrustedMethod = x509ExtendedTrustManagerClass.getMethod("checkServerTrusted",
+        method = x509ExtendedTrustManagerClass.getMethod("checkServerTrusted",
                 X509Certificate[].class, String.class, SSLEngine.class);
       } catch (ClassNotFoundException e) {
       } catch (NoSuchMethodException e) {
         // Should never happen.
-        logger.warning("Method checkServerTrusted not found in javax.net.ssl.X509ExtendedTrustManager");
+        logger.log(Level.WARNING, "Method checkServerTrusted not found in " +
+                "javax.net.ssl.X509ExtendedTrustManager", e);
       }
+      checkServerTrustedMethod = method;
     }
 
     @GuardedBy("this")
@@ -669,10 +671,13 @@ final class ProtocolNegotiators {
         try {
           verifyAuthorityAllowedForPeerCert(authority);
           peerVerificationStatus = Status.OK;
-        } catch (SSLPeerUnverifiedException | CertificateException | InvocationTargetException | IllegalAccessException e) {
+        } catch (SSLPeerUnverifiedException | CertificateException | InvocationTargetException |
+                 IllegalAccessException | IllegalStateException e) {
           peerVerificationStatus = Status.UNAVAILABLE.withDescription(
                   String.format("Peer hostname verification during rpc failed for authority '%s'",
                   authority)).withCause(e);
+          logger.log(Level.WARNING, "Authority verification failed (this will be an error in the "
+                  + "future).", e);
         }
         peerVerificationResults.put(authority, peerVerificationStatus);
         return peerVerificationStatus;

@@ -108,7 +108,6 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
-  private final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
 
   NettyClientTransport(
       SocketAddress address,
@@ -204,9 +203,6 @@ class NettyClientTransport implements ConnectionClientTransport {
         if (enablePerRpcAuthorityCheck) {
           return new FailingClientStream(verificationStatus, tracers);
         }
-        logger.warning(String.format("Authority verification for the rpc %s failed (this will be an" +
-                " error in the future) with error status: %s", method.getFullMethodName(),
-                verificationStatus.getDescription()));
       }
     }
     StatsTraceContext statsTraceCtx =
