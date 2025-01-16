@@ -140,7 +140,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     if (watcher instanceof CdsWatcher) {
       CdsWatcher cdsWatcher = (CdsWatcher) watcher;
       if (!cdsWatcher.parentContexts.isEmpty()) {
-        return;
+        String msg = String.format("CdsWatcher %s has parent contexts %s",
+            cdsWatcher.resourceName(), cdsWatcher.parentContexts.keySet());
+        throw new IllegalStateException(msg);
       }
     }
     XdsResourceType<T> type = watcher.type;
@@ -403,6 +405,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
       List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
       String rdsName = httpConnectionManager.rdsName();
+      VirtualHost activeVirtualHost = getActiveVirtualHost();
 
       boolean changedRdsName = rdsName != null && !rdsName.equals(this.rdsName);
       if (changedRdsName) {
@@ -410,7 +413,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
 
       if (virtualHosts != null) {
-        updateRoutes(virtualHosts, rdsName, getActiveVirtualHost());
+        // No RDS watcher since we are getting RDS updates via LDS
+        updateRoutes(virtualHosts, rdsName, activeVirtualHost);
       } else if (changedRdsName) {
         this.rdsName = rdsName;
         addWatcher(new RdsWatcher(rdsName));
@@ -438,7 +442,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       if (watchers == null) {
         return;
       }
-      RdsWatcher oldRdsWatcher = (RdsWatcher) watchers.watchers.remove(rdsName);
+      RdsWatcher oldRdsWatcher = (RdsWatcher) watchers.watchers.get(rdsName);
       if (oldRdsWatcher != null) {
         cancelWatcher(oldRdsWatcher);
       }
