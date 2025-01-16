@@ -35,7 +35,6 @@ import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -98,11 +97,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     });
 
     return subscription;
-  }
-
-  private boolean hasWatcher(XdsResourceType<?> type, String resourceName) {
-    TypeWatchers<?> typeWatchers = resourceWatchers.get(type);
-    return typeWatchers != null && typeWatchers.watchers.containsKey(resourceName);
   }
 
   private <T extends ResourceUpdate> void addWatcher(XdsWatcherBase<T> watcher) {
