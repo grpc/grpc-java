@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
-import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -84,16 +83,13 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
@@ -589,31 +585,27 @@ final class ProtocolNegotiators {
   }
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
-    private static final Logger logger = Logger.getLogger(ClientTlsProtocolNegotiator.class.getName());
+    private static final Logger logger =
+            Logger.getLogger(ClientTlsProtocolNegotiator.class.getName());
     private static final Method checkServerTrustedMethod;
+
     static {
       Method method = null;
       try {
-        Class<?> x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
+        Class<?> x509ExtendedTrustManagerClass =
+                Class.forName("javax.net.ssl.X509ExtendedTrustManager");
         method = x509ExtendedTrustManagerClass.getMethod("checkServerTrusted",
                 X509Certificate[].class, String.class, SSLEngine.class);
       } catch (ClassNotFoundException e) {
+        // Per-rpc authority overriding via call options will be disallowed.
       } catch (NoSuchMethodException e) {
         // Should never happen.
-        logger.log(Level.WARNING, "Method checkServerTrusted not found in " +
-                "javax.net.ssl.X509ExtendedTrustManager", e);
+        logger.log(Level.WARNING, "Method checkServerTrusted not found in "
+                + "javax.net.ssl.X509ExtendedTrustManager", e);
       }
       checkServerTrustedMethod = method;
     }
 
-    @GuardedBy("this")
-    private final LinkedHashMap<String, Status> peerVerificationResults =
-            new LinkedHashMap<String, Status>() {
-          @Override
-          protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
-            return size() > 100;
-          }
-        };
     private SSLEngine sslEngine;
 
     public ClientTlsProtocolNegotiator(SslContext sslContext,
@@ -656,7 +648,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public synchronized Status verifyAuthority(@Nonnull String authority) {
+    public Status verifyAuthority(@Nonnull String authority) {
       // sslEngine won't be set when creating ClientTlsHandler from InternalProtocolNegotiators
       // for example.
       if (sslEngine == null || x509ExtendedTrustManager == null) {
@@ -664,24 +656,17 @@ final class ProtocolNegotiators {
                 "Can't allow authority override in rpc when SslEngine or X509ExtendedTrustManager"
                         + " is not available");
       }
-      if (peerVerificationResults.containsKey(authority)) {
-        return peerVerificationResults.get(authority);
-      } else {
-        Status peerVerificationStatus;
-        try {
-          verifyAuthorityAllowedForPeerCert(authority);
-          peerVerificationStatus = Status.OK;
-        } catch (SSLPeerUnverifiedException | CertificateException | InvocationTargetException |
-                 IllegalAccessException | IllegalStateException e) {
-          peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                  String.format("Peer hostname verification during rpc failed for authority '%s'",
-                  authority)).withCause(e);
-          logger.log(Level.WARNING, "Authority verification failed (this will be an error in the "
-                  + "future).", e);
-        }
-        peerVerificationResults.put(authority, peerVerificationStatus);
-        return peerVerificationStatus;
+      Status peerVerificationStatus;
+      try {
+        verifyAuthorityAllowedForPeerCert(authority);
+        peerVerificationStatus = Status.OK;
+      } catch (SSLPeerUnverifiedException | CertificateException | InvocationTargetException
+               | IllegalAccessException | IllegalStateException e) {
+        peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                String.format("Peer hostname verification during rpc failed for authority '%s'",
+                authority)).withCause(e);
       }
+      return peerVerificationStatus;
     }
 
     public void setSslEngine(SSLEngine sslEngine) {
@@ -692,7 +677,8 @@ final class ProtocolNegotiators {
             throws SSLPeerUnverifiedException, CertificateException, InvocationTargetException,
             IllegalAccessException {
       if (checkServerTrustedMethod == null) {
-        throw new IllegalStateException("Method checkServerTrusted not found in javax.net.ssl.X509ExtendedTrustManager");
+        throw new IllegalStateException("Method checkServerTrusted not found in "
+                + "javax.net.ssl.X509ExtendedTrustManager");
       }
       SSLEngine sslEngineWrapper = new SslEngineWrapper(sslEngine, authority);
       // The typecasting of Certificate to X509Certificate should work because this method will only
@@ -702,7 +688,8 @@ final class ProtocolNegotiators {
       for (int i = 0; i < peerCertificates.length; i++) {
         x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
       }
-      checkServerTrustedMethod.invoke(x509ExtendedTrustManager, x509PeerCertificates, "RSA", sslEngineWrapper);
+      checkServerTrustedMethod.invoke(
+              x509ExtendedTrustManager, x509PeerCertificates, "RSA", sslEngineWrapper);
     }
 
     @VisibleForTesting

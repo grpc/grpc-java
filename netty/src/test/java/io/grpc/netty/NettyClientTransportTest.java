@@ -853,7 +853,8 @@ public class NettyClientTransportTest {
     try {
       startServer();
       InputStream caCert = TlsTesting.loadCert("ca.pem");
-      X509TrustManager x509ExtendedTrustManager = (X509TrustManager) getX509ExtendedTrustManager(caCert);
+      X509TrustManager x509ExtendedTrustManager =
+              (X509TrustManager) getX509ExtendedTrustManager(caCert);
       ProtocolNegotiators.FromChannelCredentialsResult result =
               ProtocolNegotiators.from(TlsChannelCredentials.newBuilder()
                       .trustManager(new FakeTrustManager(x509ExtendedTrustManager)).build());
@@ -874,8 +875,9 @@ public class NettyClientTransportTest {
       InsightBuilder insightBuilder = new InsightBuilder();
       stream.appendTimeoutInsight(insightBuilder);
       assertThat(insightBuilder.toString()).contains(
-              "Status{code=FAILED_PRECONDITION, description=Can't allow authority override in rpc when "
-                      + "SslEngine or X509ExtendedTrustManager is not available, cause=null}");
+              "Status{code=FAILED_PRECONDITION, description=Can't allow authority override in rpc "
+                      + "when SslEngine or X509ExtendedTrustManager is not available, "
+                      + "cause=null}");
     } finally {
       System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
     }
@@ -904,9 +906,10 @@ public class NettyClientTransportTest {
       InsightBuilder insightBuilder = new InsightBuilder();
       stream.appendTimeoutInsight(insightBuilder);
       assertThat(insightBuilder.toString()).contains(
-              "Status{code=UNAVAILABLE, description=Peer hostname verification during rpc failed for"
-                      + " authority 'foo.test.google.in'");
-      assertThat(insightBuilder.toString()).contains("cause=java.security.cert.CertificateException:"
+              "Status{code=UNAVAILABLE, description=Peer hostname verification during rpc failed "
+                      + "for authority 'foo.test.google.in'");
+      assertThat(insightBuilder.toString()).contains(
+              "Caused by: java.security.cert.CertificateException:"
               + " No subject alternative DNS name matching foo.test.google.in found.");
     } finally {
       System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");

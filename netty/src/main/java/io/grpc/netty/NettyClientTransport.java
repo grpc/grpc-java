@@ -60,9 +60,11 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -71,8 +73,6 @@ import javax.annotation.Nullable;
  */
 class NettyClientTransport implements ConnectionClientTransport {
 
-  private static final boolean enablePerRpcAuthorityCheck =
-          GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false);
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress remoteAddress;
@@ -108,6 +108,14 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
+  private final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
+  private final LinkedHashMap<String, Status> peerVerificationResults =
+      new LinkedHashMap<String, Status>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+          return size() > 100;
+        }
+      };
 
   NettyClientTransport(
       SocketAddress address,
@@ -198,9 +206,19 @@ class NettyClientTransport implements ConnectionClientTransport {
       return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
     }
     if (callOptions.getAuthority() != null) {
-      Status verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
+      Status verificationStatus = peerVerificationResults.get(callOptions.getAuthority());
+      if (verificationStatus == null) {
+        verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
+        if (!verificationStatus.isOk()) {
+          logger.log(Level.WARNING, String.format("Peer hostname verification during rpc failed "
+                          + "for authority '%s' for method '%s' with the error \"%s\". This will "
+                          + "be an error in the future.", callOptions.getAuthority(),
+                  method.getFullMethodName(), verificationStatus.getDescription()),
+                  verificationStatus.getCause());
+        }
+      }
       if (!verificationStatus.isOk()) {
-        if (enablePerRpcAuthorityCheck) {
+        if (GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false)) {
           return new FailingClientStream(verificationStatus, tracers);
         }
       }
