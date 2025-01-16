@@ -53,7 +53,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   public static final XdsClusterResource CLUSTER_RESOURCE = XdsClusterResource.getInstance();
   public static final String TOP_CDS_CONTEXT = toContextStr(CLUSTER_RESOURCE.typeName(), "");
   public static final XdsEndpointResource ENDPOINT_RESOURCE = XdsEndpointResource.getInstance();
-  private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Matches core
+  private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Matches C++
   private final XdsClient xdsClient;
   private final XdsConfigWatcher xdsConfigWatcher;
   private final SynchronizationContext syncContext;
