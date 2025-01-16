@@ -35,6 +35,7 @@ import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -120,7 +121,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     xdsClient.watchXdsResource(type, resourceName, watcher, syncContext);
   }
 
-  private void cancelWatcher(CdsWatcher watcher, String parentContext) {
+  private void cancelCdsWatcher(CdsWatcher watcher, String parentContext) {
     if (watcher == null) {
       return;
     }
@@ -129,6 +130,18 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       cancelWatcher(watcher);
     }
   }
+
+  private void cancelEdsWatcher(EdsWatcher watcher, String parentContext) {
+    if (watcher == null) {
+      return;
+    }
+    watcher.parentContexts.remove(parentContext);
+    if (watcher.parentContexts.isEmpty()) {
+      cancelWatcher(watcher);
+    }
+  }
+
+
 
   private <T extends ResourceUpdate> void cancelWatcher(XdsWatcherBase<T> watcher) {
     syncContext.throwIfNotInThisSynchronizationContext();
@@ -198,7 +211,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private void cancelClusterWatcherTree(CdsWatcher root, String parentContext) {
     checkNotNull(root, "root");
-    cancelWatcher(root, parentContext);
+
+    cancelCdsWatcher(root, parentContext);
 
     if (!root.hasDataValue() || !root.parentContexts.isEmpty()) {
       return;
@@ -210,7 +224,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         String edsServiceName = cdsUpdate.edsServiceName();
         EdsWatcher edsWatcher =
             (EdsWatcher) resourceWatchers.get(ENDPOINT_RESOURCE).watchers.get(edsServiceName);
-        cancelWatcher(edsWatcher);
+        cancelEdsWatcher(edsWatcher, root.toContextString());
         break;
       case AGGREGATE:
         for (String cluster : cdsUpdate.prioritizedClusterNames()) {
@@ -501,9 +515,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       switch (update.clusterType()) {
         case EDS:
           setData(update);
-          if (!hasWatcher(ENDPOINT_RESOURCE, update.edsServiceName())) {
-            addWatcher(new EdsWatcher(update.edsServiceName()));
-          } else {
+          if (!addEdsWatcher(update.edsServiceName(), this.toContextString()))  {
             maybePublishConfig();
           }
           break;
@@ -565,6 +577,19 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
   }
 
+  // Returns true if the watcher was added, false if it already exists
+  private boolean addEdsWatcher(String edsServiceName, String parentContext) {
+    TypeWatchers<?> typeWatchers = resourceWatchers.get(XdsEndpointResource.getInstance());
+    if (typeWatchers == null || !typeWatchers.watchers.containsKey(edsServiceName)) {
+      addWatcher(new EdsWatcher(edsServiceName, parentContext));
+      return true;
+    }
+
+    EdsWatcher watcher = (EdsWatcher) typeWatchers.watchers.get(edsServiceName);
+    watcher.addParentContext(parentContext); // Is a set, so don't need to check for existence
+    return false;
+  }
+
   private void addClusterWatcher(String clusterName, String parentContext, int depth) {
     TypeWatchers<?> clusterWatchers = resourceWatchers.get(CLUSTER_RESOURCE);
     if (clusterWatchers != null) {
@@ -579,8 +604,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   private class EdsWatcher extends XdsWatcherBase<XdsEndpointResource.EdsUpdate> {
-    private EdsWatcher(String resourceName) {
+    private Set<String> parentContexts = new HashSet<>();
+
+    private EdsWatcher(String resourceName, String parentContext) {
       super(ENDPOINT_RESOURCE, resourceName);
+      parentContexts.add(parentContext);
     }
 
     @Override
@@ -593,6 +621,10 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     public void onResourceDoesNotExist(String resourceName) {
       handleDoesNotExist(resourceName);
       maybePublishConfig();
+    }
+
+    void addParentContext(String parentContext) {
+      parentContexts.add(checkNotNull(parentContext, "parentContext"));
     }
   }
 
