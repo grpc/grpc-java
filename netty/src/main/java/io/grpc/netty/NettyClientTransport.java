@@ -60,6 +60,7 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -109,13 +110,17 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
   private final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
-  private final LinkedHashMap<String, Status> peerVerificationResults =
+  private final Map<String, Status> peerVerificationResults = Collections.synchronizedMap(
       new LinkedHashMap<String, Status>() {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
           return size() > 100;
         }
-      };
+      });
+
+  @VisibleForTesting
+  static boolean enablePerRpcAuthorityCheck =
+          GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false);
 
   NettyClientTransport(
       SocketAddress address,
@@ -209,6 +214,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       Status verificationStatus = peerVerificationResults.get(callOptions.getAuthority());
       if (verificationStatus == null) {
         verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
+        peerVerificationResults.put(callOptions.getAuthority(), verificationStatus);
         if (!verificationStatus.isOk()) {
           logger.log(Level.WARNING, String.format("Peer hostname verification during rpc failed "
                           + "for authority '%s' for method '%s' with the error \"%s\". This will "
@@ -218,7 +224,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         }
       }
       if (!verificationStatus.isOk()) {
-        if (GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false)) {
+        if (enablePerRpcAuthorityCheck) {
           return new FailingClientStream(verificationStatus, tracers);
         }
       }
