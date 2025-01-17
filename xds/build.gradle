@@ -53,6 +53,7 @@ dependencies {
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.dev.cel.runtime,
+            libraries.dev.cel.protobuf,
             libraries.guava,
             libraries.gson,
             libraries.re2j,
