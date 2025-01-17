@@ -43,9 +43,12 @@ import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.listener.v3.ApiListener;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -409,8 +412,69 @@ public class XdsDependencyManagerTest {
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     testWatcher.verifyStats(0,1, 0);
+  }
+
+  @Test
+  public void testChangeRdsName_fromLds() {
+    // TODO implement
+    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    Listener serverListener = ControlPlaneRule.buildServerListener();
+
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
+
+    String newRdsName = "newRdsName1";
+
+    Listener clientListener = buildInlineClientListener(newRdsName, CLUSTER_NAME);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS,
+        ImmutableMap.of(XdsTestUtils.SERVER_LISTENER, serverListener, serverName, clientListener));
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    assertThat(xdsConfigCaptor.getValue()).isNotEqualTo(defaultXdsConfig);
+  }
+
+  @Test
+  public void testChangeRdsName_notFromLds() {
+    // TODO implement
+  }
+
+  @Test
+  public void testMultipleParentsInCdsTree() {
+    // TODO implement
+  }
+
+  @Test
+  public void testMultipleCdsReferToSameEds() {
+    // TODO implement
+  }
+
+  @Test
+  public void testChangeRdsName_FromLds_complexTree() {
+    // TODO implement
+  }
+
+  private Listener buildInlineClientListener(String rdsName, String clusterName) {
+    HttpFilter
+        httpFilter = HttpFilter.newBuilder()
+        .setName(serverName)
+        .setTypedConfig(Any.pack(Router.newBuilder().build()))
+        .setIsOptional(true)
+        .build();
+    ApiListener.Builder clientListenerBuilder =
+        ApiListener.newBuilder().setApiListener(Any.pack(
+            io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
+                .HttpConnectionManager.newBuilder()
+                .setRouteConfig(
+                    XdsTestUtils.buildRouteConfiguration(serverName, rdsName, clusterName))
+                .addAllHttpFilters(Collections.singletonList(httpFilter))
+                .build(),
+            XdsTestUtils.HTTP_CONNECTION_MANAGER_TYPE_URL));
+    return Listener.newBuilder()
+        .setName(serverName)
+        .setApiListener(clientListenerBuilder.build()).build();
 
   }
+
 
   private static String toContextStr(String type, String resourceName) {
     return type + " resource: " + resourceName;

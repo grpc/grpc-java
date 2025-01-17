@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import javax.annotation.Nullable;
 
@@ -260,9 +261,17 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     // Iterate watchers and build the XdsConfig
 
     // Will only be 1 listener and 1 route resource
-    resourceWatchers.get(XdsListenerResource.getInstance()).watchers.values().stream()
-        .map(watcher -> (LdsWatcher) watcher)
-        .forEach(watcher -> builder.setListener(watcher.getData().getValue()));
+    for (XdsWatcherBase<?> xdsWatcherBase :
+        resourceWatchers.get(XdsListenerResource.getInstance()).watchers.values()) {
+      XdsListenerResource.LdsUpdate ldsUpdate = ((LdsWatcher) xdsWatcherBase).getData().getValue();
+      builder.setListener(ldsUpdate);
+
+      if (ldsUpdate.httpConnectionManager() != null
+          && ldsUpdate.httpConnectionManager().virtualHosts() != null) {
+        RdsUpdate rdsUpdate = new RdsUpdate(ldsUpdate.httpConnectionManager().virtualHosts());
+        builder.setRoute(rdsUpdate);
+      }
+    }
 
     resourceWatchers.get(XdsRouteConfigureResource.getInstance()).watchers.values().stream()
         .map(watcher -> (RdsWatcher) watcher)
@@ -415,7 +424,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       String rdsName = httpConnectionManager.rdsName();
       VirtualHost activeVirtualHost = getActiveVirtualHost();
 
-      boolean changedRdsName = rdsName != null && !rdsName.equals(this.rdsName);
+      boolean changedRdsName = !Objects.equals(rdsName, this.rdsName);
       if (changedRdsName) {
         cleanUpRdsWatcher();
       }
@@ -423,6 +432,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       if (virtualHosts != null) {
         // No RDS watcher since we are getting RDS updates via LDS
         updateRoutes(virtualHosts, rdsName, activeVirtualHost);
+        this.rdsName = null;
       } else if (changedRdsName) {
         this.rdsName = rdsName;
         addWatcher(new RdsWatcher(rdsName));

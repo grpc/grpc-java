@@ -76,6 +76,9 @@ public class XdsTestUtils {
   static final String CLUSTER_NAME = "cluster0";
   static final String EDS_NAME = "eds-service-0";
   static final String SERVER_LISTENER = "grpc/server?udpa.resource.listening_address=";
+  static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
+      "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
+          + ".HttpConnectionManager";
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
 
@@ -292,6 +295,24 @@ public class XdsTestUtils {
                             .build()));
     io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
     return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
+  }
+
+  static io.envoyproxy.envoy.config.route.v3.VirtualHost buildVirtualHost(String authority,
+                                                                         String rdsName,
+                                                                         String clusterName) {
+    return io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
+        .setName(rdsName)
+        .addDomains(authority)
+        .addRoutes(
+            Route.newBuilder()
+                .setMatch(
+                    RouteMatch.newBuilder().setPrefix("/").build())
+                .setRoute(
+                    RouteAction.newBuilder().setCluster(clusterName)
+                        .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
+                        .build())
+                .build())
+        .build();
   }
 
   /**
