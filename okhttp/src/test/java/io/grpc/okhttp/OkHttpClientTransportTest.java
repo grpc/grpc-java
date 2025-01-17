@@ -817,7 +817,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void perRpcAuthoritySpecified_hostnameVerification_SslSocket_failureCase()
           throws Exception {
-    System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
+    OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
     try {
       startTransport(
               DEFAULT_START_STREAM_ID, null, true, null,
@@ -833,7 +833,7 @@ public class OkHttpClientTransportTest {
               + "cause=null}");
       shutdownAndVerify();
     } finally {
-      System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
+      OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
     }
   }
 

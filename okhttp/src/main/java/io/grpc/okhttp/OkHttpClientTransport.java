@@ -134,10 +134,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
   private static final String GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK =
           "GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK";
+  static boolean enablePerRpcAuthorityCheck =
+          GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false);
   private final ChannelCredentials channelCredentials;
   private Socket sock;
   private SSLSession sslSession;
-  private final Logger logger = Logger.getLogger(OkHttpClientTransport.class.getName());
 
   private static Map<ErrorCode, Status> buildErrorCodeToStatusMap() {
     Map<ErrorCode, Status> errorToStatus = new EnumMap<>(ErrorCode.class);
@@ -179,9 +180,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     } catch (ClassNotFoundException e) {
       // Per-rpc authority override via call options will be disallowed.
     } catch (NoSuchMethodException e) {
-      // Should never happen.
-      Logger.getLogger(OkHttpClientTransport.class.getName()).warning("Method checkServerTrusted "
-              + "not found in javax.net.ssl.X509ExtendedTrustManager");
+      // Should never happen since X509ExtendedTrustManager was introduced in Android API level 24
+      // along with checkServerTrusted.
     }
   }
 
@@ -246,13 +246,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  private final LinkedHashMap<String, Status> peerVerificationResults =
+  private final Map<String, Status> peerVerificationResults = Collections.synchronizedMap(
           new LinkedHashMap<String, Status>() {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
               return size() > 100;
             }
-          };
+          });
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -453,13 +453,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     if (hostnameVerifier != null && socket instanceof SSLSocket
             && !hostnameVerifier.verify(callOptions.getAuthority(),
                     ((SSLSocket) socket).getSession())) {
-      if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
+      if (enablePerRpcAuthorityCheck) {
         return new FailingClientStream(Status.UNAVAILABLE.withDescription(
                 String.format("HostNameVerifier verification failed for authority '%s'",
                         callOptions.getAuthority())), tracers);
       }
-      logger.warning(String.format("HostNameVerifier verification failed for authority '%s'.",
-          callOptions.getAuthority()));
     }
     if (socket instanceof SSLSocket && callOptions.getAuthority() != null
         && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
@@ -467,55 +465,40 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       if (peerVerificationResults.containsKey(callOptions.getAuthority())) {
         peerVerificationStatus = peerVerificationResults.get(callOptions.getAuthority());
       } else {
-        TrustManager x509ExtendedTrustManager = null;
-        boolean warningLogged = false;
+        TrustManager x509ExtendedTrustManager;
         try {
           x509ExtendedTrustManager = x509ExtendedTrustManagerClass != null
                   ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials) : null;
+          if (x509ExtendedTrustManager == null) {
+            if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
+              return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                      "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
+                              + "available"), tracers);
+            }
+          } else {
+            try {
+              Certificate[] peerCertificates = sslSession.getPeerCertificates();
+              X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
+              for (int i = 0; i < peerCertificates.length; i++) {
+                x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+              }
+              checkServerTrustedMethod.invoke(x509ExtendedTrustManager, x509PeerCertificates,
+                      "RSA", new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
+              peerVerificationStatus = Status.OK;
+            } catch (SSLPeerUnverifiedException | InvocationTargetException
+                     | IllegalAccessException e) {
+              peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                      String.format("Failure in verifying authority '%s' against peer during rpc",
+                              callOptions.getAuthority())).withCause(e);
+            }
+            peerVerificationResults.put(callOptions.getAuthority(), peerVerificationStatus);
+          }
         } catch (GeneralSecurityException e) {
           if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
             return new FailingClientStream(Status.UNAVAILABLE.withDescription(
                     "Failure getting X509ExtendedTrustManager from TlsCredentials").withCause(e),
                     tracers);
           }
-          logger.warning(String.format("Failure getting X509ExtendedTrustManager from "
-                  + "TlsCredentials due to: %s", e.getMessage()));
-          warningLogged = true;
-        }
-        if (x509ExtendedTrustManager == null) {
-          if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
-            return new FailingClientStream(Status.UNAVAILABLE.withDescription(
-                    "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
-                    + "available"), tracers);
-          }
-          if (!warningLogged) {
-            logger.warning("Authority override set for rpc when X509ExtendedTrustManager is not "
-                    + "available.");
-          }
-        } else {
-          try {
-            Certificate[] peerCertificates = sslSession.getPeerCertificates();
-            X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
-            for (int i = 0; i < peerCertificates.length; i++) {
-              x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
-            }
-            // Should never happen
-            if (checkServerTrustedMethod == null) {
-              peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                      "Method checkServerTrusted not found in "
-                              + "javax.net.ssl.X509ExtendedTrustManager");
-            } else {
-              checkServerTrustedMethod.invoke(x509ExtendedTrustManager, x509PeerCertificates,
-                      "RSA", new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
-              peerVerificationStatus = Status.OK;
-            }
-          } catch (SSLPeerUnverifiedException | InvocationTargetException
-                   | IllegalAccessException e) {
-            peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                    String.format("Failure in verifying authority '%s' against peer during rpc",
-                            callOptions.getAuthority())).withCause(e);
-          }
-          peerVerificationResults.put(callOptions.getAuthority(), peerVerificationStatus);
         }
       }
       if (peerVerificationStatus != null && !peerVerificationStatus.isOk()) {
@@ -1610,7 +1593,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   /**
    * SSLSocket wrapper that provides a fake SSLSession for handshake session.
    */
-  static class SslSocketWrapper extends NoopSslSocket {
+  static final class SslSocketWrapper extends NoopSslSocket {
 
     private final SSLSession sslSession;
     private final SSLSocket sslSocket;

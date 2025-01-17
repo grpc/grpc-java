@@ -60,6 +60,8 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
+
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
@@ -69,6 +71,7 @@ import org.junit.runners.JUnit4;
 
 /** Verify OkHttp's TLS integration. */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class TlsTest {
   @Rule
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
@@ -110,7 +113,7 @@ public class TlsTest {
 
   @Test
   public void perRpcAuthorityOverride_checkServerTrustedIsCalled() throws Exception {
-    System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
+    OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
     try {
       ServerCredentials serverCreds;
       try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
@@ -137,7 +140,7 @@ public class TlsTest {
               SimpleRequest.getDefaultInstance());
       assertThat(fakeTrustManager.checkServerTrustedCalled).isTrue();
     } finally {
-      System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
+      OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
     }
   }
 
@@ -148,7 +151,7 @@ public class TlsTest {
   @Test
   public void perRpcAuthorityOverride_tlsCreds_noX509ExtendedTrustManager_fails()
           throws Exception {
-    System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
+    OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
     try {
       ServerCredentials serverCreds;
       try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
@@ -180,7 +183,7 @@ public class TlsTest {
                         + "available");
       }
     } finally {
-      System.clearProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK");
+      OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
     }
   }
 
