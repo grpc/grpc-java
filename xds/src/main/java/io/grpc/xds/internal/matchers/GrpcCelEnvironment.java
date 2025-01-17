@@ -35,8 +35,12 @@ import javax.annotation.Nullable;
 public class GrpcCelEnvironment  {
   private static final CelOptions CEL_OPTIONS = CelOptions
       .current()
-      .comprehensionMaxIterations(0)
       .resolveTypeDependencies(false)
+      // Parity with Envoy.
+      .enableComprehension(false)
+      .enableListConcatenation(false)
+      .enableStringConcatenation(false)
+      .enableStringConversion(false)
       .build();
   private static final CelRuntime CEL_RUNTIME = CelRuntimeFactory
       .standardCelRuntimeBuilder()
