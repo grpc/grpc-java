@@ -363,8 +363,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
 
     private XdsWatcherBase(XdsResourceType<T> type, String resourceName) {
-      this.type = type;
-      this.resourceName = resourceName;
+      this.type = checkNotNull(type, "type");
+      this.resourceName = checkNotNull(resourceName, "resourceName");
     }
 
     @Override
@@ -419,6 +419,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onChanged(XdsListenerResource.LdsUpdate update) {
+      checkNotNull(update, "update");
+
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
       List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
       String rdsName = httpConnectionManager.rdsName();
@@ -445,7 +447,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onError(Status error) {
-      super.onError(error);
+      super.onError(checkNotNull(error, "error"));
       xdsConfigWatcher.onError(toContextString(), error);
     }
 
@@ -470,11 +472,12 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   private class RdsWatcher extends XdsWatcherBase<RdsUpdate> {
 
     public RdsWatcher(String resourceName) {
-      super(XdsRouteConfigureResource.getInstance(), resourceName);
+      super(XdsRouteConfigureResource.getInstance(), checkNotNull(resourceName, "resourceName"));
     }
 
     @Override
     public void onChanged(RdsUpdate update) {
+      checkNotNull(update, "update");
       RdsUpdate oldData = hasDataValue() ? getData().getValue() : null;
       VirtualHost oldVirtualHost =
           (oldData != null)
@@ -487,13 +490,13 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onError(Status error) {
-      super.onError(error);
+      super.onError(checkNotNull(error, "error"));
       xdsConfigWatcher.onError(toContextString(), error);
     }
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
-      handleDoesNotExist(resourceName);
+      handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
       xdsConfigWatcher.onResourceDoesNotExist(toContextString());
     }
 
@@ -510,12 +513,13 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     Map<String, Integer> parentContexts = new HashMap<>();
 
     CdsWatcher(String resourceName, String parentContext, int depth) {
-      super(CLUSTER_RESOURCE, resourceName);
-      this.parentContexts.put(parentContext, depth);
+      super(CLUSTER_RESOURCE, checkNotNull(resourceName, "resourceName"));
+      this.parentContexts.put(checkNotNull(parentContext, "parentContext"), depth);
     }
 
     @Override
     public void onChanged(XdsClusterResource.CdsUpdate update) {
+      checkNotNull(update, "update");
       switch (update.clusterType()) {
         case EDS:
           setData(update);
@@ -576,7 +580,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
-      handleDoesNotExist(resourceName);
+      handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
       maybePublishConfig();
     }
   }
@@ -608,22 +612,22 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   private class EdsWatcher extends XdsWatcherBase<XdsEndpointResource.EdsUpdate> {
-    private Set<String> parentContexts = new HashSet<>();
+    private final Set<String> parentContexts = new HashSet<>();
 
     private EdsWatcher(String resourceName, String parentContext) {
-      super(ENDPOINT_RESOURCE, resourceName);
-      parentContexts.add(parentContext);
+      super(ENDPOINT_RESOURCE, checkNotNull(resourceName, "resourceName"));
+      parentContexts.add(checkNotNull(parentContext, "parentContext"));
     }
 
     @Override
     public void onChanged(XdsEndpointResource.EdsUpdate update) {
-      setData(update);
+      setData(checkNotNull(update, "update"));
       maybePublishConfig();
     }
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
-      handleDoesNotExist(resourceName);
+      handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
       maybePublishConfig();
     }
 
