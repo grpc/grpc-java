@@ -597,7 +597,8 @@ final class ProtocolNegotiators {
       } catch (ClassNotFoundException e) {
         // Per-rpc authority overriding via call options will be disallowed.
       } catch (NoSuchMethodException e) {
-        // Should never happen.
+        // Should never happen since X509ExtendedTrustManager was introduced in Android API level 24
+        // along with checkServerTrusted.
       }
       checkServerTrustedMethod = method;
     }
