@@ -71,7 +71,6 @@ import org.junit.runners.JUnit4;
 
 /** Verify OkHttp's TLS integration. */
 @RunWith(JUnit4.class)
-@IgnoreJRERequirement
 public class TlsTest {
   @Rule
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
@@ -432,6 +431,7 @@ public class TlsTest {
 
   /** Used to capture the fact that checkServerTrusted has been called for the per-rpc authority
    *  verification. */
+  @IgnoreJRERequirement
   private static class FakeX509ExtendedTrustManager extends X509ExtendedTrustManager {
     private final X509ExtendedTrustManager delegate;
     private boolean checkServerTrustedCalled;
