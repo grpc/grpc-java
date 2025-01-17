@@ -585,8 +585,6 @@ final class ProtocolNegotiators {
   }
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
-    private static final Logger logger =
-            Logger.getLogger(ClientTlsProtocolNegotiator.class.getName());
     private static final Method checkServerTrustedMethod;
 
     static {
@@ -600,8 +598,6 @@ final class ProtocolNegotiators {
         // Per-rpc authority overriding via call options will be disallowed.
       } catch (NoSuchMethodException e) {
         // Should never happen.
-        logger.log(Level.WARNING, "Method checkServerTrusted not found in "
-                + "javax.net.ssl.X509ExtendedTrustManager", e);
       }
       checkServerTrustedMethod = method;
     }
@@ -676,10 +672,6 @@ final class ProtocolNegotiators {
     private void verifyAuthorityAllowedForPeerCert(String authority)
             throws SSLPeerUnverifiedException, CertificateException, InvocationTargetException,
             IllegalAccessException {
-      if (checkServerTrustedMethod == null) {
-        throw new IllegalStateException("Method checkServerTrusted not found in "
-                + "javax.net.ssl.X509ExtendedTrustManager");
-      }
       SSLEngine sslEngineWrapper = new SslEngineWrapper(sslEngine, authority);
       // The typecasting of Certificate to X509Certificate should work because this method will only
       // be called when using TLS and thus X509.
