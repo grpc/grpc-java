@@ -54,6 +54,7 @@ dependencies {
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.guava,
             libraries.dev.cel.runtime,
+            libraries.dev.cel.protobuf,
             libraries.gson,
             libraries.re2j,
             libraries.auto.value.annotations,
