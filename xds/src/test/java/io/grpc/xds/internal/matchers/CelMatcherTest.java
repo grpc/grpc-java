@@ -105,7 +105,7 @@ public class CelMatcherTest {
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    assertCausedByCelErrorCode(status, CelErrorCode.ATTRIBUTE_NOT_FOUND);
+    assertCelCauseErrorCode(status, CelErrorCode.ATTRIBUTE_NOT_FOUND);
   }
 
   @Test
@@ -114,7 +114,7 @@ public class CelMatcherTest {
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    assertCausedByCelErrorCode(status, CelErrorCode.ATTRIBUTE_NOT_FOUND);
+    assertCelCauseErrorCode(status, CelErrorCode.ATTRIBUTE_NOT_FOUND);
   }
 
   @Test
@@ -124,7 +124,7 @@ public class CelMatcherTest {
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcherWithComprehensions.test(fakeInput)).getStatus();
 
-    assertCausedByCelErrorCode(status, CelErrorCode.ITERATION_BUDGET_EXCEEDED);
+    assertCelCauseErrorCode(status, CelErrorCode.ITERATION_BUDGET_EXCEEDED);
   }
 
   @Test
@@ -139,7 +139,7 @@ public class CelMatcherTest {
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    assertCausedByCelErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
+    assertCelCauseErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
   }
 
   @Test
@@ -148,7 +148,7 @@ public class CelMatcherTest {
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    assertCausedByCelErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
+    assertCelCauseErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
   }
 
   @Test
@@ -158,7 +158,7 @@ public class CelMatcherTest {
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    assertCausedByCelErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
+    assertCelCauseErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
   }
 
   @Test
@@ -176,11 +176,13 @@ public class CelMatcherTest {
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    // TODO(sergiitk): assert message?
-    assertCausedByCelErrorCode(status, CelErrorCode.INVALID_ARGUMENT);
+    assertCelCauseErrorCode(status, CelErrorCode.INVALID_ARGUMENT);
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getMessage()).contains(
+        "Regex pattern exceeds allowed program size. Allowed: 100, Provided:");
   }
 
-  private void assertCausedByCelErrorCode(Status status, CelErrorCode expectedCelCode) {
+  private void assertCelCauseErrorCode(Status status, CelErrorCode expectedCelCode) {
     assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
     assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
 
