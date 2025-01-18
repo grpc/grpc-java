@@ -36,12 +36,15 @@ import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
+import io.envoyproxy.envoy.config.listener.v3.ApiListener;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.Route;
 import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -297,22 +300,54 @@ public class XdsTestUtils {
     return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
   }
 
-  static io.envoyproxy.envoy.config.route.v3.VirtualHost buildVirtualHost(String authority,
-                                                                         String rdsName,
-                                                                         String clusterName) {
-    return io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
-        .setName(rdsName)
-        .addDomains(authority)
-        .addRoutes(
-            Route.newBuilder()
-                .setMatch(
-                    RouteMatch.newBuilder().setPrefix("/").build())
-                .setRoute(
-                    RouteAction.newBuilder().setCluster(clusterName)
-                        .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
-                        .build())
-                .build())
+  static Cluster buildAggCluster(String name, List<String> childNames) {
+    ClusterConfig rootConfig = ClusterConfig.newBuilder().addAllClusters(childNames).build();
+    Cluster.CustomClusterType type =
+        Cluster.CustomClusterType.newBuilder()
+            .setName(XdsClusterResource.AGGREGATE_CLUSTER_TYPE_NAME)
+            .setTypedConfig(Any.pack(rootConfig))
+            .build();
+    Cluster.Builder builder =
+        Cluster.newBuilder().setName(name).setClusterType(type);
+    builder.setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN);
+    Cluster cluster = builder.build();
+    return cluster;
+  }
+
+  static void addEdsClusters(Map<String, Message> clusterMap, Map<String, Message> edsMap,
+                             String... clusterNames) {
+    for (String clusterName : clusterNames) {
+      Cluster cluster =
+          ControlPlaneRule.buildCluster(clusterName, getEdsNameForCluster(clusterName));
+      clusterMap.put(clusterName, cluster);
+
+      String edsName = getEdsNameForCluster(clusterName);
+      ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
+          clusterName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
+      edsMap.put(edsName, clusterLoadAssignment);
+    }
+  }
+
+  static Listener buildInlineClientListener(String rdsName, String clusterName, String serverName) {
+      HttpFilter
+        httpFilter = HttpFilter.newBuilder()
+        .setName(serverName)
+        .setTypedConfig(Any.pack(Router.newBuilder().build()))
+        .setIsOptional(true)
         .build();
+    ApiListener.Builder clientListenerBuilder =
+        ApiListener.newBuilder().setApiListener(Any.pack(
+            io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
+                .HttpConnectionManager.newBuilder()
+                .setRouteConfig(
+                    buildRouteConfiguration(serverName, rdsName, clusterName))
+                .addAllHttpFilters(Collections.singletonList(httpFilter))
+                .build(),
+            HTTP_CONNECTION_MANAGER_TYPE_URL));
+    return Listener.newBuilder()
+        .setName(serverName)
+        .setApiListener(clientListenerBuilder.build()).build();
+
   }
 
   /**

@@ -94,7 +94,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       Set<ClusterSubscription> localSubscriptions =
           clusterSubscriptions.computeIfAbsent(clusterName, k -> new HashSet<>());
       localSubscriptions.add(subscription);
-      addWatcher(new CdsWatcher(clusterName, TOP_CDS_CONTEXT, 1));
+      addClusterWatcher(clusterName, subscription.toString(), 1);
+      maybePublishConfig();
     });
 
     return subscription;
@@ -198,7 +199,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         clusterSubscriptions.remove(clusterName);
         XdsWatcherBase<?> cdsWatcher =
             resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
-        cancelClusterWatcherTree((CdsWatcher) cdsWatcher, TOP_CDS_CONTEXT);
+        cancelClusterWatcherTree((CdsWatcher) cdsWatcher, subscription.toString());
         maybePublishConfig();
       }
     });

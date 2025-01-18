@@ -39,16 +39,11 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
-import io.envoyproxy.envoy.config.listener.v3.ApiListener;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
-import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -304,16 +299,7 @@ public class XdsDependencyManagerTest {
   public void testMissingCdsAndEds() {
     // update config so that agg cluster references 2 existing & 1 non-existing cluster
     List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
-    ClusterConfig rootConfig = ClusterConfig.newBuilder().addAllClusters(childNames).build();
-    Cluster.CustomClusterType type =
-        Cluster.CustomClusterType.newBuilder()
-            .setName(XdsClusterResource.AGGREGATE_CLUSTER_TYPE_NAME)
-            .setTypedConfig(Any.pack(rootConfig))
-            .build();
-    Cluster.Builder builder =
-        Cluster.newBuilder().setName(CLUSTER_NAME).setClusterType(type);
-    builder.setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN);
-    Cluster cluster = builder.build();
+    Cluster cluster = XdsTestUtils.buildAggCluster(CLUSTER_NAME, childNames);
     Map<String, Message> clusterMap = new HashMap<>();
     Map<String, Message> edsMap = new HashMap<>();
 
@@ -434,13 +420,81 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
-  public void testChangeRdsName_notFromLds() {
-    // TODO implement
-  }
+  public void testMultipleParentsInCdsTree() throws IOException {
+    /*
+     * Configure Xds server with the following cluster tree and point RDS to root:
+      2 aggregates under root A & B
+       B has EDS Cluster B1 && shared agg AB1; A has agg A1 && shared agg AB1
+        A1 has shared EDS Cluster A11 && shared agg AB1
+         AB1 has shared EDS Clusters A11 && AB11
 
-  @Test
-  public void testMultipleParentsInCdsTree() {
-    // TODO implement
+      As an alternate visualization, parents are:
+        A -> root, B -> root, A1 -> A, AB1 -> A|B|A1, B1 -> B, A11 -> A1|AB1, AB11 -> AB1
+     */
+    Cluster rootCluster =
+        XdsTestUtils.buildAggCluster("root", Arrays.asList("clusterA", "clusterB"));
+    Cluster clusterA =
+        XdsTestUtils.buildAggCluster("clusterA", Arrays.asList("clusterA1", "clusterAB1"));
+    Cluster clusterB =
+        XdsTestUtils.buildAggCluster("clusterB", Arrays.asList("clusterB1", "clusterAB1"));
+    Cluster clusterA1 =
+        XdsTestUtils.buildAggCluster("clusterA1", Arrays.asList("clusterA11", "clusterAB1"));
+    Cluster clusterAB1 =
+        XdsTestUtils.buildAggCluster("clusterAB1", Arrays.asList("clusterA11", "clusterAB11"));
+
+    Map<String, Message> clusterMap = new HashMap<>();
+    Map<String, Message> edsMap = new HashMap<>();
+
+    clusterMap.put("root", rootCluster);
+    clusterMap.put("clusterA", clusterA);
+    clusterMap.put("clusterB", clusterB);
+    clusterMap.put("clusterA1", clusterA1);
+    clusterMap.put("clusterAB1", clusterAB1);
+
+    XdsTestUtils.addEdsClusters(clusterMap, edsMap, "clusterA11", "clusterAB11", "clusterB1");
+    RouteConfiguration routeConfig =
+        XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "root");
+    controlPlaneService.setXdsConfig(
+        ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, routeConfig));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    // Start the actual test
+    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    XdsConfig initialConfig = xdsConfigCaptor.getValue();
+
+    Closeable rootSub = xdsDependencyManager.subscribeToCluster("root");
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    XdsConfig afterRootConfig = xdsConfigCaptor.getValue();
+    assertThat(afterRootConfig).isEqualTo(initialConfig);
+
+    Closeable clusterAB11Sub = xdsDependencyManager.subscribeToCluster("clusterAB11");
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
+
+    rootSub.close();
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
+    clusterAB11Sub.close();
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
+    System.out.println("\nAfter closes\n--------------------\n");
+
+    // Make an explicit root subscription and then change RDS to point to A11
+    rootSub = xdsDependencyManager.subscribeToCluster("root");
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
+
+    RouteConfiguration newRouteConfig =
+        XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "clusterA11");
+    controlPlaneService.setXdsConfig(
+        ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, newRouteConfig));
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    assertThat(xdsConfigCaptor.getValue().getClusters().keySet().size()).isEqualTo(8);
+
+    // Now that it is released, we should only have A11
+    rootSub.close();
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    assertThat(xdsConfigCaptor.getValue().getClusters().keySet()).containsExactly("clusterA11");
   }
 
   @Test
@@ -454,25 +508,7 @@ public class XdsDependencyManagerTest {
   }
 
   private Listener buildInlineClientListener(String rdsName, String clusterName) {
-    HttpFilter
-        httpFilter = HttpFilter.newBuilder()
-        .setName(serverName)
-        .setTypedConfig(Any.pack(Router.newBuilder().build()))
-        .setIsOptional(true)
-        .build();
-    ApiListener.Builder clientListenerBuilder =
-        ApiListener.newBuilder().setApiListener(Any.pack(
-            io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
-                .HttpConnectionManager.newBuilder()
-                .setRouteConfig(
-                    XdsTestUtils.buildRouteConfiguration(serverName, rdsName, clusterName))
-                .addAllHttpFilters(Collections.singletonList(httpFilter))
-                .build(),
-            XdsTestUtils.HTTP_CONNECTION_MANAGER_TYPE_URL));
-    return Listener.newBuilder()
-        .setName(serverName)
-        .setApiListener(clientListenerBuilder.build()).build();
-
+    return XdsTestUtils.buildInlineClientListener(rdsName, clusterName, serverName);
   }
 
 
@@ -488,6 +524,7 @@ public class XdsDependencyManagerTest {
 
     @Override
     public void onUpdate(XdsConfig config) {
+      System.out.println("\nConfig changed: " + config + "\n----------------------------\n");
       log.fine("Config changed: " + config);
       lastConfig = config;
       numUpdates++;
