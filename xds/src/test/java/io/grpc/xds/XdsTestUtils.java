@@ -317,11 +317,10 @@ public class XdsTestUtils {
   static void addEdsClusters(Map<String, Message> clusterMap, Map<String, Message> edsMap,
                              String... clusterNames) {
     for (String clusterName : clusterNames) {
-      Cluster cluster =
-          ControlPlaneRule.buildCluster(clusterName, getEdsNameForCluster(clusterName));
+      String edsName = getEdsNameForCluster(clusterName);
+      Cluster cluster = ControlPlaneRule.buildCluster(clusterName, edsName);
       clusterMap.put(clusterName, cluster);
 
-      String edsName = getEdsNameForCluster(clusterName);
       ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
           clusterName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
       edsMap.put(edsName, clusterLoadAssignment);

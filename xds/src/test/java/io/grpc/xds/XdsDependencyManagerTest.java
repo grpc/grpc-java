@@ -478,7 +478,6 @@ public class XdsDependencyManagerTest {
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
     clusterAB11Sub.close();
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
-    System.out.println("\nAfter closes\n--------------------\n");
 
     // Make an explicit root subscription and then change RDS to point to A11
     rootSub = xdsDependencyManager.subscribeToCluster("root");
@@ -499,7 +498,48 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testMultipleCdsReferToSameEds() {
-    // TODO implement
+    // Create the maps and Update the config to have 2 clusters that refer to the same EDS resource
+    String edsName = "sharedEds";
+
+    Cluster rootCluster =
+        XdsTestUtils.buildAggCluster("root", Arrays.asList("clusterA", "clusterB"));
+    Cluster clusterA = ControlPlaneRule.buildCluster("clusterA", edsName);
+    Cluster clusterB = ControlPlaneRule.buildCluster("clusterB", edsName);
+
+    Map<String, Message> clusterMap = new HashMap<>();
+    clusterMap.put("root", rootCluster);
+    clusterMap.put("clusterA", clusterA);
+    clusterMap.put("clusterB", clusterB);
+
+    Map<String, Message> edsMap = new HashMap<>();
+    ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
+        serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
+    edsMap.put(edsName, clusterLoadAssignment);
+
+    RouteConfiguration routeConfig =
+        XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "root");
+    controlPlaneService.setXdsConfig(
+        ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, routeConfig));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    // Start the actual test
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+    verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    XdsConfig initialConfig = xdsConfigCaptor.getValue();
+    assertThat(initialConfig.getClusters().keySet())
+        .containsExactly("root", "clusterA", "clusterB");
+
+    XdsEndpointResource.EdsUpdate edsForA =
+        initialConfig.getClusters().get("clusterA").getValue().getEndpoint().getValue();
+    assertThat(edsForA.clusterName).isEqualTo(edsName);
+    XdsEndpointResource.EdsUpdate edsForB =
+        initialConfig.getClusters().get("clusterB").getValue().getEndpoint().getValue();
+    assertThat(edsForB.clusterName).isEqualTo(edsName);
+    assertThat(edsForA).isEqualTo(edsForB);
+    edsForA.localityLbEndpointsMap.values().forEach(
+        localityLbEndpoints -> assertThat(localityLbEndpoints.endpoints()).hasSize(1));
   }
 
   @Test
