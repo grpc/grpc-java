@@ -19,6 +19,7 @@ package io.grpc.xds.internal.matchers;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
+import com.google.common.base.Strings;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelErrorCode;
 import dev.cel.common.CelValidationException;
@@ -158,6 +159,25 @@ public class CelMatcherTest {
         () -> matcher.test(fakeInput)).getStatus();
 
     assertCausedByCelErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
+  }
+
+  @Test
+  public void env_regexProgramSize() throws Exception {
+    String ten = "0123456780";
+
+    // Positive case, program size <= 100.
+    assertThat(newMatcher("matches('" + ten + "', '" + ten + "')").test(fakeInput)).isTrue();
+
+    // Negative case, program size > 100.
+    @SuppressWarnings("InlineMeInliner") // String.repeat() requires Java 11.
+    String patternOverLimit = Strings.repeat(ten, 11); // Program Size = 112 in re2j 1.8 / cel 1.9.1
+
+    CelMatcher matcher = newMatcher("matches('foo', '" + patternOverLimit + "')");
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    // TODO(sergiitk): assert message?
+    assertCausedByCelErrorCode(status, CelErrorCode.INVALID_ARGUMENT);
   }
 
   private void assertCausedByCelErrorCode(Status status, CelErrorCode expectedCelCode) {

@@ -37,6 +37,7 @@ public class GrpcCelEnvironment  {
       .current()
       .resolveTypeDependencies(false)
       // Parity with Envoy.
+      .maxRegexProgramSize(100)
       .enableComprehension(false)
       .enableListConcatenation(false)
       .enableStringConcatenation(false)
