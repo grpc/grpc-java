@@ -101,53 +101,71 @@ public class CelMatcherTest {
   @Test
   public void unknownRequestProperty() throws Exception {
     CelMatcher matcher = newMatcher("request.protocol == 'Whatever'");
-
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
-    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
-
-    // Verify CelErrorCode is ATTRIBUTE_NOT_FOUND.
-    CelEvaluationException cause = (CelEvaluationException) status.getCause();
-    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ATTRIBUTE_NOT_FOUND);
+    assertCausedByCelErrorCode(status, CelErrorCode.ATTRIBUTE_NOT_FOUND);
   }
 
   @Test
   public void unknownHeader() throws Exception {
     CelMatcher matcher = newMatcher("request.headers['foo'] == 'bar'");
-
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcher.test(fakeInput)).getStatus();
 
-    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
-    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
-
-    // Verify CelErrorCode is ATTRIBUTE_NOT_FOUND.
-    CelEvaluationException cause = (CelEvaluationException) status.getCause();
-    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ATTRIBUTE_NOT_FOUND);
+    assertCausedByCelErrorCode(status, CelErrorCode.ATTRIBUTE_NOT_FOUND);
   }
 
   @Test
   public void macros_comprehensionsDisabled() throws Exception {
     CelMatcher matcherWithComprehensions = newMatcher(
         "size(['foo', 'bar'].map(x, [request.headers[x], request.headers[x]])) == 1");
-
     Status status = assertThrows(StatusRuntimeException.class,
         () -> matcherWithComprehensions.test(fakeInput)).getStatus();
 
-    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
-    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
-
-    // Verify CelErrorCode is ITERATION_BUDGET_EXCEEDED.
-    CelEvaluationException cause = (CelEvaluationException) status.getCause();
-    assertThat(cause.getErrorCode()).isEqualTo(CelErrorCode.ITERATION_BUDGET_EXCEEDED);
+    assertCausedByCelErrorCode(status, CelErrorCode.ITERATION_BUDGET_EXCEEDED);
   }
 
   @Test
   public void macros_hasEnabled() throws Exception {
     boolean result = newMatcher("has(request.headers.foo)").test(fakeInput);
     assertThat(result).isFalse();
+  }
+
+  @Test
+  public void env_listConcatenationDisabled() throws Exception {
+    CelMatcher matcher = newMatcher("size([1, 2] + [3, 4]) == 4");
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    assertCausedByCelErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
+  }
+
+  @Test
+  public void env_stringConcatenationDisabled() throws Exception {
+    CelMatcher matcher = newMatcher("'ab' + 'cd' == 'abcd'");
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    assertCausedByCelErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
+  }
+
+  @Test
+  public void env_stringConversionDisabled() throws Exception {
+    // TODO(sergiitk): [TEST] verify conversions to all types?
+    CelMatcher matcher = newMatcher("string(3.14) == '3.14'");
+    Status status = assertThrows(StatusRuntimeException.class,
+        () -> matcher.test(fakeInput)).getStatus();
+
+    assertCausedByCelErrorCode(status, CelErrorCode.OVERLOAD_NOT_FOUND);
+  }
+
+  private void assertCausedByCelErrorCode(Status status, CelErrorCode expectedCelCode) {
+    assertThat(status.getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(status.getCause()).isInstanceOf(CelEvaluationException.class);
+
+    CelEvaluationException cause = (CelEvaluationException) status.getCause();
+    assertThat(cause.getErrorCode()).isEqualTo(expectedCelCode);
   }
 
   private CelMatcher newMatcher(String expr) throws CelValidationException, CelEvaluationException {
