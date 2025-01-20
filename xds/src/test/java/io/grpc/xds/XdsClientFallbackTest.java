@@ -335,10 +335,13 @@ public class XdsClientFallbackTest {
 
   // This test takes a long time because of the 16 sec timeout for non-existent resource
   @Test
-  public void connect_then_mainServerDown_fallbackServerUp() throws InterruptedException {
+  public void connect_then_mainServerDown_fallbackServerUp() throws Exception {
     mainXdsServer.restartXdsServer();
     fallbackServer.restartXdsServer();
-    xdsClient = xdsClientPool.getObject();
+    XdsClientImpl xdsClient = CommonBootstrapperTestUtils.createXdsClient(
+        new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride()),
+        DEFAULT_XDS_TRANSPORT_FACTORY, fakeClock, new ExponentialBackoffPolicy.Provider(),
+        MessagePrinter.INSTANCE, xdsClientMetricReporter);
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
@@ -349,7 +352,12 @@ public class XdsClientFallbackTest {
     verify(rdsWatcher, timeout(5000)).onChanged(any());
 
     mainXdsServer.getServer().shutdownNow();
-    TimeUnit.SECONDS.sleep(5); // TODO(lsafran) Use FakeClock so test runs faster
+    // Sleep for the ADS stream disconnect to be processed and for the retry to fail. Between those
+    // two sleeps we need the fakeClock to progress by 1 second to restart the ADS stream.
+    for (int i = 0; i < 5; i++) {
+      fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
+      TimeUnit.SECONDS.sleep(1);
+    }
 
     // Shouldn't do fallback since all watchers are loaded
     verify(ldsWatcher, never()).onChanged(
@@ -372,7 +380,7 @@ public class XdsClientFallbackTest {
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
     verify(ldsWatcher2, timeout(5000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
-    verify(cdsWatcher, timeout(16000)).onChanged(any());
+    verify(cdsWatcher, timeout(5000)).onChanged(any());
 
     xdsClient.watchXdsResource(
         XdsRouteConfigureResource.getInstance(), FALLBACK_RDS_NAME, rdsWatcher3);
@@ -381,7 +389,10 @@ public class XdsClientFallbackTest {
     // Test that resource defined in main but not fallback is handled correctly
     xdsClient.watchXdsResource(
         XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher2);
-    verify(cdsWatcher2, timeout(16000)).onResourceDoesNotExist(eq(CLUSTER_NAME));
+    verify(cdsWatcher2, never()).onResourceDoesNotExist(eq(CLUSTER_NAME));
+    fakeClock.forwardTime(15000, TimeUnit.MILLISECONDS); // Does not exist timer
+    verify(cdsWatcher2, timeout(5000)).onResourceDoesNotExist(eq(CLUSTER_NAME));
+    xdsClient.shutdown();
   }
 
   @Test
@@ -428,7 +439,7 @@ public class XdsClientFallbackTest {
 
   @Test
   public void testGoodUrlFollowedByBadUrl() {
-    // Setup xdsClient to fail on stream creation
+    // xdsClient should succeed in stream creation as it doesn't need to use the bad url
     String garbageUri = "some. garbage";
     String validUri = "localhost:" + mainXdsServer.getServer().getPort();
 
@@ -437,7 +448,6 @@ public class XdsClientFallbackTest {
         new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-    fakeClock.forwardTime(20, TimeUnit.SECONDS);
     verify(ldsWatcher, timeout(5000)).onChanged(
         XdsListenerResource.LdsUpdate.forApiListener(
             MAIN_HTTP_CONNECTION_MANAGER));

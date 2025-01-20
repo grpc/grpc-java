@@ -34,6 +34,8 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import java.net.Inet4Address;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,17 +60,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
+  private final boolean enableHappyEyeballs = !isSerializingRetries()
+      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
-  private final Index addressIndex = new Index(ImmutableList.of());
+  private final Index addressIndex = new Index(ImmutableList.of(), this.enableHappyEyeballs);
   private int numTf = 0;
   private boolean firstPass = true;
   @Nullable
   private ScheduledHandle scheduleConnectionTask = null;
   private ConnectivityState rawConnectivityState = IDLE;
   private ConnectivityState concludedState = IDLE;
-  private final boolean enableHappyEyeballs = !isSerializingRetries()
-      && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
   private boolean notAPetiolePolicy = true; // means not under a petiole policy
   private final BackoffPolicy.Provider bkoffPolProvider = new ExponentialBackoffPolicy.Provider();
   private BackoffPolicy reconnectPolicy;
@@ -610,27 +612,26 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Index as in 'i', the pointer to an entry. Not a "search index."
+   * This contains both an ordered list of addresses and a pointer(i.e. index) to the current entry.
    * All updates should be done in a synchronization context.
    */
   @VisibleForTesting
   static final class Index {
-    private List<EquivalentAddressGroup> addressGroups;
-    private int size;
-    private int groupIndex;
-    private int addressIndex;
+    private List<UnwrappedEag> orderedAddresses;
+    private int activeElement = 0;
+    private boolean enableHappyEyeballs;
 
-    public Index(List<EquivalentAddressGroup> groups) {
+    Index(List<EquivalentAddressGroup> groups, boolean enableHappyEyeballs) {
+      this.enableHappyEyeballs = enableHappyEyeballs;
       updateGroups(groups);
     }
 
     public boolean isValid() {
-      // Is invalid if empty or has incremented off the end
-      return groupIndex < addressGroups.size();
+      return activeElement < orderedAddresses.size();
     }
 
     public boolean isAtBeginning() {
-      return groupIndex == 0 && addressIndex == 0;
+      return activeElement == 0;
     }
 
     /**
@@ -642,79 +643,150 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         return false;
       }
 
-      EquivalentAddressGroup group = addressGroups.get(groupIndex);
-      addressIndex++;
-      if (addressIndex >= group.getAddresses().size()) {
-        groupIndex++;
-        addressIndex = 0;
-        return groupIndex < addressGroups.size();
-      }
+      activeElement++;
 
-      return true;
+      return isValid();
     }
 
     public void reset() {
-      groupIndex = 0;
-      addressIndex = 0;
+      activeElement = 0;
     }
 
     public SocketAddress getCurrentAddress() {
       if (!isValid()) {
         throw new IllegalStateException("Index is past the end of the address group list");
       }
-      return addressGroups.get(groupIndex).getAddresses().get(addressIndex);
+      return orderedAddresses.get(activeElement).address;
     }
 
     public Attributes getCurrentEagAttributes() {
       if (!isValid()) {
         throw new IllegalStateException("Index is off the end of the address group list");
       }
-      return addressGroups.get(groupIndex).getAttributes();
+      return orderedAddresses.get(activeElement).attributes;
     }
 
     public List<EquivalentAddressGroup> getCurrentEagAsList() {
-      return Collections.singletonList(
-          new EquivalentAddressGroup(getCurrentAddress(), getCurrentEagAttributes()));
+      return Collections.singletonList(getCurrentEag());
+    }
+
+    private EquivalentAddressGroup getCurrentEag() {
+      if (!isValid()) {
+        throw new IllegalStateException("Index is past the end of the address group list");
+      }
+      return orderedAddresses.get(activeElement).asEag();
     }
 
     /**
      * Update to new groups, resetting the current index.
      */
     public void updateGroups(List<EquivalentAddressGroup> newGroups) {
-      addressGroups = checkNotNull(newGroups, "newGroups");
+      checkNotNull(newGroups, "newGroups");
+      orderedAddresses = enableHappyEyeballs
+                             ? updateGroupsHE(newGroups)
+                             : updateGroupsNonHE(newGroups);
       reset();
-      int size = 0;
-      for (EquivalentAddressGroup eag : newGroups) {
-        size += eag.getAddresses().size();
-      }
-      this.size = size;
     }
 
     /**
      * Returns false if the needle was not found and the current index was left unchanged.
      */
     public boolean seekTo(SocketAddress needle) {
-      for (int i = 0; i < addressGroups.size(); i++) {
-        EquivalentAddressGroup group = addressGroups.get(i);
-        int j = group.getAddresses().indexOf(needle);
-        if (j == -1) {
-          continue;
+      checkNotNull(needle, "needle");
+      for (int i = 0; i < orderedAddresses.size(); i++) {
+        if (orderedAddresses.get(i).address.equals(needle)) {
+          this.activeElement = i;
+          return true;
         }
-        this.groupIndex = i;
-        this.addressIndex = j;
-        return true;
       }
       return false;
     }
 
     public int size() {
-      return size;
+      return orderedAddresses.size();
+    }
+
+    private List<UnwrappedEag> updateGroupsNonHE(List<EquivalentAddressGroup> newGroups) {
+      List<UnwrappedEag> entries = new ArrayList<>();
+      for (int g = 0; g < newGroups.size(); g++) {
+        EquivalentAddressGroup eag = newGroups.get(g);
+        for (int a = 0; a < eag.getAddresses().size(); a++) {
+          SocketAddress addr = eag.getAddresses().get(a);
+          entries.add(new UnwrappedEag(eag.getAttributes(), addr));
+        }
+      }
+
+      return entries;
+    }
+
+    private List<UnwrappedEag> updateGroupsHE(List<EquivalentAddressGroup> newGroups) {
+      Boolean firstIsV6 = null;
+      List<UnwrappedEag> v4Entries = new ArrayList<>();
+      List<UnwrappedEag> v6Entries = new ArrayList<>();
+      for (int g = 0; g <  newGroups.size(); g++) {
+        EquivalentAddressGroup eag = newGroups.get(g);
+        for (int a = 0; a < eag.getAddresses().size(); a++) {
+          SocketAddress addr = eag.getAddresses().get(a);
+          boolean isIpV4 = addr instanceof InetSocketAddress
+              && ((InetSocketAddress) addr).getAddress() instanceof Inet4Address;
+          if (isIpV4) {
+            if (firstIsV6 == null) {
+              firstIsV6 = false;
+            }
+            v4Entries.add(new UnwrappedEag(eag.getAttributes(), addr));
+          } else {
+            if (firstIsV6 == null) {
+              firstIsV6 = true;
+            }
+            v6Entries.add(new UnwrappedEag(eag.getAttributes(), addr));
+          }
+        }
+      }
+
+      return firstIsV6 != null && firstIsV6
+          ? interleave(v6Entries, v4Entries)
+          : interleave(v4Entries, v6Entries);
+    }
+
+    private List<UnwrappedEag> interleave(List<UnwrappedEag> firstFamily,
+                                          List<UnwrappedEag> secondFamily) {
+      if (firstFamily.isEmpty()) {
+        return secondFamily;
+      }
+      if (secondFamily.isEmpty()) {
+        return firstFamily;
+      }
+
+      List<UnwrappedEag> result = new ArrayList<>(firstFamily.size() + secondFamily.size());
+      for (int i = 0; i < Math.max(firstFamily.size(), secondFamily.size()); i++) {
+        if (i < firstFamily.size()) {
+          result.add(firstFamily.get(i));
+        }
+        if (i < secondFamily.size()) {
+          result.add(secondFamily.get(i));
+        }
+      }
+      return result;
+    }
+
+    private static final class UnwrappedEag {
+      private final Attributes attributes;
+      private final SocketAddress address;
+
+      public UnwrappedEag(Attributes attributes, SocketAddress address) {
+        this.attributes = attributes;
+        this.address = address;
+      }
+
+      private EquivalentAddressGroup asEag() {
+        return new EquivalentAddressGroup(address, attributes);
+      }
     }
   }
 
   @VisibleForTesting
-  int getGroupIndex() {
-    return addressIndex.groupIndex;
+  int getIndexLocation() {
+    return addressIndex.activeElement;
   }
 
   @VisibleForTesting
@@ -778,4 +850,5 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       this.randomSeed = randomSeed;
     }
   }
+
 }

@@ -25,6 +25,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -32,6 +33,7 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.core.v3.Metadata;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
@@ -44,12 +46,15 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.internal.ProtobufJsonConverter;
 import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 
@@ -67,6 +72,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   static final String ADS_TYPE_URL_CDS =
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
+  private static final String TYPE_URL_CLUSTER_CONFIG =
+      "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
@@ -169,7 +176,60 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     updateBuilder.filterMetadata(
         ImmutableMap.copyOf(cluster.getMetadata().getFilterMetadataMap()));
 
+    try {
+      ImmutableMap<String, Object> parsedFilterMetadata =
+          parseClusterMetadata(cluster.getMetadata());
+      updateBuilder.parsedMetadata(parsedFilterMetadata);
+    } catch (InvalidProtocolBufferException e) {
+      throw new ResourceInvalidException(
+          "Failed to parse xDS filter metadata for cluster '" + cluster.getName() + "': "
+              + e.getMessage(), e);
+    }
+
     return updateBuilder.build();
+  }
+
+  /**
+   * Parses cluster metadata into a structured map.
+   *
+   * <p>Values in {@code typed_filter_metadata} take precedence over
+   * {@code filter_metadata} when keys overlap, following Envoy API behavior. See
+   * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/core/v3/base.proto#L217-L259">
+   *   Envoy metadata documentation </a> for details.
+   *
+   * @param metadata the {@link Metadata} containing the fields to parse.
+   * @return an immutable map of parsed metadata.
+   * @throws InvalidProtocolBufferException if parsing {@code typed_filter_metadata} fails.
+   */
+  private static ImmutableMap<String, Object> parseClusterMetadata(Metadata metadata)
+      throws InvalidProtocolBufferException {
+    ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
+
+    MetadataRegistry registry = MetadataRegistry.getInstance();
+    // Process typed_filter_metadata
+    for (Map.Entry<String, Any> entry : metadata.getTypedFilterMetadataMap().entrySet()) {
+      String key = entry.getKey();
+      Any value = entry.getValue();
+      MetadataValueParser parser = registry.findParser(value.getTypeUrl());
+      if (parser != null) {
+        Object parsedValue = parser.parse(value);
+        parsedMetadata.put(key, parsedValue);
+      }
+    }
+    // building once to reuse in the next loop
+    ImmutableMap<String, Object> intermediateParsedMetadata = parsedMetadata.build();
+
+    // Process filter_metadata for remaining keys
+    for (Map.Entry<String, Struct> entry : metadata.getFilterMetadataMap().entrySet()) {
+      String key = entry.getKey();
+      if (!intermediateParsedMetadata.containsKey(key)) {
+        Struct structValue = entry.getValue();
+        Object jsonValue = ProtobufJsonConverter.convertToJson(structValue);
+        parsedMetadata.put(key, jsonValue);
+      }
+    }
+
+    return parsedMetadata.build();
   }
 
   private static StructOrError<CdsUpdate.Builder> parseAggregateCluster(Cluster cluster) {
@@ -213,7 +273,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           continue;
         }
         if (threshold.hasMaxRequests()) {
-          maxConcurrentRequests = (long) threshold.getMaxRequests().getValue();
+          maxConcurrentRequests = Integer.toUnsignedLong(threshold.getMaxRequests().getValue());
         }
       }
     }
@@ -571,13 +631,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     abstract ImmutableMap<String, Struct> filterMetadata();
 
+    abstract ImmutableMap<String, Object> parsedMetadata();
+
     private static Builder newBuilder(String clusterName) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
           .minRingSize(0)
           .maxRingSize(0)
           .choiceCount(0)
-          .filterMetadata(ImmutableMap.of());
+          .filterMetadata(ImmutableMap.of())
+          .parsedMetadata(ImmutableMap.of());
     }
 
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
@@ -695,6 +758,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       protected abstract Builder outlierDetection(OutlierDetection outlierDetection);
 
       protected abstract Builder filterMetadata(ImmutableMap<String, Struct> filterMetadata);
+
+      protected abstract Builder parsedMetadata(ImmutableMap<String, Object> parsedMetadata);
 
       abstract CdsUpdate build();
     }

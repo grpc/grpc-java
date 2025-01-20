@@ -253,7 +253,7 @@ public final class S2AProtocolNegotiatorFactory {
                   InternalProtocolNegotiators.tls(
                           sslContext,
                           SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
-                          Optional.of(new Runnable() {
+                          com.google.common.base.Optional.of(new Runnable() {
                             @Override
                             public void run() {
                               s2aStub.close();

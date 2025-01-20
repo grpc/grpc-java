@@ -1084,7 +1084,7 @@ public class RingHashLoadBalancerTest {
     for (int i = 0; i < weights.length; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       Attributes attr = Attributes.newBuilder().set(
-          InternalXdsAttributes.ATTR_SERVER_WEIGHT, weights[i]).build();
+          XdsAttributes.ATTR_SERVER_WEIGHT, weights[i]).build();
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr, attr);
       addrs.add(eag);
     }

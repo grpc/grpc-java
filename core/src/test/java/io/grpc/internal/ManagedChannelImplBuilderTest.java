@@ -765,6 +765,16 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void setNameResolverExtArgs() {
+    assertThat(builder.nameResolverCustomArgs)
+        .isNull();
+
+    NameResolver.Args.Key<Integer> testKey = NameResolver.Args.Key.create("test-key");
+    builder.setNameResolverArg(testKey, 42);
+    assertThat(builder.nameResolverCustomArgs.get(testKey)).isEqualTo(42);
+  }
+
+  @Test
   public void metricSinks() {
     MetricSink mocksink = mock(MetricSink.class);
     builder.addMetricSink(mocksink);

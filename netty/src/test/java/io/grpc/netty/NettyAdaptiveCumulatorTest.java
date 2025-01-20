@@ -40,7 +40,6 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -55,7 +54,7 @@ import org.junit.runners.Parameterized.Parameters;
 public class NettyAdaptiveCumulatorTest {
 
   private static Collection<Object[]> cartesianProductParams(List<?>... lists) {
-    return Lists.cartesianProduct(lists).stream().map(List::toArray).collect(Collectors.toList());
+    return Lists.transform(Lists.cartesianProduct(lists), List::toArray);
   }
 
   @RunWith(JUnit4.class)

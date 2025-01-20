@@ -28,13 +28,13 @@ import android.os.UserHandle;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
 import io.grpc.binder.BinderChannelCredentials;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**

@@ -444,6 +444,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   // cpcForThisStream is null when doing shutdown
   private void cleanUpResourceTimers(ControlPlaneClient cpcForThisStream) {
     Collection<String> authoritiesForCpc = getActiveAuthorities(cpcForThisStream);
+    String target = cpcForThisStream == null ? "null" : cpcForThisStream.getServerInfo().target();
+    logger.log(XdsLogLevel.DEBUG, "Cleaning up resource timers for CPC {0}, authorities {1}",
+        target, authoritiesForCpc);
 
     for (Map<String, ResourceSubscriber<?>> subscriberMap : resourceSubscribers.values()) {
       for (ResourceSubscriber<?> subscriber : subscriberMap.values()) {
@@ -957,6 +960,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
       ControlPlaneClient cpcClosed = serverCpClientMap.get(serverInfo);
       if (cpcClosed == null) {
+        logger.log(XdsLogLevel.DEBUG,
+            "Couldn't find closing CPC for {0}, so skipping cleanup and reporting", serverInfo);
         return;
       }
 

@@ -684,7 +684,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     /** Adds a new tracker for every given address. */
     void putNewTrackers(OutlierDetectionLoadBalancerConfig config,
         Set<Set<SocketAddress>> endpoints) {
-      endpoints.forEach(e -> trackerMap.putIfAbsent(e, new EndpointTracker(config)));
+      for (Set<SocketAddress> endpoint : endpoints) {
+        if (!trackerMap.containsKey(endpoint)) {
+          trackerMap.put(endpoint, new EndpointTracker(config));
+        }
+      }
     }
 
     /** Resets the call counters for all the trackers in the map. */

@@ -70,6 +70,7 @@ import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
@@ -653,7 +654,7 @@ public class XdsSecurityClientServerTest {
     Attributes attrs =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
-                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
                         upstreamTlsContext, tlsContextManagerForClient))
                 .build()

@@ -62,7 +62,7 @@ jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.20"
 jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 junit = "junit:junit:4.13.2"
 # 2.17+ require Java 11+ (not mentioned in release notes)
-lincheck = "org.jetbrains.kotlinx:lincheck:2.16"
+lincheck = "org.jetbrains.kotlinx:lincheck-jvm:2.16"
 # Update notes / 2023-07-19 sergiitk:
 #    Couldn't update to 5.4.0, updated to the last in 4.x line. Version 5.x breaks some tests.
 #    Error log: https://github.com/grpc/grpc-java/pull/10359#issuecomment-1632834435
@@ -97,7 +97,7 @@ protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.7"
 robolectric = "org.robolectric:robolectric:4.13"
-signature-android = "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4"
+signature-android = "net.sf.androidscents.signature:android-api-level-21:5.0.1_r2"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 # 11.0.0+ require Java 17+
 tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.31"

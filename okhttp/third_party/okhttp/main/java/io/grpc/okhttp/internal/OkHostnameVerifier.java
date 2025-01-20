@@ -29,10 +29,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
 import javax.security.auth.x500.X500Principal;
+import com.google.common.base.Utf8;
+import com.google.common.base.Ascii;
 
 /**
  * A HostnameVerifier consistent with <a
@@ -63,6 +66,9 @@ public final class OkHostnameVerifier implements HostnameVerifier {
 
   @Override
   public boolean verify(String host, SSLSession session) {
+    if (!isAscii(host)) {
+      return false;
+    }
     try {
       Certificate[] certificates = session.getPeerCertificates();
       return verify(host, (X509Certificate) certificates[0]);
@@ -71,7 +77,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
     }
   }
 
-  public boolean verify(String host, X509Certificate certificate) {
+  private boolean verify(String host, X509Certificate certificate) {
     return verifyAsIpAddress(host)
         ? verifyIpAddress(host, certificate)
         : verifyHostName(host, certificate);
@@ -98,7 +104,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
    * Returns true if {@code certificate} matches {@code hostName}.
    */
   private boolean verifyHostName(String hostName, X509Certificate certificate) {
-    hostName = hostName.toLowerCase(Locale.US);
+    hostName = Ascii.toLowerCase(hostName);
     boolean hasDns = false;
     List<String> altNames = getSubjectAltNames(certificate, ALT_DNS_NAME);
     for (int i = 0, size = altNames.size(); i < size; i++) {
@@ -198,7 +204,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
     }
     // hostName and pattern are now absolute domain names.
 
-    pattern = pattern.toLowerCase(Locale.US);
+    pattern = Ascii.toLowerCase(pattern);
     // hostName and pattern are now in lower case -- domain names are case-insensitive.
 
     if (!pattern.contains("*")) {
@@ -253,5 +259,14 @@ public final class OkHostnameVerifier implements HostnameVerifier {
 
     // hostName matches pattern
     return true;
+  }
+
+  /**
+   * Returns true if {@code input} is an ASCII string.
+   * @param input the string to check.
+   */
+  private static boolean isAscii(String input) {
+    // Only ASCII characters are 1 byte in UTF-8.
+    return Utf8.encodedLength(input) == input.length();
   }
 }

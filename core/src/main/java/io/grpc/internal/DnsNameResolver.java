@@ -134,20 +134,16 @@ public class DnsNameResolver extends NameResolver {
   private final String host;
   private final int port;
 
-  /** Executor that will be used if an Executor is not provide via {@link NameResolver.Args}. */
-  private final Resource<Executor> executorResource;
+  private final ObjectPool<Executor> executorPool;
   private final long cacheTtlNanos;
   private final SynchronizationContext syncContext;
+  private final ServiceConfigParser serviceConfigParser;
 
   // Following fields must be accessed from syncContext
   private final Stopwatch stopwatch;
   protected boolean resolved;
   private boolean shutdown;
   private Executor executor;
-
-  /** True if using an executor resource that should be released after use. */
-  private final boolean usingExecutorResource;
-  private final ServiceConfigParser serviceConfigParser;
 
   private boolean resolving;
 
@@ -165,7 +161,7 @@ public class DnsNameResolver extends NameResolver {
     checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
-    this.executorResource = executorResource;
+
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
     // opaque URI, thus the authority and host of the resulted URI would be null.
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
@@ -179,11 +175,15 @@ public class DnsNameResolver extends NameResolver {
       port = nameUri.getPort();
     }
     this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
+    Executor offloadExecutor = args.getOffloadExecutor();
+    if (offloadExecutor != null) {
+      this.executorPool = new FixedObjectPool<>(offloadExecutor);
+    } else {
+      this.executorPool = SharedResourcePool.forResource(executorResource);
+    }
     this.cacheTtlNanos = getNetworkAddressCacheTtlNanos(isAndroid);
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
-    this.executor = args.getOffloadExecutor();
-    this.usingExecutorResource = executor == null;
     this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
   }
 
@@ -200,9 +200,7 @@ public class DnsNameResolver extends NameResolver {
   @Override
   public void start(Listener2 listener) {
     Preconditions.checkState(this.listener == null, "already started");
-    if (usingExecutorResource) {
-      executor = SharedResourceHolder.get(executorResource);
-    }
+    executor = executorPool.getObject();
     this.listener = checkNotNull(listener, "listener");
     resolve();
   }
@@ -413,8 +411,8 @@ public class DnsNameResolver extends NameResolver {
       return;
     }
     shutdown = true;
-    if (executor != null && usingExecutorResource) {
-      executor = SharedResourceHolder.release(executorResource, executor);
+    if (executor != null) {
+      executor = executorPool.returnObject(executor);
     }
   }
 
