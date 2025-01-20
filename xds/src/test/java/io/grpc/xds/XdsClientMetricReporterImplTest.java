@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -83,13 +84,13 @@ public class XdsClientMetricReporterImplTest {
   public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
-  private MetricRecorder mockMetricRecorder;
-  @Mock
   private XdsClient mockXdsClient;
-  @Mock
-  private BatchRecorder mockBatchRecorder;
   @Captor
   private ArgumentCaptor<BatchCallback> gaugeBatchCallbackCaptor;
+  private MetricRecorder mockMetricRecorder = mock(MetricRecorder.class,
+      delegatesTo(new MetricRecorderImpl()));
+  private BatchRecorder mockBatchRecorder = mock(BatchRecorder.class,
+      delegatesTo(new BatchRecorderImpl()));
 
   private XdsClientMetricReporterImpl reporter;
 
@@ -370,6 +371,12 @@ public class XdsClientMetricReporterImplTest {
         return instrument.getName().equals(name);
       }
     });
+  }
+
+  static class MetricRecorderImpl implements MetricRecorder {
+  }
+
+  static class BatchRecorderImpl implements BatchRecorder {
   }
 
   static class TestlogHandler extends Handler {

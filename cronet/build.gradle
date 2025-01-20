@@ -8,7 +8,6 @@ description = "gRPC: Cronet Android"
 
 repositories {
     google()
-    mavenCentral()
 }
 
 android {

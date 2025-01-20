@@ -219,14 +219,15 @@ public class RbacFilterTest {
   @SuppressWarnings("unchecked")
   public void compositeRules() {
     MetadataMatcher metadataMatcher = MetadataMatcher.newBuilder().build();
+    @SuppressWarnings("deprecation")
+    Permission permissionMetadata = Permission.newBuilder().setMetadata(metadataMatcher).build();
     List<Permission> permissionList = Arrays.asList(
             Permission.newBuilder().setOrRules(Permission.Set.newBuilder().addRules(
-                    Permission.newBuilder().setMetadata(metadataMatcher).build()
-            ).build()).build());
+                    permissionMetadata).build()).build());
+    @SuppressWarnings("deprecation")
+    Principal principalMetadata = Principal.newBuilder().setMetadata(metadataMatcher).build();
     List<Principal> principalList = Arrays.asList(
-            Principal.newBuilder().setNotId(
-                    Principal.newBuilder().setMetadata(metadataMatcher).build()
-            ).build());
+            Principal.newBuilder().setNotId(principalMetadata).build());
     ConfigOrError<? extends FilterConfig> result = parse(permissionList, principalList);
     assertThat(result.errorDetail).isNull();
     assertThat(result.config).isInstanceOf(RbacConfig.class);
