@@ -523,7 +523,7 @@ public class TestServiceClient {
       }
 
       case RPC_SOAK: {
-        tester.performSoakTest(
+        SoakClient.performSoakTest(
             serverHost,
             soakIterations,
             soakMaxFailures,
@@ -533,12 +533,13 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
+            tester.createChannelBuilder().build(),
             (currentChannel) -> currentChannel);
         break;
       }
 
       case CHANNEL_SOAK: {
-        tester.performSoakTest(
+        SoakClient.performSoakTest(
             serverHost,
             soakIterations,
             soakMaxFailures,
@@ -548,6 +549,7 @@ public class TestServiceClient {
             soakRequestSize,
             soakResponseSize,
             numThreads,
+            tester.createChannelBuilder().build(),
             (currentChannel) -> tester.createNewChannel(currentChannel));
         break;
       }
@@ -709,6 +711,16 @@ public class TestServiceClient {
         okBuilder.intercept(addMdInterceptor);
       }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
+    }
+
+    ManagedChannel createNewChannel(ManagedChannel currentChannel) {
+      currentChannel.shutdownNow();
+      try {
+        currentChannel.awaitTermination(10, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Interrupted while creating a new channel", e);
+      }
+      return createChannel();
     }
 
     /**

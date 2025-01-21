@@ -19,10 +19,10 @@ package io.grpc.binder;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Status;
 import java.util.HashMap;
 import java.util.Map;
-import javax.annotation.CheckReturnValue;
 
 /**
  * A security policy for a gRPC server.

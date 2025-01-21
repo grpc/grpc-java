@@ -17,11 +17,11 @@
 package io.grpc.binder;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
-import javax.annotation.CheckReturnValue;
 
 /**
  * Decides whether a given Android UID is authorized to access some resource.

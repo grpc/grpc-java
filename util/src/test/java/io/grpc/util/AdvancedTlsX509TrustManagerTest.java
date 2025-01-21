@@ -24,6 +24,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
+import com.google.common.io.Files;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
@@ -57,21 +58,28 @@ public class AdvancedTlsX509TrustManagerTest {
 
   private static final String CA_PEM_FILE = "ca.pem";
   private static final String SERVER_0_PEM_FILE = "server0.pem";
+  private static final String SERVER_1_PEM_FILE = "server1.pem";
   private File caCertFile;
   private File serverCert0File;
+  private File serverCert1File;
 
   private X509Certificate[] caCert;
   private X509Certificate[] serverCert0;
+  private X509Certificate[] serverCert1;
 
+  private FakeClock fakeClock;
   private ScheduledExecutorService executor;
 
   @Before
   public void setUp() throws IOException, GeneralSecurityException {
-    executor = new FakeClock().getScheduledExecutorService();
+    fakeClock = new FakeClock();
+    executor = fakeClock.getScheduledExecutorService();
     caCertFile = TestUtils.loadCert(CA_PEM_FILE);
     caCert = CertificateUtils.getX509Certificates(TlsTesting.loadCert(CA_PEM_FILE));
     serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
     serverCert0 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_0_PEM_FILE));
+    serverCert1File = TestUtils.loadCert(SERVER_1_PEM_FILE);
+    serverCert1 = CertificateUtils.getX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
   }
 
   @Test
@@ -145,6 +153,39 @@ public class AdvancedTlsX509TrustManagerTest {
     CertificateException ce = assertThrows(CertificateException.class, () -> trustManager
         .checkClientTrusted(serverCert0, "RSA", sslSocket));
     assertEquals("No handshake session", ce.getMessage());
+  }
+
+  @Test
+  public void updateTrustCredentials_rotate() throws GeneralSecurityException, IOException {
+    AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
+    trustManager.updateTrustCredentials(serverCert0File);
+    assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
+
+    trustManager.updateTrustCredentials(serverCert0File, 1, TimeUnit.MINUTES,
+        executor);
+    assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
+
+    fakeClock.forwardTime(1, TimeUnit.MINUTES);
+    assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
+
+    serverCert0File.setLastModified(serverCert0File.lastModified() - 2000);
+
+    fakeClock.forwardTime(1, TimeUnit.MINUTES);
+    assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
+
+    long beforeModify = serverCert0File.lastModified();
+    Files.copy(serverCert1File, serverCert0File);
+    serverCert0File.setLastModified(beforeModify);
+
+    // although file content changed, file modification time is not changed
+    fakeClock.forwardTime(1, TimeUnit.MINUTES);
+    assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
+
+    serverCert0File.setLastModified(beforeModify + 2000);
+
+    // file modification time changed
+    fakeClock.forwardTime(1, TimeUnit.MINUTES);
+    assertArrayEquals(serverCert1, trustManager.getAcceptedIssuers());
   }
 
   private static class TestHandler extends Handler {

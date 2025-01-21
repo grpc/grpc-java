@@ -38,6 +38,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,6 +101,7 @@ import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import io.netty.util.ReferenceCountUtil;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -207,6 +209,7 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     // Send a single RPC and wait for the response.
     new Rpc(transport).halfClose().waitForResponse();
@@ -264,6 +267,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     new Rpc(transport, new Metadata()).halfClose().waitForResponse();
 
@@ -281,6 +285,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(),
         1, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, true);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     try {
       // Send a single RPC and wait for the response.
@@ -307,6 +312,7 @@ public class NettyClientTransportTest {
       NettyClientTransport transport = newTransport(negotiator);
       callMeMaybe(transport.start(clientTransportListener));
     }
+    verify(clientTransportListener, timeout(5000).times(2)).transportReady();
 
     // Send a single RPC on each transport.
     final List<Rpc> rpcs = new ArrayList<>(transports.size());
@@ -336,6 +342,7 @@ public class NettyClientTransportTest {
             failureStatus.asRuntimeException());
       }
     });
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -369,6 +376,7 @@ public class NettyClientTransportTest {
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, null);
     final NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -398,6 +406,7 @@ public class NettyClientTransportTest {
     callMeMaybe(transport.start(clientTransportListener));
     final Status failureStatus = Status.UNAVAILABLE.withDescription("oh noes!");
     transport.channel().pipeline().fireExceptionCaught(failureStatus.asRuntimeException());
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -429,6 +438,7 @@ public class NettyClientTransportTest {
         }
       }
     });
+    verify(clientTransportListener, timeout(5000)).transportTerminated();
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
@@ -448,6 +458,7 @@ public class NettyClientTransportTest {
 
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     // Send a dummy RPC in order to ensure that the updated SETTINGS_MAX_CONCURRENT_STREAMS
     // has been received by the remote endpoint.
@@ -599,6 +610,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport =
         newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE, 1, null, true);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     try {
       // Send a single RPC and wait for the response.
@@ -632,6 +644,7 @@ public class NettyClientTransportTest {
         longStringOfA);
 
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     AtomicBoolean foundExpectedHeaderBytes = new AtomicBoolean(false);
 
@@ -661,6 +674,7 @@ public class NettyClientTransportTest {
 
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
 
     try {
       // Send a single RPC and wait for the response.
@@ -705,6 +719,7 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
 
@@ -723,6 +738,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
 
@@ -735,6 +751,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, false /* keep alive */);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
 
@@ -828,6 +845,7 @@ public class NettyClientTransportTest {
     assertEquals(true, clientExecutorPool.isInUse());
     final NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
     // closing the negotiators should return the executors back to pool, and release the resource
@@ -1313,8 +1331,14 @@ public class NettyClientTransportTest {
     }
 
     @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+      // Prevent any data being passed to NettyClientHandler
+      ReferenceCountUtil.release(msg);
+    }
+
+    @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-      ctx.pipeline().addBefore(ctx.name(), null, grpcHandler);
+      ctx.pipeline().addAfter(ctx.name(), null, grpcHandler);
     }
 
     public void fail(ChannelHandlerContext ctx, Throwable cause) {

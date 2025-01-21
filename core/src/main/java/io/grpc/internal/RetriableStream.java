@@ -22,6 +22,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
@@ -47,9 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckForNull;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /** A logical {@link ClientStream} that is retriable. */
 abstract class RetriableStream<ReqT> implements ClientStream {

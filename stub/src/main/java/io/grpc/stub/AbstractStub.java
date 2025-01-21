@@ -19,6 +19,7 @@ package io.grpc.stub;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.InternalTimeUtils.convert;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -30,7 +31,6 @@ import io.grpc.ManagedChannelBuilder;
 import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;

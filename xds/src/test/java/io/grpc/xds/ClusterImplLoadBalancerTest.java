@@ -271,7 +271,7 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void pick_addsLocalityLabel() {
+  public void pick_addsOptionalLabels() {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -298,6 +298,31 @@ public class ClusterImplLoadBalancerTest {
     // The value will be determined by the parent policy, so can be different than the value used in
     // makeAddress() for the test.
     verify(detailsConsumer).addOptionalLabel("grpc.lb.locality", locality.toString());
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.backend_service", CLUSTER);
+  }
+
+  @Test
+  public void pick_noResult_addsClusterLabel() {
+    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
+    WeightedTargetConfig weightedTargetConfig =
+        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
+        null, Collections.<DropOverload>emptyList(),
+        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            weightedTargetProvider, weightedTargetConfig),
+        null, Collections.emptyMap());
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    leafBalancer.deliverSubchannelState(PickResult.withNoResult(), ConnectivityState.CONNECTING);
+    assertThat(currentState).isEqualTo(ConnectivityState.CONNECTING);
+
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    pickSubchannelArgs = new PickSubchannelArgsImpl(
+      TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT, detailsConsumer);
+    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.backend_service", CLUSTER);
   }
 
   @Test
@@ -1061,10 +1086,14 @@ public class ClusterImplLoadBalancerTest {
     }
 
     void deliverSubchannelState(final Subchannel subchannel, ConnectivityState state) {
+      deliverSubchannelState(PickResult.withSubchannel(subchannel), state);
+    }
+
+    void deliverSubchannelState(final PickResult result, ConnectivityState state) {
       SubchannelPicker picker = new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return PickResult.withSubchannel(subchannel);
+          return result;
         }
       };
       helper.updateBalancingState(state, picker);

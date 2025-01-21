@@ -16,10 +16,10 @@
 
 package io.grpc.stub;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.stub.ClientCalls.StubType;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**

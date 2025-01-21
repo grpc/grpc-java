@@ -385,6 +385,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         args.getCallOptions().getOption(ClusterImplLoadBalancerProvider.FILTER_METADATA_CONSUMER)
             .accept(filterMetadata);
+        args.getPickDetailsConsumer().addOptionalLabel("grpc.lb.backend_service", cluster);
         for (DropOverload dropOverload : dropPolicies) {
           int rand = random.nextInt(1_000_000);
           if (rand < dropOverload.dropsPerMillion()) {
