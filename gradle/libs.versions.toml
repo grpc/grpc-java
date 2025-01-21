@@ -19,10 +19,10 @@ androidx-test-ext-junit = "androidx.test.ext:junit:1.2.1"
 androidx-test-rules = "androidx.test:rules:1.6.1"
 animalsniffer = "org.codehaus.mojo:animal-sniffer:1.24"
 animalsniffer-annotations = "org.codehaus.mojo:animal-sniffer-annotations:1.24"
-assertj-core = "org.assertj:assertj-core:3.26.3"
+assertj-core = "org.assertj:assertj-core:3.27.2"
 auto-value = "com.google.auto.value:auto-value:1.11.0"
 auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.11.0"
-checkstyle = "com.puppycrawl.tools:checkstyle:10.19.0"
+checkstyle = "com.puppycrawl.tools:checkstyle:10.21.1"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:119.6045.31"
@@ -31,35 +31,40 @@ cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 # It breaks Bazel (ArrayIndexOutOfBoundsException in turbine) and Dexing ("D8:
 # java.lang.NullPointerException"). We can trivially upgrade the Bazel CI to
 # 6.3.0+ (https://github.com/bazelbuild/bazel/issues/18743).
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.30.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.36.0"
 # error-prone 2.32.0+ require Java 17+
-errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.48.0"
+errorprone-core = "com.google.errorprone:error_prone_core:2.36.0"
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.50.1"
 # google-auth-library 1.25.0+ requires error_prone_annotations 2.31.0+, which
 # breaks the Android build
-google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.24.1"
-google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.24.1"
+google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.30.1"
+google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.30.1"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
-google-cloud-logging = "com.google.cloud:google-cloud-logging:3.20.6"
+google-cloud-logging = "com.google.cloud:google-cloud-logging:3.21.1"
 gson = "com.google.code.gson:gson:2.11.0"
-guava = "com.google.guava:guava:33.3.1-android"
+guava = "com.google.guava:guava:33.4.0-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
-guava-testlib = "com.google.guava:guava-testlib:33.3.1-android"
+guava-testlib = "com.google.guava:guava-testlib:33.4.0-android"
 # JRE version is needed for projects where its a transitive dependency, f.e. gcp-observability.
 # May be different from the -android version.
-guava-jre = "com.google.guava:guava:33.3.1-jre"
+guava-jre = "com.google.guava:guava:33.4.0-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
 # 6.0.0+ use java.lang.Deprecated forRemoval and since from Java 9
-jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:5.0.0"
+jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:6.1.0"
+# Not using the relocated org.apache.tomcat:tomcat-annotations-api because it requires migrating
+# java.annotation to jakarta.annotation. According to
+# https://github.com/grpc/grpc-java/issues/6833#issuecomment-602242609
+# there are so many different artifacts containing it, which causes classpath collisions.
 javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
 # 12.0.0+ require Java 17+
 jetty-client = "org.eclipse.jetty:jetty-client:11.0.24"
+# Relocated to jetty-http3-server that we don't use
 jetty-http2-server = "org.eclipse.jetty.http2:http2-server:11.0.24"
 jetty-http2-server10 = "org.eclipse.jetty.http2:http2-server:10.0.20"
-jetty-servlet = "org.eclipse.jetty:jetty-servlet:11.0.24"
+jetty-servlet = "org.eclipse.jetty.ee10:jetty-ee10-servlet:12.0.16"
 jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.20"
-jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
+jsr305 = "com.github.spotbugs:spotbugs-annotations:4.8.6"
 junit = "junit:junit:4.13.2"
 # 2.17+ require Java 11+ (not mentioned in release notes)
 lincheck = "org.jetbrains.kotlinx:lincheck:2.16"
@@ -85,18 +90,18 @@ opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-g
 opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exporter-stats-stackdriver", version.ref = "opencensus" }
 opencensus-exporter-trace-stackdriver = { module = "io.opencensus:opencensus-exporter-trace-stackdriver", version.ref = "opencensus" }
 opencensus-impl = { module = "io.opencensus:opencensus-impl", version.ref = "opencensus" }
-opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.43.0"
-opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.43.0-alpha"
-opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.40.0-alpha"
-opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.43.0"
-opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.43.0"
+opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.46.0"
+opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.46.0-alpha"
+opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.43.0-alpha"
+opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.46.0"
+opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.46.0"
 perfmark-api = "io.perfmark:perfmark-api:0.27.0"
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
-re2j = "com.google.re2j:re2j:1.7"
-robolectric = "org.robolectric:robolectric:4.13"
+re2j = "com.google.re2j:re2j:1.8"
+robolectric = "org.robolectric:robolectric:4.14.1"
 signature-android = "net.sf.androidscents.signature:android-api-level-21:5.0.1_r2"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 # 11.0.0+ require Java 17+
@@ -109,5 +114,5 @@ undertow-servlet = "io.undertow:undertow-servlet:2.3.18.Final"
 # Do not update: Pinned to the last version supporting Java 8.
 # See https://checkstyle.sourceforge.io/releasenotes.html#Release_10.1
 checkstylejava8 = "com.puppycrawl.tools:checkstyle:9.3"
-# See https://github.com/google/error-prone/releases/tag/v2.11.0
+# 2.11.0+ requires JDK 11+ (See https://github.com/google/error-prone/releases/tag/v2.11.0)
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
