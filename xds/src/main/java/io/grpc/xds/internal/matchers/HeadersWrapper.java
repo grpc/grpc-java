@@ -49,14 +49,8 @@ public final class HeadersWrapper extends AbstractMap<String, String> {
       case ":path":
         return httpMatchInput.getPath();
       default:
-        return MetadataHelper.deserializeHeader(httpMatchInput.metadata(), headerName);
+        return httpMatchInput.getHeader(headerName);
     }
-  }
-
-  @Override
-  public String getOrDefault(Object key, String defaultValue) {
-    String value = get(key);
-    return value != null ? value : defaultValue;
   }
 
   @Override
@@ -73,6 +67,12 @@ public final class HeadersWrapper extends AbstractMap<String, String> {
     return ImmutableSet.<String>builder()
         .addAll(httpMatchInput.metadata().keys())
         .addAll(PSEUDO_HEADERS).build();
+  }
+
+  @Override
+  public String getOrDefault(Object key, String defaultValue) {
+    String value = get(key);
+    return value != null ? value : defaultValue;
   }
 
   @Override
