@@ -22,6 +22,6 @@ https://github.com/grpc/grpc-java/blob/master/examples/src/main/resources/io/grp
 entirely, set environment variable `DISABLE_RETRYING_IN_RETRYING_EXAMPLE=true` before running the client.
 Disabling the retry policy should produce many more failed gRPC calls as seen in the output log.
 
-See [the section](https://github.com/grpc/grpc-java/blob/master/COMPILING.md) for how to build and run the example. The
+See [the section](https://github.com/grpc/grpc-java/tree/master/examples#-to-build-the-examples) for how to build and run the example. The
 executables for the server and the client are `retrying-hello-world-server` and
 `retrying-hello-world-client`.
