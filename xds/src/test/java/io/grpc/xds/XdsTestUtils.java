@@ -250,6 +250,10 @@ public class XdsTestUtils {
     XdsRouteConfigureResource.RdsUpdate rdsUpdate =
         XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
 
+    // Take advantage of knowing that there is only 1 virtual host in the route configuration
+    assertThat(rdsUpdate.virtualHosts).hasSize(1);
+    VirtualHost virtualHost = rdsUpdate.virtualHosts.get(0);
+
     // Need to create endpoints to create locality endpoints map to create edsUpdate
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint =
@@ -267,8 +271,10 @@ public class XdsTestUtils {
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, StatusOr.fromValue(edsUpdate));
 
-    builder.setListener(ldsUpdate)
+    builder
+        .setListener(ldsUpdate)
         .setRoute(rdsUpdate)
+        .setVirtualHost(virtualHost)
         .addCluster(CLUSTER_NAME, StatusOr.fromValue(clusterConfig));
 
     return builder.build();
@@ -328,7 +334,7 @@ public class XdsTestUtils {
   }
 
   static Listener buildInlineClientListener(String rdsName, String clusterName, String serverName) {
-      HttpFilter
+    HttpFilter
         httpFilter = HttpFilter.newBuilder()
         .setName(serverName)
         .setTypedConfig(Any.pack(Router.newBuilder().build()))

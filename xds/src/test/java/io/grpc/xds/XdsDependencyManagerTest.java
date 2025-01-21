@@ -564,7 +564,6 @@ public class XdsDependencyManagerTest {
 
     @Override
     public void onUpdate(XdsConfig config) {
-      System.out.println("\nConfig changed: " + config + "\n----------------------------\n");
       log.fine("Config changed: " + config);
       lastConfig = config;
       numUpdates++;

@@ -262,10 +262,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     // Iterate watchers and build the XdsConfig
 
     // Will only be 1 listener and 1 route resource
+    VirtualHost activeVirtualHost = getActiveVirtualHost();
     for (XdsWatcherBase<?> xdsWatcherBase :
         resourceWatchers.get(XdsListenerResource.getInstance()).watchers.values()) {
       XdsListenerResource.LdsUpdate ldsUpdate = ((LdsWatcher) xdsWatcherBase).getData().getValue();
       builder.setListener(ldsUpdate);
+      if (activeVirtualHost == null) {
+        activeVirtualHost = RoutingUtils.findVirtualHostForHostName(
+            ldsUpdate.httpConnectionManager().virtualHosts(), dataPlaneAuthority);
+      }
 
       if (ldsUpdate.httpConnectionManager() != null
           && ldsUpdate.httpConnectionManager().virtualHosts() != null) {
@@ -277,6 +282,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     resourceWatchers.get(XdsRouteConfigureResource.getInstance()).watchers.values().stream()
         .map(watcher -> (RdsWatcher) watcher)
         .forEach(watcher -> builder.setRoute(watcher.getData().getValue()));
+
+    builder.setVirtualHost(activeVirtualHost);
 
     Map<String, ? extends XdsWatcherBase<?>> edsWatchers =
         resourceWatchers.get(ENDPOINT_RESOURCE).watchers;

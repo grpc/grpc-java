@@ -35,20 +35,23 @@ import java.util.Objects;
 final class XdsConfig {
   private final LdsUpdate listener;
   private final RdsUpdate route;
+  private final VirtualHost virtualHost;
   private final ImmutableMap<String, StatusOr<XdsClusterConfig>> clusters;
   private final int hashCode;
 
-  XdsConfig(LdsUpdate listener, RdsUpdate route, Map<String, StatusOr<XdsClusterConfig>> clusters) {
-    this(listener, route, ImmutableMap.copyOf(clusters));
+  XdsConfig(LdsUpdate listener, RdsUpdate route, Map<String, StatusOr<XdsClusterConfig>> clusters,
+            VirtualHost virtualHost) {
+    this(listener, route, virtualHost, ImmutableMap.copyOf(clusters));
   }
 
-  public XdsConfig(LdsUpdate listener, RdsUpdate route, ImmutableMap<String,
-      StatusOr<XdsClusterConfig>> clusters) {
+  public XdsConfig(LdsUpdate listener, RdsUpdate route, VirtualHost virtualHost,
+                   ImmutableMap<String, StatusOr<XdsClusterConfig>> clusters) {
     this.listener = listener;
     this.route = route;
+    this.virtualHost = virtualHost;
     this.clusters = clusters;
 
-    hashCode = Objects.hash(listener, route, clusters);
+    hashCode = Objects.hash(listener, route, virtualHost, clusters);
   }
 
   @Override
@@ -60,7 +63,8 @@ final class XdsConfig {
     XdsConfig o = (XdsConfig) obj;
 
     return hashCode() == o.hashCode() && Objects.equals(listener, o.listener)
-        && Objects.equals(route, o.route) && Objects.equals(clusters, o.clusters);
+        && Objects.equals(route, o.route) && Objects.equals(virtualHost, o.virtualHost)
+        && Objects.equals(clusters, o.clusters);
   }
 
   @Override
@@ -71,9 +75,12 @@ final class XdsConfig {
   @Override
   public String toString() {
     StringBuilder builder = new StringBuilder();
-    builder.append("XdsConfig{listener=").append(listener)
-        .append(", route=").append(route)
-        .append(", clusters=").append(clusters).append("}");
+    builder.append("XdsConfig{")
+        .append("\n  listener=").append(listener)
+        .append(",\n  route=").append(route)
+        .append(",\n  virtualHost=").append(virtualHost)
+        .append(",\n  clusters=").append(clusters)
+        .append("\n}");
     return builder.toString();
   }
 
@@ -83,6 +90,10 @@ final class XdsConfig {
 
   public RdsUpdate getRoute() {
     return route;
+  }
+
+  public VirtualHost getVirtualHost() {
+    return virtualHost;
   }
 
   public ImmutableMap<String, StatusOr<XdsClusterConfig>> getClusters() {
@@ -144,6 +155,7 @@ final class XdsConfig {
     private LdsUpdate listener;
     private RdsUpdate route;
     private Map<String, StatusOr<XdsClusterConfig>> clusters = new HashMap<>();
+    private VirtualHost virtualHost;
 
     XdsConfigBuilder setListener(LdsUpdate listener) {
       this.listener = checkNotNull(listener, "listener");
@@ -162,10 +174,15 @@ final class XdsConfig {
       return this;
     }
 
+    XdsConfigBuilder setVirtualHost(VirtualHost virtualHost) {
+      this.virtualHost = checkNotNull(virtualHost, "virtualHost");
+      return this;
+    }
+
     XdsConfig build() {
       checkNotNull(listener, "listener");
       checkNotNull(route, "route");
-      return new XdsConfig(listener, route, clusters);
+      return new XdsConfig(listener, route, clusters, virtualHost);
     }
   }
 
