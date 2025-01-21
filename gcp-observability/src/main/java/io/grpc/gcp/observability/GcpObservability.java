@@ -151,7 +151,7 @@ public final class GcpObservability implements AutoCloseable {
    *
    * @param sleepTime sleepTime
    */
-  protected void closeWithSleepTime(long sleepTime, TimeUnit timeUnit) {
+  void closeWithSleepTime(long sleepTime, TimeUnit timeUnit) {
     synchronized (GcpObservability.class) {
       if (instance == null) {
         throw new IllegalStateException("GcpObservability already closed!");

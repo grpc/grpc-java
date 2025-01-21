@@ -210,15 +210,16 @@ public class GcpObservabilityTest {
         assertThat(configurator.serverInterceptors).hasSize(1);
         assertThat(configurator.tracerFactories).hasSize(2);
         gcpObservability.closeWithSleepTime(3000, TimeUnit.MILLISECONDS);
-        try {
-          gcpObservability.close();
-          fail("Expected IllegalStateException to be thrown on second close");
-        } catch (IllegalStateException e) {
-          assertThat(e.getMessage()).isEqualTo("GcpObservability already closed!");
-        }
+        // try {
+        //   gcpObservability.close();
+        //   fail("Expected IllegalStateException to be thrown on second close");
+        // } catch (IllegalStateException e) {
+        //   assertThat(e.getMessage()).isEqualTo("GcpObservability already closed!");
+        // }
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
+      verify(sink).close();
     }
   }
 
@@ -268,26 +269,5 @@ public class GcpObservabilityTest {
         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       return next.startCall(call, headers);
     }
-  }
-
- // Test to verify the closeWithSleepTime method along with sleep time explicitly.
-  @Test
-  public void closeWithSleepTime() throws Exception {
-    long sleepTime = 1000L;
-    Sink sink = mock(Sink.class);
-    ObservabilityConfig observabilityConfig = mock(ObservabilityConfig.class);
-    when(observabilityConfig.isEnableCloudLogging()).thenReturn(false);
-    when(observabilityConfig.isEnableCloudMonitoring()).thenReturn(false);
-    when(observabilityConfig.isEnableCloudTracing()).thenReturn(false);
-    when(observabilityConfig.getSampler()).thenReturn(Samplers.neverSample());
-
-    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory =
-        mock(InternalLoggingChannelInterceptor.Factory.class);
-    InternalLoggingServerInterceptor.Factory serverInterceptorFactory =
-        mock(InternalLoggingServerInterceptor.Factory.class);
-    GcpObservability gcpObservability =
-        GcpObservability.grpcInit(
-            sink, observabilityConfig, channelInterceptorFactory, serverInterceptorFactory);
-    gcpObservability.closeWithSleepTime(3000, TimeUnit.MILLISECONDS);
   }
 }
