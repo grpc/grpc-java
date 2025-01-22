@@ -127,23 +127,7 @@ public final class GcpObservability implements AutoCloseable {
   /** Un-initialize/shutdown grpc-observability. */
   @Override
   public void close() {
-    synchronized (GcpObservability.class) {
-      if (instance == null) {
-        throw new IllegalStateException("GcpObservability already closed!");
-      }
-      sink.close();
-      if (config.isEnableCloudMonitoring() || config.isEnableCloudTracing()) {
-        try {
-          // Sleeping before shutdown to ensure all metrics and traces are flushed
-          Thread.sleep(
-              TimeUnit.MILLISECONDS.convert(2 * METRICS_EXPORT_INTERVAL, TimeUnit.SECONDS));
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          logger.log(Level.SEVERE, "Caught exception during sleep", e);
-        }
-      }
-      instance = null;
-    }
+    closeWithSleepTime(2 * METRICS_EXPORT_INTERVAL, TimeUnit.SECONDS);
   }
 
   /**
@@ -159,8 +143,7 @@ public final class GcpObservability implements AutoCloseable {
       sink.close();
       if (config.isEnableCloudMonitoring() || config.isEnableCloudTracing()) {
         try {
-          long sleepTimeMillis = TimeUnit.MILLISECONDS.convert(sleepTime, timeUnit);
-          Thread.sleep(sleepTimeMillis);
+          timeUnit.sleep(sleepTime);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           logger.log(Level.SEVERE, "Caught exception during sleep", e);

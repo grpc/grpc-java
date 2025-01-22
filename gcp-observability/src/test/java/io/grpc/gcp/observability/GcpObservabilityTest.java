@@ -210,12 +210,6 @@ public class GcpObservabilityTest {
         assertThat(configurator.serverInterceptors).hasSize(1);
         assertThat(configurator.tracerFactories).hasSize(2);
         gcpObservability.closeWithSleepTime(3000, TimeUnit.MILLISECONDS);
-        // try {
-        //   gcpObservability.close();
-        //   fail("Expected IllegalStateException to be thrown on second close");
-        // } catch (IllegalStateException e) {
-        //   assertThat(e.getMessage()).isEqualTo("GcpObservability already closed!");
-        // }
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
