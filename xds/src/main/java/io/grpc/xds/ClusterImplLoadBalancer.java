@@ -406,7 +406,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                 dropStats.recordDroppedRequest();
               }
               return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
-                  "Cluster max concurrent requests limit exceeded"));
+                  String.format("Cluster max concurrent requests limit of %d exceeded",
+                      maxConcurrentRequests)));
             }
           }
           final AtomicReference<ClusterLocality> clusterLocality =
