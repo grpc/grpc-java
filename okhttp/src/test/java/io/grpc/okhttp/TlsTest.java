@@ -71,6 +71,7 @@ import org.junit.runners.JUnit4;
 
 /** Verify OkHttp's TLS integration. */
 @RunWith(JUnit4.class)
+@IgnoreJRERequirement
 public class TlsTest {
   @Rule
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
