@@ -756,7 +756,7 @@ public class DelayedClientTransportTest {
     InsightBuilder insight = new InsightBuilder();
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
-        .matches("\\[wait_for_ready, buffered_nanos=[0-9]+\\, waiting_for_connection]");
+        .matches("\\[wait_for_ready, buffered_nanos=[0-9]+\\, waiting_for_connection, null]");
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {

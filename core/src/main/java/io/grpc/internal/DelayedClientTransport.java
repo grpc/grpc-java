@@ -286,6 +286,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     for (final PendingStream stream : toProcess) {
       PickResult pickResult = picker.pickSubchannel(stream.args);
+      if (!pickResult.hasResult()) {
+        stream.lastPickStatus = pickResult.getStatus();
+      }
       CallOptions callOptions = stream.args.getCallOptions();
       // User code provided authority takes precedence over the LB provided one.
       if (callOptions.getAuthority() == null && pickResult.getAuthorityOverride() != null) {
