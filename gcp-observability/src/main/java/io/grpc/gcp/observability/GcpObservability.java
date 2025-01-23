@@ -143,6 +143,7 @@ public final class GcpObservability implements AutoCloseable {
       sink.close();
       if (config.isEnableCloudMonitoring() || config.isEnableCloudTracing()) {
         try {
+          // Sleeping before shutdown to ensure all metrics and traces are flushed
           timeUnit.sleep(sleepTime);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
