@@ -31,11 +31,15 @@ public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
 
   private Server server;
+  private static final ThreadPoolExecutor executor = new ThreadPoolExecutor(8, 8, 1,
+      TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+      new DefaultThreadFactory("proxy-test-pool", true));
 
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+    server = ServerBuilder.forPort(port)
+        .executor(executor)
         .addService(new GreeterImpl())
         .build()
         .start();
