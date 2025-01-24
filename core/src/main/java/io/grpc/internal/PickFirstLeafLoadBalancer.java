@@ -153,7 +153,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       addressIndex.updateGroups(newImmutableAddressGroups);
     }
 
-    // returns all old addresses
+    // No old addresses means first time through, so we will do an explicit move to CONNECTING
+    // which is what we implicitly started with
     boolean noOldAddrs = shutdownRemovedAddresses(newImmutableAddressGroups);
 
     if (noOldAddrs) {
@@ -177,13 +178,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * Get the difference between the flattened new addresses and the old addresses that had been
+   * Compute the difference between the flattened new addresses and the old addresses that had been
    * made into subchannels and then shutdown the matching subchannels.
    * @return true if there were no old addresses
    */
   private boolean shutdownRemovedAddresses(
       ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups) {
-    // remove old subchannels that were not in new address list
+
     Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
 
     // Flatten the new EAGs addresses
