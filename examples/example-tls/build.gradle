@@ -71,8 +71,6 @@ application {
     applicationDistribution.into('bin') {
         from(helloWorldTlsServer)
         from(helloWorldTlsClient)
-        filePermissions {
-            unix(0755)
-        }
+        fileMode = 0755
     }
 }

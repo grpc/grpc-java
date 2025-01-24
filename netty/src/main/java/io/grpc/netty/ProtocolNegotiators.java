@@ -641,6 +641,7 @@ final class ProtocolNegotiators {
     private Executor executor;
     private final Optional<Runnable> handshakeCompleteRunnable;
     private final X509TrustManager x509ExtendedTrustManager;
+    private SSLEngine sslEngine;
 
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
         Executor executor, ChannelLogger negotiationLogger,
@@ -661,19 +662,13 @@ final class ProtocolNegotiators {
     @Override
     @IgnoreJRERequirement
     protected void handlerAdded0(ChannelHandlerContext ctx) {
-      SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
+      sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
       SSLParameters sslParams = sslEngine.getSSLParameters();
       sslParams.setEndpointIdentificationAlgorithm("HTTPS");
       sslEngine.setSSLParameters(sslParams);
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
           ? new SslHandler(sslEngine, false, this.executor)
           : new SslHandler(sslEngine, false));
-      ProtocolNegotiationEvent existingPne = getProtocolNegotiationEvent();
-      Attributes attrs = existingPne.getAttributes().toBuilder()
-              .set(GrpcAttributes.ATTR_AUTHORITY_VERIFIER, new X509AuthorityVerifier(
-                      sslEngine, x509ExtendedTrustManager))
-              .build();
-      replaceProtocolNegotiationEvent(existingPne.withAttributes(attrs));
     }
 
     @Override
@@ -724,6 +719,8 @@ final class ProtocolNegotiators {
       Attributes attrs = existingPne.getAttributes().toBuilder()
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
           .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
+          .set(GrpcAttributes.ATTR_AUTHORITY_VERIFIER, new X509AuthorityVerifier(
+              sslEngine, x509ExtendedTrustManager))
           .build();
       replaceProtocolNegotiationEvent(existingPne.withAttributes(attrs).withSecurity(security));
       if (handshakeCompleteRunnable.isPresent()) {
