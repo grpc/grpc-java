@@ -921,7 +921,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator());
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -960,7 +960,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator());
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -985,7 +985,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator());
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -1014,7 +1014,7 @@ public class ProtocolNegotiatorsTest {
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", null, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator());
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 

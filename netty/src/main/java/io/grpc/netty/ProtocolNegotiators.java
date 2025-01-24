@@ -585,25 +585,6 @@ final class ProtocolNegotiators {
   }
 
   static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
-    private static final Method checkServerTrustedMethod;
-
-    static {
-      Method method = null;
-      try {
-        Class<?> x509ExtendedTrustManagerClass =
-                Class.forName("javax.net.ssl.X509ExtendedTrustManager");
-        method = x509ExtendedTrustManagerClass.getMethod("checkServerTrusted",
-                X509Certificate[].class, String.class, SSLEngine.class);
-      } catch (ClassNotFoundException e) {
-        // Per-rpc authority overriding via call options will be disallowed.
-      } catch (NoSuchMethodException e) {
-        // Should never happen since X509ExtendedTrustManager was introduced in Android API level 24
-        // along with checkServerTrusted.
-      }
-      checkServerTrustedMethod = method;
-    }
-
-    private SSLEngine sslEngine;
 
     public ClientTlsProtocolNegotiator(SslContext sslContext,
         ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
@@ -633,7 +614,8 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority(),
-          this.executor, negotiationLogger, handshakeCompleteRunnable, this);
+          this.executor, negotiationLogger, handshakeCompleteRunnable, this,
+              x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
 
@@ -642,47 +624,6 @@ final class ProtocolNegotiators {
       if (this.executorPool != null && this.executor != null) {
         this.executorPool.returnObject(this.executor);
       }
-    }
-
-    @Override
-    public Status verifyAuthority(@Nonnull String authority) {
-      // sslEngine won't be set when creating ClientTlsHandler from InternalProtocolNegotiators
-      // for example.
-      if (sslEngine == null || x509ExtendedTrustManager == null) {
-        return Status.FAILED_PRECONDITION.withDescription(
-                "Can't allow authority override in rpc when SslEngine or X509ExtendedTrustManager"
-                        + " is not available");
-      }
-      Status peerVerificationStatus;
-      try {
-        verifyAuthorityAllowedForPeerCert(authority);
-        peerVerificationStatus = Status.OK;
-      } catch (SSLPeerUnverifiedException | CertificateException | InvocationTargetException
-               | IllegalAccessException | IllegalStateException e) {
-        peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                String.format("Peer hostname verification during rpc failed for authority '%s'",
-                authority)).withCause(e);
-      }
-      return peerVerificationStatus;
-    }
-
-    public void setSslEngine(SSLEngine sslEngine) {
-      this.sslEngine = sslEngine;
-    }
-
-    private void verifyAuthorityAllowedForPeerCert(String authority)
-            throws SSLPeerUnverifiedException, CertificateException, InvocationTargetException,
-            IllegalAccessException {
-      SSLEngine sslEngineWrapper = new SslEngineWrapper(sslEngine, authority);
-      // The typecasting of Certificate to X509Certificate should work because this method will only
-      // be called when using TLS and thus X509.
-      Certificate[] peerCertificates = sslEngine.getSession().getPeerCertificates();
-      X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
-      for (int i = 0; i < peerCertificates.length; i++) {
-        x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
-      }
-      checkServerTrustedMethod.invoke(
-              x509ExtendedTrustManager, x509PeerCertificates, "RSA", sslEngineWrapper);
     }
 
     @VisibleForTesting
@@ -699,11 +640,13 @@ final class ProtocolNegotiators {
     private final ClientTlsProtocolNegotiator clientTlsProtocolNegotiator;
     private Executor executor;
     private final Optional<Runnable> handshakeCompleteRunnable;
+    private final X509TrustManager x509ExtendedTrustManager;
 
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
         Executor executor, ChannelLogger negotiationLogger,
         Optional<Runnable> handshakeCompleteRunnable,
-        ClientTlsProtocolNegotiator clientTlsProtocolNegotiator) {
+        ClientTlsProtocolNegotiator clientTlsProtocolNegotiator,
+         X509TrustManager x509ExtendedTrustManager) {
       super(next, negotiationLogger);
       this.sslContext = checkNotNull(sslContext, "sslContext");
       HostPort hostPort = parseAuthority(authority);
@@ -712,6 +655,7 @@ final class ProtocolNegotiators {
       this.executor = executor;
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
       this.clientTlsProtocolNegotiator = clientTlsProtocolNegotiator;
+      this.x509ExtendedTrustManager = x509ExtendedTrustManager;
     }
 
     @Override
@@ -724,7 +668,12 @@ final class ProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, this.executor != null
           ? new SslHandler(sslEngine, false, this.executor)
           : new SslHandler(sslEngine, false));
-      clientTlsProtocolNegotiator.setSslEngine(sslEngine);
+      ProtocolNegotiationEvent existingPne = getProtocolNegotiationEvent();
+      Attributes attrs = existingPne.getAttributes().toBuilder()
+              .set(GrpcAttributes.ATTR_AUTHORITY_VERIFIER, new X509AuthorityVerifier(
+                      sslEngine, x509ExtendedTrustManager))
+              .build();
+      replaceProtocolNegotiationEvent(existingPne.withAttributes(attrs));
     }
 
     @Override

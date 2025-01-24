@@ -42,5 +42,7 @@ public final class GrpcAttributes {
   public static final Attributes.Key<Attributes> ATTR_CLIENT_EAG_ATTRS =
       Attributes.Key.create("io.grpc.internal.GrpcAttributes.clientEagAttrs");
 
+  public static final Attributes.Key<AuthorityVerifier> ATTR_AUTHORITY_VERIFIER =
+          Attributes.Key.create("io.grpc.internal.GrpcAttributes.authorityVerifier");
   private GrpcAttributes() {}
 }
