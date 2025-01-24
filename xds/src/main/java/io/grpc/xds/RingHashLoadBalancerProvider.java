@@ -81,12 +81,16 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
       Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long minRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "minRingSize");
     Long maxRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "maxRingSize");
+    String requestHashHeader = JsonUtil.getString(rawLoadBalancingPolicyConfig, "requestHashHeader");
     long maxRingSizeCap = RingHashOptions.getRingSizeCap();
     if (minRingSize == null) {
       minRingSize = DEFAULT_MIN_RING_SIZE;
     }
     if (maxRingSize == null) {
       maxRingSize = DEFAULT_MAX_RING_SIZE;
+    }
+    if (requestHashHeader == null) {
+      requestHashHeader = "";
     }
     if (minRingSize > maxRingSizeCap) {
       minRingSize = maxRingSizeCap;
@@ -98,6 +102,6 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
       return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
           "Invalid 'mingRingSize'/'maxRingSize'"));
     }
-    return ConfigOrError.fromConfig(new RingHashConfig(minRingSize, maxRingSize));
+    return ConfigOrError.fromConfig(new RingHashConfig(minRingSize, maxRingSize, requestHashHeader));
   }
 }

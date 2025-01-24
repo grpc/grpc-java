@@ -34,6 +34,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.util.MultiChildLoadBalancer;
@@ -47,6 +48,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -70,6 +72,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
   private List<RingEntry> ring;
+  private String requestHashHeader = "";
 
   RingHashLoadBalancer(Helper helper) {
     super(helper);
@@ -99,6 +102,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       if (config == null) {
         throw new IllegalArgumentException("Missing RingHash configuration");
       }
+      requestHashHeader = config.requestHashHeader;
       Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
       long totalWeight = 0L;
       for (EquivalentAddressGroup eag : addrList) {
@@ -213,7 +217,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = TRANSIENT_FAILURE;
     }
 
-    RingHashPicker picker = new RingHashPicker(syncContext, ring, getChildLbStates());
+    RingHashPicker picker =
+        new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeader);
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
   }
@@ -334,6 +339,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   private static final class RingHashPicker extends SubchannelPicker {
+    private final Random random = new Random();
     private final SynchronizationContext syncContext;
     private final List<RingEntry> ring;
     // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,
@@ -341,16 +347,22 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     // TODO(chengyuanzhang): can be more performance-friendly with
     //  IdentityHashMap<Subchannel, ConnectivityStateInfo> and RingEntry contains Subchannel.
     private final Map<Endpoint, SubchannelView> pickableSubchannels;  // read-only
+    private final String requestHashHeader;
+    private boolean hasEndpointInConnectingState = false;
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
-        Collection<ChildLbState> children) {
+        Collection<ChildLbState> children, String requestHashHeader) {
       this.syncContext = syncContext;
       this.ring = ring;
+      this.requestHashHeader = requestHashHeader;
       pickableSubchannels = new HashMap<>(children.size());
       for (ChildLbState childLbState : children) {
         pickableSubchannels.put((Endpoint)childLbState.getKey(),
             new SubchannelView(childLbState, childLbState.getCurrentState()));
+        if (childLbState.getCurrentState() == CONNECTING) {
+          hasEndpointInConnectingState = true;
+        }
       }
     }
 
@@ -381,38 +393,78 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      Long requestHash = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
-      if (requestHash == null) {
-        return PickResult.withError(RPC_HASH_NOT_FOUND);
+      // Determine request hash.
+      boolean usingRandomHash = false;
+      Long requestHash;
+      if (requestHashHeader.isEmpty()) {
+        // Set by the xDS config selector.
+        requestHash = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
+        if (requestHash == null) {
+          return PickResult.withError(RPC_HASH_NOT_FOUND);
+        }
+      } else {
+        String headerValue =
+            args.getHeaders()
+                .get(Metadata.Key.of(requestHashHeader, Metadata.ASCII_STRING_MARSHALLER));
+        if (headerValue != null) {
+          requestHash = hashFunc.hashAsciiString(headerValue);
+        } else {
+          requestHash = random.nextLong();
+          usingRandomHash = true;
+        }
       }
 
       int targetIndex = getTargetIndex(requestHash);
 
-      // Per gRFC A61, because of sticky-TF with PickFirst's auto reconnect on TF, we ignore
-      // all TF subchannels and find the first ring entry in READY, CONNECTING or IDLE.  If
-      // CONNECTING or IDLE we return a pick with no results.  Additionally, if that entry is in
-      // IDLE, we initiate a connection.
-      for (int i = 0; i < ring.size(); i++) {
-        int index = (targetIndex + i) % ring.size();
-        SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
-        ChildLbState childLbState = subchannelView.childLbState;
+      if (!usingRandomHash) {
+        // Per gRFC A61, because of sticky-TF with PickFirst's auto reconnect on TF, we ignore
+        // all TF subchannels and find the first ring entry in READY, CONNECTING or IDLE.  If
+        // CONNECTING or IDLE we return a pick with no results.  Additionally, if that entry is in
+        // IDLE, we initiate a connection.
+        for (int i = 0; i < ring.size(); i++) {
+          int index = (targetIndex + i) % ring.size();
+          SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
+          ChildLbState childLbState = subchannelView.childLbState;
 
-        if (subchannelView.connectivityState  == READY) {
-          return childLbState.getCurrentPicker().pickSubchannel(args);
+          if (subchannelView.connectivityState  == READY) {
+            return childLbState.getCurrentPicker().pickSubchannel(args);
+          }
+
+          // RPCs can be buffered if the next subchannel is pending (per A62). Otherwise, RPCs
+          // are failed unless there is a READY connection.
+          if (subchannelView.connectivityState == CONNECTING) {
+            return PickResult.withNoResult();
+          }
+
+          if (subchannelView.connectivityState == IDLE) {
+            syncContext.execute(() -> {
+              childLbState.getLb().requestConnection();
+            });
+
+            return PickResult.withNoResult(); // Indicates that this should be retried after backoff
+          }
         }
-
-        // RPCs can be buffered if the next subchannel is pending (per A62). Otherwise, RPCs
-        // are failed unless there is a READY connection.
-        if (subchannelView.connectivityState == CONNECTING) {
+      } else {
+        // Using a random hash. Find and use the first READY ring entry, triggering at most one
+        // entry to attempt connection.
+        boolean requestedConnection = hasEndpointInConnectingState;
+        for (int i = 0; i < ring.size(); i++) {
+          int index = (targetIndex + i) % ring.size();
+          SubchannelView subchannelView = pickableSubchannels.get(ring.get(index).addrKey);
+          ChildLbState childLbState = subchannelView.childLbState;
+          if (subchannelView.connectivityState == READY) {
+            return childLbState.getCurrentPicker().pickSubchannel(args);
+          }
+          if (!requestedConnection && subchannelView.connectivityState == IDLE) {
+            syncContext.execute(
+                () -> {
+                  childLbState.getLb().requestConnection();
+                });
+            requestedConnection = true;
+          }
+        }
+        if (requestedConnection) {
           return PickResult.withNoResult();
-        }
-
-        if (subchannelView.connectivityState == IDLE) {
-          syncContext.execute(() -> {
-            childLbState.getLb().requestConnection();
-          });
-
-          return PickResult.withNoResult(); // Indicates that this should be retried after backoff
         }
       }
 
@@ -460,13 +512,16 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   static final class RingHashConfig {
     final long minRingSize;
     final long maxRingSize;
+    final String requestHashHeader;
 
-    RingHashConfig(long minRingSize, long maxRingSize) {
+    RingHashConfig(long minRingSize, long maxRingSize, String requestHashHeader) {
       checkArgument(minRingSize > 0, "minRingSize <= 0");
       checkArgument(maxRingSize > 0, "maxRingSize <= 0");
       checkArgument(minRingSize <= maxRingSize, "minRingSize > maxRingSize");
+      checkNotNull(requestHashHeader);
       this.minRingSize = minRingSize;
       this.maxRingSize = maxRingSize;
+      this.requestHashHeader = requestHashHeader;
     }
 
     @Override
@@ -474,6 +529,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       return MoreObjects.toStringHelper(this)
           .add("minRingSize", minRingSize)
           .add("maxRingSize", maxRingSize)
+          .add("requestHashHeader", requestHashHeader)
           .toString();
     }
   }

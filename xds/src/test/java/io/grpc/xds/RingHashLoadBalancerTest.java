@@ -142,7 +142,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void subchannelLazyConnectUntilPicked() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
     Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -176,7 +176,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void subchannelNotAutoReconnectAfterReenteringIdle() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
     Status addressesAcceptanceStatus = loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -207,7 +207,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void aggregateSubchannelStates_connectingReadyIdleFailure() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
 
@@ -266,7 +266,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void aggregateSubchannelStates_allSubchannelsInTransientFailure() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1);
 
     List<Subchannel> subChannelList = initializeLbSubchannels(config, servers, STAY_IN_CONNECTING);
@@ -324,7 +324,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void ignoreShutdownSubchannelStateChange() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     initializeLbSubchannels(config, servers);
 
@@ -340,7 +340,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void deterministicPickWithHostsPartiallyRemoved() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1, 1);
     initializeLbSubchannels(config, servers);
     InOrder inOrder = Mockito.inOrder(helper);
@@ -380,7 +380,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void deterministicPickWithNewHostsAdded() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);  // server0 and server1
     initializeLbSubchannels(config, servers, DO_NOT_VERIFY, DO_NOT_RESET_HELPER);
 
@@ -419,7 +419,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void skipFailingHosts_pickNextNonFailingHost() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     Status addressesAcceptanceStatus =
         loadBalancer.acceptResolvedAddresses(
@@ -489,7 +489,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void skipFailingHosts_firstTwoHostsFailed_pickNextFirstReady() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
 
     initializeLbSubchannels(config, servers);
@@ -555,7 +555,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void removingAddressShutdownSubchannel() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> svs1 = createWeightedServerAddrs(1, 1, 1);
     List<Subchannel> subchannels1 = initializeLbSubchannels(config, svs1, STAY_IN_CONNECTING);
 
@@ -572,7 +572,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void allSubchannelsInTransientFailure() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     initializeLbSubchannels(config, servers);
 
@@ -599,7 +599,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void firstSubchannelIdle() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     initializeLbSubchannels(config, servers);
 
@@ -620,7 +620,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void firstSubchannelConnecting() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     initializeLbSubchannels(config, servers);
 
@@ -644,7 +644,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void firstSubchannelFailure() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
 
     List<Subchannel> subchannelList =
@@ -675,7 +675,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void secondSubchannelConnecting() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
 
     initializeLbSubchannels(config, servers);
@@ -706,7 +706,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void secondSubchannelFailure() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
 
     initializeLbSubchannels(config, servers);
@@ -733,7 +733,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void thirdSubchannelConnecting() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
 
     initializeLbSubchannels(config, servers);
@@ -762,7 +762,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void stickyTransientFailure() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3);
+    RingHashConfig config = new RingHashConfig(3, 3, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
 
     initializeLbSubchannels(config, servers);
@@ -791,7 +791,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void largeWeights() {
-    RingHashConfig config = new RingHashConfig(10000, 100000);  // large ring
+    RingHashConfig config = new RingHashConfig(10000, 100000, "");  // large ring
     List<EquivalentAddressGroup> servers =
         createWeightedServerAddrs(Integer.MAX_VALUE, 10, 100); // MAX:10:100
 
@@ -829,7 +829,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void hostSelectionProportionalToWeights() {
-    RingHashConfig config = new RingHashConfig(10000, 100000);  // large ring
+    RingHashConfig config = new RingHashConfig(10000, 100000, "");  // large ring
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 10, 100); // 1:10:100
 
     initializeLbSubchannels(config, servers);
@@ -872,7 +872,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void nameResolutionErrorWithActiveSubchannels() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);
 
     initializeLbSubchannels(config, servers, DO_NOT_VERIFY, DO_NOT_RESET_HELPER);
@@ -894,7 +894,7 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void duplicateAddresses() {
-    RingHashConfig config = new RingHashConfig(10, 100);
+    RingHashConfig config = new RingHashConfig(10, 100, "");
     List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 2, 3);
 
     initializeLbSubchannels(config, servers, DO_NOT_VERIFY);
@@ -940,7 +940,7 @@ public class RingHashLoadBalancerTest {
 
     InOrder inOrder = Mockito.inOrder(helper);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
-    initializeLbSubchannels(new RingHashConfig(10, 100), servers);
+    initializeLbSubchannels(new RingHashConfig(10, 100, ""), servers);
     Subchannel subchannel0 = subchannels.get(Collections.singletonList(servers.get(0)));
     Subchannel subchannel1 = subchannels.get(Collections.singletonList(servers.get(1)));
 
