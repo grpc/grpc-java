@@ -46,10 +46,10 @@ import io.opencensus.trace.samplers.Samplers;
 import java.io.IOException;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import java.util.concurrent.TimeUnit;
 
 @RunWith(JUnit4.class)
 public class GcpObservabilityTest {
