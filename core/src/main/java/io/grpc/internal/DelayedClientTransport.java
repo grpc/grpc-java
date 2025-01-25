@@ -286,7 +286,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     for (final PendingStream stream : toProcess) {
       PickResult pickResult = picker.pickSubchannel(stream.args);
-      if (!pickResult.hasResult()) {
+      if (pickResult.hasResult()) {
         stream.lastPickStatus = pickResult.getStatus();
       }
       CallOptions callOptions = stream.args.getCallOptions();
@@ -350,6 +350,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
     private final ClientStreamTracer[] tracers;
+    private Status lastPickStatus;
 
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers) {
       this.args = args;
@@ -399,6 +400,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     public void appendTimeoutInsight(InsightBuilder insight) {
       if (args.getCallOptions().isWaitForReady()) {
         insight.append("wait_for_ready");
+        if (lastPickStatus != null && !lastPickStatus.isOk()) {
+          insight.appendKeyValue("Last Pick Failure", lastPickStatus);
+        }
       }
       super.appendTimeoutInsight(insight);
     }

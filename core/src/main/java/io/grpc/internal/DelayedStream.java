@@ -63,7 +63,6 @@ class DelayedStream implements ClientStream {
   private long streamSetTimeNanos;
   // No need to synchronize; start() synchronization provides a happens-before
   private List<Runnable> preStartPendingCalls = new ArrayList<>();
-  protected Status lastPickStatus;
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
@@ -110,7 +109,6 @@ class DelayedStream implements ClientStream {
       } else {
         insight.appendKeyValue("buffered_nanos", System.nanoTime() - startTimeNanos);
         insight.append("waiting_for_connection");
-        insight.append(lastPickStatus);
       }
     }
   }
