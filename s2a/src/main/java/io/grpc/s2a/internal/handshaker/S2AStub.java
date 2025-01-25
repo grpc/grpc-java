@@ -44,7 +44,8 @@ public class S2AStub implements AutoCloseable {
   private boolean doneWriting = false;
   private boolean isClosed = false;
 
-  static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
+  @VisibleForTesting
+  public static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
     checkNotNull(serviceStub);
     return new S2AStub(serviceStub);
   }
