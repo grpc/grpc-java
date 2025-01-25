@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.netty.channel.ChannelHandler;
 import io.netty.util.AsciiString;
@@ -62,5 +63,13 @@ interface ProtocolNegotiator {
      * @param offloadExecutorPool an executor pool for time-consuming tasks
      */
     ProtocolNegotiator newNegotiator(ObjectPool<? extends Executor> offloadExecutorPool);
+  }
+
+  /**
+   * Verify the authority against peer if applicable depending on the transport credential type.
+   */
+  default Status verifyAuthority(String authority) {
+    return Status.UNAVAILABLE.withDescription("Per-rpc authority verification not implemented by "
+            + "the protocol negotiator");
   }
 }

@@ -34,6 +34,7 @@ import io.grpc.CompositeChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.FakeClock;
@@ -212,7 +213,7 @@ public class OkHttpChannelBuilderTest {
 
     TrustManager[] trustManagers;
     try (InputStream ca = TlsTesting.loadCert("ca.pem")) {
-      trustManagers = OkHttpChannelBuilder.createTrustManager(ca);
+      trustManagers = CertificateUtils.createTrustManager(ca);
     }
 
     SSLContext serverContext = SSLContext.getInstance("TLS");
@@ -257,7 +258,7 @@ public class OkHttpChannelBuilderTest {
          InputStream ca = TlsTesting.loadCert("ca.pem")) {
       serverContext.init(
           OkHttpChannelBuilder.createKeyManager(server1Chain, server1Key),
-          OkHttpChannelBuilder.createTrustManager(ca),
+          CertificateUtils.createTrustManager(ca),
           null);
     }
     final SSLServerSocket serverListenSocket =
