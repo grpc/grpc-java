@@ -206,15 +206,16 @@ public class HealthCheckingLoadBalancerFactoryTest {
         boolean shutdown;
 
         @Override
-        public void handleResolvedAddresses(final ResolvedAddresses resolvedAddresses) {
+        public Status acceptResolvedAddresses(final ResolvedAddresses resolvedAddresses) {
           syncContext.execute(new Runnable() {
               @Override
               public void run() {
                 if (!shutdown) {
-                  hcLb.handleResolvedAddresses(resolvedAddresses);
+                  hcLb.acceptResolvedAddresses(resolvedAddresses);
                 }
               }
             });
+          return Status.OK;
         }
 
         @Override
@@ -264,9 +265,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result);
+    hcLbEventDelivery.acceptResolvedAddresses(result);
 
-    verify(origLb).handleResolvedAddresses(result);
+    verify(origLb).acceptResolvedAddresses(result);
     verify(origHelper, atLeast(0)).getSynchronizationContext();
     verify(origHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(origHelper);
@@ -404,9 +405,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result);
+    hcLbEventDelivery.acceptResolvedAddresses(result);
 
-    verify(origLb).handleResolvedAddresses(result);
+    verify(origLb).acceptResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
     // We create 2 Subchannels. One of them connects to a server that doesn't implement health check
@@ -489,9 +490,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result);
+    hcLbEventDelivery.acceptResolvedAddresses(result);
 
-    verify(origLb).handleResolvedAddresses(result);
+    verify(origLb).acceptResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
     SubchannelStateListener mockHealthListener = mockHealthListeners[0];
@@ -567,9 +568,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result);
+    hcLbEventDelivery.acceptResolvedAddresses(result);
 
-    verify(origLb).handleResolvedAddresses(result);
+    verify(origLb).acceptResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
     SubchannelStateListener mockStateListener = mockStateListeners[0];
@@ -667,9 +668,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
 
-    verify(origLb).handleResolvedAddresses(result1);
+    verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
     // First, create Subchannels 0
@@ -688,8 +689,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result2);
-    verify(origLb).handleResolvedAddresses(result2);
+    hcLbEventDelivery.acceptResolvedAddresses(result2);
+    verify(origLb).acceptResolvedAddresses(result2);
 
     // Health check started on existing Subchannel
     assertThat(healthImpls[0].calls).hasSize(1);
@@ -711,9 +712,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
 
-    verify(origLb).handleResolvedAddresses(result1);
+    verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY, maybeGetMockListener());
@@ -738,7 +739,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result2);
+    hcLbEventDelivery.acceptResolvedAddresses(result2);
 
     // Health check RPC cancelled.
     assertThat(serverCall.cancelled).isTrue();
@@ -746,7 +747,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(getMockListener()).onSubchannelState(
         eq(ConnectivityStateInfo.forNonError(READY)));
 
-    inOrder.verify(origLb).handleResolvedAddresses(result2);
+    inOrder.verify(origLb).acceptResolvedAddresses(result2);
 
     verifyNoMoreInteractions(origLb, mockStateListeners[0]);
     assertThat(healthImpl.calls).isEmpty();
@@ -759,9 +760,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result);
+    hcLbEventDelivery.acceptResolvedAddresses(result);
 
-    verify(origLb).handleResolvedAddresses(result);
+    verify(origLb).acceptResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
     SubchannelStateListener mockHealthListener = mockHealthListeners[0];
@@ -793,7 +794,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result2);
+    hcLbEventDelivery.acceptResolvedAddresses(result2);
 
     // Retry timer is cancelled
     assertThat(clock.getPendingTasks()).isEmpty();
@@ -805,7 +806,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(getMockListener()).onSubchannelState(
         eq(ConnectivityStateInfo.forNonError(READY)));
 
-    inOrder.verify(origLb).handleResolvedAddresses(result2);
+    inOrder.verify(origLb).acceptResolvedAddresses(result2);
 
     verifyNoMoreInteractions(origLb, mockStateListeners[0]);
   }
@@ -817,9 +818,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
 
-    verify(origLb).handleResolvedAddresses(result1);
+    verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY, maybeGetMockListener());
@@ -842,9 +843,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result2);
+    hcLbEventDelivery.acceptResolvedAddresses(result2);
 
-    inOrder.verify(origLb).handleResolvedAddresses(result2);
+    inOrder.verify(origLb).acceptResolvedAddresses(result2);
 
     // Underlying subchannel is now ready
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
@@ -870,9 +871,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
 
-    verify(origLb).handleResolvedAddresses(result1);
+    verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
     SubchannelStateListener mockHealthListener = mockHealthListeners[0];
@@ -900,9 +901,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         eq(ConnectivityStateInfo.forNonError(READY)));
 
     // Service config returns with the same health check name.
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
     // It's delivered to origLb, but nothing else happens
-    inOrder.verify(origLb).handleResolvedAddresses(result1);
+    inOrder.verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb, mockListener);
 
     // Service config returns a different health check name.
@@ -911,8 +912,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result2);
-    inOrder.verify(origLb).handleResolvedAddresses(result2);
+    hcLbEventDelivery.acceptResolvedAddresses(result2);
+    inOrder.verify(origLb).acceptResolvedAddresses(result2);
 
     // Current health check RPC cancelled.
     assertThat(serverCall.cancelled).isTrue();
@@ -934,9 +935,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
 
-    verify(origLb).handleResolvedAddresses(result1);
+    verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
     SubchannelStateListener mockHealthListener = mockHealthListeners[0];
@@ -969,9 +970,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // Service config returns with the same health check name.
 
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
     // It's delivered to origLb, but nothing else happens
-    inOrder.verify(origLb).handleResolvedAddresses(result1);
+    inOrder.verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb, mockListener);
     assertThat(clock.getPendingTasks()).hasSize(1);
     assertThat(healthImpl.calls).isEmpty();
@@ -982,12 +983,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result2);
+    hcLbEventDelivery.acceptResolvedAddresses(result2);
     // Concluded CONNECTING state
     inOrder.verify(getMockListener()).onSubchannelState(
         eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
-    inOrder.verify(origLb).handleResolvedAddresses(result2);
+    inOrder.verify(origLb).acceptResolvedAddresses(result2);
 
     // Current retry timer cancelled
     assertThat(clock.getPendingTasks()).isEmpty();
@@ -1008,9 +1009,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
 
-    verify(origLb).handleResolvedAddresses(result1);
+    verify(origLb).acceptResolvedAddresses(result1);
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY, maybeGetMockListener());
@@ -1031,9 +1032,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verifyNoMoreInteractions();
 
     // Service config returns with the same health check name.
-    hcLbEventDelivery.handleResolvedAddresses(result1);
+    hcLbEventDelivery.acceptResolvedAddresses(result1);
     // It's delivered to origLb, but nothing else happens
-    inOrder.verify(origLb).handleResolvedAddresses(result1);
+    inOrder.verify(origLb).acceptResolvedAddresses(result1);
     assertThat(healthImpl.calls).isEmpty();
     verifyNoMoreInteractions(origLb);
 
@@ -1043,9 +1044,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result2);
+    hcLbEventDelivery.acceptResolvedAddresses(result2);
 
-    inOrder.verify(origLb).handleResolvedAddresses(result2);
+    inOrder.verify(origLb).acceptResolvedAddresses(result2);
 
     // Underlying subchannel is now ready
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
@@ -1092,9 +1093,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result);
+    hcLbEventDelivery.acceptResolvedAddresses(result);
 
-    verify(origLb).handleResolvedAddresses(result);
+    verify(origLb).acceptResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
     ServerSideCall[] serverCalls = new ServerSideCall[NUM_SUBCHANNELS];
 
@@ -1172,8 +1173,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
-    hcLbEventDelivery.handleResolvedAddresses(result);
-    verify(origLb).handleResolvedAddresses(result);
+    hcLbEventDelivery.acceptResolvedAddresses(result);
+    verify(origLb).acceptResolvedAddresses(result);
     createSubchannel(0, Attributes.EMPTY);
     assertThat(healthImpls[0].calls).isEmpty();
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
