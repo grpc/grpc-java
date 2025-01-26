@@ -1091,9 +1091,9 @@ public abstract class AbstractTransportTest {
     Metadata clientStreamTrailers =
         clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     checkClientStatus(status, clientStreamStatus);
-    assertEquals(
-        Lists.newArrayList(trailers.getAll(asciiKey)),
-        Lists.newArrayList(clientStreamTrailers.getAll(asciiKey)));
+    assertAsciiMetadataValuesEqual(
+        trailers.getAll(asciiKey),
+        clientStreamTrailers.getAll(asciiKey));
     assertEquals(
         Lists.newArrayList(trailers.getAll(binaryKey)),
         Lists.newArrayList(clientStreamTrailers.getAll(binaryKey)));
