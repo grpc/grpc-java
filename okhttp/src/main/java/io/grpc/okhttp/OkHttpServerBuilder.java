@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.grpc.internal.CertificateUtils.createTrustManager;
 
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
@@ -425,7 +426,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
         tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
       } else if (tlsCreds.getRootCertificates() != null) {
         try {
-          tm = OkHttpChannelBuilder.createTrustManager(tlsCreds.getRootCertificates());
+          tm = createTrustManager(tlsCreds.getRootCertificates());
         } catch (GeneralSecurityException gse) {
           log.log(Level.FINE, "Exception loading root certificates from credential", gse);
           return HandshakerSocketFactoryResult.error(

@@ -30,6 +30,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Grpc;
 import io.grpc.HttpConnectProxiedSocketAddress;
@@ -43,18 +44,24 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.CertificateUtils;
+import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.NoopSslSession;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
+import io.grpc.okhttp.OkHttpChannelBuilder.OkHttpTransportFactory;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Credentials;
 import io.grpc.okhttp.internal.StatusLine;
@@ -71,14 +78,21 @@ import io.grpc.okhttp.internal.proxy.Request;
 import io.perfmark.PerfMark;
 import java.io.EOFException;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -96,9 +110,13 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -114,6 +132,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       OutboundFlowController.Transport {
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
+  private static final String GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK =
+          "GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK";
+  static boolean enablePerRpcAuthorityCheck =
+          GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false);
+  private final ChannelCredentials channelCredentials;
+  private Socket sock;
+  private SSLSession sslSession;
 
   private static Map<ErrorCode, Status> buildErrorCodeToStatusMap() {
     Map<ErrorCode, Status> errorToStatus = new EnumMap<>(ErrorCode.class);
@@ -142,6 +167,22 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     errorToStatus.put(ErrorCode.INADEQUATE_SECURITY,
         Status.PERMISSION_DENIED.withDescription("Inadequate security"));
     return Collections.unmodifiableMap(errorToStatus);
+  }
+
+  private static Class<?> x509ExtendedTrustManagerClass;
+  private static Method checkServerTrustedMethod;
+
+  static {
+    try {
+      x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
+      checkServerTrustedMethod = x509ExtendedTrustManagerClass.getMethod("checkServerTrusted",
+              X509Certificate[].class, String.class, Socket.class);
+    } catch (ClassNotFoundException e) {
+      // Per-rpc authority override via call options will be disallowed.
+    } catch (NoSuchMethodException e) {
+      // Should never happen since X509ExtendedTrustManager was introduced in Android API level 24
+      // along with checkServerTrusted.
+    }
   }
 
   private final InetSocketAddress address;
@@ -205,6 +246,14 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
+  private final Map<String, Status> peerVerificationResults = Collections.synchronizedMap(
+          new LinkedHashMap<String, Status>() {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+              return size() > 100;
+            }
+          });
+
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
       new InUseStateAggregator<OkHttpClientStream>() {
@@ -233,13 +282,14 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   SettableFuture<Void> connectedFuture;
 
   public OkHttpClientTransport(
-      OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
-      InetSocketAddress address,
-      String authority,
-      @Nullable String userAgent,
-      Attributes eagAttrs,
-      @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
-      Runnable tooManyPingsRunnable) {
+          OkHttpTransportFactory transportFactory,
+          InetSocketAddress address,
+          String authority,
+          @Nullable String userAgent,
+          Attributes eagAttrs,
+          @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
+          Runnable tooManyPingsRunnable,
+          ChannelCredentials channelCredentials) {
     this(
         transportFactory,
         address,
@@ -249,19 +299,21 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         GrpcUtil.STOPWATCH_SUPPLIER,
         new Http2(),
         proxiedAddr,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable,
+        channelCredentials);
   }
 
   private OkHttpClientTransport(
-      OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
-      InetSocketAddress address,
-      String authority,
-      @Nullable String userAgent,
-      Attributes eagAttrs,
-      Supplier<Stopwatch> stopwatchFactory,
-      Variant variant,
-      @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
-      Runnable tooManyPingsRunnable) {
+          OkHttpTransportFactory transportFactory,
+          InetSocketAddress address,
+          String authority,
+          @Nullable String userAgent,
+          Attributes eagAttrs,
+          Supplier<Stopwatch> stopwatchFactory,
+          Variant variant,
+          @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
+          Runnable tooManyPingsRunnable,
+          ChannelCredentials channelCredentials) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = transportFactory.maxMessageSize;
@@ -291,6 +343,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
     this.useGetForSafeMethods = transportFactory.useGetForSafeMethods;
+    this.channelCredentials = channelCredentials;
     initTransportTracer();
   }
 
@@ -316,7 +369,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         stopwatchFactory,
         variant,
         null,
-        tooManyPingsRunnable);
+        tooManyPingsRunnable,
+        null);
     this.connectingCallback = connectingCallback;
     this.connectedFuture = Preconditions.checkNotNull(connectedFuture, "connectedFuture");
   }
@@ -389,13 +443,68 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @Override
-  public OkHttpClientStream newStream(
+  public ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
       ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
     StatsTraceContext statsTraceContext =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
+    if (hostnameVerifier != null && socket instanceof SSLSocket
+            && !hostnameVerifier.verify(callOptions.getAuthority(),
+                    ((SSLSocket) socket).getSession())) {
+      if (enablePerRpcAuthorityCheck) {
+        return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                String.format("HostNameVerifier verification failed for authority '%s'",
+                        callOptions.getAuthority())), tracers);
+      }
+    }
+    if (socket instanceof SSLSocket && callOptions.getAuthority() != null
+        && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
+      Status peerVerificationStatus = null;
+      if (peerVerificationResults.containsKey(callOptions.getAuthority())) {
+        peerVerificationStatus = peerVerificationResults.get(callOptions.getAuthority());
+      } else {
+        TrustManager x509ExtendedTrustManager;
+        try {
+          x509ExtendedTrustManager = x509ExtendedTrustManagerClass != null
+                  ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials) : null;
+          if (x509ExtendedTrustManager == null) {
+            if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
+              return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                      "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
+                              + "available"), tracers);
+            }
+          } else {
+            try {
+              Certificate[] peerCertificates = sslSession.getPeerCertificates();
+              X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
+              for (int i = 0; i < peerCertificates.length; i++) {
+                x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+              }
+              checkServerTrustedMethod.invoke(x509ExtendedTrustManager, x509PeerCertificates,
+                      "RSA", new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
+              peerVerificationStatus = Status.OK;
+            } catch (SSLPeerUnverifiedException | InvocationTargetException
+                     | IllegalAccessException e) {
+              peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                      String.format("Failure in verifying authority '%s' against peer during rpc",
+                              callOptions.getAuthority())).withCause(e);
+            }
+            peerVerificationResults.put(callOptions.getAuthority(), peerVerificationStatus);
+          }
+        } catch (GeneralSecurityException e) {
+          if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
+            return new FailingClientStream(Status.UNAVAILABLE.withDescription(
+                    "Failure getting X509ExtendedTrustManager from TlsCredentials").withCause(e),
+                    tracers);
+          }
+        }
+      }
+      if (peerVerificationStatus != null && !peerVerificationStatus.isOk()) {
+        return new FailingClientStream(peerVerificationStatus, tracers);
+      }
+    }
     // FIXME: it is likely wrong to pass the transportTracer here as it'll exit the lock's scope
     synchronized (lock) { // to make @GuardedBy linter happy
       return new OkHttpClientStream(
@@ -414,6 +523,28 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           callOptions,
           useGetForSafeMethods);
     }
+  }
+
+  private TrustManager getX509ExtendedTrustManager(TlsChannelCredentials tlsCreds)
+      throws GeneralSecurityException {
+    TrustManager[] tm = null;
+    // Using the same way of creating TrustManager from OkHttpChannelBuilder.sslSocketFactoryFrom()
+    if (tlsCreds.getTrustManagers() != null) {
+      tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
+    } else if (tlsCreds.getRootCertificates() != null) {
+      tm = CertificateUtils.createTrustManager(tlsCreds.getRootCertificates());
+    } else { // else use system default
+      TrustManagerFactory tmf = TrustManagerFactory.getInstance(
+          TrustManagerFactory.getDefaultAlgorithm());
+      tmf.init((KeyStore) null);
+      tm = tmf.getTrustManagers();
+    }
+    for (TrustManager trustManager: tm) {
+      if (x509ExtendedTrustManagerClass.isInstance(trustManager)) {
+        return trustManager;
+      }
+    }
+    return null;
   }
 
   @GuardedBy("lock")
@@ -531,8 +662,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           public void close() {
           }
         });
-        Socket sock;
-        SSLSession sslSession = null;
         try {
           // This is a hack to make sure the connection preface and initial settings to be sent out
           // without blocking the start. By doing this essentially prevents potential deadlock when
@@ -1458,6 +1587,52 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     public void alternateService(int streamId, String origin, ByteString protocol, String host,
         int port, long maxAge) {
       // TODO(madongfly): Deal with alternateService propagation
+    }
+  }
+
+  /**
+   * SSLSocket wrapper that provides a fake SSLSession for handshake session.
+   */
+  static final class SslSocketWrapper extends NoopSslSocket {
+
+    private final SSLSession sslSession;
+    private final SSLSocket sslSocket;
+
+    SslSocketWrapper(SSLSocket sslSocket, String peerHost) {
+      this.sslSocket = sslSocket;
+      this.sslSession = new FakeSslSession(peerHost);
+    }
+
+    @Override
+    public SSLSession getHandshakeSession() {
+      return this.sslSession;
+    }
+
+    @Override
+    public boolean isConnected() {
+      return sslSocket.isConnected();
+    }
+
+    @Override
+    public SSLParameters getSSLParameters() {
+      return sslSocket.getSSLParameters();
+    }
+  }
+
+  /**
+   * Fake SSLSession instance that provides the peer host name to verify for per-rpc check.
+   */
+  static class FakeSslSession extends NoopSslSession {
+
+    private final String peerHost;
+
+    FakeSslSession(String peerHost) {
+      this.peerHost = peerHost;
+    }
+
+    @Override
+    public String getPeerHost() {
+      return peerHost;
     }
   }
 }
