@@ -675,7 +675,8 @@ static void PrintStub(
   for (int i = 0; i < service->method_count(); ++i) {
     const MethodDescriptor* method = service->method(i);
     (*vars)["input_type"] = MessageFullJavaName(method->input_type());
-    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
+    std::string output_type = MessageFullJavaName(method->output_type());
+    (*vars)["output_type"] = output_type;
     (*vars)["lower_method_name"] = LowerMethodName(method);
     (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
     bool client_streaming = method->client_streaming();
@@ -695,6 +696,11 @@ static void PrintStub(
     p->Print("\n");
     GrpcWriteMethodDocComment(p, method);
 
+    if (call_type == BLOCKING_CALL &&
+        !server_streaming &&
+        output_type == "com.google.protobuf.Empty") {
+      p->Print(*vars, "@$CanIgnoreReturnValue$\n");
+    }
     if (method->options().deprecated()) {
       p->Print(*vars, "@$Deprecated$\n");
     }
@@ -1345,6 +1351,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
+  vars["CanIgnoreReturnValue"] = "com.google.errorprone.annotations.CanIgnoreReturnValue";
 
   Printer printer(out, '$');
   std::string package_name = ServiceJavaPackage(service->file());

@@ -20,6 +20,8 @@ package grpc.testing.compiler;
 
 option java_package = "io.grpc.testing.compiler";
 
+import "google/protobuf/empty.proto";
+
 message SimpleRequest {
 }
 
@@ -80,6 +82,8 @@ service TestService {
   rpc IdempotentCall(SimpleRequest) returns (SimpleResponse) {
       option idempotency_level = IDEMPOTENT;
   }
+
+  rpc UnaryCallWithoutResult(SimpleRequest) returns (google.protobuf.Empty);
 }
 
 // Test service that has been deprecated and should generate with Java's @Deprecated annotation
