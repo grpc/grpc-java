@@ -34,10 +34,6 @@ public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
 
   private Server server;
-  // private static final ThreadPoolExecutor executor = new ThreadPoolExecutor(8, 8, 1,
-  //     TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
-  //     new DefaultThreadFactory("proxy-test-pool", true));
-
   // Create a fixed thread pool
   ExecutorService executor = Executors.newFixedThreadPool(2);
   private void start() throws IOException {
@@ -67,7 +63,7 @@ public class HelloWorldServer {
   private void stop() throws InterruptedException {
     if (server != null) {
       server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
-      executorService.shutdown();
+      executor.shutdown();
     }
   }
 
