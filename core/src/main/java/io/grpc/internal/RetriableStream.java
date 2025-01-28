@@ -1066,7 +1066,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (pushbackMillis == null) {
           if (isRetryableStatusCode) {
             shouldRetry = true;
-            backoffNanos = (long) (nextBackoffIntervalNanos * random.nextDouble());
+            // Apply jitter by multiplying with a random factor between 0.8 and 1.2
+            backoffNanos = (long) (nextBackoffIntervalNanos * (0.8 + random.nextDouble() * 0.4));
             nextBackoffIntervalNanos = Math.min(
                 (long) (nextBackoffIntervalNanos * retryPolicy.backoffMultiplier),
                 retryPolicy.maxBackoffNanos);
