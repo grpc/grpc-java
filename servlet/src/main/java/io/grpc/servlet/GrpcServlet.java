@@ -43,7 +43,11 @@ public class GrpcServlet extends HttpServlet {
 
   GrpcServlet(ServletAdapter servletAdapter) {
     this.servletAdapter = servletAdapter;
-    removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
+    if (getServletConfig() != null) {
+      removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
+    } else {
+      removeContextPath = false;
+    }
   }
 
   /**
