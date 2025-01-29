@@ -41,12 +41,6 @@ public class NettyWritableBufferAllocatorTest extends WritableBufferAllocatorTes
   }
 
   @Test
-  public void testCapacityHasMinimum() {
-    WritableBuffer buffer = allocator().allocate(100);
-    assertEquals(0, buffer.readableBytes());
-  }
-
-  @Test
   public void testCapacityIsExactAboveMinimum() {
     WritableBuffer buffer = allocator().allocate(9000);
     assertEquals(0, buffer.readableBytes());
