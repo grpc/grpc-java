@@ -25,7 +25,6 @@ import static org.mockito.Mockito.when;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
