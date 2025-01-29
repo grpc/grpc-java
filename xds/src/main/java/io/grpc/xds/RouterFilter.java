@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.ServerInterceptor;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
@@ -64,7 +63,7 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder, ServerInterceptor
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(
-      FilterConfig config, @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
+      FilterConfig config, @Nullable FilterConfig overrideConfig,
       ScheduledExecutorService scheduler) {
     return null;
   }

@@ -37,7 +37,6 @@ import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.ForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -183,7 +182,7 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(
-      FilterConfig config, @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
+      FilterConfig config, @Nullable FilterConfig overrideConfig,
       final ScheduledExecutorService scheduler) {
     checkNotNull(config, "config");
     if (overrideConfig != null) {

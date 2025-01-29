@@ -113,7 +113,6 @@ import io.envoyproxy.envoy.type.v3.Int64Range;
 import io.grpc.ClientInterceptor;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
 import io.grpc.internal.JsonUtil;
@@ -1266,7 +1265,6 @@ public class GrpcXdsClientImplDataTest {
     @Override
     public ClientInterceptor buildClientInterceptor(FilterConfig config,
                                                     @Nullable FilterConfig overrideConfig,
-                                                    LoadBalancer.PickSubchannelArgs args,
                                                     ScheduledExecutorService scheduler) {
       return null;
     }

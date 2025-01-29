@@ -19,7 +19,6 @@ package io.grpc.xds;
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.ServerInterceptor;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
@@ -59,7 +58,7 @@ interface Filter {
   interface ClientInterceptorBuilder {
     @Nullable
     ClientInterceptor buildClientInterceptor(
-        FilterConfig config, @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
+        FilterConfig config, @Nullable FilterConfig overrideConfig,
         ScheduledExecutorService scheduler);
   }
 
