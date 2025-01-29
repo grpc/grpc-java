@@ -808,10 +808,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /**
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
-    private void internalClose(Throwable t) {
-      // TODO(ejona86): this is not thread-safe :)
+    private synchronized void internalClose(Throwable t) {
       String description = "Application error processing RPC";
-      stream.close(Status.UNKNOWN.withDescription(description).withCause(t), new Metadata());
+      stream.cancel(Status.UNKNOWN.withDescription(description).withCause(t));
     }
 
     @Override

@@ -1563,11 +1563,10 @@ public class ServerImplTest {
   }
 
   private void ensureServerStateNotLeaked() {
-    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    verify(stream).cancel(statusCaptor.capture());
     assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
     // Used in InProcessTransport when set to include the cause with the status
     assertNotNull(statusCaptor.getValue().getCause());
-    assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
   private static class SimpleServer implements io.grpc.internal.InternalServer {
