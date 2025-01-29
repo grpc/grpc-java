@@ -298,7 +298,7 @@ public class ClusterImplLoadBalancerTest {
     // The value will be determined by the parent policy, so can be different than the value used in
     // makeAddress() for the test.
     verify(detailsConsumer).addOptionalLabel("grpc.lb.locality", locality.toString());
-    verify(detailsConsumer).addOptionalLabel("grpc.xds.cluster", CLUSTER);
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.backend_service", CLUSTER);
   }
 
   @Test
@@ -322,7 +322,7 @@ public class ClusterImplLoadBalancerTest {
       TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT, detailsConsumer);
     PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
     assertThat(result.getStatus().isOk()).isTrue();
-    verify(detailsConsumer).addOptionalLabel("grpc.xds.cluster", CLUSTER);
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.backend_service", CLUSTER);
   }
 
   @Test
@@ -636,7 +636,7 @@ public class ClusterImplLoadBalancerTest {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
-          .isEqualTo("Cluster max concurrent requests limit exceeded");
+          .isEqualTo("Cluster max concurrent requests limit of 100 exceeded");
       assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
@@ -667,7 +667,7 @@ public class ClusterImplLoadBalancerTest {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
-          .isEqualTo("Cluster max concurrent requests limit exceeded");
+          .isEqualTo("Cluster max concurrent requests limit of 101 exceeded");
       assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
@@ -731,7 +731,7 @@ public class ClusterImplLoadBalancerTest {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
-          .isEqualTo("Cluster max concurrent requests limit exceeded");
+          .isEqualTo("Cluster max concurrent requests limit of 1024 exceeded");
       assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
