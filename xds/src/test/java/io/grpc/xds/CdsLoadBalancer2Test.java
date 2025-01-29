@@ -198,7 +198,8 @@ public class CdsLoadBalancer2Test {
   @Test
   public void discoverTopLevelLogicalDnsCluster() {
     CdsUpdate update =
-        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext)
+        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext,
+                isHttp11ProxyEnabled)
             .leastRequestLbPolicy(3).build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
@@ -254,7 +255,8 @@ public class CdsLoadBalancer2Test {
   @Test
   public void nonAggregateCluster_resourceRevoked() {
     CdsUpdate update =
-        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, null, 100L, upstreamTlsContext)
+        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, null, 100L, upstreamTlsContext,
+                isHttp11ProxyEnabled)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
@@ -302,7 +304,7 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(cluster3, update3);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, null, 100L, null)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, null, 100L, null, isHttp11ProxyEnabled)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     assertThat(childBalancers).isEmpty();
@@ -365,7 +367,8 @@ public class CdsLoadBalancer2Test {
         upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null,
+                isHttp11ProxyEnabled)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -415,7 +418,8 @@ public class CdsLoadBalancer2Test {
         upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null,
+                isHttp11ProxyEnabled)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -649,7 +653,8 @@ public class CdsLoadBalancer2Test {
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     CdsUpdate update1 =
-        CdsUpdate.forLogicalDns(cluster1, DNS_HOST_NAME, LRS_SERVER_INFO, 200L, null)
+        CdsUpdate.forLogicalDns(cluster1, DNS_HOST_NAME, LRS_SERVER_INFO, 200L, null,
+                isHttp11ProxyEnabled)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     FakeLoadBalancer childLb = Iterables.getOnlyElement(childBalancers);

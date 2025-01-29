@@ -21,10 +21,12 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -59,8 +61,12 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -430,9 +436,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                           .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
                           .set(XdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                           .build();
+
+                  List<SocketAddress> rewrittenAddresses = new ArrayList<>();
+                  for (SocketAddress addr : endpoint.eag().getAddresses()) {
+                    rewrittenAddresses.add(rewriteAddress(
+                        addr, endpoint.endpointMetadata(), localityLbInfo.localityMetadata()));
+                  }
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
-                      endpoint.eag().getAddresses(), attr);
-                  eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
+                      rewrittenAddresses, attr);
+                  eag = AddressFilter.setPathFilter(
+                      eag, Arrays.asList(priorityName, localityName));
                   addresses.add(eag);
                 }
               }
@@ -467,6 +480,41 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         }
 
         new EndpointsUpdated().run();
+      }
+
+      private SocketAddress rewriteAddress(SocketAddress addr, ImmutableMap<String,
+          Object> endpointMetadata, ImmutableMap<String, Object> localityMetadata) {
+        if (!(addr instanceof InetSocketAddress)) {
+          return addr;
+        }
+        InetSocketAddress inet = (InetSocketAddress) addr;
+
+        // Attempt to retrieve proxy address from endpoint metadata
+        String proxyAddress = (String) endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+
+        // Fallback to locality metadata if not found in endpoint metadata
+        if (proxyAddress == null) {
+          proxyAddress = (String) localityMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+        }
+
+        if (proxyAddress != null) {
+          try {
+            List<String> proxyParts = Splitter.on(':').splitToList(proxyAddress);
+            String proxyHost = proxyParts.get(0);
+            int proxyPort = Integer.parseInt(proxyParts.get(1));
+            InetAddress proxyInetAddress = InetAddress.getByName(proxyHost);
+            InetAddress newAddr = InetAddress.getByAddress(inet.getAddress().getAddress());
+
+            return HttpConnectProxiedSocketAddress.newBuilder()
+                .setTargetAddress(new InetSocketAddress(newAddr, inet.getPort()))
+                .setProxyAddress(new InetSocketAddress(proxyInetAddress, proxyPort))
+                .build();
+          } catch (UnknownHostException ex) {
+            throw new AssertionError("Failed to parse proxy address", ex);
+          }
+        }
+
+        return addr;
       }
 
       private List<String> generatePriorityNames(String name,
