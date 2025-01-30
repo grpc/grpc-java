@@ -958,13 +958,13 @@ final class XdsNameResolver extends NameResolver {
      */
     final ImmutableList<ClientInterceptor> filterChoices;
 
-    RouteData(RouteMatch routeMatch, RouteAction routeAction, ClientInterceptor filter) {
+    RouteData(RouteMatch routeMatch, @Nullable RouteAction routeAction, ClientInterceptor filter) {
       this(routeMatch, routeAction, ImmutableList.of(filter));
     }
 
     RouteData(
         RouteMatch routeMatch,
-        RouteAction routeAction,
+        @Nullable RouteAction routeAction,
         ImmutableList<ClientInterceptor> filterChoices) {
       this.routeMatch = checkNotNull(routeMatch, "routeMatch");
       checkArgument(
