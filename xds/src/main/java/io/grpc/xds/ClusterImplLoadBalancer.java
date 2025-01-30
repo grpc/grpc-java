@@ -59,6 +59,7 @@ import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
@@ -406,7 +407,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                 dropStats.recordDroppedRequest();
               }
               return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
-                  "Cluster max concurrent requests limit exceeded"));
+                  String.format(Locale.US, "Cluster max concurrent requests limit of %d exceeded",
+                      maxConcurrentRequests)));
             }
           }
           final AtomicReference<ClusterLocality> clusterLocality =
