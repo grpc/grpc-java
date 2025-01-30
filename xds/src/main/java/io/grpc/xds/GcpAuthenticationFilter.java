@@ -31,7 +31,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompositeCallCredentials;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -97,8 +96,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig config,
-      @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
-      ScheduledExecutorService scheduler) {
+      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
     LruCache<String, CallCredentials> callCredentialsCache =

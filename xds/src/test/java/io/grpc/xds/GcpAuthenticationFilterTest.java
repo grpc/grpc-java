@@ -92,7 +92,7 @@ public class GcpAuthenticationFilterTest {
     GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
 
     // Create interceptor
-    ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null, null);
+    ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
 
     // Mock channel and capture CallOptions
