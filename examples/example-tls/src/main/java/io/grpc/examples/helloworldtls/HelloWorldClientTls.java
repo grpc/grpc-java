@@ -18,6 +18,7 @@ package io.grpc.examples.helloworldtls;
 
 import static io.grpc.examples.helloworld.GreeterGrpc.getSayHelloMethod;
 
+import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
@@ -27,6 +28,7 @@ import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import java.io.File;
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,13 +52,15 @@ public class HelloWorldClientTls {
      * Say hello to server.
      */
     public void greet(String name) {
-        System.setProperty("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", "true");
         logger.info("Will try to greet " + name + " ...");
         HelloRequest request = HelloRequest.newBuilder().setName(name).build();
         HelloReply response;
         try {
+            CallOptions callOptions = blockingStub.getCallOptions()
+                .withAuthority("moo.test.goog.fr");
             response = io.grpc.stub.ClientCalls.blockingUnaryCall(
-                blockingStub.getChannel(), getSayHelloMethod(), blockingStub.getCallOptions().withAuthority("foo.goog.test.in"), request);
+                blockingStub.getChannel(), getSayHelloMethod(),
+                callOptions, request);
         } catch (StatusRuntimeException e) {
             logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
             return;
