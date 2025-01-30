@@ -384,17 +384,17 @@ final class XdsNameResolver extends NameResolver {
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
-      String cluster = null;
-      ClientInterceptor filters = null; // null iff cluster is null
-      RouteData selectedRoute = null;
       RoutingConfig routingCfg;
+      RouteData selectedRoute;
+      String cluster;
+      ClientInterceptor filters;
       Metadata headers = args.getHeaders();
+      String path = "/" + args.getMethodDescriptor().getFullMethodName();
       do {
         routingCfg = routingConfig;
+        selectedRoute = null;
         for (RouteData route : routingCfg.routes) {
-          if (RoutingUtils.matchRoute(
-                  route.routeMatch, "/" + args.getMethodDescriptor().getFullMethodName(),
-                  headers, random)) {
+          if (RoutingUtils.matchRoute(route.routeMatch, path, headers, random)) {
             selectedRoute = route;
             break;
           }
@@ -418,7 +418,7 @@ final class XdsNameResolver extends NameResolver {
           }
           long select = random.nextLong(totalWeight);
           long accumulator = 0;
-          for (int i = 0; i < action.weightedClusters().size(); i++) {
+          for (int i = 0; ; i++) {
             ClusterWeight weightedCluster = action.weightedClusters().get(i);
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
@@ -431,13 +431,14 @@ final class XdsNameResolver extends NameResolver {
           cluster =
               prefixedClusterSpecifierPluginName(action.namedClusterSpecifierPluginConfig().name());
           filters = selectedRoute.filterChoices.get(0);
+        } else {
+          throw new AssertionError();
         }
       } while (!retainCluster(cluster));
+      final RouteAction action = selectedRoute.routeAction;
       Long timeoutNanos = null;
       if (enableTimeout) {
-        if (selectedRoute != null) {
-          timeoutNanos = selectedRoute.routeAction.timeoutNano();
-        }
+        timeoutNanos = action.timeoutNano();
         if (timeoutNanos == null) {
           timeoutNanos = routingCfg.fallbackTimeoutNano;
         }
@@ -445,8 +446,7 @@ final class XdsNameResolver extends NameResolver {
           timeoutNanos = null;
         }
       }
-      RetryPolicy retryPolicy =
-          selectedRoute == null ? null : selectedRoute.routeAction.retryPolicy();
+      RetryPolicy retryPolicy = action.retryPolicy();
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodConfig(timeoutNanos, retryPolicy);
@@ -459,8 +459,7 @@ final class XdsNameResolver extends NameResolver {
                 "Failed to parse service config (method config)"));
       }
       final String finalCluster = cluster;
-      final long hash = generateHash(selectedRoute.routeAction.hashPolicies(), headers);
-      RouteData finalSelectedRoute = selectedRoute;
+      final long hash = generateHash(action.hashPolicies(), headers);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -469,7 +468,7 @@ final class XdsNameResolver extends NameResolver {
           CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
                   .withOption(RPC_HASH_KEY, hash);
-          if (finalSelectedRoute.routeAction.autoHostRewrite()) {
+          if (action.autoHostRewrite()) {
             callOptionsForCluster = callOptionsForCluster.withOption(AUTO_HOST_REWRITE_KEY, true);
           }
           return new SimpleForwardingClientCall<ReqT, RespT>(
@@ -757,6 +756,8 @@ final class XdsNameResolver extends NameResolver {
           }
           ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
           routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+        } else {
+          // Discard route
         }
       }
 
