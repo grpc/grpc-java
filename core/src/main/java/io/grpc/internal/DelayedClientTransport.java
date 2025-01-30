@@ -129,8 +129,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (state.shutdownStatus != null) {
           return new FailingClientStream(state.shutdownStatus, tracers);
         }
+        PickResult pickResult = null;
         if (state.lastPicker != null) {
-          PickResult pickResult = state.lastPicker.pickSubchannel(args);
+          pickResult = state.lastPicker.pickSubchannel(args);
           callOptions = args.getCallOptions();
           // User code provided authority takes precedence over the LB provided one.
           if (callOptions.getAuthority() == null
@@ -150,7 +151,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         synchronized (lock) {
           PickerState newerState = pickerState;
           if (state == newerState) {
-            return createPendingStream(args, tracers);
+            return createPendingStream(args, tracers, pickResult);
           }
           state = newerState;
         }
@@ -166,8 +167,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
    */
   @GuardedBy("lock")
   private PendingStream createPendingStream(
-      PickSubchannelArgs args, ClientStreamTracer[] tracers) {
+      PickSubchannelArgs args, ClientStreamTracer[] tracers, PickResult pickResult) {
     PendingStream pendingStream = new PendingStream(args, tracers);
+    if (args.getCallOptions().isWaitForReady() && pickResult != null && pickResult.hasResult()) {
+      pendingStream.lastPickStatus = pickResult.getStatus();
+    }
     pendingStreams.add(pendingStream);
     if (getPendingStreamsCount() == 1) {
       syncContext.executeLater(reportTransportInUse);
@@ -286,10 +290,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     for (final PendingStream stream : toProcess) {
       PickResult pickResult = picker.pickSubchannel(stream.args);
-      if (pickResult.hasResult()) {
+      CallOptions callOptions = stream.args.getCallOptions();
+      if (callOptions.isWaitForReady() && pickResult.hasResult()) {
         stream.lastPickStatus = pickResult.getStatus();
       }
-      CallOptions callOptions = stream.args.getCallOptions();
       // User code provided authority takes precedence over the LB provided one.
       if (callOptions.getAuthority() == null && pickResult.getAuthorityOverride() != null) {
         stream.setAuthority(pickResult.getAuthorityOverride());
@@ -400,8 +404,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
     public void appendTimeoutInsight(InsightBuilder insight) {
       if (args.getCallOptions().isWaitForReady()) {
         insight.append("wait_for_ready");
-        if (lastPickStatus != null && !lastPickStatus.isOk()) {
-          insight.appendKeyValue("Last Pick Failure", lastPickStatus);
+        synchronized (this) {
+          if (lastPickStatus != null && !lastPickStatus.isOk()) {
+            insight.appendKeyValue("Last Pick Failure", lastPickStatus);
+          }
         }
       }
       super.appendTimeoutInsight(insight);
