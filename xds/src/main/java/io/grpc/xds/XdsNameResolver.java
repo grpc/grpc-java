@@ -129,7 +129,7 @@ final class XdsNameResolver extends NameResolver {
   private final long randomChannelId;
   private final MetricRecorder metricRecorder;
 
-  private volatile RoutingConfig routingConfig = RoutingConfig.empty;
+  private volatile RoutingConfig routingConfig = RoutingConfig.EMPTY;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -856,7 +856,7 @@ final class XdsNameResolver extends NameResolver {
         }
         existingClusters = null;
       }
-      routingConfig = RoutingConfig.empty;
+      routingConfig = RoutingConfig.EMPTY;
       // Without addresses the default LB (normally pick_first) should become TRANSIENT_FAILURE, and
       // the config selector handles the error message itself. Once the LB API allows providing
       // failure information for addresses yet still providing a service config, the config seector
@@ -938,7 +938,7 @@ final class XdsNameResolver extends NameResolver {
     private final long fallbackTimeoutNano;
     final ImmutableList<RouteData> routes;
 
-    private static RoutingConfig empty = new RoutingConfig(0, ImmutableList.of());
+    private static final RoutingConfig EMPTY = new RoutingConfig(0, ImmutableList.of());
 
     private RoutingConfig(long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
