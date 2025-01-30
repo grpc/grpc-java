@@ -60,12 +60,9 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -110,17 +107,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
   private final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
-  private final Map<String, Status> peerVerificationResults = Collections.synchronizedMap(
-      new LinkedHashMap<String, Status>() {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
-          return size() > 100;
-        }
-      });
 
-  @VisibleForTesting
-  static boolean enablePerRpcAuthorityCheck =
-          GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false);
 
   NettyClientTransport(
       SocketAddress address,
@@ -209,25 +196,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     Preconditions.checkNotNull(headers, "headers");
     if (channel == null) {
       return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
-    }
-    if (callOptions.getAuthority() != null) {
-      Status verificationStatus = peerVerificationResults.get(callOptions.getAuthority());
-      if (verificationStatus == null) {
-        verificationStatus = negotiator.verifyAuthority(callOptions.getAuthority());
-        peerVerificationResults.put(callOptions.getAuthority(), verificationStatus);
-        if (!verificationStatus.isOk()) {
-          logger.log(Level.WARNING, String.format("Peer hostname verification during rpc failed "
-                          + "for authority '%s' for method '%s' with the error \"%s\". This will "
-                          + "be an error in the future.", callOptions.getAuthority(),
-                  method.getFullMethodName(), verificationStatus.getDescription()),
-                  verificationStatus.getCause());
-        }
-      }
-      if (!verificationStatus.isOk()) {
-        if (enablePerRpcAuthorityCheck) {
-          return new FailingClientStream(verificationStatus, tracers);
-        }
-      }
     }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);

@@ -867,7 +867,7 @@ public class NettyClientTransportTest {
   public void authorityOverrideInCallOptions_noX509ExtendedTrustManager_newStreamCreationFails()
           throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
           TimeoutException {
-    NettyClientTransport.enablePerRpcAuthorityCheck = true;
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
     try {
       startServer();
       InputStream caCert = TlsTesting.loadCert("ca.pem");
@@ -895,7 +895,7 @@ public class NettyClientTransportTest {
         assertThat(status.getCode()).isEqualTo(Code.FAILED_PRECONDITION);
       }
     } finally {
-      NettyClientTransport.enablePerRpcAuthorityCheck = false;
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
     }
   }
 
@@ -903,7 +903,7 @@ public class NettyClientTransportTest {
   public void authorityOverrideInCallOptions_doesntMatchServerPeerHost_newStreamCreationFails()
           throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
           TimeoutException {
-    NettyClientTransport.enablePerRpcAuthorityCheck = true;
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
     try {
       startServer();
       NettyClientTransport transport = newTransport(newNegotiator());
@@ -930,7 +930,7 @@ public class NettyClientTransportTest {
                 "No subject alternative DNS name matching foo.test.google.in found.");
       }
     } finally {
-      NettyClientTransport.enablePerRpcAuthorityCheck = false;
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
     }
   }
 
@@ -938,7 +938,7 @@ public class NettyClientTransportTest {
   public void authorityOverrideInCallOptions_matchesServerPeerHost_newStreamCreationSucceeds()
           throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
           TimeoutException {
-    NettyClientTransport.enablePerRpcAuthorityCheck = true;
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
     try {
       startServer();
       NettyClientTransport transport = newTransport(newNegotiator());
@@ -951,7 +951,7 @@ public class NettyClientTransportTest {
 
       new Rpc(transport, new Metadata(), "foo.test.google.fr").waitForResponse();
     } finally {
-      NettyClientTransport.enablePerRpcAuthorityCheck = false;;
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;;
     }
   }
 
@@ -959,7 +959,7 @@ public class NettyClientTransportTest {
   public void authorityOverrideInCallOptions_lruCache()
           throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
           TimeoutException {
-    NettyClientTransport.enablePerRpcAuthorityCheck = true;
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
     try {
       startServer();
       ProtocolNegotiator mockNegotiator =
@@ -997,7 +997,7 @@ public class NettyClientTransportTest {
       assertThat(authorityValues.get(100)).isEqualTo("foo-100.test.google.fr");
       assertThat(authorityValues.get(101)).isEqualTo("foo-0.test.google.fr");
     } finally {
-      NettyClientTransport.enablePerRpcAuthorityCheck = false;;
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;;
     }
   }
 

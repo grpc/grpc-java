@@ -83,6 +83,8 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.nio.channels.ClosedChannelException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -94,6 +96,8 @@ import javax.annotation.Nullable;
  */
 class NettyClientHandler extends AbstractNettyHandler {
   private static final Logger logger = Logger.getLogger(NettyClientHandler.class.getName());
+  static boolean enablePerRpcAuthorityCheck =
+      GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false);
 
   /**
    * A message that simply passes through the channel without any real processing. It is useful to
@@ -126,6 +130,13 @@ class NettyClientHandler extends AbstractNettyHandler {
         @Override
         protected void handleNotInUse() {
           lifecycleManager.notifyInUse(false);
+        }
+      };
+  private final Map<String, Status> peerVerificationResults =
+      new LinkedHashMap<String, Status>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+          return size() > 100;
         }
       };
 
@@ -591,6 +602,28 @@ class NettyClientHandler extends AbstractNettyHandler {
       return;
     }
 
+    String authority = ((GrpcHttp2OutboundHeaders) command.headers()).getAuthority();
+    if (authority != null) {
+      Status authorityVerificationStatus = peerVerificationResults.get(authority);
+      if (authorityVerificationStatus == null) {
+        authorityVerificationStatus = attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER)
+            .verifyAuthority(((GrpcHttp2OutboundHeaders) command.headers()).getAuthority());
+        peerVerificationResults.put(authority, authorityVerificationStatus);
+      }
+      if (!authorityVerificationStatus.isOk()) {
+        logger.log(Level.WARNING, String.format("%s.%s",
+                authorityVerificationStatus.getDescription(), enablePerRpcAuthorityCheck
+            ? "" : "This will be an error in the future."),
+            authorityVerificationStatus.getCause());
+        if (enablePerRpcAuthorityCheck) {
+          command.stream().setNonExistent();
+          command.stream().transportReportStatus(
+              authorityVerificationStatus, RpcProgress.DROPPED, true, new Metadata());
+          promise.setFailure(authorityVerificationStatus.getCause());
+          return;
+        }
+      }
+    }
     // Get the stream ID for the new stream.
     int streamId;
     try {

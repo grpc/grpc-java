@@ -46,6 +46,15 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
     return new GrpcHttp2OutboundHeaders(preHeaders, serializedMetadata);
   }
 
+  String getAuthority() {
+    for (int i = 0; i < preHeaders.length / 2; i++) {
+      if (preHeaders[i] == Http2Headers.PseudoHeaderName.AUTHORITY.value()) {
+        return preHeaders[i + 1].toString();
+      }
+    }
+    return null;
+  }
+
   static GrpcHttp2OutboundHeaders serverResponseHeaders(byte[][] serializedMetadata) {
     AsciiString[] preHeaders = new AsciiString[] {
         Http2Headers.PseudoHeaderName.STATUS.value(), Utils.STATUS_OK,
