@@ -189,8 +189,6 @@ public class ServerImplTest {
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
   @Captor
-  private ArgumentCaptor<Metadata> metadataCaptor;
-  @Captor
   private ArgumentCaptor<ServerStreamListener> streamListenerCaptor;
 
   @Mock
