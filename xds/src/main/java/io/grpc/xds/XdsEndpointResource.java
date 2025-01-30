@@ -22,6 +22,7 @@ import static io.grpc.xds.MetadataRegistry.parseMetadata;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -295,6 +296,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   static class AddressMetadataParser implements MetadataValueParser {
+    private InetSocketAddress address;
 
     @Override
     public String getTypeUrl() {
@@ -302,20 +304,38 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     }
 
     @Override
-    public String parse(Any any) throws InvalidProtocolBufferException {
-      Address address = any.unpack(Address.class);
-      SocketAddress socketAddress = address.getSocketAddress();
-      if (socketAddress.getAddress().isEmpty()) {
-        throw new InvalidProtocolBufferException("Address field is empty or invalid.");
-      }
+    public InetSocketAddress parse(Any any) throws InvalidProtocolBufferException {
+      Address addressProto = any.unpack(Address.class);
+      SocketAddress socketAddress = addressProto.getSocketAddress();
+
+      validateAddress(socketAddress);
 
       String ip = socketAddress.getAddress();
       int port = socketAddress.getPortValue();
-      if (port <= 0) {
-        throw new InvalidProtocolBufferException("Port value must be positive.");
-      }
 
-      return String.format("%s:%d", ip, port);
+      try {
+        this.address = new InetSocketAddress(InetAddresses.forString(ip), port);
+      } catch (IllegalArgumentException e) {
+        throw createException("Invalid IP address format: " + ip);
+      }
+      return this.address;
+    }
+
+    private void validateAddress(SocketAddress socketAddress) throws InvalidProtocolBufferException {
+      if (socketAddress.getAddress().isEmpty()) {
+        throw createException("Address field is empty or invalid.");
+      }
+      if (socketAddress.getPortValue() <= 0) {
+        throw createException("Port value must be positive.");
+      }
+    }
+
+    private InvalidProtocolBufferException createException(String message) {
+      return new InvalidProtocolBufferException("Failed to parse envoy.config.core.v3.Address: " + message);
+    }
+
+    public InetSocketAddress getAddress() {
+      return address;
     }
   }
 }

@@ -23,6 +23,7 @@ import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -489,31 +490,22 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         }
         InetSocketAddress inet = (InetSocketAddress) addr;
 
-        // Attempt to retrieve proxy address from endpoint metadata
-        String proxyAddress = (String) endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
-
-        // Fallback to locality metadata if not found in endpoint metadata
-        if (proxyAddress == null) {
-          proxyAddress = (String) localityMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+        InetSocketAddress proxyAddress;
+        try {
+          proxyAddress = (InetSocketAddress) endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+          if (proxyAddress == null) {
+            proxyAddress = (InetSocketAddress) localityMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+          }
+        } catch (ClassCastException e) {
+          throw new AssertionError("Proxy address metadata is not an InetSocketAddress", e);
         }
 
         if (proxyAddress != null) {
-          try {
-            List<String> proxyParts = Splitter.on(':').splitToList(proxyAddress);
-            String proxyHost = proxyParts.get(0);
-            int proxyPort = Integer.parseInt(proxyParts.get(1));
-            InetAddress proxyInetAddress = InetAddress.getByName(proxyHost);
-            InetAddress newAddr = InetAddress.getByAddress(inet.getAddress().getAddress());
-
-            return HttpConnectProxiedSocketAddress.newBuilder()
-                .setTargetAddress(new InetSocketAddress(newAddr, inet.getPort()))
-                .setProxyAddress(new InetSocketAddress(proxyInetAddress, proxyPort))
-                .build();
-          } catch (UnknownHostException ex) {
-            throw new AssertionError("Failed to parse proxy address", ex);
-          }
+          return HttpConnectProxiedSocketAddress.newBuilder()
+              .setTargetAddress(inet)
+              .setProxyAddress(proxyAddress)
+              .build();
         }
-
         return addr;
       }
 

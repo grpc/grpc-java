@@ -36,7 +36,9 @@ import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.extensions.transport_sockets.http_11_proxy.v3.Http11ProxyUpstreamTransport;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.LoadBalancerRegistry;
@@ -244,7 +246,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       String transportSocketName = cluster.getTransportSocket().getName();
 
       if (!TRANSPORT_SOCKET_NAME_TLS.equals(transportSocketName) &&
-          (isEnabledXdsHttpConnect && !TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocketName))) {
+          !(isEnabledXdsHttpConnect && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocketName))) {
         return StructOrError.fromError(
             "Transport socket with name " + transportSocketName + " not supported.");
       }
@@ -253,12 +255,11 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       if (isEnabledXdsHttpConnect && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocketName)) {
         isHttp11ProxyEnabled = true;
         try {
-          tlsConfig = unpackCompatibleType(
-              cluster.getTransportSocket().getTypedConfig(),
-              io.envoyproxy.envoy.extensions.transport_sockets.http_11_proxy.v3
-                  .Http11ProxyUpstreamTransport.class,
-              TRANSPORT_SOCKET_NAME_HTTP11_PROXY, null
-          ).getTransportSocket().getTypedConfig();
+          Http11ProxyUpstreamTransport wrappedTransportSocket = cluster.getTransportSocket()
+              .getTypedConfig().unpack(io.envoyproxy.envoy.extensions.transport_sockets
+                  .http_11_proxy.v3.Http11ProxyUpstreamTransport.class);
+          tlsConfig = wrappedTransportSocket.getTransportSocket().getTypedConfig();
+          transportSocketName = wrappedTransportSocket.getTransportSocket().getName();
         } catch (InvalidProtocolBufferException e) {
           return StructOrError.fromError(
               "Cluster " + clusterName + ": malformed Http11ProxyUpstreamTransport: " + e);
@@ -270,16 +271,18 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         tlsConfig = cluster.getTransportSocket().getTypedConfig();
       }
 
-      try {
-        upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-            validateUpstreamTlsContext(
-                unpackCompatibleType(tlsConfig,
-                    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
-                    TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
-                certProviderInstances));
-      } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
-        return StructOrError.fromError(
-            "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
+      if (TRANSPORT_SOCKET_NAME_TLS.equals(transportSocketName)) {
+        try {
+          upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+              validateUpstreamTlsContext(
+                  unpackCompatibleType(tlsConfig,
+                      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
+                      TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
+                  certProviderInstances));
+        } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
+          return StructOrError.fromError(
+              "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
+        }
       }
     }
 
