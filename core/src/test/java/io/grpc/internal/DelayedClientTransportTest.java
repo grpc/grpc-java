@@ -745,6 +745,23 @@ public class DelayedClientTransportTest {
         .matches("\\[wait_for_ready, buffered_nanos=[0-9]+\\, waiting_for_connection]");
   }
 
+  @Test
+  public void pendingStream_appendTimeoutInsight_waitForReady_withLastPickFailure() {
+    ClientStream stream = delayedTransport.newStream(
+        method, headers, callOptions.withWaitForReady(), tracers);
+    stream.start(streamListener);
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withError(Status.PERMISSION_DENIED));
+    delayedTransport.reprocess(picker);
+    InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString())
+        .matches("\\[wait_for_ready, "
+            + "Last Pick Failure=Status\\{code=PERMISSION_DENIED, description=null, cause=null\\},"
+            + " buffered_nanos=[0-9]+, waiting_for_connection]");
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override
