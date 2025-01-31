@@ -16,11 +16,11 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
+import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -46,7 +46,6 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.NoopSslSession;
 import io.grpc.internal.ObjectPool;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
@@ -61,7 +60,6 @@ import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
 import io.netty.handler.proxy.HttpProxyHandler;
 import io.netty.handler.proxy.ProxyConnectionEvent;
-import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.OpenSslEngine;
 import io.netty.handler.ssl.SslContext;
@@ -225,15 +223,15 @@ final class ProtocolNegotiators {
       } // else use system default
       switch (tlsCreds.getClientAuth()) {
         case OPTIONAL:
-          builder.clientAuth(ClientAuth.OPTIONAL);
+          builder.clientAuth(io.netty.handler.ssl.ClientAuth.OPTIONAL);
           break;
 
         case REQUIRE:
-          builder.clientAuth(ClientAuth.REQUIRE);
+          builder.clientAuth(io.netty.handler.ssl.ClientAuth.REQUIRE);
           break;
 
         case NONE:
-          builder.clientAuth(ClientAuth.NONE);
+          builder.clientAuth(io.netty.handler.ssl.ClientAuth.NONE);
           break;
 
         default:
@@ -289,17 +287,17 @@ final class ProtocolNegotiators {
 
     public static FromChannelCredentialsResult error(String error) {
       return new FromChannelCredentialsResult(
-          null, null, checkNotNull(error, "error"));
+          null, null, Preconditions.checkNotNull(error, "error"));
     }
 
     public static FromChannelCredentialsResult negotiator(
         ProtocolNegotiator.ClientFactory factory) {
       return new FromChannelCredentialsResult(
-          checkNotNull(factory, "factory"), null, null);
+          Preconditions.checkNotNull(factory, "factory"), null, null);
     }
 
     public FromChannelCredentialsResult withCallCredentials(CallCredentials callCreds) {
-      checkNotNull(callCreds, "callCreds");
+      Preconditions.checkNotNull(callCreds, "callCreds");
       if (error != null) {
         return this;
       }
@@ -320,11 +318,11 @@ final class ProtocolNegotiators {
     }
 
     public static FromServerCredentialsResult error(String error) {
-      return new FromServerCredentialsResult(null, checkNotNull(error, "error"));
+      return new FromServerCredentialsResult(null, Preconditions.checkNotNull(error, "error"));
     }
 
     public static FromServerCredentialsResult negotiator(ProtocolNegotiator.ServerFactory factory) {
-      return new FromServerCredentialsResult(checkNotNull(factory, "factory"), null);
+      return new FromServerCredentialsResult(Preconditions.checkNotNull(factory, "factory"), null);
     }
   }
 
@@ -339,7 +337,7 @@ final class ProtocolNegotiators {
 
     public FixedProtocolNegotiatorServerFactory(ProtocolNegotiator protocolNegotiator) {
       this.protocolNegotiator =
-          checkNotNull(protocolNegotiator, "protocolNegotiator");
+          Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
     }
 
     @Override
@@ -381,7 +379,7 @@ final class ProtocolNegotiators {
     private final SslContext sslContext;
 
     public TlsProtocolNegotiatorServerFactory(SslContext sslContext) {
-      this.sslContext = checkNotNull(sslContext, "sslContext");
+      this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
     }
 
     @Override
@@ -396,7 +394,7 @@ final class ProtocolNegotiators {
    */
   public static ProtocolNegotiator serverTls(final SslContext sslContext,
       final ObjectPool<? extends Executor> executorPool) {
-    checkNotNull(sslContext, "sslContext");
+    Preconditions.checkNotNull(sslContext, "sslContext");
     final Executor executor;
     if (executorPool != null) {
       // The handlers here can out-live the {@link ProtocolNegotiator}.
@@ -446,8 +444,8 @@ final class ProtocolNegotiators {
     ServerTlsHandler(ChannelHandler next,
         SslContext sslContext,
         final ObjectPool<? extends Executor> executorPool) {
-      this.sslContext = checkNotNull(sslContext, "sslContext");
-      this.next = checkNotNull(next, "next");
+      this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
+      this.next = Preconditions.checkNotNull(next, "next");
       if (executorPool != null) {
         this.executor = executorPool.getObject();
       }
@@ -504,8 +502,8 @@ final class ProtocolNegotiators {
   public static ProtocolNegotiator httpProxy(final SocketAddress proxyAddress,
       final @Nullable String proxyUsername, final @Nullable String proxyPassword,
       final ProtocolNegotiator negotiator) {
-    checkNotNull(negotiator, "negotiator");
-    checkNotNull(proxyAddress, "proxyAddress");
+    Preconditions.checkNotNull(negotiator, "negotiator");
+    Preconditions.checkNotNull(proxyAddress, "proxyAddress");
     final AsciiString scheme = negotiator.scheme();
     class ProxyNegotiator implements ProtocolNegotiator {
       @Override
@@ -551,7 +549,7 @@ final class ProtocolNegotiators {
         ChannelHandler next,
         ChannelLogger negotiationLogger) {
       super(next, negotiationLogger);
-      this.address = checkNotNull(address, "address");
+      this.address = Preconditions.checkNotNull(address, "address");
       this.userName = userName;
       this.password = password;
     }
@@ -582,7 +580,7 @@ final class ProtocolNegotiators {
     public ClientTlsProtocolNegotiator(SslContext sslContext,
         ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
         X509TrustManager x509ExtendedTrustManager) {
-      this.sslContext = checkNotNull(sslContext, "sslContext");
+      this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
       this.executorPool = executorPool;
       if (this.executorPool != null) {
         this.executor = this.executorPool.getObject();
@@ -630,7 +628,6 @@ final class ProtocolNegotiators {
     private final SslContext sslContext;
     private final String host;
     private final int port;
-    private final ClientTlsProtocolNegotiator clientTlsProtocolNegotiator;
     private Executor executor;
     private final Optional<Runnable> handshakeCompleteRunnable;
     private final X509TrustManager x509ExtendedTrustManager;
@@ -642,13 +639,12 @@ final class ProtocolNegotiators {
         ClientTlsProtocolNegotiator clientTlsProtocolNegotiator,
          X509TrustManager x509ExtendedTrustManager) {
       super(next, negotiationLogger);
-      this.sslContext = checkNotNull(sslContext, "sslContext");
+      this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
       HostPort hostPort = parseAuthority(authority);
       this.host = hostPort.host;
       this.port = hostPort.port;
       this.executor = executor;
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
-      this.clientTlsProtocolNegotiator = clientTlsProtocolNegotiator;
       this.x509ExtendedTrustManager = x509ExtendedTrustManager;
     }
 
@@ -725,7 +721,7 @@ final class ProtocolNegotiators {
 
   @VisibleForTesting
   static HostPort parseAuthority(String authority) {
-    URI uri = GrpcUtil.authorityToUri(checkNotNull(authority, "authority"));
+    URI uri = GrpcUtil.authorityToUri(Preconditions.checkNotNull(authority, "authority"));
     String host;
     int port;
     if (uri.getHost() != null) {
@@ -748,7 +744,7 @@ final class ProtocolNegotiators {
 
   /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
-   * be negotiated, the {@code handler} is added and writes to the {@link Channel}
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
@@ -761,7 +757,7 @@ final class ProtocolNegotiators {
 
   /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
-   * be negotiated, the {@code handler} is added and writes to the {@link Channel}
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
@@ -783,7 +779,7 @@ final class ProtocolNegotiators {
 
     public TlsProtocolNegotiatorClientFactory(SslContext sslContext,
                                               X509TrustManager x509ExtendedTrustManager) {
-      this.sslContext = checkNotNull(sslContext, "sslContext");
+      this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
       this.x509ExtendedTrustManager = x509ExtendedTrustManager;
     }
 
@@ -862,8 +858,8 @@ final class ProtocolNegotiators {
     private ProtocolNegotiationEvent pne;
 
     Http2UpgradeAndGrpcHandler(String authority, GrpcHttp2ConnectionHandler next) {
-      this.authority = checkNotNull(authority, "authority");
-      this.next = checkNotNull(next, "next");
+      this.authority = Preconditions.checkNotNull(authority, "authority");
+      this.next = Preconditions.checkNotNull(next, "next");
       this.negotiationLogger = next.getNegotiationLogger();
     }
 
@@ -907,9 +903,9 @@ final class ProtocolNegotiators {
   }
 
   /**
-   * Returns a {@link ChannelHandler} that ensures that the {@code handler} is added to the
-   * pipeline writes to the {@link Channel} may happen immediately, even before it
-   * is active.
+   * Returns a {@link io.netty.channel.ChannelHandler} that ensures that the {@code handler} is
+   * added to the pipeline writes to the {@link io.netty.channel.Channel} may happen immediately,
+   * even before it is active.
    */
   public static ProtocolNegotiator plaintext() {
     return new PlaintextProtocolNegotiator();
@@ -987,7 +983,7 @@ final class ProtocolNegotiators {
     private final GrpcHttp2ConnectionHandler next;
 
     public GrpcNegotiationHandler(GrpcHttp2ConnectionHandler next) {
-      this.next = checkNotNull(next, "next");
+      this.next = Preconditions.checkNotNull(next, "next");
     }
 
     @Override
@@ -1109,15 +1105,15 @@ final class ProtocolNegotiators {
 
     protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName,
         ChannelLogger negotiationLogger) {
-      this.next = checkNotNull(next, "next");
+      this.next = Preconditions.checkNotNull(next, "next");
       this.negotiatorName = negotiatorName;
-      this.negotiationLogger = checkNotNull(negotiationLogger, "negotiationLogger");
+      this.negotiationLogger = Preconditions.checkNotNull(negotiationLogger, "negotiationLogger");
     }
 
     protected ProtocolNegotiationHandler(ChannelHandler next, ChannelLogger negotiationLogger) {
-      this.next = checkNotNull(next, "next");
+      this.next = Preconditions.checkNotNull(next, "next");
       this.negotiatorName = getClass().getSimpleName().replace("Handler", "");
-      this.negotiationLogger = checkNotNull(negotiationLogger, "negotiationLogger");
+      this.negotiationLogger = Preconditions.checkNotNull(negotiationLogger, "negotiationLogger");
     }
 
     @Override
@@ -1158,7 +1154,7 @@ final class ProtocolNegotiators {
 
     protected final void replaceProtocolNegotiationEvent(ProtocolNegotiationEvent pne) {
       checkState(this.pne != null, "previous protocol negotiation event hasn't triggered");
-      this.pne = checkNotNull(pne);
+      this.pne = Preconditions.checkNotNull(pne);
     }
 
     protected final void fireProtocolNegotiationEvent(ChannelHandlerContext ctx) {

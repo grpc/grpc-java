@@ -63,7 +63,6 @@ import java.nio.channels.ClosedChannelException;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -106,7 +105,6 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
-  private final Logger logger = Logger.getLogger(NettyClientTransport.class.getName());
 
 
   NettyClientTransport(

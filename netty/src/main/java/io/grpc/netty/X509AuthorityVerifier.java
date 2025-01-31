@@ -55,6 +55,7 @@ public class X509AuthorityVerifier implements AuthorityVerifier {
     this.x509ExtendedTrustManager = x509ExtendedTrustManager;
   }
 
+  @Override
   public Status verifyAuthority(@Nonnull String authority) {
     // sslEngine won't be set when creating ClientTlsHandler from InternalProtocolNegotiators
     // for example.
