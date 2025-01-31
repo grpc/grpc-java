@@ -586,6 +586,17 @@ class NettyClientHandler extends AbstractNettyHandler {
         && ((StreamBufferingEncoder) encoder()).numBufferedStreams() == 0;
   }
 
+  private String getAuthorityPseudoHeader(Http2Headers http2Headers) {
+    if (http2Headers instanceof GrpcHttp2OutboundHeaders) {
+      return ((GrpcHttp2OutboundHeaders) http2Headers).getAuthority();
+    }
+    try {
+      return http2Headers.authority().toString();
+    } catch (UnsupportedOperationException e) {
+      return null;
+    }
+  }
+
   /**
    * Attempts to create a new stream from the given command. If there are too many active streams,
    * the creation request is queued.
@@ -602,15 +613,16 @@ class NettyClientHandler extends AbstractNettyHandler {
       return;
     }
 
-    String authority = ((GrpcHttp2OutboundHeaders) command.headers()).getAuthority();
+    String authority = getAuthorityPseudoHeader(command.headers());
     if (authority != null) {
       Status authorityVerificationStatus = peerVerificationResults.get(authority);
-      if (authorityVerificationStatus == null) {
+      if (authorityVerificationStatus == null && attributes != null
+          && attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER) != null) {
         authorityVerificationStatus = attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER)
             .verifyAuthority(((GrpcHttp2OutboundHeaders) command.headers()).getAuthority());
         peerVerificationResults.put(authority, authorityVerificationStatus);
       }
-      if (!authorityVerificationStatus.isOk()) {
+      if (authorityVerificationStatus != null && !authorityVerificationStatus.isOk()) {
         logger.log(Level.WARNING, String.format("%s.%s",
                 authorityVerificationStatus.getDescription(), enablePerRpcAuthorityCheck
             ? "" : "This will be an error in the future."),

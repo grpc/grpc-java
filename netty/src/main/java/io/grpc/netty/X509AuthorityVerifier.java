@@ -65,7 +65,9 @@ public class X509AuthorityVerifier implements AuthorityVerifier {
     }
     Status peerVerificationStatus;
     try {
-      verifyAuthorityAllowedForPeerCert(authority);
+      // Because the authority pseudo-header can contain a port number:
+      // https://www.rfc-editor.org/rfc/rfc7540#section-8.1.2.3com
+      verifyAuthorityAllowedForPeerCert(removeAnyPortNumber(authority));
       peerVerificationStatus = Status.OK;
     } catch (SSLPeerUnverifiedException | CertificateException | InvocationTargetException
              | IllegalAccessException | IllegalStateException e) {
@@ -74,6 +76,15 @@ public class X509AuthorityVerifier implements AuthorityVerifier {
                       authority)).withCause(e);
     }
     return peerVerificationStatus;
+  }
+
+  private String removeAnyPortNumber(String authority) {
+    int closingSquareBracketIndex = authority.lastIndexOf(']');
+    int portNumberSeperatorColonIndex = authority.lastIndexOf(':');
+    if (portNumberSeperatorColonIndex > closingSquareBracketIndex) {
+      return authority.substring(0, portNumberSeperatorColonIndex);
+    }
+    return authority;
   }
 
   private void verifyAuthorityAllowedForPeerCert(String authority)

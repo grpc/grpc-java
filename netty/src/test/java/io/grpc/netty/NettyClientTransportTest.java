@@ -37,9 +37,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -139,8 +137,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.AdditionalAnswers;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -955,47 +951,58 @@ public class NettyClientTransportTest {
     }
   }
 
+  // Without removing the port number part that {@link X509AuthorityVerifier} does, there will be a
+  // java.security.cert.CertificateException: Illegal given domain name: foo.test.google.fr:12345
   @Test
-  public void authorityOverrideInCallOptions_lruCache()
-          throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
-          TimeoutException {
+  public void authorityOverrideInCallOptions_portNumberInAuthority_isStrippedForPeerVerification()
+      throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+      TimeoutException {
     NettyClientHandler.enablePerRpcAuthorityCheck = true;
     try {
       startServer();
-      ProtocolNegotiator mockNegotiator =
-              mock(ProtocolNegotiator.class, AdditionalAnswers.delegatesTo(newNegotiator()));
-      NettyClientTransport transport = newTransport(mockNegotiator);
+      NettyClientTransport transport = newTransport(newNegotiator());
       SettableFuture<Void> connected = SettableFuture.create();
       FakeClientTransportListener fakeClientTransportListener =
-              new FakeClientTransportListener(connected);
+          new FakeClientTransportListener(connected);
       callMeMaybe(transport.start(fakeClientTransportListener));
       connected.get(10, TimeUnit.SECONDS);
       assertThat(fakeClientTransportListener.isConnected()).isTrue();
 
-      ArgumentCaptor<String> authorityArgumentCaptor = ArgumentCaptor.forClass(String.class);
-      new Rpc(transport, new Metadata(), "foo-0.test.google.fr").halfClose()
-              .waitForResponse();
-      // Should use cache.
-      new Rpc(transport, new Metadata(), "foo-0.test.google.fr").waitForResponse();
-      for (int i = 1; i < 100; i++) {
-        // Should call verifyAuthority each time here and the cache grows with each call.
-        new Rpc(transport, new Metadata(), "foo-" + i + ".test.google.fr").halfClose()
-                .waitForResponse();
-      }
-      // Cache is full at this point. Eviction occurs here for foo-0.test.google.fr.
-      new Rpc(transport, new Metadata(), "foo-100.test.google.fr").halfClose()
-              .waitForResponse();
-      // verifyAuthority call happens for foo-0.test.google.fr.
-      new Rpc(transport, new Metadata(), "foo-0.test.google.fr").halfClose()
-              .waitForResponse();
-      verify(mockNegotiator, times(102)).verifyAuthority(
-              authorityArgumentCaptor.capture());
-      List<String> authorityValues = authorityArgumentCaptor.getAllValues();
-      for (int i = 0; i < 100; i++) {
-        assertThat(authorityValues.get(i)).isEqualTo("foo-" + i + ".test.google.fr");
-      }
-      assertThat(authorityValues.get(100)).isEqualTo("foo-100.test.google.fr");
-      assertThat(authorityValues.get(101)).isEqualTo("foo-0.test.google.fr");
+      new Rpc(transport, new Metadata(), "foo.test.google.fr:12345").waitForResponse();
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;;
+    }
+  }
+
+  @Test
+  public void authorityOverrideInCallOptions_portNumberAndIpv6_isStrippedForPeerVerification()
+      throws IOException, InterruptedException, GeneralSecurityException, ExecutionException,
+      TimeoutException {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      startServer();
+      NettyClientTransport transport = newTransport(newNegotiator());
+      SettableFuture<Void> connected = SettableFuture.create();
+      FakeClientTransportListener fakeClientTransportListener =
+          new FakeClientTransportListener(connected);
+      callMeMaybe(transport.start(fakeClientTransportListener));
+      connected.get(10, TimeUnit.SECONDS);
+      assertThat(fakeClientTransportListener.isConnected()).isTrue();
+
+      new Rpc(transport, new Metadata(), "[2001:db8:3333:4444:5555:6666:1.2.3.4]:12345")
+          .waitForResponse();
+    } catch (ExecutionException ex) {
+      Status status = ((StatusException) ex.getCause()).getStatus();
+      assertThat(status.getDescription()).isEqualTo("Peer hostname verification during rpc "
+          + "failed for authority '[2001:db8:3333:4444:5555:6666:1.2.3.4]:12345'");
+      assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(((InvocationTargetException) ex.getCause().getCause()).getTargetException())
+          .isInstanceOf(CertificateException.class);
+      // Port number is removed by {@link X509AuthorityVerifier}.
+      assertThat(((InvocationTargetException) ex.getCause().getCause()).getTargetException()
+          .getMessage()).isEqualTo(
+          "No subject alternative names matching IP address 2001:db8:3333:4444:5555:6666:1.2.3.4 "
+              + "found");
     } finally {
       NettyClientHandler.enablePerRpcAuthorityCheck = false;;
     }
@@ -1182,9 +1189,11 @@ public class NettyClientTransportTest {
 
     Rpc(NettyClientTransport transport, Metadata headers, String authorityOverride) {
       stream = transport.newStream(
-          METHOD, headers, authorityOverride != null
-                      ? CallOptions.DEFAULT.withAuthority(authorityOverride) : CallOptions.DEFAULT,
+          METHOD, headers, CallOptions.DEFAULT,
           new ClientStreamTracer[]{ new ClientStreamTracer() {} });
+      if (authorityOverride != null) {
+        stream.setAuthority(authorityOverride);
+      }
       stream.start(listener);
       stream.request(1);
       stream.writeMessage(new ByteArrayInputStream(MESSAGE.getBytes(UTF_8)));
