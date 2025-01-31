@@ -19,6 +19,7 @@ package io.grpc.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
@@ -40,7 +41,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A client transport that queues requests before a real transport is available. When {@link
@@ -142,9 +142,15 @@ final class DelayedClientTransport implements ManagedClientTransport {
           ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
               callOptions.isWaitForReady());
           if (transport != null) {
-            return transport.newStream(
+            ClientStream stream = transport.newStream(
                 args.getMethodDescriptor(), args.getHeaders(), callOptions,
                 tracers);
+            // User code provided authority takes precedence over the LB provided one; this will be
+            // overwritten by ClientCallImpl if the application sets an authority override
+            if (pickResult.getAuthorityOverride() != null) {
+              stream.setAuthority(pickResult.getAuthorityOverride());
+            }
+            return stream;
           }
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
@@ -311,7 +317,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (callOptions.getExecutor() != null) {
           executor = callOptions.getExecutor();
         }
-        Runnable runnable = stream.createRealStream(transport);
+        Runnable runnable = stream.createRealStream(transport, pickResult.getAuthorityOverride());
         if (runnable != null) {
           executor.execute(runnable);
         }
@@ -365,7 +371,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     /** Runnable may be null. */
-    private Runnable createRealStream(ClientTransport transport) {
+    private Runnable createRealStream(ClientTransport transport, String authorityOverride) {
       ClientStream realStream;
       Context origContext = context.attach();
       try {
@@ -374,6 +380,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
             tracers);
       } finally {
         context.detach(origContext);
+      }
+      if (authorityOverride != null) {
+        // User code provided authority takes precedence over the LB provided one; this will be
+        // overwritten by an enqueud call from ClientCallImpl if the application sets an authority
+        // override. We must call the real stream directly because stream.start() has likely already
+        // been called on the delayed stream.
+        realStream.setAuthority(authorityOverride);
       }
       return setStream(realStream);
     }

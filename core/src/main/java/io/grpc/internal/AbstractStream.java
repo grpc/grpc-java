@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
@@ -29,7 +30,6 @@ import io.perfmark.TaskCloseable;
 import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * The stream and stream state as used by the application. Must only be called from the sending

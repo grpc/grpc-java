@@ -23,7 +23,6 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.TimeProvider;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
@@ -32,28 +31,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 public class CommonBootstrapperTestUtils {
   private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
   private static final String SERVER_URI_CUSTOM_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
-
-  private static final long TIME_INCREMENT = TimeUnit.SECONDS.toNanos(1);
-
-  /** Fake time provider increments time TIME_INCREMENT each call. */
-  private static TimeProvider newTimeProvider() {
-    return new TimeProvider() {
-      private long count;
-
-      @Override
-      public long currentTimeNanos() {
-        return ++count * TIME_INCREMENT;
-      }
-    };
-  }
-
   private static final String FILE_WATCHER_CONFIG = "{\"path\": \"/etc/secret/certs\"}";
   private static final String MESHCA_CONFIG =
       "{\n"
@@ -183,14 +166,28 @@ public class CommonBootstrapperTestUtils {
                                               BackoffPolicy.Provider backoffPolicyProvider,
                                               MessagePrettyPrinter messagePrinter,
                                               XdsClientMetricReporter xdsClientMetricReporter) {
-    Bootstrapper.BootstrapInfo bootstrapInfo = buildBootStrap(serverUris);
+    return createXdsClient(
+        buildBootStrap(serverUris),
+        xdsTransportFactory,
+        fakeClock,
+        backoffPolicyProvider,
+        messagePrinter,
+        xdsClientMetricReporter);
+  }
+
+  public static XdsClientImpl createXdsClient(Bootstrapper.BootstrapInfo bootstrapInfo,
+                                              XdsTransportFactory xdsTransportFactory,
+                                              FakeClock fakeClock,
+                                              BackoffPolicy.Provider backoffPolicyProvider,
+                                              MessagePrettyPrinter messagePrinter,
+                                              XdsClientMetricReporter xdsClientMetricReporter) {
     return new XdsClientImpl(
         xdsTransportFactory,
         bootstrapInfo,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,
         fakeClock.getStopwatchSupplier(),
-        newTimeProvider(),
+        fakeClock.getTimeProvider(),
         messagePrinter,
         new TlsContextManagerImpl(bootstrapInfo),
         xdsClientMetricReporter);
