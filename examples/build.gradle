@@ -4,6 +4,11 @@ plugins {
     id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
+    id 'java-platform'
+}
+
+javaPlatform {
+    allowDependencies() // Allows using external BOMs or defining a platform
 }
 
 repositories {
@@ -28,20 +33,22 @@ def protobufVersion = '3.25.5'
 def protocVersion = protobufVersion
 
 dependencies {
-    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
-    implementation "io.grpc:grpc-services:${grpcVersion}"
-    implementation "io.grpc:grpc-stub:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+    constraints {
+        api 'io.grpc:grpc-protobuf:${grpcVersion}'
+        api 'io.grpc:grpc-services:${grpcVersion}'
+        api 'io.grpc:grpc-stub:${grpcVersion}'
+        compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
 
-    // examples/advanced need this for JsonFormat
-    implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
+        // examples/advanced need this for JsonFormat
+        api 'com.google.protobuf:protobuf-java-util:${protobufVersion}'
 
-    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+        runtimeOnly 'io.grpc:grpc-netty-shaded:${grpcVersion}'
 
-    testImplementation "io.grpc:grpc-testing:${grpcVersion}"
-    testImplementation "io.grpc:grpc-inprocess:${grpcVersion}"
-    testImplementation "junit:junit:4.13.2"
-    testImplementation "org.mockito:mockito-core:4.4.0"
+        api 'io.grpc:grpc-testing:${grpcVersion}'
+        api 'io.grpc:grpc-inprocess:${grpcVersion}'
+        api 'junit:junit:4.13.2'
+        api 'org.mockito:mockito-core:4.4.0'
+    }
 }
 
 protobuf {
