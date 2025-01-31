@@ -3875,7 +3875,7 @@ public class ManagedChannelImplTest {
         Status.UNAVAILABLE, PROCESSED, new Metadata());
 
     // in backoff
-    timer.forwardTime(5, TimeUnit.SECONDS);
+    timer.forwardTime(6, TimeUnit.SECONDS);
     assertThat(timer.getPendingTasks()).hasSize(1);
     verify(mockStream2, never()).start(any(ClientStreamListener.class));
 
@@ -3894,7 +3894,7 @@ public class ManagedChannelImplTest {
     assertEquals("Channel shutdown invoked", statusCaptor.getValue().getDescription());
 
     // backoff ends
-    timer.forwardTime(5, TimeUnit.SECONDS);
+    timer.forwardTime(6, TimeUnit.SECONDS);
     assertThat(timer.getPendingTasks()).isEmpty();
     verify(mockStream2).start(streamListenerCaptor.capture());
     verify(mockLoadBalancer, never()).shutdown();
