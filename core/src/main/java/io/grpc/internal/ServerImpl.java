@@ -810,7 +810,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
      */
     private synchronized void internalClose(Throwable t) {
       String description = "Application error processing RPC";
-      stream.cancel(Status.INTERNAL.withDescription(description).withCause(t));
+      stream.cancel(Status.UNKNOWN.withDescription(description).withCause(t));
     }
 
     @Override
