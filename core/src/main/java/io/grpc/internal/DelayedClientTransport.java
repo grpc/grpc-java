@@ -37,6 +37,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -170,7 +171,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       PickSubchannelArgs args, ClientStreamTracer[] tracers, PickResult pickResult) {
     PendingStream pendingStream = new PendingStream(args, tracers);
     if (args.getCallOptions().isWaitForReady() && pickResult != null && pickResult.hasResult()) {
-      pendingStream.lastPickStatus = pickResult.getStatus();
+      pendingStream.lastPickStatus.set(pickResult.getStatus());
     }
     pendingStreams.add(pendingStream);
     if (getPendingStreamsCount() == 1) {
@@ -291,8 +292,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
     for (final PendingStream stream : toProcess) {
       PickResult pickResult = picker.pickSubchannel(stream.args);
       CallOptions callOptions = stream.args.getCallOptions();
-      if (callOptions.isWaitForReady() && pickResult.hasResult()) {
-        stream.lastPickStatus = pickResult.getStatus();
+      synchronized (lock) {
+        if (callOptions.isWaitForReady() && pickResult.hasResult()) {
+          stream.lastPickStatus.set(pickResult.getStatus());
+        }
       }
       // User code provided authority takes precedence over the LB provided one.
       if (callOptions.getAuthority() == null && pickResult.getAuthorityOverride() != null) {
@@ -354,7 +357,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
     private final ClientStreamTracer[] tracers;
-    private Status lastPickStatus;
+    private final AtomicReference<Status> lastPickStatus = new AtomicReference<>(null);
 
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers) {
       this.args = args;
@@ -404,10 +407,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     public void appendTimeoutInsight(InsightBuilder insight) {
       if (args.getCallOptions().isWaitForReady()) {
         insight.append("wait_for_ready");
-        synchronized (this) {
-          if (lastPickStatus != null && !lastPickStatus.isOk()) {
-            insight.appendKeyValue("Last Pick Failure", lastPickStatus);
-          }
+        Status status = lastPickStatus.get();
+        if (status != null && !status.isOk()) {
+          insight.appendKeyValue("Last Pick Failure", status);
         }
       }
       super.appendTimeoutInsight(insight);
