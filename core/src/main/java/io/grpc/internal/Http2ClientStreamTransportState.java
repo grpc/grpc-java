@@ -140,6 +140,7 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
       }
     } else {
       if (!headersReceived) {
+        frame.close();
         http2ProcessingFailed(
             Status.INTERNAL.withDescription("headers not received before payload"),
             false,
