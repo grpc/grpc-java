@@ -85,6 +85,7 @@ java_proto_library(
         "@envoy_api//envoy/extensions/load_balancing_policies/ring_hash/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/round_robin/v3:pkg",
         "@envoy_api//envoy/extensions/load_balancing_policies/wrr_locality/v3:pkg",
+        "@envoy_api//envoy/extensions/transport_sockets/http_11_proxy/v3:pkg",
         "@envoy_api//envoy/extensions/transport_sockets/tls/v3:pkg",
         "@envoy_api//envoy/service/discovery/v3:pkg",
         "@envoy_api//envoy/service/load_stats/v3:pkg",
