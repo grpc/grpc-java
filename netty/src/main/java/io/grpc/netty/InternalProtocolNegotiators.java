@@ -44,7 +44,7 @@ public final class InternalProtocolNegotiators {
           ObjectPool<? extends Executor> executorPool,
           Optional<Runnable> handshakeCompleteRunnable) {
     final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
-        executorPool, handshakeCompleteRunnable);
+        executorPool, handshakeCompleteRunnable, null);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override
@@ -170,7 +170,7 @@ public final class InternalProtocolNegotiators {
       ChannelHandler next, SslContext sslContext, String authority,
       ChannelLogger negotiationLogger) {
     return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger,
-        Optional.absent());
+        Optional.absent(), null, null);
   }
 
   public static class ProtocolNegotiationHandler
