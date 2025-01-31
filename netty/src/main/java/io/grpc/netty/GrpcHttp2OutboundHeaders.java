@@ -48,7 +48,7 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
 
   String getAuthority() {
     for (int i = 0; i < preHeaders.length / 2; i++) {
-      if (preHeaders[i] == Http2Headers.PseudoHeaderName.AUTHORITY.value()) {
+      if (preHeaders[i].equals(Http2Headers.PseudoHeaderName.AUTHORITY.value())) {
         return preHeaders[i + 1].toString();
       }
     }
