@@ -37,6 +37,13 @@ final class XdsAttributes {
       Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientPool");
 
   /**
+   * Attribute key for passing around the XdsClient object pool across NameResolver/LoadBalancers.
+   */
+  @NameResolver.ResolutionResultAttr
+  static final Attributes.Key<XdsConfig> XDS_CONFIG =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsConfig");
+
+  /**
    * Attribute key for obtaining the global provider that provides atomics for aggregating
    * outstanding RPCs sent to each cluster.
    */

@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -86,6 +87,8 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
@@ -101,14 +104,17 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -385,6 +391,7 @@ public class XdsNameResolverTest {
             Collections.singletonList(route1),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
@@ -401,6 +408,7 @@ public class XdsNameResolverTest {
             Collections.singletonList(route2),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(alternativeRdsResource, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, cluster2);
     // Two new service config updates triggered:
     //  - with load balancing config being able to select cluster1 and cluster2
     //  - with load balancing config being able to select cluster2 only
@@ -439,6 +447,7 @@ public class XdsNameResolverTest {
             Collections.singletonList(route),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
@@ -455,6 +464,7 @@ public class XdsNameResolverTest {
     verifyNoInteractions(mockListener);
     assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
@@ -478,6 +488,7 @@ public class XdsNameResolverTest {
             Collections.singletonList(route),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
@@ -504,7 +515,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS resource: " + AUTHORITY
         + ". xDS server returned: UNAVAILABLE: server unreachable");
   }
 
@@ -516,7 +527,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS resource: " + AUTHORITY
         + ". xDS server returned: NOT_FOUND: server unreachable");
     assertThat(error.getCause()).isNull();
   }
@@ -530,11 +541,11 @@ public class XdsNameResolverTest {
     verify(mockListener, times(2)).onError(errorCaptor.capture());
     Status error = errorCaptor.getAllValues().get(0);
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS resource: " + AUTHORITY
         + ". xDS server returned: UNAVAILABLE: server unreachable");
     error = errorCaptor.getAllValues().get(1);
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("Unable to load RDS " + RDS_RESOURCE_NAME
+    assertThat(error.getDescription()).isEqualTo("Unable to load RDS resource: " + RDS_RESOURCE_NAME
         + ". xDS server returned: UNAVAILABLE: server unreachable");
   }
 
@@ -557,6 +568,7 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Collections.singletonList(cluster1),
@@ -580,7 +592,9 @@ public class XdsNameResolverTest {
         metricRecorder);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverLdsUpdate(0L, Arrays.asList(virtualHost));
+    // TODO Why does the test expect to have listener.onResult() called when this produces an error
+    xdsClient.deliverLdsUpdateOnly(0L, Arrays.asList(virtualHost));
+    fakeClock.forwardTime(15, TimeUnit.SECONDS);
     assertEmptyResolutionResult("random");
   }
 
@@ -1162,6 +1176,18 @@ public class XdsNameResolverTest {
     assertCallSelectClusterResult(call1, configSelector, cluster1, 20.0);
   }
 
+  /** Creates and delivers both CDS and EDS updates for the given clusters. */
+  private static void createAndDeliverClusterUpdates(FakeXdsClient xdsClient, String... clusterNames) {
+    for (String clusterName : clusterNames) {
+      CdsUpdate.Builder forEds = CdsUpdate.forEds(clusterName, clusterName, null, null, null, null)
+              .roundRobinLbPolicy();
+      xdsClient.deliverCdsUpdate(clusterName, forEds.build());
+      EdsUpdate edsUpdate = new EdsUpdate(clusterName,
+          XdsTestUtils.createMinimalLbEndpointsMap("host"), Collections.emptyList());
+      xdsClient.deliverEdsUpdate(clusterName, edsUpdate);
+    }
+  }
+
   @Test
   public void resolved_simpleCallSucceeds_routeToRls() {
     when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
@@ -1417,6 +1443,7 @@ public class XdsNameResolverTest {
             ImmutableList.of(route1, route2, route3),
             ImmutableMap.of());
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    createAndDeliverClusterUpdates(xdsClient, "cluster-foo", "cluster-bar", "cluster-baz");
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     String expectedServiceConfigJson =
@@ -2041,6 +2068,8 @@ public class XdsNameResolverTest {
     private String rdsResource;
     private ResourceWatcher<LdsUpdate> ldsWatcher;
     private ResourceWatcher<RdsUpdate> rdsWatcher;
+    private final Map<String, List<ResourceWatcher<CdsUpdate>>> cdsWatchers = new HashMap<>();
+    private final Map<String, List<ResourceWatcher<EdsUpdate>>> edsWatchers = new HashMap<>();
 
     @Override
     public BootstrapInfo getBootstrapInfo() {
@@ -2068,10 +2097,19 @@ public class XdsNameResolverTest {
           rdsResource = resourceName;
           rdsWatcher = (ResourceWatcher<RdsUpdate>) watcher;
           break;
+          case "CDS":
+            cdsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
+                .add((ResourceWatcher<CdsUpdate>) watcher);
+            break;
+        case "EDS":
+          edsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
+              .add((ResourceWatcher<EdsUpdate>) watcher);
+          break;
         default:
       }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
                                                                   String resourceName,
@@ -2090,14 +2128,36 @@ public class XdsNameResolverTest {
           rdsResource = null;
           rdsWatcher = null;
           break;
+        case "CDS":
+          assertThat(cdsWatchers).containsKey(resourceName);
+          assertThat(cdsWatchers.get(resourceName)).contains(watcher);
+          cdsWatchers.get(resourceName).remove((ResourceWatcher<CdsUpdate>) watcher);
+          break;
+        case "EDS":
+          assertThat(edsWatchers).containsKey(resourceName);
+          assertThat(edsWatchers.get(resourceName)).contains(watcher);
+          edsWatchers.get(resourceName).remove((ResourceWatcher<EdsUpdate>) watcher);
+          break;
         default:
       }
     }
-
-    void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
+    void deliverLdsUpdateOnly(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
       syncContext.execute(() -> {
         ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
             httpMaxStreamDurationNano, virtualHosts, null)));
+      });
+    }
+
+    void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
+      List<String> clusterNames = new ArrayList<>();
+      for (VirtualHost vh : virtualHosts) {
+        clusterNames.addAll(getClusterNames(vh.routes()));
+      }
+
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null)));
+        createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
       });
     }
 
@@ -2106,9 +2166,14 @@ public class XdsNameResolverTest {
           VirtualHost.create(
               "virtual-host", Collections.singletonList(expectedLdsResourceName), routes,
               ImmutableMap.of());
+      List<String> clusterNames = getClusterNames(routes);
+
       syncContext.execute(() -> {
         ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(virtualHost), null)));
+        if (!clusterNames.isEmpty()) {
+          createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
+        }
       });
     }
 
@@ -2157,6 +2222,7 @@ public class XdsNameResolverTest {
       syncContext.execute(() -> {
         ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(virtualHost), filterChain)));
+        createAndDeliverClusterUpdates(this, cluster);
       });
     }
 
@@ -2177,8 +2243,11 @@ public class XdsNameResolverTest {
 
     void deliverLdsUpdateForRdsName(String rdsName) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0, rdsName, null)));
+        HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
+            0, rdsName, null);
+        if (httpConnectionManager != null) {
+          ldsWatcher.onChanged(LdsUpdate.forApiListener(httpConnectionManager));
+        }
       });
     }
 
@@ -2186,6 +2255,29 @@ public class XdsNameResolverTest {
       syncContext.execute(() -> {
         ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
       });
+    }
+
+    private List<String> getClusterNames(List<Route> routes) {
+      List<String> clusterNames = new ArrayList<>();
+      for (Route r : routes) {
+        if (r.routeAction() == null) {
+          continue;
+        }
+        String cluster = r.routeAction().cluster();
+        if (cluster != null) {
+          clusterNames.add(cluster);
+        } else {
+          List<ClusterWeight> weightedClusters = r.routeAction().weightedClusters();
+          if (weightedClusters == null) {
+            continue;
+          }
+          for (ClusterWeight wc : weightedClusters) {
+            clusterNames.add(wc.name());
+          }
+        }
+      }
+
+      return clusterNames;
     }
 
     void deliverRdsUpdateWithFaultInjection(
@@ -2224,6 +2316,7 @@ public class XdsNameResolverTest {
           overrideConfig);
       syncContext.execute(() -> {
         rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+        createAndDeliverClusterUpdates(this, cluster1);
       });
     }
 
@@ -2245,6 +2338,39 @@ public class XdsNameResolverTest {
       });
     }
 
+    private void deliverCdsUpdate(String clusterName, CdsUpdate update) {
+      if (!cdsWatchers.containsKey(clusterName)) {
+        return;
+      }
+      syncContext.execute(() -> {
+        List<ResourceWatcher<CdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(cdsWatchers.get(clusterName));
+        resourceWatchers.forEach(w -> w.onChanged(update));
+      });
+    }
+
+    private void deliverCdsResourceNotExist(String clusterName)  {
+      if (!cdsWatchers.containsKey(clusterName)) {
+        return;
+      }
+      syncContext.execute(() -> {
+        ImmutableList.copyOf(cdsWatchers.get(clusterName))
+            .forEach(w -> w.onResourceDoesNotExist(clusterName));
+      });
+    }
+
+    private void deliverEdsUpdate(String name, EdsUpdate update) {
+      syncContext.execute(() -> {
+        if (!edsWatchers.containsKey(name)) {
+          return;
+        }
+        List<ResourceWatcher<EdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(edsWatchers.get(name));
+        resourceWatchers.forEach(w -> w.onChanged(update));
+      });
+    }
+
+
     void deliverError(final Status error) {
       if (ldsWatcher != null) {
         syncContext.execute(() -> {
@@ -2256,6 +2382,11 @@ public class XdsNameResolverTest {
           rdsWatcher.onError(error);
         });
       }
+      syncContext.execute(() -> {
+        cdsWatchers.values().stream()
+            .flatMap(List::stream)
+            .forEach(w -> w.onError(error));
+      });
     }
   }
 

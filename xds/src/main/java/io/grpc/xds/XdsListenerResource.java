@@ -608,6 +608,15 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(httpConnectionManager, null);
     }
 
+    static LdsUpdate forApiListener(io.grpc.xds.HttpConnectionManager httpConnectionManager,
+                                    String listenerName) {
+      checkNotNull(httpConnectionManager, "httpConnectionManager");
+      EnvoyServerProtoData.Listener listener = EnvoyServerProtoData.Listener.create(
+          listenerName, null, ImmutableList.of(), null);
+      return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(httpConnectionManager,
+          listener);
+    }
+
     static LdsUpdate forTcpListener(EnvoyServerProtoData.Listener listener) {
       checkNotNull(listener, "listener");
       return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(null, listener);

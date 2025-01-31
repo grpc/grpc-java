@@ -255,12 +255,7 @@ public class XdsTestUtils {
     VirtualHost virtualHost = rdsUpdate.virtualHosts.get(0);
 
     // Need to create endpoints to create locality endpoints map to create edsUpdate
-    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
-    LbEndpoint lbEndpoint =
-        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
-    lbEndpointsMap.put(
-        Locality.create("", "", ""),
-        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
+    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = createMinimalLbEndpointsMap(serverHostName);
 
     // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
@@ -278,6 +273,16 @@ public class XdsTestUtils {
         .addCluster(CLUSTER_NAME, StatusOr.fromValue(clusterConfig));
 
     return builder.build();
+  }
+
+  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
+    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
+    LbEndpoint lbEndpoint =
+        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
+    lbEndpointsMap.put(
+        Locality.create("", "", ""),
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
+    return lbEndpointsMap;
   }
 
   @SuppressWarnings("unchecked")
