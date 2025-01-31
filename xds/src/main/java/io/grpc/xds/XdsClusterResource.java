@@ -242,47 +242,44 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       return StructOrError.fromError("Cluster " + clusterName
           + ": transport-socket-matches not supported.");
     }
-    if (cluster.hasTransportSocket()) {
-      String transportSocketName = cluster.getTransportSocket().getName();
+    boolean hasTransportSocket = cluster.hasTransportSocket();
+    TransportSocket transportSocket = cluster.getTransportSocket();
 
-      if (!TRANSPORT_SOCKET_NAME_TLS.equals(transportSocketName) &&
-          !(isEnabledXdsHttpConnect && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocketName))) {
+    if (hasTransportSocket && !TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName()) &&
+        !(isEnabledXdsHttpConnect && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName()))) {
+      return StructOrError.fromError(
+          "Transport socket with name " + transportSocket.getName() + " not supported.");
+    }
+
+    if (hasTransportSocket && isEnabledXdsHttpConnect &&
+        TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName())) {
+      isHttp11ProxyEnabled = true;
+      try {
+        Http11ProxyUpstreamTransport wrappedTransportSocket = transportSocket
+            .getTypedConfig().unpack(io.envoyproxy.envoy.extensions.transport_sockets
+                .http_11_proxy.v3.Http11ProxyUpstreamTransport.class);
+        hasTransportSocket = wrappedTransportSocket.hasTransportSocket();
+        transportSocket = wrappedTransportSocket.getTransportSocket();
+      } catch (InvalidProtocolBufferException e) {
         return StructOrError.fromError(
-            "Transport socket with name " + transportSocketName + " not supported.");
+            "Cluster " + clusterName + ": malformed Http11ProxyUpstreamTransport: " + e);
+      } catch (ClassCastException e) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": invalid transport_socket type in Http11ProxyUpstreamTransport");
       }
+    }
 
-      Any tlsConfig;
-      if (isEnabledXdsHttpConnect && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocketName)) {
-        isHttp11ProxyEnabled = true;
-        try {
-          Http11ProxyUpstreamTransport wrappedTransportSocket = cluster.getTransportSocket()
-              .getTypedConfig().unpack(io.envoyproxy.envoy.extensions.transport_sockets
-                  .http_11_proxy.v3.Http11ProxyUpstreamTransport.class);
-          tlsConfig = wrappedTransportSocket.getTransportSocket().getTypedConfig();
-          transportSocketName = wrappedTransportSocket.getTransportSocket().getName();
-        } catch (InvalidProtocolBufferException e) {
-          return StructOrError.fromError(
-              "Cluster " + clusterName + ": malformed Http11ProxyUpstreamTransport: " + e);
-        } catch (ClassCastException e) {
-          return StructOrError.fromError(
-              "Cluster " + clusterName + ": invalid transport_socket type in Http11ProxyUpstreamTransport");
-        }
-      } else {
-        tlsConfig = cluster.getTransportSocket().getTypedConfig();
-      }
-
-      if (TRANSPORT_SOCKET_NAME_TLS.equals(transportSocketName)) {
-        try {
-          upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-              validateUpstreamTlsContext(
-                  unpackCompatibleType(tlsConfig,
-                      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
-                      TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
-                  certProviderInstances));
-        } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
-          return StructOrError.fromError(
-              "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
-        }
+    if (hasTransportSocket && TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName())) {
+      try {
+        upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+            validateUpstreamTlsContext(
+                unpackCompatibleType(transportSocket.getTypedConfig(),
+                    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
+                    TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
+                certProviderInstances));
+      } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
       }
     }
 

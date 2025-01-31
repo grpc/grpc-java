@@ -296,7 +296,6 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
   }
 
   static class AddressMetadataParser implements MetadataValueParser {
-    private InetSocketAddress address;
 
     @Override
     public String getTypeUrl() {
@@ -304,7 +303,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     }
 
     @Override
-    public InetSocketAddress parse(Any any) throws InvalidProtocolBufferException {
+    public java.net.SocketAddress parse(Any any) throws InvalidProtocolBufferException {
       Address addressProto = any.unpack(Address.class);
       SocketAddress socketAddress = addressProto.getSocketAddress();
 
@@ -314,28 +313,24 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       int port = socketAddress.getPortValue();
 
       try {
-        this.address = new InetSocketAddress(InetAddresses.forString(ip), port);
+        return new InetSocketAddress(InetAddresses.forString(ip), port);
       } catch (IllegalArgumentException e) {
-        throw createException("Invalid IP address format: " + ip);
+        throw createException("Invalid IP address or port: " + ip + ":" + port);
       }
-      return this.address;
     }
 
     private void validateAddress(SocketAddress socketAddress) throws InvalidProtocolBufferException {
       if (socketAddress.getAddress().isEmpty()) {
         throw createException("Address field is empty or invalid.");
       }
-      if (socketAddress.getPortValue() <= 0) {
-        throw createException("Port value must be positive.");
+      long port = Integer.toUnsignedLong(socketAddress.getPortValue());
+      if (port == 0 || port > 65535) {
+        throw createException(String.format("Port value %d out of range 1-65535.", port));
       }
     }
 
     private InvalidProtocolBufferException createException(String message) {
       return new InvalidProtocolBufferException("Failed to parse envoy.config.core.v3.Address: " + message);
-    }
-
-    public InetSocketAddress getAddress() {
-      return address;
     }
   }
 }
