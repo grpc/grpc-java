@@ -62,8 +62,9 @@ jetty-client = "org.eclipse.jetty:jetty-client:11.0.24"
 # Relocated to jetty-http3-server that we don't use
 jetty-http2-server = "org.eclipse.jetty.http2:http2-server:11.0.24"
 jetty-http2-server10 = "org.eclipse.jetty.http2:http2-server:10.0.20"
-jetty-servlet = "org.eclipse.jetty.ee10:jetty-ee10-servlet:12.0.16"
+jetty-servlet = "org.eclipse.jetty:jetty-servlet:11.0.24"
 jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.20"
+# 4.9.0+ requires Java 11.
 jsr305 = "com.github.spotbugs:spotbugs-annotations:4.8.6"
 junit = "junit:junit:4.13.2"
 # 2.17+ require Java 11+ (not mentioned in release notes)
