@@ -59,7 +59,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   private final XdsConfigWatcher xdsConfigWatcher;
   private final SynchronizationContext syncContext;
   private final String dataPlaneAuthority;
-  private final Map<String, Set<ClusterSubscription>> clusterSubscriptions = new HashMap<>();
 
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -91,10 +90,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     ClusterSubscription subscription = new ClusterSubscription(clusterName);
 
     syncContext.execute(() -> {
-      Set<ClusterSubscription> localSubscriptions =
-          clusterSubscriptions.computeIfAbsent(clusterName, k -> new HashSet<>());
-      localSubscriptions.add(subscription);
-      addClusterWatcher(clusterName, subscription.toString(), 1);
+      addClusterWatcher(clusterName, subscription, 1);
       maybePublishConfig();
     });
 
@@ -117,7 +113,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     xdsClient.watchXdsResource(type, resourceName, watcher, syncContext);
   }
 
-  private void cancelCdsWatcher(CdsWatcher watcher, String parentContext) {
+  private void cancelCdsWatcher(CdsWatcher watcher, Object parentContext) {
     if (watcher == null) {
       return;
     }
@@ -127,7 +123,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
   }
 
-  private void cancelEdsWatcher(EdsWatcher watcher, String parentContext) {
+  private void cancelEdsWatcher(EdsWatcher watcher, CdsWatcher parentContext) {
     if (watcher == null) {
       return;
     }
@@ -146,14 +142,10 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       return;
     }
 
-    if (watcher instanceof CdsWatcher) {
-      CdsWatcher cdsWatcher = (CdsWatcher) watcher;
-      if (!cdsWatcher.parentContexts.isEmpty()) {
-        String msg = String.format("CdsWatcher %s has parent contexts %s",
-            cdsWatcher.resourceName(), cdsWatcher.parentContexts.keySet());
-        throw new IllegalStateException(msg);
-      }
+    if (watcher instanceof CdsWatcher || watcher instanceof EdsWatcher) {
+      throwIfParentContextsNotEmpty(watcher);
     }
+
     XdsResourceType<T> type = watcher.type;
     String resourceName = watcher.resourceName;
 
@@ -167,6 +159,24 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     typeWatchers.watchers.remove(resourceName);
     xdsClient.cancelXdsResourceWatch(type, resourceName, watcher);
 
+  }
+
+  private static void throwIfParentContextsNotEmpty(XdsWatcherBase<?> watcher) {
+    if (watcher instanceof CdsWatcher) {
+      CdsWatcher cdsWatcher = (CdsWatcher) watcher;
+      if (!cdsWatcher.parentContexts.isEmpty()) {
+        String msg = String.format("CdsWatcher %s has parent contexts %s",
+            cdsWatcher.resourceName(), cdsWatcher.parentContexts.keySet());
+        throw new IllegalStateException(msg);
+      }
+    } else if (watcher instanceof EdsWatcher) {
+      EdsWatcher edsWatcher = (EdsWatcher) watcher;
+      if (!edsWatcher.parentContexts.isEmpty()) {
+        String msg = String.format("CdsWatcher %s has parent contexts %s",
+            edsWatcher.resourceName(), edsWatcher.parentContexts);
+        throw new IllegalStateException(msg);
+      }
+    }
   }
 
   public void shutdown() {
@@ -189,23 +199,17 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     checkNotNull(subscription, "subscription");
     String clusterName = subscription.getClusterName();
     syncContext.execute(() -> {
-      Set<ClusterSubscription> subscriptions = clusterSubscriptions.get(clusterName);
-      if (subscriptions == null || !subscriptions.remove(subscription)) {
-        logger.log(DEBUG, "Subscription already released for {0}", clusterName);
-        return;
+      XdsWatcherBase<?> cdsWatcher =
+          resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
+      if (cdsWatcher == null) {
+        return; // already released while waiting for the syncContext
       }
-
-      if (subscriptions.isEmpty()) {
-        clusterSubscriptions.remove(clusterName);
-        XdsWatcherBase<?> cdsWatcher =
-            resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
-        cancelClusterWatcherTree((CdsWatcher) cdsWatcher, subscription.toString());
-        maybePublishConfig();
-      }
+      cancelClusterWatcherTree((CdsWatcher) cdsWatcher, subscription);
+      maybePublishConfig();
     });
   }
 
-  private void cancelClusterWatcherTree(CdsWatcher root, String parentContext) {
+  private void cancelClusterWatcherTree(CdsWatcher root, Object parentContext) {
     checkNotNull(root, "root");
 
     cancelCdsWatcher(root, parentContext);
@@ -220,14 +224,14 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         String edsServiceName = cdsUpdate.edsServiceName();
         EdsWatcher edsWatcher =
             (EdsWatcher) resourceWatchers.get(ENDPOINT_RESOURCE).watchers.get(edsServiceName);
-        cancelEdsWatcher(edsWatcher, root.toContextString());
+        cancelEdsWatcher(edsWatcher, root);
         break;
       case AGGREGATE:
         for (String cluster : cdsUpdate.prioritizedClusterNames()) {
           CdsWatcher clusterWatcher =
               (CdsWatcher) resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(cluster);
           if (clusterWatcher != null) {
-            cancelClusterWatcherTree(clusterWatcher, root.toContextString());
+            cancelClusterWatcherTree(clusterWatcher, root);
           }
         }
         break;
@@ -518,9 +522,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   private class CdsWatcher extends XdsWatcherBase<XdsClusterResource.CdsUpdate> {
-    Map<String, Integer> parentContexts = new HashMap<>();
+    Map<Object, Integer> parentContexts = new HashMap<>();
 
-    CdsWatcher(String resourceName, String parentContext, int depth) {
+    CdsWatcher(String resourceName, Object parentContext, int depth) {
       super(CLUSTER_RESOURCE, checkNotNull(resourceName, "resourceName"));
       this.parentContexts.put(checkNotNull(parentContext, "parentContext"), depth);
     }
@@ -531,7 +535,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       switch (update.clusterType()) {
         case EDS:
           setData(update);
-          if (!addEdsWatcher(update.edsServiceName(), this.toContextString()))  {
+          if (!addEdsWatcher(update.edsServiceName(), this))  {
             maybePublishConfig();
           }
           break;
@@ -541,7 +545,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
           // no eds needed
           break;
         case AGGREGATE:
-          String parentContext = this.toContextString();
+          Object parentContext = this;
           int depth = parentContexts.values().stream().max(Integer::compare).orElse(0) + 1;
           if (depth > MAX_CLUSTER_RECURSION_DEPTH) {
             logger.log(XdsLogger.XdsLogLevel.WARNING,
@@ -594,7 +598,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   // Returns true if the watcher was added, false if it already exists
-  private boolean addEdsWatcher(String edsServiceName, String parentContext) {
+  private boolean addEdsWatcher(String edsServiceName, CdsWatcher parentContext) {
     TypeWatchers<?> typeWatchers = resourceWatchers.get(XdsEndpointResource.getInstance());
     if (typeWatchers == null || !typeWatchers.watchers.containsKey(edsServiceName)) {
       addWatcher(new EdsWatcher(edsServiceName, parentContext));
@@ -606,7 +610,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     return false;
   }
 
-  private void addClusterWatcher(String clusterName, String parentContext, int depth) {
+  private void addClusterWatcher(String clusterName, Object parentContext, int depth) {
     TypeWatchers<?> clusterWatchers = resourceWatchers.get(CLUSTER_RESOURCE);
     if (clusterWatchers != null) {
       CdsWatcher watcher = (CdsWatcher) clusterWatchers.watchers.get(clusterName);
@@ -620,9 +624,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   private class EdsWatcher extends XdsWatcherBase<XdsEndpointResource.EdsUpdate> {
-    private final Set<String> parentContexts = new HashSet<>();
+    private final Set<CdsWatcher> parentContexts = new HashSet<>();
 
-    private EdsWatcher(String resourceName, String parentContext) {
+    private EdsWatcher(String resourceName, CdsWatcher parentContext) {
       super(ENDPOINT_RESOURCE, checkNotNull(resourceName, "resourceName"));
       parentContexts.add(checkNotNull(parentContext, "parentContext"));
     }
@@ -639,7 +643,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       maybePublishConfig();
     }
 
-    void addParentContext(String parentContext) {
+    void addParentContext(CdsWatcher parentContext) {
       parentContexts.add(checkNotNull(parentContext, "parentContext"));
     }
   }
@@ -732,7 +736,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     for (String cName : rdsWatcher.getCdsNames()) {
       CdsWatcher cdsWatcher = getCluster(cName);
       if (cdsWatcher != null) {
-        cancelClusterWatcherTree(cdsWatcher, rdsWatcher.toContextString());
+        cancelClusterWatcherTree(cdsWatcher, rdsWatcher);
       }
     }
   }
