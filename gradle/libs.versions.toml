@@ -59,10 +59,9 @@ javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
 # 12.0.0+ require Java 17+
 jetty-client = "org.eclipse.jetty:jetty-client:11.0.24"
-# Relocated to jetty-http3-server that we don't use
-jetty-http2-server = "org.eclipse.jetty.http2:http2-server:11.0.24"
+jetty-http2-server = "org.eclipse.jetty.http2:jetty-http2-server:12.0.16"
 jetty-http2-server10 = "org.eclipse.jetty.http2:http2-server:10.0.20"
-jetty-servlet = "org.eclipse.jetty:jetty-servlet:11.0.24"
+jetty-servlet = "org.eclipse.jetty.ee10:jetty-ee10-servlet:12.0.16"
 jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.20"
 # 4.9.0+ requires Java 11.
 jsr305 = "com.github.spotbugs:spotbugs-annotations:4.8.6"
