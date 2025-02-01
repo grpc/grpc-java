@@ -24,7 +24,6 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.protobuf.Any;
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -45,7 +44,6 @@ import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.NonForwardingAction;
 import io.envoyproxy.envoy.config.route.v3.Route;
-import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
@@ -239,24 +237,7 @@ public class ControlPlaneRule extends TestWatcher {
    * Builds a new default RDS configuration.
    */
   static RouteConfiguration buildRouteConfiguration(String authority) {
-    return buildRouteConfiguration(authority, RDS_NAME, CLUSTER_NAME);
-  }
-
-  static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
-                                                    String clusterName) {
-    VirtualHost.Builder vhBuilder = VirtualHost.newBuilder()
-        .setName(rdsName)
-        .addDomains(authority)
-        .addRoutes(
-            Route.newBuilder()
-                .setMatch(
-                    RouteMatch.newBuilder().setPrefix("/").build())
-                .setRoute(
-                    RouteAction.newBuilder().setCluster(clusterName)
-                        .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
-                        .build()));
-    VirtualHost virtualHost = vhBuilder.build();
-    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
+    return XdsTestUtils.buildRouteConfiguration(authority, RDS_NAME, CLUSTER_NAME);
   }
 
   /**
