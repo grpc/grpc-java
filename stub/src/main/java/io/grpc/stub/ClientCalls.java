@@ -100,6 +100,12 @@ public final class ClientCalls {
    * {@code beforeStart()} will be called.
    *
    * @return request stream observer. It will extend {@link ClientCallStreamObserver}
+   * onError called on the request stream observer will result in stream cancellation. The response
+   * {@link StreamObserver} will be immediately notified of the cancellation with a
+   * {@link io.grpc.StatusRuntimeException}. The server's request stream observer will receive an
+   * onError callbackk from the gRPC server framework with a {@link io.grpc.StatusRuntimeException}
+   * for the cancellation. The actual exception passed by the client to onError is never actually
+   * transmitted to the server.
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncClientStreamingCall(
       ClientCall<ReqT, RespT> call,
@@ -116,6 +122,12 @@ public final class ClientCalls {
    * {@code beforeStart()} will be called.
    *
    * @return request stream observer. It will extend {@link ClientCallStreamObserver}
+   * onError called on the request stream observer will result in stream cancellation. The response
+   * {@link StreamObserver} will be immediately notified of the cancellation with a
+   * {@link io.grpc.StatusRuntimeException}. The server's request stream observer will receive an
+   * onError callbackk from the gRPC server framework with a {@link io.grpc.StatusRuntimeException}
+   * for the cancellation. The actual exception passed by the client to onError is never actually
+   * transmitted to the server.
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncBidiStreamingCall(
       ClientCall<ReqT, RespT> call, StreamObserver<RespT> responseObserver) {
