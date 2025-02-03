@@ -42,6 +42,8 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class RingHashLoadBalancerProviderTest {
   private static final String AUTHORITY = "foo.googleapis.com";
+  private static final String GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY =
+      "GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY";
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new UncaughtExceptionHandler() {
@@ -81,6 +83,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(10L);
     assertThat(config.maxRingSize).isEqualTo(100L);
+    assertThat(config.requestHashHeader).isEmpty();
   }
 
   @Test
@@ -92,6 +95,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.DEFAULT_MIN_RING_SIZE);
     assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.DEFAULT_MAX_RING_SIZE);
+    assertThat(config.requestHashHeader).isEmpty();
   }
 
   @Test
@@ -127,6 +131,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(10);
     assertThat(config.maxRingSize).isEqualTo(RingHashOptions.DEFAULT_RING_SIZE_CAP);
+    assertThat(config.requestHashHeader).isEmpty();
   }
 
   @Test
@@ -142,6 +147,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
     assertThat(config.maxRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
+    assertThat(config.requestHashHeader).isEmpty();
     // Reset to avoid affecting subsequent test cases
     RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
@@ -159,6 +165,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
     assertThat(config.maxRingSize).isEqualTo(RingHashOptions.MAX_RING_SIZE_CAP);
+    assertThat(config.requestHashHeader).isEmpty();
     // Reset to avoid affecting subsequent test cases
     RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
@@ -176,6 +183,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(1);
     assertThat(config.maxRingSize).isEqualTo(1);
+    assertThat(config.requestHashHeader).isEmpty();
     // Reset to avoid affecting subsequent test cases
     RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
@@ -193,6 +201,7 @@ public class RingHashLoadBalancerProviderTest {
     RingHashConfig config = (RingHashConfig) configOrError.getConfig();
     assertThat(config.minRingSize).isEqualTo(1);
     assertThat(config.maxRingSize).isEqualTo(1);
+    assertThat(config.requestHashHeader).isEmpty();
     // Reset to avoid affecting subsequent test cases
     RingHashOptions.setRingSizeCap(RingHashOptions.DEFAULT_RING_SIZE_CAP);
   }
@@ -217,6 +226,56 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(configOrError.getError().getDescription())
         .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_requestHashHeaderIgnoredWhenEnvVarNotSet()
+      throws IOException {
+    String lbConfig =
+        "{\"minRingSize\" : 10, \"maxRingSize\" : 100, \"requestHashHeader\" : \"dummy-hash\"}";
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+    assertThat(configOrError.getConfig()).isNotNull();
+    RingHashConfig config = (RingHashConfig) configOrError.getConfig();
+    assertThat(config.minRingSize).isEqualTo(10L);
+    assertThat(config.maxRingSize).isEqualTo(100L);
+    assertThat(config.requestHashHeader).isEmpty();
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_requestHashHeaderSetWhenEnvVarSet() throws IOException {
+    System.setProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY, "true");
+    try {
+      String lbConfig =
+          "{\"minRingSize\" : 10, \"maxRingSize\" : 100, \"requestHashHeader\" : \"dummy-hash\"}";
+      ConfigOrError configOrError =
+          provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+      assertThat(configOrError.getConfig()).isNotNull();
+      RingHashConfig config = (RingHashConfig) configOrError.getConfig();
+      assertThat(config.minRingSize).isEqualTo(10L);
+      assertThat(config.maxRingSize).isEqualTo(100L);
+      assertThat(config.requestHashHeader).isEqualTo("dummy-hash");
+    } finally {
+      System.clearProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY);
+    }
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_requestHashHeaderUnsetWhenEnvVarSet_useDefaults()
+      throws IOException {
+    System.setProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY, "true");
+    try {
+      String lbConfig = "{\"minRingSize\" : 10, \"maxRingSize\" : 100}";
+      ConfigOrError configOrError =
+          provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+      assertThat(configOrError.getConfig()).isNotNull();
+      RingHashConfig config = (RingHashConfig) configOrError.getConfig();
+      assertThat(config.minRingSize).isEqualTo(10L);
+      assertThat(config.maxRingSize).isEqualTo(100L);
+      assertThat(config.requestHashHeader).isEmpty();
+    } finally {
+      System.clearProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY);
+    }
   }
 
   @SuppressWarnings("unchecked")
