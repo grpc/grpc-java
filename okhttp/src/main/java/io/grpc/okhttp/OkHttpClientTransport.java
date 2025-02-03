@@ -450,61 +450,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     Preconditions.checkNotNull(headers, "headers");
     StatsTraceContext statsTraceContext =
         StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
-    if (hostnameVerifier != null && socket instanceof SSLSocket
-            && !hostnameVerifier.verify(callOptions.getAuthority(),
-                    ((SSLSocket) socket).getSession())) {
-      if (enablePerRpcAuthorityCheck) {
-        return new FailingClientStream(Status.UNAVAILABLE.withDescription(
-                String.format("HostNameVerifier verification failed for authority '%s'",
-                        callOptions.getAuthority())), tracers);
-      }
-    }
-    if (socket instanceof SSLSocket && callOptions.getAuthority() != null
-        && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
-      Status peerVerificationStatus = null;
-      if (peerVerificationResults.containsKey(callOptions.getAuthority())) {
-        peerVerificationStatus = peerVerificationResults.get(callOptions.getAuthority());
-      } else {
-        TrustManager x509ExtendedTrustManager;
-        try {
-          x509ExtendedTrustManager = x509ExtendedTrustManagerClass != null
-                  ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials) : null;
-          if (x509ExtendedTrustManager == null) {
-            if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
-              return new FailingClientStream(Status.UNAVAILABLE.withDescription(
-                      "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
-                              + "available"), tracers);
-            }
-          } else {
-            try {
-              Certificate[] peerCertificates = sslSession.getPeerCertificates();
-              X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
-              for (int i = 0; i < peerCertificates.length; i++) {
-                x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
-              }
-              checkServerTrustedMethod.invoke(x509ExtendedTrustManager, x509PeerCertificates,
-                      "RSA", new SslSocketWrapper((SSLSocket) socket, callOptions.getAuthority()));
-              peerVerificationStatus = Status.OK;
-            } catch (SSLPeerUnverifiedException | InvocationTargetException
-                     | IllegalAccessException e) {
-              peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                      String.format("Failure in verifying authority '%s' against peer during rpc",
-                              callOptions.getAuthority())).withCause(e);
-            }
-            peerVerificationResults.put(callOptions.getAuthority(), peerVerificationStatus);
-          }
-        } catch (GeneralSecurityException e) {
-          if (GrpcUtil.getFlag(GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK, false)) {
-            return new FailingClientStream(Status.UNAVAILABLE.withDescription(
-                    "Failure getting X509ExtendedTrustManager from TlsCredentials").withCause(e),
-                    tracers);
-          }
-        }
-      }
-      if (peerVerificationStatus != null && !peerVerificationStatus.isOk()) {
-        return new FailingClientStream(peerVerificationStatus, tracers);
-      }
-    }
+
     // FIXME: it is likely wrong to pass the transportTracer here as it'll exit the lock's scope
     synchronized (lock) { // to make @GuardedBy linter happy
       return new OkHttpClientStream(
@@ -548,7 +494,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @GuardedBy("lock")
-  void streamReadyToStart(OkHttpClientStream clientStream) {
+  void streamReadyToStart(OkHttpClientStream clientStream, String authority) {
     if (goAwayStatus != null) {
       clientStream.transportState().transportReportStatus(
           goAwayStatus, RpcProgress.MISCARRIED, true, new Metadata());
@@ -556,6 +502,79 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       pendingStreams.add(clientStream);
       setInUse(clientStream);
     } else {
+      if (hostnameVerifier != null
+              && socket instanceof SSLSocket
+              && !hostnameVerifier.verify(authority,
+              ((SSLSocket) socket).getSession())) {
+        if (enablePerRpcAuthorityCheck) {
+          clientStream.transportState().transportReportStatus(
+                  Status.UNAVAILABLE.withDescription(
+                          String.format("HostNameVerifier verification failed for authority '%s'",
+                                  authority)),
+                  RpcProgress.DROPPED, true, new Metadata());
+          return;
+        } else {
+          log.log(Level.WARNING, String.format("HostNameVerifier verification failed for authority "
+                          + "'%s'. This will be an error in the future.",
+                  authority));
+        }
+      }
+      if (socket instanceof SSLSocket && authority != null
+              && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
+        Status peerVerificationStatus = null;
+        if (peerVerificationResults.containsKey(authority)) {
+          peerVerificationStatus = peerVerificationResults.get(authority);
+        } else {
+          TrustManager x509ExtendedTrustManager = null;
+          try {
+            x509ExtendedTrustManager = x509ExtendedTrustManagerClass != null
+                    ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials) : null;
+          } catch (GeneralSecurityException e) {
+            peerVerificationStatus = Status.UNAVAILABLE.withCause(e)
+                    .withDescription("Could not verify authority due to failure getting "
+                            + "X509ExtendedTrustManager from TlsCredentials");
+          }
+          if (x509ExtendedTrustManager == null) {
+            peerVerificationStatus = Status.UNAVAILABLE.withDescription(String.format("Could not verify authority '%s' for "
+                            + "the rpc with no X509ExtendedTrustManager available",
+                    authority));
+          }
+          if (x509ExtendedTrustManager != null) {
+            try {
+              Certificate[] peerCertificates = sslSession.getPeerCertificates();
+              X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
+              for (int i = 0; i < peerCertificates.length; i++) {
+                x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+              }
+              checkServerTrustedMethod.invoke(x509ExtendedTrustManager, x509PeerCertificates,
+                      "RSA", new SslSocketWrapper((SSLSocket) socket, authority));
+              peerVerificationStatus = Status.OK;
+            } catch (SSLPeerUnverifiedException | InvocationTargetException
+                     | IllegalAccessException e) {
+              peerVerificationStatus = Status.UNAVAILABLE.withCause(e).withDescription(
+                      "Peer verification failed");
+            }
+            if (peerVerificationStatus != null) {
+              peerVerificationResults.put(authority, peerVerificationStatus);
+            }
+          }
+        }
+        if (peerVerificationStatus != null && !peerVerificationStatus.isOk()) {
+          if (enablePerRpcAuthorityCheck) {
+            clientStream.transportState().transportReportStatus(
+                    peerVerificationStatus, RpcProgress.DROPPED, true, new Metadata());
+            return;
+          } else {
+            if (peerVerificationStatus.getCause() != null) {
+              log.log(Level.WARNING, peerVerificationStatus.getDescription()
+                      + ". This will be an error in the future.", peerVerificationStatus.getCause());
+            } else {
+              log.log(Level.WARNING, peerVerificationStatus.getDescription()
+                      + ". This will be an error in the future.");
+            }
+          }
+        }
+      }
       startStream(clientStream);
     }
   }

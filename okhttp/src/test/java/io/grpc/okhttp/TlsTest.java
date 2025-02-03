@@ -51,9 +51,11 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Optional;
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -112,6 +114,131 @@ public class TlsTest {
   }
 
   @Test
+  public void perRpcAuthorityOverride_hostnameVerification_success()
+          throws Exception {
+    OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
+    try {
+      ServerCredentials serverCreds;
+      try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+           InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+        serverCreds = TlsServerCredentials.newBuilder()
+                .keyManager(serverCert, serverPrivateKey)
+                .build();
+      }
+      Server server = grpcCleanupRule.register(server(serverCreds));
+      SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
+              Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+      ManagedChannel channel = grpcCleanupRule.register(grpcCleanupRule.register(
+              OkHttpChannelBuilder.forAddress("localhost", server.getPort())
+                      .directExecutor()
+                      .sslSocketFactory(sslSocketFactory)
+                      .hostnameVerifier(new HostnameVerifier() {
+                        private int callCount;
+                        @Override
+                        public boolean verify(String hostname, SSLSession session) {
+                          if (++callCount == 1) {
+                            return true;
+                          }
+                          return hostname.equals("foo.test.google.fr");
+                        }
+                      })
+                      .build()));
+
+      ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
+              CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+              SimpleRequest.getDefaultInstance());
+    } finally {
+      OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void perRpcAuthorityOverride_hostnameVerification_failure_rpcFails()
+          throws Exception {
+    OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
+    try {
+      ServerCredentials serverCreds;
+      try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+           InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+        serverCreds = TlsServerCredentials.newBuilder()
+                .keyManager(serverCert, serverPrivateKey)
+                .build();
+      }
+      Server server = grpcCleanupRule.register(server(serverCreds));
+      SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
+              Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+      ManagedChannel channel = grpcCleanupRule.register(grpcCleanupRule.register(
+              OkHttpChannelBuilder.forAddress("localhost", server.getPort())
+                      .directExecutor()
+                      .sslSocketFactory(sslSocketFactory)
+                      .hostnameVerifier(new HostnameVerifier() {
+                        private int callCount;
+                        @Override
+                        public boolean verify(String hostname, SSLSession session) {
+                          if (++callCount == 1) {
+                            return true;
+                          }
+                          return hostname.equals("foo.test.google.fr");
+                        }
+                      })
+                      .build()));
+
+      try {
+      ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
+              CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+              SimpleRequest.getDefaultInstance());
+        fail("Expected exception for hostname verifier failure.");
+      } catch (StatusRuntimeException ex) {
+        assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+        assertThat(ex.getStatus().getDescription()).isEqualTo(
+                "HostNameVerifier verification failed for authority 'foo.test.google.in'");
+      }
+    } finally {
+      OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void perRpcAuthorityOverride_hostnameVerification_failure_flagDisabled_rpcSucceeds()
+          throws Exception {
+    ServerCredentials serverCreds;
+    try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+      serverCreds = TlsServerCredentials.newBuilder()
+              .keyManager(serverCert, serverPrivateKey)
+              .build();
+    }
+    Server server = grpcCleanupRule.register(server(serverCreds));
+    SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
+            Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+    ManagedChannel channel = grpcCleanupRule.register(grpcCleanupRule.register(
+            OkHttpChannelBuilder.forAddress("localhost", server.getPort())
+                    .directExecutor()
+                    .sslSocketFactory(sslSocketFactory)
+                    .hostnameVerifier(new HostnameVerifier() {
+                      private int callCount;
+                      @Override
+                      public boolean verify(String hostname, SSLSession session) {
+                        if (++callCount == 1) {
+                          return true;
+                        }
+                        return hostname.equals("foo.test.google.fr");
+                      }
+                    })
+                    .build()));
+
+    ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
+            CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+            SimpleRequest.getDefaultInstance());
+  }
+
+  /**
+   *  Test to verify that checkServerTrusted is been called for the per-rpc authority
+   *  verification. Could not verify this indirectly using an invalid authority in the test because
+   *  the SSLParameters.setEndpointIdentificationAlgorithm (an Android 24+ API) is not set to HTTPS
+   *  during the handshake and doesn't verify hostname during rpc call either.
+   */
+  @Test
   public void perRpcAuthorityOverride_checkServerTrustedIsCalled() throws Exception {
     OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
     try {
@@ -145,6 +272,78 @@ public class TlsTest {
   }
 
   /**
+   * Uses a fake Trust Manager to fail authority verification for rpc identified by the call count.
+   */
+  @Test
+  public void perRpcAuthorityOverride_peerVerificationFails_rpcFails()
+          throws Exception {
+    OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
+    try {
+      ServerCredentials serverCreds;
+      try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+           InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+        serverCreds = TlsServerCredentials.newBuilder()
+                .keyManager(serverCert, serverPrivateKey)
+                .build();
+      }
+      ChannelCredentials channelCreds;
+      FakeX509ExtendedTrustManager fakeTrustManager;
+      try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+        X509ExtendedTrustManager x509ExtendedTrustManager =
+                (X509ExtendedTrustManager) getX509ExtendedTrustManager(caCert).get();
+        fakeTrustManager = new FakeX509ExtendedTrustManager(x509ExtendedTrustManager);
+        channelCreds = TlsChannelCredentials.newBuilder()
+                .trustManager(fakeTrustManager)
+                .build();
+      }
+      Server server = grpcCleanupRule.register(server(serverCreds));
+      ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
+
+      try {
+        fakeTrustManager.setFailCheckServerTrusted();
+        ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
+                CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+                SimpleRequest.getDefaultInstance());
+        fail("Expected exception for authority verification failure.");
+      } catch (StatusRuntimeException ex) {
+        assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+        assertThat(ex.getCause().getCause()).isInstanceOf(CertificateException.class);
+      }
+    } finally {
+      OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void perRpcAuthorityOverride_peerVerificationFails_featureDisabled_rpcSucceeds()
+          throws Exception {
+    ServerCredentials serverCreds;
+    try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+         InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+      serverCreds = TlsServerCredentials.newBuilder()
+              .keyManager(serverCert, serverPrivateKey)
+              .build();
+    }
+    ChannelCredentials channelCreds;
+    FakeX509ExtendedTrustManager fakeTrustManager;
+    try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+      X509ExtendedTrustManager x509ExtendedTrustManager =
+              (X509ExtendedTrustManager) getX509ExtendedTrustManager(caCert).get();
+      fakeTrustManager = new FakeX509ExtendedTrustManager(x509ExtendedTrustManager);
+      channelCreds = TlsChannelCredentials.newBuilder()
+              .trustManager(fakeTrustManager)
+              .build();
+    }
+    Server server = grpcCleanupRule.register(server(serverCreds));
+    ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
+
+    fakeTrustManager.setFailCheckServerTrusted();
+    ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
+            CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+            SimpleRequest.getDefaultInstance());
+  }
+
+  /**
    * This negative test simulates the absence of X509ExtendedTrustManager while still using the
    * real trust manager for the connection handshake to happen.
    */
@@ -173,14 +372,14 @@ public class TlsTest {
 
       try {
         ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
-                CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+                CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
                 SimpleRequest.getDefaultInstance());
-        fail("Expected exception for authority not matching cert name.");
+        fail("Expected exception for authority verification failure.");
       } catch (StatusRuntimeException ex) {
         assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
         assertThat(ex.getStatus().getDescription()).isEqualTo(
-                "Can't allow authority override in rpc when X509ExtendedTrustManager is not "
-                        + "available");
+                "Could not verify authority 'foo.test.google.fr' for the rpc with no "
+                        + "X509ExtendedTrustManager available");
       }
     } finally {
       OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
@@ -209,7 +408,7 @@ public class TlsTest {
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
-            CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+            CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
             SimpleRequest.getDefaultInstance());
   }
 
@@ -430,22 +629,29 @@ public class TlsTest {
     }
   }
 
-  /** Used to capture the fact that checkServerTrusted has been called for the per-rpc authority
-   *  verification. */
   @IgnoreJRERequirement
   private static class FakeX509ExtendedTrustManager extends X509ExtendedTrustManager {
     private final X509ExtendedTrustManager delegate;
     private boolean checkServerTrustedCalled;
+    private boolean shouldFailCheckServerTrustedForRpc;
+    private int numCalls;
 
     private FakeX509ExtendedTrustManager(X509ExtendedTrustManager delegate) {
       this.delegate = delegate;
     }
 
+    private void setFailCheckServerTrusted() {
+      shouldFailCheckServerTrustedForRpc = true;
+    }
+
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
             throws CertificateException {
-      delegate.checkServerTrusted(chain, authType, socket);
       this.checkServerTrustedCalled = true;
+      if (shouldFailCheckServerTrustedForRpc && ++numCalls > 1) {
+        throw new CertificateException("Peer verification failed.");
+      }
+      delegate.checkServerTrusted(chain, authType, socket);
     }
 
     @Override
