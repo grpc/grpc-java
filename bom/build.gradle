@@ -14,9 +14,6 @@ gradle.projectsEvaluated {
   dependencies {
     constraints {
       projectsToInclude.each { api it }
-      // compiler. should have "<type>pom</type>"
-      // not sure how to express in gradle, patched in XML
-      api "$project.group:protoc-gen-grpc-java:$project.version"
     }
   }
 }
@@ -26,9 +23,14 @@ publishing {
     maven(MavenPublication) {
       from components.javaPlatform
       pom.withXml {
-        def lastDependency = asNode().dependencyManagement.dependencies.dependency.last()
-        assert lastDependency.artifactId.text() == 'protoc-gen-grpc-java'
-        lastDependency.appendNode('type', 'pom')
+        def dependencies = asNode().dependencyManagement.dependencies.last()
+        // add protoc gen (produced by grpc-compiler with different artifact name)
+        // not sure how to express "<type>pom</type>" in gradle, kept in XML
+        def dependencyNode = dependencies.appendNode('dependency')
+        dependencyNode.appendNode('groupId', project.group)
+        dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
+        dependencyNode.appendNode('version', project.version)
+        dependencyNode.appendNode('type', 'pom')
       }
     }
   }
