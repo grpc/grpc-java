@@ -31,9 +31,9 @@ cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 # It breaks Bazel (ArrayIndexOutOfBoundsException in turbine) and Dexing ("D8:
 # java.lang.NullPointerException"). We can trivially upgrade the Bazel CI to
 # 6.3.0+ (https://github.com/bazelbuild/bazel/issues/18743).
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.36.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.30.0"
 # error-prone 2.32.0+ require Java 17+
-errorprone-core = "com.google.errorprone:error_prone_core:2.36.0"
+errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
 google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.50.1"
 # google-auth-library 1.25.0+ requires error_prone_annotations 2.31.0+, which
 # breaks the Android build
