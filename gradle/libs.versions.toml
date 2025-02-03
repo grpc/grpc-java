@@ -42,12 +42,13 @@ google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.30.1
 # Release notes: https://cloud.google.com/logging/docs/release-notes
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.21.1"
 gson = "com.google.code.gson:gson:2.11.0"
-guava = "com.google.guava:guava:33.4.0-android"
+# 33.4.0 requires com.google.errorprone:error_prone_annotations:2.36.0 but we are stuck with 2.30.0 (see above)
+guava = "com.google.guava:guava:33.3.1-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
 guava-testlib = "com.google.guava:guava-testlib:33.4.0-android"
 # JRE version is needed for projects where its a transitive dependency, f.e. gcp-observability.
 # May be different from the -android version.
-guava-jre = "com.google.guava:guava:33.4.0-jre"
+guava-jre = "com.google.guava:guava:33.3.1-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
 # 6.0.0+ use java.lang.Deprecated forRemoval and since from Java 9
 jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:6.1.0"
