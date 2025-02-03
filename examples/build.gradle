@@ -7,9 +7,9 @@ plugins {
     id 'java'
 }
 
-javaPlatform {
+/*javaPlatform {
     allowDependencies() // Allows using external BOMs or defining a platform
-}
+}*/
 
 repositories {
     maven { // The google mirror is less flaky than mavenCentral()
