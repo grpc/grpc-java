@@ -1,45 +1,34 @@
 plugins {
+  id 'java-platform'
   id "maven-publish"
 }
 
 description = 'gRPC: BOM'
 
+gradle.projectsEvaluated {
+  def projectsToInclude = rootProject.subprojects.findAll {
+    it.plugins.hasPlugin('java')
+        && it.plugins.hasPlugin('maven-publish')
+        && it.tasks.findByName('publishMavenPublicationToMavenRepository')?.enabled
+  }
+  dependencies {
+    constraints {
+      projectsToInclude.each { api it }
+      // compiler. should have "<type>pom</type>"
+      // not sure how to express in gradle, patched in XML
+      api "$project.group:protoc-gen-grpc-java:$project.version"
+    }
+  }
+}
+
 publishing {
   publications {
     maven(MavenPublication) {
-      // remove all other artifacts since BOM doesn't generates any Jar
-      artifacts = []
-
+      from components.javaPlatform
       pom.withXml {
-        // Generate bom using subprojects
-        def internalProjects = [
-          project.name,
-          'grpc-compiler',
-        ]
-
-        def dependencyManagement = asNode().appendNode('dependencyManagement')
-        def dependencies = dependencyManagement.appendNode('dependencies')
-        rootProject.subprojects.each { subproject ->
-          if (internalProjects.contains(subproject.name)) {
-            return
-          }
-          if (!subproject.hasProperty('publishMavenPublicationToMavenRepository')) {
-            return
-          }
-          if (!subproject.publishMavenPublicationToMavenRepository.enabled) {
-            return
-          }
-          def dependencyNode = dependencies.appendNode('dependency')
-          dependencyNode.appendNode('groupId', subproject.group)
-          dependencyNode.appendNode('artifactId', subproject.name)
-          dependencyNode.appendNode('version', subproject.version)
-        }
-        // add protoc gen (produced by grpc-compiler with different artifact name)
-        def dependencyNode = dependencies.appendNode('dependency')
-        dependencyNode.appendNode('groupId', project.group)
-        dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
-        dependencyNode.appendNode('version', project.version)
-        dependencyNode.appendNode('type', 'pom')
+        def lastDependency = asNode().dependencyManagement.dependencies.dependency.last()
+        assert lastDependency.artifactId.text() == 'protoc-gen-grpc-java'
+        lastDependency.appendNode('type', 'pom')
       }
     }
   }
