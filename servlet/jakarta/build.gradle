@@ -50,8 +50,6 @@ def migrate(String name, String inputDir, SourceSet sourceSet) {
             filter { String line ->
                 line.replace('javax.servlet', 'jakarta.servlet')
                     .replace('io.grpc.servlet', 'io.grpc.servlet.jakarta')
-                    .replace('org.eclipse.jetty.http2.parser', 'org.eclipse.jetty.http2')
-                    .replace('org.eclipse.jetty.servlet', 'org.eclipse.jetty.ee10.servlet')
             }
         }
     }
