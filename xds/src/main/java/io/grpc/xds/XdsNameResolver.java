@@ -59,6 +59,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
+import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
@@ -128,7 +129,7 @@ final class XdsNameResolver extends NameResolver {
   private final long randomChannelId;
   private final MetricRecorder metricRecorder;
 
-  private volatile RoutingConfig routingConfig = RoutingConfig.empty;
+  private volatile RoutingConfig routingConfig = RoutingConfig.EMPTY;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -307,8 +308,8 @@ final class XdsNameResolver extends NameResolver {
     ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
     Attributes attrs =
         Attributes.newBuilder()
-            .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .set(InternalXdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
             .build();
     ResolutionResult result =
@@ -384,20 +385,17 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
       String cluster = null;
-      Route selectedRoute = null;
+      ClientInterceptor filters = null; // null iff cluster is null
+      RouteData selectedRoute = null;
       RoutingConfig routingCfg;
-      Map<String, FilterConfig> selectedOverrideConfigs;
-      List<ClientInterceptor> filterInterceptors = new ArrayList<>();
       Metadata headers = args.getHeaders();
       do {
         routingCfg = routingConfig;
-        selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
-        for (Route route : routingCfg.routes) {
+        for (RouteData route : routingCfg.routes) {
           if (RoutingUtils.matchRoute(
-                  route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
-              headers, random)) {
+                  route.routeMatch, "/" + args.getMethodDescriptor().getFullMethodName(),
+                  headers, random)) {
             selectedRoute = route;
-            selectedOverrideConfigs.putAll(route.filterConfigOverrides());
             break;
           }
         }
@@ -405,13 +403,14 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
-        if (selectedRoute.routeAction() == null) {
+        if (selectedRoute.routeAction == null) {
           return Result.forError(Status.UNAVAILABLE.withDescription(
               "Could not route RPC to Route with non-forwarding action"));
         }
-        RouteAction action = selectedRoute.routeAction();
+        RouteAction action = selectedRoute.routeAction;
         if (action.cluster() != null) {
           cluster = prefixedClusterName(action.cluster());
+          filters = selectedRoute.filterChoices.get(0);
         } else if (action.weightedClusters() != null) {
           long totalWeight = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
@@ -419,23 +418,25 @@ final class XdsNameResolver extends NameResolver {
           }
           long select = random.nextLong(totalWeight);
           long accumulator = 0;
-          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+          for (int i = 0; i < action.weightedClusters().size(); i++) {
+            ClusterWeight weightedCluster = action.weightedClusters().get(i);
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
               cluster = prefixedClusterName(weightedCluster.name());
-              selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
+              filters = selectedRoute.filterChoices.get(i);
               break;
             }
           }
         } else if (action.namedClusterSpecifierPluginConfig() != null) {
           cluster =
               prefixedClusterSpecifierPluginName(action.namedClusterSpecifierPluginConfig().name());
+          filters = selectedRoute.filterChoices.get(0);
         }
       } while (!retainCluster(cluster));
       Long timeoutNanos = null;
       if (enableTimeout) {
         if (selectedRoute != null) {
-          timeoutNanos = selectedRoute.routeAction().timeoutNano();
+          timeoutNanos = selectedRoute.routeAction.timeoutNano();
         }
         if (timeoutNanos == null) {
           timeoutNanos = routingCfg.fallbackTimeoutNano;
@@ -445,7 +446,7 @@ final class XdsNameResolver extends NameResolver {
         }
       }
       RetryPolicy retryPolicy =
-          selectedRoute == null ? null : selectedRoute.routeAction().retryPolicy();
+          selectedRoute == null ? null : selectedRoute.routeAction.retryPolicy();
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodConfig(timeoutNanos, retryPolicy);
@@ -457,24 +458,9 @@ final class XdsNameResolver extends NameResolver {
             parsedServiceConfig.getError().augmentDescription(
                 "Failed to parse service config (method config)"));
       }
-      if (routingCfg.filterChain != null) {
-        for (NamedFilterConfig namedFilter : routingCfg.filterChain) {
-          FilterConfig filterConfig = namedFilter.filterConfig;
-          Filter filter = filterRegistry.get(filterConfig.typeUrl());
-          if (filter instanceof ClientInterceptorBuilder) {
-            ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
-                .buildClientInterceptor(
-                    filterConfig, selectedOverrideConfigs.get(namedFilter.name),
-                    args, scheduler);
-            if (interceptor != null) {
-              filterInterceptors.add(interceptor);
-            }
-          }
-        }
-      }
       final String finalCluster = cluster;
-      final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), headers);
-      Route finalSelectedRoute = selectedRoute;
+      final long hash = generateHash(selectedRoute.routeAction.hashPolicies(), headers);
+      RouteData finalSelectedRoute = selectedRoute;
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -483,7 +469,7 @@ final class XdsNameResolver extends NameResolver {
           CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
                   .withOption(RPC_HASH_KEY, hash);
-          if (finalSelectedRoute.routeAction().autoHostRewrite()) {
+          if (finalSelectedRoute.routeAction.autoHostRewrite()) {
             callOptionsForCluster = callOptionsForCluster.withOption(AUTO_HOST_REWRITE_KEY, true);
           }
           return new SimpleForwardingClientCall<ReqT, RespT>(
@@ -514,11 +500,11 @@ final class XdsNameResolver extends NameResolver {
         }
       }
 
-      filterInterceptors.add(new ClusterSelectionInterceptor());
       return
           Result.newBuilder()
               .setConfig(config)
-              .setInterceptor(combineInterceptors(filterInterceptors))
+              .setInterceptor(combineInterceptors(
+                  ImmutableList.of(filters, new ClusterSelectionInterceptor())))
               .build();
     }
 
@@ -584,8 +570,18 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
+  static final class PassthroughClientInterceptor implements ClientInterceptor {
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      return next.newCall(method, callOptions);
+    }
+  }
+
   private static ClientInterceptor combineInterceptors(final List<ClientInterceptor> interceptors) {
-    checkArgument(!interceptors.isEmpty(), "empty interceptors");
+    if (interceptors.size() == 0) {
+      return new PassthroughClientInterceptor();
+    }
     if (interceptors.size() == 1) {
       return interceptors.get(0);
     }
@@ -722,6 +718,7 @@ final class XdsNameResolver extends NameResolver {
       }
 
       List<Route> routes = virtualHost.routes();
+      ImmutableList.Builder<RouteData> routesData = ImmutableList.builder();
 
       // Populate all clusters to which requests can be routed to through the virtual host.
       Set<String> clusters = new HashSet<>();
@@ -732,26 +729,34 @@ final class XdsNameResolver extends NameResolver {
       for (Route route : routes) {
         RouteAction action = route.routeAction();
         String prefixedName;
-        if (action != null) {
-          if (action.cluster() != null) {
-            prefixedName = prefixedClusterName(action.cluster());
+        if (action == null) {
+          routesData.add(new RouteData(route.routeMatch(), null, ImmutableList.of()));
+        } else if (action.cluster() != null) {
+          prefixedName = prefixedClusterName(action.cluster());
+          clusters.add(prefixedName);
+          clusterNameMap.put(prefixedName, action.cluster());
+          ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
+          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+        } else if (action.weightedClusters() != null) {
+          ImmutableList.Builder<ClientInterceptor> filterList = ImmutableList.builder();
+          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+            prefixedName = prefixedClusterName(weightedCluster.name());
             clusters.add(prefixedName);
-            clusterNameMap.put(prefixedName, action.cluster());
-          } else if (action.weightedClusters() != null) {
-            for (ClusterWeight weighedCluster : action.weightedClusters()) {
-              prefixedName = prefixedClusterName(weighedCluster.name());
-              clusters.add(prefixedName);
-              clusterNameMap.put(prefixedName, weighedCluster.name());
-            }
-          } else if (action.namedClusterSpecifierPluginConfig() != null) {
-            PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
-            if (pluginConfig instanceof RlsPluginConfig) {
-              prefixedName = prefixedClusterSpecifierPluginName(
-                  action.namedClusterSpecifierPluginConfig().name());
-              clusters.add(prefixedName);
-              rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
-            }
+            clusterNameMap.put(prefixedName, weightedCluster.name());
+            filterList.add(createFilters(filterConfigs, virtualHost, route, weightedCluster));
           }
+          routesData.add(
+              new RouteData(route.routeMatch(), route.routeAction(), filterList.build()));
+        } else if (action.namedClusterSpecifierPluginConfig() != null) {
+          PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
+          if (pluginConfig instanceof RlsPluginConfig) {
+            prefixedName = prefixedClusterSpecifierPluginName(
+                action.namedClusterSpecifierPluginConfig().name());
+            clusters.add(prefixedName);
+            rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
+          }
+          ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
+          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
         }
       }
 
@@ -796,10 +801,7 @@ final class XdsNameResolver extends NameResolver {
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
-      routingConfig =
-          new RoutingConfig(
-              httpMaxStreamDurationNano, routes, filterConfigs,
-              virtualHost.filterConfigOverrides());
+      routingConfig = new RoutingConfig(httpMaxStreamDurationNano, routesData.build());
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
@@ -813,6 +815,37 @@ final class XdsNameResolver extends NameResolver {
       }
     }
 
+    private ClientInterceptor createFilters(
+        @Nullable List<NamedFilterConfig> filterConfigs,
+        VirtualHost virtualHost,
+        Route route,
+        @Nullable ClusterWeight weightedCluster) {
+      if (filterConfigs == null) {
+        return new PassthroughClientInterceptor();
+      }
+      Map<String, FilterConfig> selectedOverrideConfigs =
+          new HashMap<>(virtualHost.filterConfigOverrides());
+      selectedOverrideConfigs.putAll(route.filterConfigOverrides());
+      if (weightedCluster != null) {
+        selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
+      }
+      ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
+      for (NamedFilterConfig namedFilter : filterConfigs) {
+        FilterConfig filterConfig = namedFilter.filterConfig;
+        Filter filter = filterRegistry.get(filterConfig.typeUrl());
+        if (filter instanceof ClientInterceptorBuilder) {
+          ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
+              .buildClientInterceptor(
+                  filterConfig, selectedOverrideConfigs.get(namedFilter.name),
+                  scheduler);
+          if (interceptor != null) {
+            filterInterceptors.add(interceptor);
+          }
+        }
+      }
+      return combineInterceptors(filterInterceptors.build());
+    }
+
     private void cleanUpRoutes(String error) {
       if (existingClusters != null) {
         for (String cluster : existingClusters) {
@@ -823,7 +856,7 @@ final class XdsNameResolver extends NameResolver {
         }
         existingClusters = null;
       }
-      routingConfig = RoutingConfig.empty;
+      routingConfig = RoutingConfig.EMPTY;
       // Without addresses the default LB (normally pick_first) should become TRANSIENT_FAILURE, and
       // the config selector handles the error message itself. Once the LB API allows providing
       // failure information for addresses yet still providing a service config, the config seector
@@ -903,22 +936,50 @@ final class XdsNameResolver extends NameResolver {
    */
   private static class RoutingConfig {
     private final long fallbackTimeoutNano;
-    final List<Route> routes;
-    // Null if HttpFilter is not supported.
-    @Nullable final List<NamedFilterConfig> filterChain;
-    final Map<String, FilterConfig> virtualHostOverrideConfig;
+    final ImmutableList<RouteData> routes;
 
-    private static RoutingConfig empty = new RoutingConfig(
-        0, Collections.emptyList(), null, Collections.emptyMap());
+    private static final RoutingConfig EMPTY = new RoutingConfig(0, ImmutableList.of());
 
-    private RoutingConfig(
-        long fallbackTimeoutNano, List<Route> routes, @Nullable List<NamedFilterConfig> filterChain,
-        Map<String, FilterConfig> virtualHostOverrideConfig) {
+    private RoutingConfig(long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
-      this.routes = routes;
-      checkArgument(filterChain == null || !filterChain.isEmpty(), "filterChain is empty");
-      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
-      this.virtualHostOverrideConfig = Collections.unmodifiableMap(virtualHostOverrideConfig);
+      this.routes = checkNotNull(routes, "routes");
+    }
+  }
+
+  static final class RouteData {
+    final RouteMatch routeMatch;
+    /** null implies non-forwarding action. */
+    @Nullable
+    final RouteAction routeAction;
+    /**
+     * Only one of these interceptors should be used per-RPC. There are only multiple values in the
+     * list for weighted clusters, in which case the order of the list mirrors the weighted
+     * clusters.
+     */
+    final ImmutableList<ClientInterceptor> filterChoices;
+
+    RouteData(RouteMatch routeMatch, @Nullable RouteAction routeAction, ClientInterceptor filter) {
+      this(routeMatch, routeAction, ImmutableList.of(filter));
+    }
+
+    RouteData(
+        RouteMatch routeMatch,
+        @Nullable RouteAction routeAction,
+        ImmutableList<ClientInterceptor> filterChoices) {
+      this.routeMatch = checkNotNull(routeMatch, "routeMatch");
+      checkArgument(
+          routeAction == null || !filterChoices.isEmpty(),
+          "filter may be empty only for non-forwarding action");
+      this.routeAction = routeAction;
+      if (routeAction != null && routeAction.weightedClusters() != null) {
+        checkArgument(
+            routeAction.weightedClusters().size() == filterChoices.size(),
+            "filter choices must match size of weighted clusters");
+      }
+      for (ClientInterceptor filter : filterChoices) {
+        checkNotNull(filter, "entry in filterChoices is null");
+      }
+      this.filterChoices = checkNotNull(filterChoices, "filterChoices");
     }
   }
 

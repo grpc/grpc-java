@@ -56,7 +56,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
 
   @VisibleForTesting
-  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, false);
+  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
 
   protected final XdsLogger logger;
 

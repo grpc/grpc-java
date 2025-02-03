@@ -22,6 +22,7 @@ import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.Audience;
 import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.gcp_authn.v3.TokenCacheConfig;
 import io.grpc.CallCredentials;
@@ -30,12 +31,12 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompositeCallCredentials;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
+import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -95,8 +96,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig config,
-      @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
-      ScheduledExecutorService scheduler) {
+      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
     LruCache<String, CallCredentials> callCredentialsCache =
@@ -106,7 +106,7 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
 
-        /*String clusterName = callOptions.getOption(InternalXdsAttributes.ATTR_CLUSTER_NAME);
+        /*String clusterName = callOptions.getOption(XdsAttributes.ATTR_CLUSTER_NAME);
         if (clusterName == null) {
           return next.newCall(method, callOptions);
         }*/
@@ -217,6 +217,25 @@ final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder 
 
     V getOrInsert(K key, Function<K, V> create) {
       return cache.computeIfAbsent(key, create);
+    }
+  }
+
+  static class AudienceMetadataParser implements MetadataValueParser {
+
+    @Override
+    public String getTypeUrl() {
+      return "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.Audience";
+    }
+
+    @Override
+    public String parse(Any any) throws InvalidProtocolBufferException {
+      Audience audience = any.unpack(Audience.class);
+      String url = audience.getUrl();
+      if (url.isEmpty()) {
+        throw new InvalidProtocolBufferException(
+            "Audience URL is empty. Metadata value must contain a valid URL.");
+      }
+      return url;
     }
   }
 }

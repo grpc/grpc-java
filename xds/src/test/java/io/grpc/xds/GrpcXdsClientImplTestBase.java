@@ -2898,11 +2898,13 @@ public abstract class GrpcXdsClientImplTestBase {
     xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 0);
     call.verifyRequest(EDS, Arrays.asList(), VERSION_1, "0000", NODE);
+    // The control plane can send an updated response for the empty subscription list, with a new
+    // nonce.
+    call.sendResponse(EDS, Arrays.asList(), VERSION_1, "0001");
 
-    // When re-subscribing, the version and nonce were properly forgotten, so the request is the
-    // same as the initial request
+    // When re-subscribing, the version was forgotten but not the nonce
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
-    call.verifyRequest(EDS, "A.1", "", "", NODE, Mockito.timeout(2000).times(2));
+    call.verifyRequest(EDS, "A.1", "", "0001", NODE, Mockito.timeout(2000));
   }
 
   @Test

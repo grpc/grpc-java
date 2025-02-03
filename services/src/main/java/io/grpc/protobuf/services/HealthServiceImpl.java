@@ -18,6 +18,7 @@ package io.grpc.protobuf.services;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
@@ -34,7 +35,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
 

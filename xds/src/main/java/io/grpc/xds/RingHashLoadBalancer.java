@@ -102,7 +102,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
       long totalWeight = 0L;
       for (EquivalentAddressGroup eag : addrList) {
-        Long weight = eag.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT);
+        Long weight = eag.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT);
         // Support two ways of server weighing: either multiple instances of the same address
         // or each address contains a per-address weight attribute. If a weight is not provided,
         // each occurrence of the address will be counted a weight value of one.
@@ -241,7 +241,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
     long totalWeight = 0;
     for (EquivalentAddressGroup eag : addrList) {
-      Long weight = eag.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT);
+      Long weight = eag.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT);
 
       if (weight == null) {
         weight = 1L;
