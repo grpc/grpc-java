@@ -168,7 +168,7 @@ final class ServletServerStream extends AbstractServerStream {
     private int index;
 
     ByteArrayWritableBuffer(int capacityHint) {
-      this.bytes = new byte[min(1024 * 1024,  max(4096, capacityHint))];
+      this.bytes = new byte[min(1024 * 1024, capacityHint)];
       this.capacity = bytes.length;
     }
 
