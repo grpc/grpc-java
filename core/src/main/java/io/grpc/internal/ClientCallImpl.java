@@ -28,6 +28,7 @@ import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+import static io.grpc.internal.ManagedChannelImpl.logger;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -561,7 +562,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
-    observer.onClose(status, trailers);
+    try {
+      observer.onClose(status, trailers);
+    } catch (RuntimeException ex) {
+      logger.log(Level.WARNING, "Exception thrown by onClose() in ClientCall", ex);
+    }
   }
 
   @Override
