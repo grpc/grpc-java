@@ -62,7 +62,6 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
-
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Assume;
 import org.junit.Before;
@@ -184,7 +183,7 @@ public class TlsTest {
                       .build()));
 
       try {
-      ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
+        ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
               CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
               SimpleRequest.getDefaultInstance());
         fail("Expected exception for hostname verifier failure.");

@@ -49,7 +49,6 @@ import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
-import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
@@ -247,12 +246,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
   private final Map<String, Status> peerVerificationResults = Collections.synchronizedMap(
-          new LinkedHashMap<String, Status>() {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
-              return size() > 100;
-            }
-          });
+      new LinkedHashMap<String, Status>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+          return size() > 100;
+        }
+      });
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -520,7 +519,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         }
       }
       if (socket instanceof SSLSocket && authority != null
-              && channelCredentials != null && channelCredentials instanceof TlsChannelCredentials) {
+              && channelCredentials != null
+              && channelCredentials instanceof TlsChannelCredentials) {
         Status peerVerificationStatus = null;
         if (peerVerificationResults.containsKey(authority)) {
           peerVerificationStatus = peerVerificationResults.get(authority);
@@ -528,15 +528,17 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           TrustManager x509ExtendedTrustManager = null;
           try {
             x509ExtendedTrustManager = x509ExtendedTrustManagerClass != null
-                    ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials) : null;
+                    ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials)
+                    : null;
           } catch (GeneralSecurityException e) {
             peerVerificationStatus = Status.UNAVAILABLE.withCause(e)
                     .withDescription("Could not verify authority due to failure getting "
                             + "X509ExtendedTrustManager from TlsCredentials");
           }
           if (x509ExtendedTrustManager == null) {
-            peerVerificationStatus = Status.UNAVAILABLE.withDescription(String.format("Could not verify authority '%s' for "
-                            + "the rpc with no X509ExtendedTrustManager available",
+            peerVerificationStatus = Status.UNAVAILABLE.withDescription(
+                    String.format("Could not verify authority '%s' for the rpc with no "
+                                    + "X509ExtendedTrustManager available",
                     authority));
           }
           if (x509ExtendedTrustManager != null) {
@@ -567,7 +569,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           } else {
             if (peerVerificationStatus.getCause() != null) {
               log.log(Level.WARNING, peerVerificationStatus.getDescription()
-                      + ". This will be an error in the future.", peerVerificationStatus.getCause());
+                      + ". This will be an error in the future.",
+                      peerVerificationStatus.getCause());
             } else {
               log.log(Level.WARNING, peerVerificationStatus.getDescription()
                       + ". This will be an error in the future.");
