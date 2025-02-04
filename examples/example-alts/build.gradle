@@ -1,6 +1,6 @@
 plugins {
     // Provide convenience executables for trying out the examples.
-    id 'application'
+    id 'java'
     id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
@@ -24,16 +24,17 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.69.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.5'
+//def grpcVersion = '1.69.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+//def protocVersion = '3.25.5'
 
 dependencies {
     // grpc-alts transitively depends on grpc-netty-shaded, grpc-protobuf, and grpc-stub
-    implementation "io.grpc:grpc-alts:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+    //implementation "io.grpc:grpc-alts:${grpcVersion}"
+    implementation platform('io.grpc:examples:1.69.0-SNAPSHOT')
+    compileOnly "org.apache.tomcat:annotations-api"
 }
 
-protobuf {
+/*protobuf {
     protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
     plugins {
         grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
@@ -41,7 +42,7 @@ protobuf {
     generateProtoTasks {
         all()*.plugins { grpc {} }
     }
-}
+}*/
 
 // Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
 sourceSets {
