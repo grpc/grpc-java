@@ -45,7 +45,7 @@ gson = "com.google.code.gson:gson:2.11.0"
 # 33.4.0 requires com.google.errorprone:error_prone_annotations:2.36.0 but we are stuck with 2.30.0 (see above)
 guava = "com.google.guava:guava:33.3.1-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
-guava-testlib = "com.google.guava:guava-testlib:33.4.0-android"
+guava-testlib = "com.google.guava:guava-testlib:33.1.0-android"
 # JRE version is needed for projects where its a transitive dependency, f.e. gcp-observability.
 # May be different from the -android version.
 guava-jre = "com.google.guava:guava:33.3.1-jre"
