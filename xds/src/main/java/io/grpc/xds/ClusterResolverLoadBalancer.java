@@ -488,13 +488,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (!(addr instanceof InetSocketAddress)) {
           return addr;
         }
-        InetSocketAddress inet = (InetSocketAddress) addr;
 
-        InetSocketAddress proxyAddress;
+        SocketAddress proxyAddress;
         try {
-          proxyAddress = (InetSocketAddress) endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+          proxyAddress = (SocketAddress) endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
           if (proxyAddress == null) {
-            proxyAddress = (InetSocketAddress) localityMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+            proxyAddress = (SocketAddress) localityMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
           }
         } catch (ClassCastException e) {
           throw new AssertionError("Proxy address metadata is not an InetSocketAddress", e);
@@ -502,7 +501,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
         if (proxyAddress != null) {
           return HttpConnectProxiedSocketAddress.newBuilder()
-              .setTargetAddress(inet)
+              .setTargetAddress((InetSocketAddress) addr)
               .setProxyAddress(proxyAddress)
               .build();
         }
