@@ -7,7 +7,8 @@ description = 'gRPC: BOM'
 
 gradle.projectsEvaluated {
   def projectsToInclude = rootProject.subprojects.findAll {
-    it.plugins.hasPlugin('java')
+    return it.name != 'grpc-compiler'
+        && it.plugins.hasPlugin('java')
         && it.plugins.hasPlugin('maven-publish')
         && it.tasks.findByName('publishMavenPublicationToMavenRepository')?.enabled
   }
