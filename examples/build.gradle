@@ -30,18 +30,20 @@ def protobufVersion = '3.25.5'
 def protocVersion = protobufVersion
 
 dependencies {
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+}
+
+dependencies {
     constraints {
         api "io.grpc:grpc-protobuf:${grpcVersion}"
         api "io.grpc:grpc-services:${grpcVersion}"
         api "io.grpc:grpc-stub:${grpcVersion}"
-        compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-
+        api "io.grpc:grpc-inprocess:${grpcVersion}"
         // examples/advanced need this for JsonFormat
         api "com.google.protobuf:protobuf-java-util:${protobufVersion}"
-        runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
         api "io.grpc:grpc-testing:${grpcVersion}"
-        api "io.grpc:grpc-inprocess:${grpcVersion}"
         api "junit:junit:4.13.2"
         api "org.mockito:mockito-core:4.4.0"
     }
