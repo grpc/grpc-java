@@ -60,8 +60,8 @@ public class HelloWorldServer {
           e.printStackTrace(System.err);
         System.err.println("*** server shut down");
       }
-    });
-  }
+    }
+  });
 
   private void stop() throws InterruptedException {
     if (server != null) {
