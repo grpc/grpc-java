@@ -39,7 +39,7 @@ public class HelloWorldServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .executor(executor)
         .addService(new GreeterImpl())
         .build()
@@ -53,8 +53,11 @@ public class HelloWorldServer {
         try {
           HelloWorldServer.this.stop();
         } catch (InterruptedException e) {
+          if (server != null) {
+            server.shutdownNow();
+          }
+          executor.shutdown();
           e.printStackTrace(System.err);
-        }
         System.err.println("*** server shut down");
       }
     });
@@ -63,7 +66,6 @@ public class HelloWorldServer {
   private void stop() throws InterruptedException {
     if (server != null) {
       server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
-      executor.shutdown();
     }
   }
 
