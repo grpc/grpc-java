@@ -58,10 +58,11 @@ public class HelloWorldServer {
           }
           executor.shutdown();
           e.printStackTrace(System.err);
+        }
         System.err.println("*** server shut down");
       }
-    }
-  });
+    });
+  }
 
   private void stop() throws InterruptedException {
     if (server != null) {
