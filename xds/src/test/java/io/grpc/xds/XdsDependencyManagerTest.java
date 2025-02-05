@@ -26,12 +26,14 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static io.grpc.xds.XdsTestUtils.CLUSTER_NAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_HOSTNAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_PORT;
+import static io.grpc.xds.XdsTestUtils.RDS_NAME;
 import static io.grpc.xds.XdsTestUtils.getEdsNameForCluster;
 import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -55,9 +57,12 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
+import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsTransportFactory;
 import java.io.Closeable;
 import java.io.IOException;
@@ -70,6 +75,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
@@ -84,6 +90,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -124,6 +131,8 @@ public class XdsDependencyManagerTest {
 
   @Captor
   private ArgumentCaptor<XdsConfig> xdsConfigCaptor;
+  @Captor
+  private ArgumentCaptor<Status> statusCaptor;
 
   @Before
   public void setUp() throws Exception {
@@ -180,7 +189,7 @@ public class XdsDependencyManagerTest {
     xdsDependencyManager = new XdsDependencyManager(
         xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
 
-    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
     testWatcher.verifyStats(1, 0, 0);
     assertThat(testWatcher.lastConfig).isEqualTo(defaultXdsConfig);
@@ -194,7 +203,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void verify_simple_aggregate() {
-    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     xdsDependencyManager = new XdsDependencyManager(
         xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
@@ -234,7 +243,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testComplexRegisteredAggregate() throws IOException {
-    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
 
     // Do initialization
     String rootName1 = "root_c";
@@ -257,7 +266,7 @@ public class XdsDependencyManagerTest {
     testWatcher.verifyStats(3, 0, 0);
     ImmutableSet.Builder<String> builder = ImmutableSet.builder();
     Set<String> expectedClusters = builder.add(rootName1).add(rootName2).add(CLUSTER_NAME)
-            .addAll(childNames).addAll(childNames2).build();
+        .addAll(childNames).addAll(childNames2).build();
     assertThat(xdsConfigCaptor.getValue().getClusters().keySet()).isEqualTo(expectedClusters);
 
     // Close 1 subscription shouldn't affect the other or RDS subscriptions
@@ -274,7 +283,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testDelayedSubscription() {
-    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     xdsDependencyManager = new XdsDependencyManager(
         xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
@@ -334,7 +343,7 @@ public class XdsDependencyManagerTest {
 
     // Check that missing cluster reported Status and the other 2 are present
     Status expectedClusterStatus = Status.UNAVAILABLE.withDescription(
-        "No " + toContextStr(CLUSTER_TYPE_NAME , childNames.get(2)));
+        "No " + toContextStr(CLUSTER_TYPE_NAME, childNames.get(2)));
     StatusOr<XdsConfig.XdsClusterConfig> missingCluster = returnedClusters.get(2);
     assertThat(missingCluster.getStatus().toString()).isEqualTo(expectedClusterStatus.toString());
     assertThat(returnedClusters.get(0).hasValue()).isTrue();
@@ -342,7 +351,7 @@ public class XdsDependencyManagerTest {
 
     // Check that missing EDS reported Status, the other one is present and the garbage EDS is not
     Status expectedEdsStatus = Status.UNAVAILABLE.withDescription(
-        "No " + toContextStr(ENDPOINT_TYPE_NAME , XdsTestUtils.EDS_NAME + 1));
+        "No " + toContextStr(ENDPOINT_TYPE_NAME, XdsTestUtils.EDS_NAME + 1));
     assertThat(returnedClusters.get(0).getValue().getEndpoint().hasValue()).isTrue();
     assertThat(returnedClusters.get(1).getValue().getEndpoint().hasValue()).isFalse();
     assertThat(returnedClusters.get(1).getValue().getEndpoint().getStatus().toString())
@@ -359,7 +368,7 @@ public class XdsDependencyManagerTest {
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     verify(xdsConfigWatcher, timeout(1000)).onResourceDoesNotExist(
-        toContextStr(XdsListenerResource.getInstance().typeName(),"badLdsName"));
+        toContextStr(XdsListenerResource.getInstance().typeName(), "badLdsName"));
 
     testWatcher.verifyStats(0, 0, 1);
   }
@@ -377,9 +386,53 @@ public class XdsDependencyManagerTest {
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     verify(xdsConfigWatcher, timeout(1000)).onResourceDoesNotExist(
-        toContextStr(XdsRouteConfigureResource.getInstance().typeName(),"badRdsName"));
+        toContextStr(XdsRouteConfigureResource.getInstance().typeName(), "badRdsName"));
 
     testWatcher.verifyStats(0, 0, 1);
+  }
+
+  @Test
+  public void testUpdateToMissingVirtualHost() {
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
+    WrappedXdsClient wrappedXdsClient = new WrappedXdsClient(xdsClient, syncContext);
+    xdsDependencyManager = new XdsDependencyManager(
+        wrappedXdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
+
+    // Update with a config that has a virtual host that doesn't match the server name
+    wrappedXdsClient.deliverLdsUpdate(0L, buildUnmatchedVirtualHosts());
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onError(any(), statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getDescription())
+        .isEqualTo("Failed to find virtual host matching hostname: " + serverName);
+
+    testWatcher.verifyStats(1, 1, 0);
+
+    wrappedXdsClient.shutdown();
+  }
+
+  private List<io.grpc.xds.VirtualHost> buildUnmatchedVirtualHosts() {
+    io.grpc.xds.VirtualHost.Route route1 =
+        io.grpc.xds.VirtualHost.Route.forAction(
+            io.grpc.xds.VirtualHost.Route.RouteMatch.withPathExactOnly("/GreetService/bye"),
+        io.grpc.xds.VirtualHost.Route.RouteAction.forCluster(
+            "cluster-bar.googleapis.com", Collections.emptyList(),
+            TimeUnit.SECONDS.toNanos(15L), null, false), ImmutableMap.of());
+    io.grpc.xds.VirtualHost.Route route2 =
+        io.grpc.xds.VirtualHost.Route.forAction(
+            io.grpc.xds.VirtualHost.Route.RouteMatch.withPathExactOnly("/HelloService/hi"),
+        io.grpc.xds.VirtualHost.Route.RouteAction.forCluster(
+            "cluster-foo.googleapis.com", Collections.emptyList(),
+            TimeUnit.SECONDS.toNanos(15L), null, false),
+        ImmutableMap.of());
+    return Arrays.asList(
+        io.grpc.xds.VirtualHost.create("virtualhost-foo", Collections.singletonList("hello"
+                + ".googleapis.com"),
+            Collections.singletonList(route1),
+            ImmutableMap.of()),
+        io.grpc.xds.VirtualHost.create("virtualhost-bar", Collections.singletonList("hi"
+                + ".googleapis.com"),
+            Collections.singletonList(route2),
+            ImmutableMap.of()));
   }
 
   @Test
@@ -397,13 +450,13 @@ public class XdsDependencyManagerTest {
         .onError(eq(context), argThat(new XdsTestUtils.StatusMatcher(expectedStatus)));
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
-    testWatcher.verifyStats(0,1, 0);
+    testWatcher.verifyStats(0, 1, 0);
   }
 
   @Test
   public void testChangeRdsName_fromLds() {
     // TODO implement
-    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     Listener serverListener = ControlPlaneRule.buildServerListener();
 
     xdsDependencyManager = new XdsDependencyManager(
@@ -417,6 +470,7 @@ public class XdsDependencyManagerTest {
         ImmutableMap.of(XdsTestUtils.SERVER_LISTENER, serverListener, serverName, clientListener));
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
     assertThat(xdsConfigCaptor.getValue()).isNotEqualTo(defaultXdsConfig);
+    assertThat(xdsConfigCaptor.getValue().getVirtualHost().name()).isEqualTo(newRdsName);
   }
 
   @Test
@@ -460,29 +514,26 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
     // Start the actual test
-    InOrder inOrder = org.mockito.Mockito.inOrder(xdsConfigWatcher);
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     xdsDependencyManager = new XdsDependencyManager(
         xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
     XdsConfig initialConfig = xdsConfigCaptor.getValue();
 
+    // Make sure that adding subscriptions that rds points at doesn't change the config
     Closeable rootSub = xdsDependencyManager.subscribeToCluster("root");
-    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
-    XdsConfig afterRootConfig = xdsConfigCaptor.getValue();
-    assertThat(afterRootConfig).isEqualTo(initialConfig);
-
+    assertThat(xdsDependencyManager.buildConfig()).isEqualTo(initialConfig);
     Closeable clusterAB11Sub = xdsDependencyManager.subscribeToCluster("clusterAB11");
-    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
+    assertThat(xdsDependencyManager.buildConfig()).isEqualTo(initialConfig);
 
+    // Make sure that closing subscriptions that rds points at doesn't change the config
     rootSub.close();
-    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
+    assertThat(xdsDependencyManager.buildConfig()).isEqualTo(initialConfig);
     clusterAB11Sub.close();
-    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
+    assertThat(xdsDependencyManager.buildConfig()).isEqualTo(initialConfig);
 
     // Make an explicit root subscription and then change RDS to point to A11
     rootSub = xdsDependencyManager.subscribeToCluster("root");
-    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(initialConfig);
-
     RouteConfiguration newRouteConfig =
         XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "clusterA11");
     controlPlaneService.setXdsConfig(
@@ -544,7 +595,102 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testChangeRdsName_FromLds_complexTree() {
-    // TODO implement
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+
+    // Create the same tree as in testMultipleParentsInCdsTree
+    Cluster rootCluster =
+        XdsTestUtils.buildAggCluster("root", Arrays.asList("clusterA", "clusterB"));
+    Cluster clusterA =
+        XdsTestUtils.buildAggCluster("clusterA", Arrays.asList("clusterA1", "clusterAB1"));
+    Cluster clusterB =
+        XdsTestUtils.buildAggCluster("clusterB", Arrays.asList("clusterB1", "clusterAB1"));
+    Cluster clusterA1 =
+        XdsTestUtils.buildAggCluster("clusterA1", Arrays.asList("clusterA11", "clusterAB1"));
+    Cluster clusterAB1 =
+        XdsTestUtils.buildAggCluster("clusterAB1", Arrays.asList("clusterA11", "clusterAB11"));
+
+    Map<String, Message> clusterMap = new HashMap<>();
+    Map<String, Message> edsMap = new HashMap<>();
+
+    clusterMap.put("root", rootCluster);
+    clusterMap.put("clusterA", clusterA);
+    clusterMap.put("clusterB", clusterB);
+    clusterMap.put("clusterA1", clusterA1);
+    clusterMap.put("clusterAB1", clusterAB1);
+
+    XdsTestUtils.addEdsClusters(clusterMap, edsMap, "clusterA11", "clusterAB11", "clusterB1");
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
+    inOrder.verify(xdsConfigWatcher, atLeastOnce()).onUpdate(any());
+
+    // Do the test
+    String newRdsName = "newRdsName1";
+    Listener clientListener = buildInlineClientListener(newRdsName, "root");
+    Listener serverListener = ControlPlaneRule.buildServerListener();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS,
+        ImmutableMap.of(XdsTestUtils.SERVER_LISTENER, serverListener, serverName, clientListener));
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    XdsConfig config = xdsConfigCaptor.getValue();
+    assertThat(config.getVirtualHost().name()).isEqualTo(newRdsName);
+    assertThat(config.getClusters().size()).isEqualTo(8);
+  }
+
+  @Test
+  public void testChangeAggCluster() {
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
+
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+    inOrder.verify(xdsConfigWatcher, atLeastOnce()).onUpdate(any());
+
+    // Setup initial config A -> A1 -> (A11, A12)
+    Cluster rootCluster =
+        XdsTestUtils.buildAggCluster("root", Arrays.asList("clusterA"));
+    Cluster clusterA =
+        XdsTestUtils.buildAggCluster("clusterA", Arrays.asList("clusterA1"));
+    Cluster clusterA1 =
+        XdsTestUtils.buildAggCluster("clusterA1", Arrays.asList("clusterA11", "clusterA12"));
+
+    Map<String, Message> clusterMap = new HashMap<>();
+    Map<String, Message> edsMap = new HashMap<>();
+
+    clusterMap.put("root", rootCluster);
+    clusterMap.put("clusterA", clusterA);
+    clusterMap.put("clusterA1", clusterA1);
+
+    XdsTestUtils.addEdsClusters(clusterMap, edsMap, "clusterA11", "clusterA12");
+    Listener clientListener = buildInlineClientListener(RDS_NAME, "root");
+    Listener serverListener = ControlPlaneRule.buildServerListener();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS,
+        ImmutableMap.of(XdsTestUtils.SERVER_LISTENER, serverListener, serverName, clientListener));
+
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    inOrder.verify(xdsConfigWatcher).onUpdate(any());
+
+    // Update the cluster to A -> A2 -> (A21, A22)
+    Cluster clusterA2 =
+        XdsTestUtils.buildAggCluster("clusterA2", Arrays.asList("clusterA21", "clusterA22"));
+    clusterA =
+        XdsTestUtils.buildAggCluster("clusterA", Arrays.asList("clusterA2"));
+    clusterMap.clear();
+    edsMap.clear();
+    clusterMap.put("root", rootCluster);
+    clusterMap.put("clusterA", clusterA);
+    clusterMap.put("clusterA2", clusterA2);
+    XdsTestUtils.addEdsClusters(clusterMap, edsMap, "clusterA21", "clusterA22");
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    // Verify that the config is updated as expected
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
+    XdsConfig config = xdsConfigCaptor.getValue();
+    assertThat(config.getClusters().keySet()).containsExactly("root", "clusterA", "clusterA2",
+        "clusterA21", "clusterA22");
   }
 
   private Listener buildInlineClientListener(String rdsName, String clusterName) {
@@ -571,7 +717,7 @@ public class XdsDependencyManagerTest {
 
     @Override
     public void onError(String resourceContext, Status status) {
-      log.fine(String.format("Error %s for %s: ",  status, resourceContext));
+      log.fine(String.format("Error %s for %s: ", status, resourceContext));
       numError++;
     }
 
@@ -587,6 +733,52 @@ public class XdsDependencyManagerTest {
 
     private void verifyStats(int updt, int err, int notExist) {
       assertThat(getStats()).isEqualTo(Arrays.asList(updt, err, notExist));
+    }
+  }
+
+  private static class WrappedXdsClient extends XdsClient {
+    private final XdsClient delegate;
+    private final SynchronizationContext syncContext;
+    private ResourceWatcher<LdsUpdate> ldsWatcher;
+
+    WrappedXdsClient(XdsClient delegate, SynchronizationContext syncContext) {
+      this.delegate = delegate;
+      this.syncContext = syncContext;
+    }
+
+    @Override
+    public void shutdown() {
+      delegate.shutdown();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T extends ResourceUpdate> void watchXdsResource(
+        XdsResourceType<T> type, String resourceName, ResourceWatcher<T> watcher,
+        Executor executor) {
+      if (type.equals(XdsListenerResource.getInstance())) {
+        ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
+      }
+      delegate.watchXdsResource(type, resourceName, watcher, executor);
+    }
+
+
+
+    @Override
+    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                                  String resourceName,
+                                                                  ResourceWatcher<T> watcher) {
+      delegate.cancelXdsResourceWatch(type, resourceName, watcher);
+    }
+
+    void deliverLdsUpdate(long httpMaxStreamDurationNano,
+                          List<io.grpc.xds.VirtualHost> virtualHosts) {
+      syncContext.execute(() -> {
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(
+            io.grpc.xds.HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onChanged(ldsUpdate);
+      });
     }
   }
 }
