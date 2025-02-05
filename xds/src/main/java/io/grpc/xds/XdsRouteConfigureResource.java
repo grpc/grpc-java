@@ -496,8 +496,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
           }
-          clusterWeightSum += clusterWeight.getWeight().getValue();
-          weightedClusters.add(clusterWeightOrError.getStruct());
+          ClusterWeight parsedWeight = clusterWeightOrError.getStruct();
+          clusterWeightSum += parsedWeight.weight();
+          weightedClusters.add(parsedWeight);
         }
         if (clusterWeightSum <= 0) {
           return StructOrError.fromError("Sum of cluster weights should be above 0.");
@@ -609,7 +610,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
               + overrideConfigs.getErrorDetail());
     }
     return StructOrError.fromStruct(VirtualHost.Route.RouteAction.ClusterWeight.create(
-        proto.getName(), proto.getWeight().getValue(), overrideConfigs.getStruct()));
+        proto.getName(),
+        Integer.toUnsignedLong(proto.getWeight().getValue()),
+        overrideConfigs.getStruct()));
   }
 
   @Nullable // null if the plugin is not supported, but it's marked as optional.
