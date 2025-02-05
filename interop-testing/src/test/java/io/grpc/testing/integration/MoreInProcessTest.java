@@ -248,9 +248,9 @@ public class MoreInProcessTest {
     TestServiceGrpc.newStub(inProcessChannel).streamingInputCall(responseObserver)
         .onNext(StreamingInputCallRequest.getDefaultInstance());
 
-    assertTrue(finishLatch.await(3000, TimeUnit.MILLISECONDS));
+    assertTrue(finishLatch.await(900, TimeUnit.MILLISECONDS));
     Status actualStatus = Status.fromThrowable(throwableRef.get());
-    Status expectedStatus = Status.CANCELLED.withDescription("server cancelled stream");
+    Status expectedStatus = Status.UNKNOWN.withDescription("Application error processing RPC");
     assertEquals(expectedStatus.getCode(), actualStatus.getCode());
     assertEquals(expectedStatus.getDescription(), actualStatus.getDescription());
     assertNull(actualStatus.getCause());

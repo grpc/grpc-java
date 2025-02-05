@@ -189,6 +189,8 @@ public class ServerImplTest {
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
   @Captor
+  private ArgumentCaptor<Metadata> metadataCaptor;
+  @Captor
   private ArgumentCaptor<ServerStreamListener> streamListenerCaptor;
 
   @Mock
@@ -1561,8 +1563,8 @@ public class ServerImplTest {
   }
 
   private void ensureServerStateNotLeaked() {
-    verify(stream).cancel(statusCaptor.capture());
-    assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
     // Used in InProcessTransport when set to include the cause with the status
     assertNotNull(statusCaptor.getValue().getCause());
   }
