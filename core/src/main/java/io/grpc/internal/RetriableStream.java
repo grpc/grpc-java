@@ -846,12 +846,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  private static boolean isExperimentalRetryJitterEnabled() {
-    return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_RETRY_JITTER", true);
-  }
+  private static final boolean isExperimentalRetryJitterEnabled = GrpcUtil
+          .getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
 
   public static long intervalWithJitter(long intervalNanos) {
-    double inverseJitterFactor = isExperimentalRetryJitterEnabled()
+    double inverseJitterFactor = isExperimentalRetryJitterEnabled
             ? 0.8 * random.nextDouble() + 0.4 : random.nextDouble();
     return (long) (intervalNanos * inverseJitterFactor);
   }
