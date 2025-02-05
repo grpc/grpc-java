@@ -779,6 +779,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
     private Metadata trailers;
+
     public JumpToApplicationThreadServerStreamListener(
         Executor executor,
         Executor cancelExecutor,
