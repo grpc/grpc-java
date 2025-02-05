@@ -437,6 +437,7 @@ final class XdsNameResolver extends NameResolver {
           throw new AssertionError();
         }
       } while (!retainCluster(cluster));
+
       final RouteAction routeAction = selectedRoute.routeAction;
       Long timeoutNanos = null;
       if (enableTimeout) {
