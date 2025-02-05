@@ -20,12 +20,9 @@ import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.stub.StreamObserver;
-import io.grpc.ServerBuilder;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Server that manages startup/shutdown of a {@code Greeter} server.
@@ -34,13 +31,11 @@ public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
 
   private Server server;
-  // Create a fixed thread pool
-  ExecutorService executor = Executors.newFixedThreadPool(2);
+
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port)
-        .executor(executor)
+    server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new GreeterImpl())
         .build()
         .start();
@@ -63,7 +58,6 @@ public class HelloWorldServer {
   private void stop() throws InterruptedException {
     if (server != null) {
       server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
-      executor.shutdown();
     }
   }
 
