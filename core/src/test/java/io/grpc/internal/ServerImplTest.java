@@ -1562,7 +1562,7 @@ public class ServerImplTest {
 
   private void ensureServerStateNotLeaked() {
     verify(stream).cancel(statusCaptor.capture());
-    assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
+    assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     // Used in InProcessTransport when set to include the cause with the status
     assertNotNull(statusCaptor.getValue().getCause());
   }
