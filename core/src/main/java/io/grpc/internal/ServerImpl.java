@@ -786,7 +786,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         ServerStream stream,
         Context.CancellableContext context,
         Tag tag) {
-      this(executor, cancelExecutor, stream, context, tag, null);
+      this(executor, cancelExecutor, stream, context, tag, new Metadata());
     }
 
     public JumpToApplicationThreadServerStreamListener(
