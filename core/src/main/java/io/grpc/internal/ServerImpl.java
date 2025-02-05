@@ -779,14 +779,22 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
     private Metadata trailers;
-
-    public JumpToApplicationThreadServerStreamListener(Executor executor,
-        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context, Tag tag) {
+    public JumpToApplicationThreadServerStreamListener(
+        Executor executor,
+        Executor cancelExecutor,
+        ServerStream stream,
+        Context.CancellableContext context,
+        Tag tag) {
       this(executor, cancelExecutor, stream, context, tag, null);
     }
 
-    public JumpToApplicationThreadServerStreamListener(Executor executor,
-        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context, Tag tag, Metadata trailers) {
+    public JumpToApplicationThreadServerStreamListener(
+        Executor executor,
+        Executor cancelExecutor,
+        ServerStream stream,
+        Context.CancellableContext context,
+        Tag tag,
+        Metadata trailers) {
       this.callExecutor = executor;
       this.cancelExecutor = cancelExecutor;
       this.stream = stream;
