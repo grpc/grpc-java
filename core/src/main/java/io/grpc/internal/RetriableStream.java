@@ -846,6 +846,15 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
+  private static final boolean isExperimentalRetryJitterEnabled = GrpcUtil
+          .getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
+
+  public static long intervalWithJitter(long intervalNanos) {
+    double inverseJitterFactor = isExperimentalRetryJitterEnabled
+            ? 0.8 * random.nextDouble() + 0.4 : random.nextDouble();
+    return (long) (intervalNanos * inverseJitterFactor);
+  }
+
   private static final class SavedCloseMasterListenerReason {
     private final Status status;
     private final RpcProgress progress;
@@ -1066,7 +1075,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (pushbackMillis == null) {
           if (isRetryableStatusCode) {
             shouldRetry = true;
-            backoffNanos = (long) (nextBackoffIntervalNanos * random.nextDouble());
+            backoffNanos = intervalWithJitter(nextBackoffIntervalNanos);
             nextBackoffIntervalNanos = Math.min(
                 (long) (nextBackoffIntervalNanos * retryPolicy.backoffMultiplier),
                 retryPolicy.maxBackoffNanos);
