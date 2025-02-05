@@ -412,6 +412,7 @@ final class XdsNameResolver extends NameResolver {
           cluster = prefixedClusterName(action.cluster());
           filters = selectedRoute.filterChoices.get(0);
         } else if (action.weightedClusters() != null) {
+          // XdsRouteConfigureResource verifies the total weight will not be 0 or exceed uint32
           long totalWeight = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             totalWeight += weightedCluster.weight();
@@ -432,13 +433,14 @@ final class XdsNameResolver extends NameResolver {
               prefixedClusterSpecifierPluginName(action.namedClusterSpecifierPluginConfig().name());
           filters = selectedRoute.filterChoices.get(0);
         } else {
+          // updateRoutes() discards routes with unknown actions
           throw new AssertionError();
         }
       } while (!retainCluster(cluster));
-      final RouteAction action = selectedRoute.routeAction;
+      final RouteAction routeAction = selectedRoute.routeAction;
       Long timeoutNanos = null;
       if (enableTimeout) {
-        timeoutNanos = action.timeoutNano();
+        timeoutNanos = routeAction.timeoutNano();
         if (timeoutNanos == null) {
           timeoutNanos = routingCfg.fallbackTimeoutNano;
         }
@@ -446,7 +448,7 @@ final class XdsNameResolver extends NameResolver {
           timeoutNanos = null;
         }
       }
-      RetryPolicy retryPolicy = action.retryPolicy();
+      RetryPolicy retryPolicy = routeAction.retryPolicy();
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodConfig(timeoutNanos, retryPolicy);
@@ -459,7 +461,7 @@ final class XdsNameResolver extends NameResolver {
                 "Failed to parse service config (method config)"));
       }
       final String finalCluster = cluster;
-      final long hash = generateHash(action.hashPolicies(), headers);
+      final long hash = generateHash(routeAction.hashPolicies(), headers);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -468,7 +470,7 @@ final class XdsNameResolver extends NameResolver {
           CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
                   .withOption(RPC_HASH_KEY, hash);
-          if (action.autoHostRewrite()) {
+          if (routeAction.autoHostRewrite()) {
             callOptionsForCluster = callOptionsForCluster.withOption(AUTO_HOST_REWRITE_KEY, true);
           }
           return new SimpleForwardingClientCall<ReqT, RespT>(
