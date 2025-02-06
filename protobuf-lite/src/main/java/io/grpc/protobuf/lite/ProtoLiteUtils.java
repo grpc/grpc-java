@@ -89,7 +89,7 @@ public final class ProtoLiteUtils {
 
   /**
    * Creates a {@link Marshaller} for protos of the same type as {@code defaultInstance} and a
-   * custom limit for the recursion depth. Any negative number will leave the limit to its default
+   * custom limit for the recursion depth. Any negative number will leave the limit as its default
    * value as defined by the protobuf library.
    *
    * @since 1.56.0
