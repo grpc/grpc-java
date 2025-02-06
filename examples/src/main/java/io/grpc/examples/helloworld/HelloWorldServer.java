@@ -56,8 +56,9 @@ public class HelloWorldServer {
           if (server != null) {
             server.shutdownNow();
           }
-          executor.shutdown();
           e.printStackTrace(System.err);
+        } finally {
+          executor.shutdown();
         }
         System.err.println("*** server shut down");
       }
