@@ -412,6 +412,109 @@ public class RingHashLoadBalancerTest {
     inOrder.verifyNoMoreInteractions();
   }
 
+  @Test
+  public void deterministicPickWithRequestHashHeader() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "custom-request-hash-key");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    initializeLbSubchannels(config, servers);
+    InOrder inOrder = Mockito.inOrder(helper);
+
+    // Bring all subchannels to READY.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, CSI_READY);
+      inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    }
+
+    // Pick subchannel with custom request hash header where the rpc hash hits server1.
+    Metadata headers = new Metadata();
+    headers.put(
+        Metadata.Key.of("custom-request-hash-key", Metadata.ASCII_STRING_MARSHALLER),
+        "FakeSocketAddress-server1_0");
+    PickSubchannelArgs args =
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod(),
+            headers,
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {});
+    SubchannelPicker picker = pickerCaptor.getValue();
+    PickResult result = picker.pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));
+  }
+
+  @Test
+  public void pickWithRandomHash_allSubchannelsReady() {
+    // Large ring to better reflect the request distribution.
+    RingHashConfig config = new RingHashConfig(10000, 10000, "dummy-random-hash");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
+    initializeLbSubchannels(config, servers);
+    InOrder inOrder = Mockito.inOrder(helper);
+
+    // Bring all subchannels to READY.
+    Map<EquivalentAddressGroup, Integer> pickCounts = new HashMap<>();
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, CSI_READY);
+      pickCounts.put(subchannel.getAddresses(), 0);
+      inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    }
+
+    // Pick subchannel 10000 times with random hash.
+    SubchannelPicker picker = pickerCaptor.getValue();
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    for (int i = 0; i < 10000; ++i) {
+      Subchannel pickedSubchannel = picker.pickSubchannel(args).getSubchannel();
+      EquivalentAddressGroup addr = pickedSubchannel.getAddresses();
+      pickCounts.put(addr, pickCounts.get(addr) + 1);
+    }
+
+    // Verify the distribution is uniform where server0 and server1 are roughly picked 5000 times.
+    assertThat(pickCounts.get(servers.get(0))).isWithin(500).of(5000);
+    assertThat(pickCounts.get(servers.get(1))).isWithin(500).of(5000);
+  }
+
+  @Test
+  public void pickWithRandomHash_atLeastOneSubchannelConnecting() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "dummy-random-hash");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    initializeLbSubchannels(config, servers);
+
+    // Bring one subchannel to CONNECTING.
+    deliverSubchannelState(getSubChannel(servers.get(0)), CSI_CONNECTING);
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+
+    // Pick subchannel with random hash does not trigger connection.
+    SubchannelPicker picker = pickerCaptor.getValue();
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result = picker.pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel()).isNull(); // buffer request
+    verifyConnection(0);
+  }
+
+  @Test
+  public void pickWithRandomHash_firstSubchannelInTransientFailure_remainingSubchannelsIdle() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, "dummy-random-hash");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    initializeLbSubchannels(config, servers);
+
+    // Bring one subchannel to TRANSIENT_FAILURE.
+    deliverSubchannelUnreachable(getSubChannel(servers.get(0)));
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(0);
+
+    // Pick subchannel with random hash does trigger connection by walking the ring
+    // and choosing the first (at most one) IDLE subchannel along the way.
+    SubchannelPicker picker = pickerCaptor.getValue();
+    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
+    PickResult result = picker.pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel()).isNull(); // buffer request
+    verifyConnection(1);
+  }
+
   private Subchannel getSubChannel(EquivalentAddressGroup eag) {
     return subchannels.get(Collections.singletonList(eag));
   }

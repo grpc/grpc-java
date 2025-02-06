@@ -106,6 +106,7 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
       return ConfigOrError.fromError(Status.UNAVAILABLE.withDescription(
           "Invalid 'mingRingSize'/'maxRingSize'"));
     }
-    return ConfigOrError.fromConfig(new RingHashConfig(minRingSize, maxRingSize, requestHashHeader));
+    return ConfigOrError.fromConfig(
+        new RingHashConfig(minRingSize, maxRingSize, requestHashHeader));
   }
 }
