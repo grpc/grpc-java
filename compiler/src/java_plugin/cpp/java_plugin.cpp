@@ -23,7 +23,9 @@
 
 #include "java_generator.h"
 #include <google/protobuf/compiler/code_generator.h>
+#if GOOGLE_PROTOBUF_VERSION >= 5027000
 #include <google/protobuf/compiler/java/java_features.pb.h>
+#endif
 #include <google/protobuf/compiler/plugin.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/zero_copy_stream.h>
