@@ -18,7 +18,6 @@ package io.grpc.protobuf;
 
 import com.google.protobuf.ExtensionRegistry;
 import com.google.protobuf.Message;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
@@ -63,7 +62,6 @@ public final class ProtoUtils {
    *
    * @since 1.56.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10108")
   public static <T extends Message> Marshaller<T> marshallerWithRecursionLimit(T defaultInstance,
       int recursionLimit) {
     return ProtoLiteUtils.marshallerWithRecursionLimit(defaultInstance, recursionLimit);

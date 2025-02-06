@@ -94,7 +94,6 @@ public final class ProtoLiteUtils {
    *
    * @since 1.56.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10108")
   public static <T extends MessageLite> Marshaller<T> marshallerWithRecursionLimit(
       T defaultInstance, int recursionLimit) {
     return new MessageMarshaller<>(defaultInstance, recursionLimit);
