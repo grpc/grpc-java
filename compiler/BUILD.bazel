@@ -13,6 +13,7 @@ cc_binary(
     visibility = ["//visibility:public"],
     deps = [
         "@com_google_protobuf//:protoc_lib",
+        "@com_google_protobuf//:protoc_java",
     ],
 )
 
