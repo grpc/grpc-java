@@ -37,11 +37,6 @@ configurations {
     undertowTestImplementation.extendsFrom(itImplementation)
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
-}
-
 // Mechanically transform sources from grpc-servlet to use the corrected packages
 def migrate(String name, String inputDir, SourceSet sourceSet) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
@@ -114,6 +109,9 @@ if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
     def jetty11Test = tasks.register('jetty11Test', Test) {
         classpath = sourceSets.jettyTest.runtimeClasspath
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
+    }
+    tasks.named('compileJettyTestJava') { JavaCompile task ->
+        task.options.release.set 8
     }
     tasks.named("check").configure {
         dependsOn jetty11Test

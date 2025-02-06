@@ -53,10 +53,8 @@ guava-jre = "com.google.guava:guava:33.3.1-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
 # 6.0.0+ use java.lang.Deprecated forRemoval and since from Java 9
 jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:5.0.0"
-# Not using the relocated org.apache.tomcat:tomcat-annotations-api because it requires migrating
-# java.annotation to jakarta.annotation. According to
-# https://github.com/grpc/grpc-java/issues/6833#issuecomment-602242609
-# there are so many different artifacts containing it, which causes classpath collisions.
+# Using javax.annotation is fine as it is part of the JDK, we don't want to depend on J2EE
+# where it is relocated to as org.apache.tomcat:tomcat-annotations-api. See issue #7179.
 javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
 # 12.0.0+ require Java 17+
