@@ -111,7 +111,7 @@ if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
     }
     tasks.named('compileJettyTestJava') { JavaCompile task ->
-        task.options.release.set 8
+        task.options.release.set 9
     }
     tasks.named("check").configure {
         dependsOn jetty11Test
