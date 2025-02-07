@@ -255,6 +255,9 @@ public class RingHashLoadBalancerProviderTest {
       assertThat(config.minRingSize).isEqualTo(10L);
       assertThat(config.maxRingSize).isEqualTo(100L);
       assertThat(config.requestHashHeader).isEqualTo("dummy-hash");
+      assertThat(config.toString()).contains("minRingSize=10");
+      assertThat(config.toString()).contains("maxRingSize=100");
+      assertThat(config.toString()).contains("requestHashHeader=dummy-hash");
     } finally {
       System.clearProperty(GRPC_EXPERIMENTAL_RING_HASH_SET_REQUEST_HASH_KEY);
     }
