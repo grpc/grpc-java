@@ -205,7 +205,7 @@ public class XdsClientFallbackTest {
         ControlPlaneRule.buildClientListener(MAIN_SERVER, serverName));
 
     controlPlane.setRdsConfig(rdsName,
-        ControlPlaneRule.buildRouteConfiguration(MAIN_SERVER, rdsName, clusterName));
+        XdsTestUtils.buildRouteConfiguration(MAIN_SERVER, rdsName, clusterName));
     controlPlane.setCdsConfig(clusterName, ControlPlaneRule.buildCluster(clusterName, edsName));
 
     controlPlane.setEdsConfig(edsName,
