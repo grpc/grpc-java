@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import io.grpc.internal.WritableBuffer;
 import io.grpc.internal.WritableBufferAllocator;
 import io.grpc.internal.WritableBufferAllocatorTestBase;
+import okio.Segment;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -42,7 +43,7 @@ public class OkHttpWritableBufferAllocatorTest extends WritableBufferAllocatorTe
   public void testCapacity() {
     WritableBuffer buffer = allocator().allocate(4096);
     assertEquals(0, buffer.readableBytes());
-    assertEquals(4096, buffer.writableBytes());
+    assertEquals(Segment.SIZE, buffer.writableBytes());
   }
 
   @Test
@@ -56,6 +57,6 @@ public class OkHttpWritableBufferAllocatorTest extends WritableBufferAllocatorTe
   public void testIsExactBelowMaxCapacity() {
     WritableBuffer buffer = allocator().allocate(4097);
     assertEquals(0, buffer.readableBytes());
-    assertEquals(4097, buffer.writableBytes());
+    assertEquals(Segment.SIZE, buffer.writableBytes());
   }
 }
