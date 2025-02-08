@@ -34,9 +34,15 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 public class CommonBootstrapperTestUtils {
+  public static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
   private static final String SERVER_URI_CUSTOM_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
+  public static final String LDS_RESOURCE = "listener.googleapis.com";
+  public static final String RDS_RESOURCE = "route-configuration.googleapis.com";
+  public static final String CDS_RESOURCE = "cluster.googleapis.com";
+  public static final String EDS_RESOURCE = "cluster-load-assignment.googleapis.com";
+
   private static final String FILE_WATCHER_CONFIG = "{\"path\": \"/etc/secret/certs\"}";
   private static final String MESHCA_CONFIG =
       "{\n"
