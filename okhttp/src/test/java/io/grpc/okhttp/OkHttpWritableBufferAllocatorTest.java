@@ -55,8 +55,8 @@ public class OkHttpWritableBufferAllocatorTest extends WritableBufferAllocatorTe
 
   @Test
   public void testIsExactBelowMaxCapacity() {
-    WritableBuffer buffer = allocator().allocate(4097);
+    WritableBuffer buffer = allocator().allocate(Segment.SIZE + 1);
     assertEquals(0, buffer.readableBytes());
-    assertEquals(Segment.SIZE, buffer.writableBytes());
+    assertEquals(Segment.SIZE * 2, buffer.writableBytes());
   }
 }
