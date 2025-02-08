@@ -47,8 +47,7 @@ class NettyWritableBufferAllocator implements WritableBufferAllocator {
 
   @Override
   public WritableBuffer allocate(int capacityHint) {
-    capacityHint = Math.min(MAX_BUFFER, Math.max(MIN_BUFFER, capacityHint));
-    return new NettyWritableBuffer(allocator.buffer(capacityHint, capacityHint));
+    return allocateKnownLength(Math.max(MIN_BUFFER, capacityHint));
   }
 
   @Override
