@@ -124,8 +124,6 @@ public class MessageFramer implements Framer {
     maxOutboundMessageSize = maxSize;
   }
 
-  private static final int COMPRESSION_MIN_LENGTH = 20;
-
   /**
    * Writes out a payload message.
    *
@@ -143,7 +141,7 @@ public class MessageFramer implements Framer {
     int messageLength = -2;
     try {
       messageLength = getKnownLength(message);
-      if (messageLength >= COMPRESSION_MIN_LENGTH && compressed) {
+      if (messageLength != 0 && compressed) {
         written = writeCompressed(message, messageLength);
       } else {
         written = writeUncompressed(message, messageLength);
