@@ -32,5 +32,7 @@ public interface WritableBufferAllocator {
    * Request a new {@link WritableBuffer} with the given {@code capacityHint}. This method is
    * similar to {@link #allocate(int)}, but there is no need to allocate greater capacity.
    */
-  WritableBuffer allocateKnownLength(int capacityHint);
+  default WritableBuffer allocateKnownLength(int capacityHint) {
+    return allocate(capacityHint);
+  }
 }
