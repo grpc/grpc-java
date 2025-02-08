@@ -75,6 +75,10 @@ public class MessageFramer implements Framer {
   // effectively final.  Can only be set once.
   private int maxOutboundMessageSize = NO_MAX_OUTBOUND_MESSAGE_SIZE;
   private WritableBuffer buffer;
+  /**
+   * if &gt; 0 - the number of bytes to allocate for the current known-length message.
+   */
+  private int knownLengthPendingAllocation;
   private Compressor compressor = Codec.Identity.NONE;
   private boolean messageCompression = true;
   private final OutputStreamAdapter outputStreamAdapter = new OutputStreamAdapter();
@@ -120,6 +124,8 @@ public class MessageFramer implements Framer {
     maxOutboundMessageSize = maxSize;
   }
 
+  private static final int COMPRESSION_MIN_LENGTH = 20;
+
   /**
    * Writes out a payload message.
    *
@@ -137,7 +143,7 @@ public class MessageFramer implements Framer {
     int messageLength = -2;
     try {
       messageLength = getKnownLength(message);
-      if (messageLength != 0 && compressed) {
+      if (messageLength >= COMPRESSION_MIN_LENGTH && compressed) {
         written = writeCompressed(message, messageLength);
       } else {
         written = writeUncompressed(message, messageLength);
@@ -222,11 +228,23 @@ public class MessageFramer implements Framer {
     headerScratch.put(UNCOMPRESSED).putInt(messageLength);
     // Allocate the initial buffer chunk based on frame header + payload length.
     // Note that the allocator may allocate a buffer larger or smaller than this length
+    knownLengthPendingAllocation = HEADER_LENGTH + messageLength;
     if (buffer == null) {
-      buffer = bufferAllocator.allocate(headerScratch.position() + messageLength);
+      buffer = allocateKnownLength();
     }
     writeRaw(headerScratch.array(), 0, headerScratch.position());
     return writeToOutputStream(message, outputStreamAdapter);
+  }
+
+  /**
+   * Allocate buffer according to {@link #knownLengthPendingAllocation} which is decremented after
+   * that.
+   */
+  private WritableBuffer allocateKnownLength() {
+    WritableBuffer newBuffer = bufferAllocator.allocateKnownLength(knownLengthPendingAllocation);
+    knownLengthPendingAllocation -= Math.min(knownLengthPendingAllocation,
+        newBuffer.writableBytes());
+    return newBuffer;
   }
 
   /**
@@ -243,7 +261,7 @@ public class MessageFramer implements Framer {
     }
     headerScratch.clear();
     headerScratch.put(compressed ? COMPRESSED : UNCOMPRESSED).putInt(messageLength);
-    WritableBuffer writeableHeader = bufferAllocator.allocate(HEADER_LENGTH);
+    WritableBuffer writeableHeader = bufferAllocator.allocateKnownLength(HEADER_LENGTH);
     writeableHeader.write(headerScratch.array(), 0, headerScratch.position());
     if (messageLength == 0) {
       // the payload had 0 length so make the header the current buffer.
@@ -289,7 +307,9 @@ public class MessageFramer implements Framer {
       }
       if (buffer == null) {
         // Request a buffer allocation using the message length as a hint.
-        buffer = bufferAllocator.allocate(len);
+        buffer = knownLengthPendingAllocation > 0
+            ? allocateKnownLength()
+            : bufferAllocator.allocate(len);
       }
       int toWrite = min(len, buffer.writableBytes());
       buffer.write(b, off, toWrite);
@@ -397,7 +417,7 @@ public class MessageFramer implements Framer {
      * {@link #write(byte[], int, int)}.
      */
     @Override
-    public void write(int b) throws IOException {
+    public void write(int b) {
       if (current != null && current.writableBytes() > 0) {
         current.write((byte)b);
         return;
