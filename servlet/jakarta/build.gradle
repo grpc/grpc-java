@@ -37,6 +37,11 @@ configurations {
     undertowTestImplementation.extendsFrom(itImplementation)
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
 // Mechanically transform sources from grpc-servlet to use the corrected packages
 def migrate(String name, String inputDir, SourceSet sourceSet) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
