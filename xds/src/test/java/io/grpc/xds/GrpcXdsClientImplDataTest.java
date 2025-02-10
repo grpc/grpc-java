@@ -2719,7 +2719,7 @@ public class GrpcXdsClientImplDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
@@ -2738,7 +2738,7 @@ public class GrpcXdsClientImplDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
@@ -2757,7 +2757,7 @@ public class GrpcXdsClientImplDataTest {
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
             + "without typed_config");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
@@ -2780,13 +2780,13 @@ public class GrpcXdsClientImplDataTest {
         "FilterChain filter-chain-foo contains filter unsupported with unsupported "
             + "typed_config type unsupported-type-url");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
   @Test
   public void parseFilterChain_noName() throws ResourceInvalidException {
-    FilterChain filterChain1 =
+    FilterChain filterChain0 =
         FilterChain.newBuilder()
             .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
             .addFilters(buildHttpConnectionManagerFilter(
@@ -2796,9 +2796,11 @@ public class GrpcXdsClientImplDataTest {
                     .setTypedConfig(Any.pack(Router.newBuilder().build()))
                     .build()))
             .build();
-    FilterChain filterChain2 =
+
+    FilterChain filterChain1 =
         FilterChain.newBuilder()
-            .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
+            .setFilterChainMatch(
+                FilterChainMatch.newBuilder().addAllSourcePorts(Arrays.asList(443, 8080)))
             .addFilters(buildHttpConnectionManagerFilter(
                 HttpFilter.newBuilder()
                     .setName("http-filter-bar")
@@ -2807,13 +2809,19 @@ public class GrpcXdsClientImplDataTest {
                     .build()))
             .build();
 
-    EnvoyServerProtoData.FilterChain parsedFilterChain1 = XdsListenerResource.parseFilterChain(
-        filterChain1, null, filterRegistry, null,
-        null, getXdsResourceTypeArgs(true));
-    EnvoyServerProtoData.FilterChain parsedFilterChain2 = XdsListenerResource.parseFilterChain(
-        filterChain2, null, filterRegistry, null,
-        null, getXdsResourceTypeArgs(true));
-    assertThat(parsedFilterChain1.name()).isEqualTo(parsedFilterChain2.name());
+    Listener listenerProto =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .addAllFilterChains(Arrays.asList(filterChain0, filterChain1))
+            .setDefaultFilterChain(filterChain0)
+            .build();
+    EnvoyServerProtoData.Listener listener = XdsListenerResource.parseServerSideListener(
+        listenerProto, null, filterRegistry, null, getXdsResourceTypeArgs(true));
+
+    assertThat(listener.filterChains().get(0).name()).isEqualTo("chain_0");
+    assertThat(listener.filterChains().get(1).name()).isEqualTo("chain_1");
+    assertThat(listener.defaultFilterChain().name()).isEqualTo("chain_default");
   }
 
   @Test
