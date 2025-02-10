@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Multiset;
@@ -403,11 +404,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           return PickResult.withError(RPC_HASH_NOT_FOUND);
         }
       } else {
-        String headerValue =
+        Iterable<String> headerValues =
             args.getHeaders()
-                .get(Metadata.Key.of(requestHashHeader, Metadata.ASCII_STRING_MARSHALLER));
-        if (headerValue != null) {
-          requestHash = hashFunc.hashAsciiString(headerValue);
+                .getAll(Metadata.Key.of(requestHashHeader, Metadata.ASCII_STRING_MARSHALLER));
+        if (headerValues != null) {
+          requestHash = hashFunc.hashAsciiString(Joiner.on(",").join(headerValues));
         } else {
           requestHash = random.nextLong();
           usingRandomHash = true;

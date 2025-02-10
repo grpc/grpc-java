@@ -98,6 +98,9 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class RingHashLoadBalancerTest {
   private static final String AUTHORITY = "foo.googleapis.com";
+  private static final String CUSTOM_REQUEST_HASH_HEADER = "custom-request-hash-header";
+  private static final Metadata.Key<String> CUSTOM_METADATA_KEY =
+      Metadata.Key.of(CUSTOM_REQUEST_HASH_HEADER, Metadata.ASCII_STRING_MARSHALLER);
   private static final Attributes.Key<String> CUSTOM_KEY = Attributes.Key.create("custom-key");
   private static final ConnectivityStateInfo CSI_CONNECTING =
       ConnectivityStateInfo.forNonError(CONNECTING);
@@ -413,9 +416,9 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
-  public void deterministicPickWithRequestHashHeader() {
+  public void deterministicPickWithRequestHashHeader_oneHeaderValue() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(3, 3, "custom-request-hash-key");
+    RingHashConfig config = new RingHashConfig(3, 3, CUSTOM_REQUEST_HASH_HEADER);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     initializeLbSubchannels(config, servers);
     InOrder inOrder = Mockito.inOrder(helper);
@@ -428,9 +431,38 @@ public class RingHashLoadBalancerTest {
 
     // Pick subchannel with custom request hash header where the rpc hash hits server1.
     Metadata headers = new Metadata();
-    headers.put(
-        Metadata.Key.of("custom-request-hash-key", Metadata.ASCII_STRING_MARSHALLER),
-        "FakeSocketAddress-server1_0");
+    headers.put(CUSTOM_METADATA_KEY, "FakeSocketAddress-server1_0");
+    PickSubchannelArgs args =
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod(),
+            headers,
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {});
+    SubchannelPicker picker = pickerCaptor.getValue();
+    PickResult result = picker.pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));
+  }
+
+  @Test
+  public void deterministicPickWithRequestHashHeader_multipleHeaderValues() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3, CUSTOM_REQUEST_HASH_HEADER);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    initializeLbSubchannels(config, servers);
+    InOrder inOrder = Mockito.inOrder(helper);
+
+    // Bring all subchannels to READY.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, CSI_READY);
+      inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    }
+
+    // Pick subchannel with custom request hash header with multiple values for the same key where
+    // the rpc hash hits server1.
+    Metadata headers = new Metadata();
+    headers.put(CUSTOM_METADATA_KEY, "FakeSocketAddress-server0_0");
+    headers.put(CUSTOM_METADATA_KEY, "FakeSocketAddress-server1_0");
     PickSubchannelArgs args =
         new PickSubchannelArgsImpl(
             TestMethodDescriptors.voidMethod(),
