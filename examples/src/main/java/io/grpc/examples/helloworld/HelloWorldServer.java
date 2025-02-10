@@ -34,11 +34,11 @@ public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
 
   private Server server;
-  // Create a fixed thread pool
-  ExecutorService executor = Executors.newFixedThreadPool(2);
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
+    // Create a fixed thread pool
+    ExecutorService executor = Executors.newFixedThreadPool(2);
     server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .executor(executor)
         .addService(new GreeterImpl())
