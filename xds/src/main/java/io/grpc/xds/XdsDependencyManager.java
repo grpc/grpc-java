@@ -29,6 +29,9 @@ import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
+import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsConfig.XdsClusterConfig.AggregateConfig;
+import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
@@ -36,6 +39,7 @@ import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -299,27 +304,123 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     Map<String, ? extends XdsWatcherBase<?>> cdsWatchers =
         resourceWatchers.get(CLUSTER_RESOURCE).watchers;
 
-    // Iterate CDS watchers
-    for (XdsWatcherBase<?> watcher : cdsWatchers.values()) {
-      CdsWatcher cdsWatcher = (CdsWatcher) watcher;
-      String clusterName = cdsWatcher.resourceName();
-      StatusOr<XdsClusterResource.CdsUpdate> cdsUpdate = cdsWatcher.getData();
-      if (cdsUpdate.hasValue()) {
-        XdsConfig.XdsClusterConfig clusterConfig;
-        String edsName = cdsUpdate.getValue().edsServiceName();
-        EdsWatcher edsWatcher = (EdsWatcher) edsWatchers.get(edsName);
+    // Only care about aggregates from LDS/RDS or subscriptions and the leaf clusters
+    List<String> topLevelClusters =
+        cdsWatchers.values().stream()
+            .filter(XdsDependencyManager::isTopLevelCluster)
+            .map(XdsWatcherBase::resourceName)
+            .collect(Collectors.toList());
 
-        // Only EDS type clusters have endpoint data
-        StatusOr<XdsEndpointResource.EdsUpdate> data =
-            edsWatcher != null ? edsWatcher.getData() : null;
-        clusterConfig = new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate.getValue(), data);
-        builder.addCluster(clusterName, StatusOr.fromValue(clusterConfig));
+    // Flatten multi-level aggregates into lists of leaf clusters
+    Set<String> leafNames =
+        addTopLevelClustersToBuilder(builder, edsWatchers, cdsWatchers, topLevelClusters);
+
+    addLeavesToBuilder(builder, edsWatchers, leafNames);
+
+    return builder.build();
+  }
+
+  private void addLeavesToBuilder(XdsConfig.XdsConfigBuilder builder,
+                                  Map<String, ? extends XdsWatcherBase<?>> edsWatchers,
+                                  Set<String> leafNames) {
+    for (String clusterName : leafNames) {
+      CdsWatcher cdsWatcher = getCluster(clusterName);
+      StatusOr<XdsClusterResource.CdsUpdate> cdsUpdateOr = cdsWatcher.getData();
+
+      if (cdsUpdateOr.hasValue()) {
+        XdsClusterResource.CdsUpdate cdsUpdate = cdsUpdateOr.getValue();
+        if (cdsUpdate.clusterType() == ClusterType.EDS) {
+          EdsWatcher edsWatcher = (EdsWatcher) edsWatchers.get(cdsUpdate.edsServiceName());
+          if (edsWatcher != null) {
+            EndpointConfig child = new EndpointConfig(edsWatcher.getData());
+            builder.addCluster(clusterName, StatusOr.fromValue(
+                new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate, child)));
+          } else {
+            builder.addCluster(clusterName, StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
+                "EDS resource not found for cluster " + clusterName)));
+          }
+        } else if (cdsUpdate.clusterType() == ClusterType.LOGICAL_DNS) {
+          // TODO get the resolved endpoint configuration
+          builder.addCluster(clusterName, StatusOr.fromValue(
+              new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate, new EndpointConfig(null))));
+        }
       } else {
-        builder.addCluster(clusterName, StatusOr.fromStatus(cdsUpdate.getStatus()));
+        builder.addCluster(clusterName, StatusOr.fromStatus(cdsUpdateOr.getStatus()));
+      }
+    }
+  }
+
+  // Adds the top-level clusters to the builder and returns the leaf cluster names
+  private Set<String> addTopLevelClustersToBuilder(
+      XdsConfig.XdsConfigBuilder builder, Map<String, ? extends XdsWatcherBase<?>> edsWatchers,
+      Map<String, ? extends XdsWatcherBase<?>> cdsWatchers, List<String> topLevelClusters) {
+
+    Set<String> leafClusterNames = new HashSet<>();
+    for (String clusterName : topLevelClusters) {
+      CdsWatcher cdsWatcher = (CdsWatcher) cdsWatchers.get(clusterName);
+      StatusOr<XdsClusterResource.CdsUpdate> cdsWatcherDataOr = cdsWatcher.getData();
+      if (!cdsWatcher.hasDataValue()) {
+        builder.addCluster(clusterName, StatusOr.fromStatus(cdsWatcherDataOr.getStatus()));
+        continue;
+      }
+
+      XdsClusterResource.CdsUpdate cdsUpdate = cdsWatcherDataOr.getValue();
+      XdsConfig.XdsClusterConfig.ClusterChild child;
+      switch (cdsUpdate.clusterType()) {
+        case AGGREGATE:
+          List<String> leafNames = getLeafNames(cdsUpdate);
+          child = new AggregateConfig(leafNames);
+          leafClusterNames.addAll(leafNames);
+          break;
+        case EDS:
+          EdsWatcher edsWatcher = (EdsWatcher) edsWatchers.get(cdsUpdate.edsServiceName());
+          if (edsWatcher != null) {
+            child = new EndpointConfig(edsWatcher.getData());
+          } else {
+            builder.addCluster(clusterName, StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
+                "EDS resource not found for cluster " + clusterName)));
+            continue;
+          }
+          break;
+        case LOGICAL_DNS:
+          // TODO get the resolved endpoint configuration
+          child = new EndpointConfig(null);
+          break;
+        default:
+          throw new IllegalStateException("Unexpected value: " + cdsUpdate.clusterType());
+      }
+      builder.addCluster(clusterName, StatusOr.fromValue(
+          new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate, child)));
+    }
+
+    return leafClusterNames;
+  }
+
+  private List<String> getLeafNames(XdsClusterResource.CdsUpdate cdsUpdate) {
+    List<String> childNames = new ArrayList<>();
+
+    for (String cluster : cdsUpdate.prioritizedClusterNames()) {
+      StatusOr<XdsClusterResource.CdsUpdate> data = getCluster(cluster).getData();
+      if (data == null || !data.hasValue() || data.getValue() == null) {
+        childNames.add(cluster);
+        continue;
+      }
+      if (data.getValue().clusterType() == ClusterType.AGGREGATE) {
+        childNames.addAll(getLeafNames(data.getValue()));
+      } else {
+        childNames.add(cluster);
       }
     }
 
-    return builder.build();
+    return childNames;
+  }
+
+  private static boolean isTopLevelCluster(XdsWatcherBase<?> cdsWatcher) {
+    if (! (cdsWatcher instanceof CdsWatcher)) {
+      return false;
+    }
+    return ((CdsWatcher)cdsWatcher).parentContexts.values().stream()
+        .anyMatch(depth -> depth == 1);
   }
 
   @Override
