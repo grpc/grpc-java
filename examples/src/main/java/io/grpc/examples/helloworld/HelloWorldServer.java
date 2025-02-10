@@ -37,7 +37,14 @@ public class HelloWorldServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    // Create a fixed thread pool
+    /**
+     * By default gRPC uses a global, shared Executor.newCachedThreadPool() for gRPC callbacks into
+     * your application. This is convenient, but can cause an excessive number of threads to be
+     * created if there are many RPCs. It is often better to limit the number of threads your
+     * application uses for processing and let RPCs queue when the CPU is saturated.
+     * The appropriate number of threads varies heavily between applications.
+     * Async application code generally does not need more threads than CPU cores.
+     */
     ExecutorService executor = Executors.newFixedThreadPool(2);
     server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .executor(executor)
