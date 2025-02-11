@@ -60,7 +60,6 @@ import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -459,47 +458,69 @@ final class XdsServerWrapper extends Server {
     }
 
     private void updateSelector() {
-      Map<FilterChain, AtomicReference<ServerRoutingConfig>> filterChainRouting = new HashMap<>();
+      // This is regenerated in generateRoutingConfig() calls below.
       savedRdsRoutingConfigRef.clear();
+
+      // Prepare server routing config map.
+      ImmutableMap.Builder<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs =
+          ImmutableMap.builder();
       for (FilterChain filterChain: filterChains) {
-        filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
+        routingConfigs.put(filterChain, generateRoutingConfig(filterChain));
       }
-      FilterChainSelector selector = new FilterChainSelector(
-          Collections.unmodifiableMap(filterChainRouting),
-          defaultFilterChain == null ? null : defaultFilterChain.sslContextProviderSupplier(),
-          defaultFilterChain == null ? new AtomicReference<ServerRoutingConfig>() :
-              generateRoutingConfig(defaultFilterChain));
-      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
+
+      // Prepare the new selector.
+      FilterChainSelector selector;
+      if (defaultFilterChain != null) {
+        selector = new FilterChainSelector(
+            routingConfigs.build(),
+            defaultFilterChain.sslContextProviderSupplier(),
+            generateRoutingConfig(defaultFilterChain));
+      } else {
+        selector = new FilterChainSelector(routingConfigs.build(), null, new AtomicReference<>());
+      }
+
+      // Prepare the list of current selector's resources to close later.
+      List<SslContextProviderSupplier> oldSslSuppliers = getSuppliersInUse();
+
+      // Swap the selectors, initiate a graceful shutdown of the old one.
       logger.log(Level.FINEST, "Updating selector {0}", selector);
       filterChainSelectorManager.updateSelector(selector);
-      for (SslContextProviderSupplier e: toRelease) {
-        e.close();
+
+      // Release old resources.
+      for (SslContextProviderSupplier supplier: oldSslSuppliers) {
+        supplier.close();
       }
+
+      // Now that we have valid Transport Socket config, we can start/restart listening on a port.
       startDelegateServer();
     }
 
     private AtomicReference<ServerRoutingConfig> generateRoutingConfig(FilterChain filterChain) {
       HttpConnectionManager hcm = filterChain.httpConnectionManager();
+      ImmutableMap<Route, ServerInterceptor> interceptors;
+
+      // Inlined routes.
       if (hcm.virtualHosts() != null) {
-        ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
-                hcm.httpFilterConfigs(), hcm.virtualHosts());
-        return new AtomicReference<>(ServerRoutingConfig.create(hcm.virtualHosts(),interceptors));
-      } else {
-        RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
-        checkNotNull(rds, "rds");
-        AtomicReference<ServerRoutingConfig> serverRoutingConfigRef = new AtomicReference<>();
-        if (rds.savedVirtualHosts != null) {
-          ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
-              hcm.httpFilterConfigs(), rds.savedVirtualHosts);
-          ServerRoutingConfig serverRoutingConfig =
-              ServerRoutingConfig.create(rds.savedVirtualHosts, interceptors);
-          serverRoutingConfigRef.set(serverRoutingConfig);
-        } else {
-          serverRoutingConfigRef.set(ServerRoutingConfig.FAILING_ROUTING_CONFIG);
-        }
-        savedRdsRoutingConfigRef.put(filterChain, serverRoutingConfigRef);
-        return serverRoutingConfigRef;
+        interceptors = generatePerRouteInterceptors(hcm.httpFilterConfigs(), hcm.virtualHosts());
+        return new AtomicReference<>(ServerRoutingConfig.create(hcm.virtualHosts(), interceptors));
       }
+
+      // Routes from RDS.
+      RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
+      checkNotNull(rds, "rds");
+
+      ServerRoutingConfig routingConfig;
+      ImmutableList<VirtualHost> savedVhosts = rds.savedVirtualHosts;
+      if (savedVhosts != null) {
+        interceptors = generatePerRouteInterceptors(hcm.httpFilterConfigs(), savedVhosts);
+        routingConfig = ServerRoutingConfig.create(savedVhosts, interceptors);
+      } else {
+        routingConfig = ServerRoutingConfig.FAILING_ROUTING_CONFIG;
+      }
+
+      AtomicReference<ServerRoutingConfig> routingConfigRef = new AtomicReference<>(routingConfig);
+      savedRdsRoutingConfigRef.put(filterChain, routingConfigRef);
+      return routingConfigRef;
     }
 
     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
