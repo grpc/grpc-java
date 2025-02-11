@@ -109,7 +109,7 @@ final class XdsConfig {
     XdsClusterConfig(String clusterName, CdsUpdate clusterResource, ClusterChild details) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.clusterResource = checkNotNull(clusterResource, "clusterResource");
-      this.children = details;
+      this.children = checkNotNull(details, "details");
     }
 
     @Override
@@ -152,8 +152,9 @@ final class XdsConfig {
 
     interface ClusterChild {}
 
-    // Endpoint info for EDS and LOGICAL_DNS clusters.  If there was an
-    // error, endpoints will be null and resolution_note will be set.
+    /** Endpoint info for EDS and LOGICAL_DNS clusters.  If there was an
+     * error, endpoints will be null and resolution_note will be set.
+     */
     static final class EndpointConfig implements ClusterChild {
       private final StatusOr<EdsUpdate> endpoint;
 
