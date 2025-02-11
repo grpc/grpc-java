@@ -308,7 +308,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     List<String> topLevelClusters =
         cdsWatchers.values().stream()
             .filter(XdsDependencyManager::isTopLevelCluster)
-            .map(XdsWatcherBase::resourceName)
+            .map(w -> w.resourceName())
             .collect(Collectors.toList());
 
     // Flatten multi-level aggregates into lists of leaf clusters
