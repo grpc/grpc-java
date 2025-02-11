@@ -57,6 +57,7 @@ import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
@@ -269,7 +270,7 @@ public class XdsTestUtils {
         CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
-        CLUSTER_NAME, cdsUpdate, StatusOr.fromValue(edsUpdate));
+        CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
 
     builder
         .setListener(ldsUpdate)
