@@ -33,10 +33,6 @@ android {
 
     defaultConfig {
         applicationId "io.grpc.android.integrationtest"
-        // Held back to 20 as Gradle fails to build at the 21 level. This is
-        // presumably a Gradle bug that can be revisited later.
-        // Maybe this issue: https://github.com/gradle/gradle/issues/20778
-        minSdkVersion 20
         targetSdkVersion 33
         versionCode 1
         versionName "1.0"
