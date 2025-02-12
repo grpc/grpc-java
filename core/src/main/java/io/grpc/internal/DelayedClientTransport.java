@@ -300,10 +300,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
       if (callOptions.isWaitForReady() && pickResult.hasResult()) {
         stream.lastPickStatus = pickResult.getStatus();
       }
-      // User code provided authority takes precedence over the LB provided one.
-      if (callOptions.getAuthority() == null && pickResult.getAuthorityOverride() != null) {
-        stream.setAuthority(pickResult.getAuthorityOverride());
-      }
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
           callOptions.isWaitForReady());
       if (transport != null) {
