@@ -87,62 +87,46 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       return addressValidityStatus;
     }
 
-    try {
-      resolvingAddresses = true;
-      AcceptResolvedAddrRetVal acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
-      }
-
-      // Now do the ringhash specific logic with weights and building the ring
-      RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      if (config == null) {
-        throw new IllegalArgumentException("Missing RingHash configuration");
-      }
-      Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
-      long totalWeight = 0L;
-      for (EquivalentAddressGroup eag : addrList) {
-        Long weight = eag.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT);
-        // Support two ways of server weighing: either multiple instances of the same address
-        // or each address contains a per-address weight attribute. If a weight is not provided,
-        // each occurrence of the address will be counted a weight value of one.
-        if (weight == null) {
-          weight = 1L;
-        }
-        totalWeight += weight;
-        EquivalentAddressGroup addrKey = stripAttrs(eag);
-        if (serverWeights.containsKey(addrKey)) {
-          serverWeights.put(addrKey, serverWeights.get(addrKey) + weight);
-        } else {
-          serverWeights.put(addrKey, weight);
-        }
-      }
-      // Calculate scale
-      long minWeight = Collections.min(serverWeights.values());
-      double normalizedMinWeight = (double) minWeight / totalWeight;
-      // Scale up the number of hashes per host such that the least-weighted host gets a whole
-      // number of hashes on the the ring. Other hosts might not end up with whole numbers, and
-      // that's fine (the ring-building algorithm can handle this). This preserves the original
-      // implementation's behavior: when weights aren't provided, all hosts should get an equal
-      // number of hashes. In the case where this number exceeds the max_ring_size, it's scaled
-      // back down to fit.
-      double scale = Math.min(
-          Math.ceil(normalizedMinWeight * config.minRingSize) / normalizedMinWeight,
-          (double) config.maxRingSize);
-
-      // Build the ring
-      ring = buildRing(serverWeights, totalWeight, scale);
-
-      // Must update channel picker before return so that new RPCs will not be routed to deleted
-      // clusters and resolver can remove them in service config.
-      updateOverallBalancingState();
-
-      shutdownRemoved(acceptRetVal.removedChildren);
-    } finally {
-      this.resolvingAddresses = false;
+    // Now do the ringhash specific logic with weights and building the ring
+    RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (config == null) {
+      throw new IllegalArgumentException("Missing RingHash configuration");
     }
+    Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
+    long totalWeight = 0L;
+    for (EquivalentAddressGroup eag : addrList) {
+      Long weight = eag.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT);
+      // Support two ways of server weighing: either multiple instances of the same address
+      // or each address contains a per-address weight attribute. If a weight is not provided,
+      // each occurrence of the address will be counted a weight value of one.
+      if (weight == null) {
+        weight = 1L;
+      }
+      totalWeight += weight;
+      EquivalentAddressGroup addrKey = stripAttrs(eag);
+      if (serverWeights.containsKey(addrKey)) {
+        serverWeights.put(addrKey, serverWeights.get(addrKey) + weight);
+      } else {
+        serverWeights.put(addrKey, weight);
+      }
+    }
+    // Calculate scale
+    long minWeight = Collections.min(serverWeights.values());
+    double normalizedMinWeight = (double) minWeight / totalWeight;
+    // Scale up the number of hashes per host such that the least-weighted host gets a whole
+    // number of hashes on the the ring. Other hosts might not end up with whole numbers, and
+    // that's fine (the ring-building algorithm can handle this). This preserves the original
+    // implementation's behavior: when weights aren't provided, all hosts should get an equal
+    // number of hashes. In the case where this number exceeds the max_ring_size, it's scaled
+    // back down to fit.
+    double scale = Math.min(
+        Math.ceil(normalizedMinWeight * config.minRingSize) / normalizedMinWeight,
+        (double) config.maxRingSize);
 
-    return Status.OK;
+    // Build the ring
+    ring = buildRing(serverWeights, totalWeight, scale);
+
+    return super.acceptResolvedAddresses(resolvedAddresses);
   }
 
 
