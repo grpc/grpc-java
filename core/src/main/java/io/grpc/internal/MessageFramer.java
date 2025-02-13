@@ -227,22 +227,8 @@ public class MessageFramer implements Framer {
     // Allocate the initial buffer chunk based on frame header + payload length.
     // Note that the allocator may allocate a buffer larger or smaller than this length
     knownLengthPendingAllocation = HEADER_LENGTH + messageLength;
-    if (buffer == null) {
-      buffer = allocateKnownLength();
-    }
     writeRaw(headerScratch.array(), 0, headerScratch.position());
     return writeToOutputStream(message, outputStreamAdapter);
-  }
-
-  /**
-   * Allocate buffer according to {@link #knownLengthPendingAllocation} which is decremented after
-   * that.
-   */
-  private WritableBuffer allocateKnownLength() {
-    WritableBuffer newBuffer = bufferAllocator.allocate(knownLengthPendingAllocation);
-    knownLengthPendingAllocation -= Math.min(knownLengthPendingAllocation,
-        newBuffer.writableBytes());
-    return newBuffer;
   }
 
   /**
@@ -304,10 +290,9 @@ public class MessageFramer implements Framer {
         commitToSink(false, false);
       }
       if (buffer == null) {
-        // Request a buffer allocation using the message length as a hint.
-        buffer = knownLengthPendingAllocation > 0
-            ? allocateKnownLength()
-            : bufferAllocator.allocate(len);
+        checkState(knownLengthPendingAllocation > 0, "knownLengthPendingAllocation reached 0");
+        buffer = bufferAllocator.allocate(knownLengthPendingAllocation);
+        knownLengthPendingAllocation -= min(knownLengthPendingAllocation, buffer.writableBytes());
       }
       int toWrite = min(len, buffer.writableBytes());
       buffer.write(b, off, toWrite);
@@ -424,11 +409,13 @@ public class MessageFramer implements Framer {
       write(singleByte, 0, 1);
     }
 
+    private static final int FIRST_BUFFER_SIZE = 4096;
+
     @Override
     public void write(byte[] b, int off, int len) {
       if (current == null) {
         // Request len bytes initially from the allocator, it may give us more.
-        current = bufferAllocator.allocate(len);
+        current = bufferAllocator.allocate(Math.max(FIRST_BUFFER_SIZE, len));
         bufferList.add(current);
       }
       while (len > 0) {
