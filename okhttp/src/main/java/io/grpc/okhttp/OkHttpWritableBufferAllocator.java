@@ -44,12 +44,7 @@ class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
   @Override
   public WritableBuffer allocate(int capacityHint) {
     // okio buffer uses fixed size Segments, round capacityHint up
-    return allocateKnownLength((capacityHint + Segment.SIZE - 1) / Segment.SIZE * Segment.SIZE);
-  }
-
-  @Override
-  public WritableBuffer allocateKnownLength(int capacityHint) {
-    capacityHint = Math.min(MAX_BUFFER, capacityHint);
-    return new OkHttpWritableBuffer(new Buffer(), capacityHint);
+    return new OkHttpWritableBuffer(new Buffer(),
+        Math.min(MAX_BUFFER, (capacityHint + Segment.SIZE - 1) / Segment.SIZE * Segment.SIZE));
   }
 }

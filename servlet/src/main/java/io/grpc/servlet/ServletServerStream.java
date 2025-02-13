@@ -38,7 +38,6 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportFrameUtil;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
-import io.grpc.internal.WritableBufferAllocator;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -73,7 +72,7 @@ final class ServletServerStream extends AbstractServerStream {
       Attributes attributes,
       String authority,
       InternalLogId logId) throws IOException {
-    super(ALLOCATOR, statsTraceCtx);
+    super(ByteArrayWritableBuffer::new, statsTraceCtx);
     transportState =
         new ServletTransportState(maxInboundMessageSize, statsTraceCtx, new TransportTracer());
     this.attributes = attributes;
@@ -161,20 +160,6 @@ final class ServletServerStream extends AbstractServerStream {
       cancel(Status.fromThrowable(cause));
     }
   }
-
-  private static final WritableBufferAllocator ALLOCATOR = new WritableBufferAllocator() {
-    private static final int MIN_BUFFER = 4096;
-
-    @Override
-    public WritableBuffer allocate(int capacityHint) {
-      return new ByteArrayWritableBuffer(max(MIN_BUFFER, capacityHint));
-    }
-
-    @Override
-    public WritableBuffer allocateKnownLength(int capacityHint) {
-      return new ByteArrayWritableBuffer(capacityHint);
-    }
-  };
 
   private static final class ByteArrayWritableBuffer implements WritableBuffer {
 

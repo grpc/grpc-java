@@ -239,7 +239,7 @@ public class MessageFramer implements Framer {
    * that.
    */
   private WritableBuffer allocateKnownLength() {
-    WritableBuffer newBuffer = bufferAllocator.allocateKnownLength(knownLengthPendingAllocation);
+    WritableBuffer newBuffer = bufferAllocator.allocate(knownLengthPendingAllocation);
     knownLengthPendingAllocation -= Math.min(knownLengthPendingAllocation,
         newBuffer.writableBytes());
     return newBuffer;
@@ -259,7 +259,7 @@ public class MessageFramer implements Framer {
     }
     headerScratch.clear();
     headerScratch.put(compressed ? COMPRESSED : UNCOMPRESSED).putInt(messageLength);
-    WritableBuffer writeableHeader = bufferAllocator.allocateKnownLength(HEADER_LENGTH);
+    WritableBuffer writeableHeader = bufferAllocator.allocate(HEADER_LENGTH);
     writeableHeader.write(headerScratch.array(), 0, headerScratch.position());
     if (messageLength == 0) {
       // the payload had 0 length so make the header the current buffer.
