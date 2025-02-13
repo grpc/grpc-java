@@ -413,8 +413,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     public void appendTimeoutInsight(InsightBuilder insight) {
       if (args.getCallOptions().isWaitForReady()) {
         insight.append("wait_for_ready");
-        if (lastPickStatus != null && !lastPickStatus.isOk()) {
-          insight.appendKeyValue("Last Pick Failure", lastPickStatus);
+        Status status = lastPickStatus;
+        if (status != null && !status.isOk()) {
+          insight.appendKeyValue("Last Pick Failure", status);
         }
       }
       super.appendTimeoutInsight(insight);
