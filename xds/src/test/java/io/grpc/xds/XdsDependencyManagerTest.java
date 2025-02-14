@@ -88,6 +88,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
@@ -696,9 +697,9 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
     // Verify that the config is updated as expected
-    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
-    XdsConfig config = xdsConfigCaptor.getValue();
-    assertThat(config.getClusters().keySet()).containsExactly("root", "clusterA21", "clusterA22");
+    ClusterNameMatcher nameMatcher
+        = new ClusterNameMatcher(Arrays.asList("root", "clusterA21", "clusterA22"));
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(argThat(nameMatcher));
   }
 
   private Listener buildInlineClientListener(String rdsName, String clusterName) {
@@ -787,6 +788,23 @@ public class XdsDependencyManagerTest {
             httpMaxStreamDurationNano, virtualHosts, null));
         ldsWatcher.onChanged(ldsUpdate);
       });
+    }
+  }
+
+  static class ClusterNameMatcher implements ArgumentMatcher<XdsConfig> {
+    private final List<String> expectedNames;
+
+    ClusterNameMatcher(List<String> expectedNames) {
+      this.expectedNames = expectedNames;
+    }
+
+    @Override
+    public boolean matches(XdsConfig xdsConfig) {
+      if (xdsConfig == null || xdsConfig.getClusters() == null) {
+        return false;
+      }
+      return xdsConfig.getClusters().size() == expectedNames.size()
+          && xdsConfig.getClusters().keySet().containsAll(expectedNames);
     }
   }
 }

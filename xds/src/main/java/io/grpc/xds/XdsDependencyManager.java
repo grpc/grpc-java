@@ -149,6 +149,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       throwIfParentContextsNotEmpty(watcher);
     }
 
+    watcher.cancelled = true;
     XdsResourceType<T> type = watcher.type;
     String resourceName = watcher.resourceName;
 
@@ -597,6 +598,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       implements ResourceWatcher<T> {
     private final XdsResourceType<T> type;
     private final String resourceName;
+    boolean cancelled;
+
     @Nullable
     private StatusOr<T> data;
 
@@ -693,6 +696,10 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
+      if (cancelled) {
+        return;
+      }
+
       handleDoesNotExist(resourceName);
       xdsConfigWatcher.onResourceDoesNotExist(toContextString());
     }
@@ -752,6 +759,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
+      if (cancelled) {
+        return;
+      }
       handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
       xdsConfigWatcher.onResourceDoesNotExist(toContextString());
     }
@@ -836,6 +846,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
+      if (cancelled) {
+        return;
+      }
       handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
       maybePublishConfig();
     }
@@ -857,6 +870,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onResourceDoesNotExist(String resourceName) {
+      if (cancelled) {
+        return;
+      }
       handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
       maybePublishConfig();
     }
