@@ -107,6 +107,7 @@ public class WrrLocalityLoadBalancerTest {
     loadBalancer = new WrrLocalityLoadBalancer(mockHelper, lbRegistry);
   }
 
+  @Deprecated
   @Test
   public void handleResolvedAddresses() {
     // A two locality cluster with a mock child LB policy.
@@ -173,6 +174,7 @@ public class WrrLocalityLoadBalancerTest {
     verify(mockWeightedTargetLb).handleNameResolutionError(status);
   }
 
+  @Deprecated
   @Test
   public void localityWeightAttributeNotPropagated() {
     Object childPolicy = newChildConfig(mockChildProvider, null);
@@ -212,6 +214,7 @@ public class WrrLocalityLoadBalancerTest {
     return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
   }
 
+  @Deprecated
   private void deliverAddresses(WrrLocalityConfig config, List<EquivalentAddressGroup> addresses) {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(addresses).setLoadBalancingPolicyConfig(config)
