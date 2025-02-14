@@ -19,6 +19,7 @@ package io.grpc.okhttp;
 import io.grpc.internal.WritableBuffer;
 import io.grpc.internal.WritableBufferAllocator;
 import okio.Buffer;
+import okio.Segment;
 
 /**
  * The default allocator for {@link OkHttpWritableBuffer}s used by the OkHttp transport. OkHttp
@@ -26,9 +27,6 @@ import okio.Buffer;
  * the allocated buffer size here.
  */
 class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
-
-  // Use 4k as our minimum buffer size.
-  private static final int MIN_BUFFER = 4096;
 
   // Set the maximum buffer size to 1MB
   private static final int MAX_BUFFER = 1024 * 1024;
@@ -45,7 +43,9 @@ class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
    */
   @Override
   public WritableBuffer allocate(int capacityHint) {
-    capacityHint = Math.min(MAX_BUFFER, Math.max(MIN_BUFFER, capacityHint));
+    // okio buffer uses fixed size Segments, round capacityHint up
+    capacityHint = Math.min(MAX_BUFFER,
+        (capacityHint + Segment.SIZE - 1) / Segment.SIZE * Segment.SIZE);
     return new OkHttpWritableBuffer(new Buffer(), capacityHint);
   }
 }

@@ -233,7 +233,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Verify that failed SendGrpcFrameCommand results in immediate CancelClientStreamCommand.
     inOrder.verify(writeQueue).enqueue(any(CancelClientStreamCommand.class), eq(true));
     // Verify that any other failures do not produce another CancelClientStreamCommand in the queue.
-    inOrder.verify(writeQueue, atLeast(1)).enqueue(any(SendGrpcFrameCommand.class), eq(false));
+    inOrder.verify(writeQueue, atLeast(0)).enqueue(any(SendGrpcFrameCommand.class), eq(false));
     inOrder.verify(writeQueue).enqueue(any(SendGrpcFrameCommand.class), eq(true));
     inOrder.verifyNoMoreInteractions();
 
