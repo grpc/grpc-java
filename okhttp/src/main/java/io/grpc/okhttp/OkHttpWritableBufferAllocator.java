@@ -41,6 +41,7 @@ class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
    * For OkHttp we will often return a buffer smaller than the requested capacity as this is the
    * mechanism for chunking a large GRPC message over many DATA frames.
    */
+  @SuppressWarnings("KotlinInternal")
   @Override
   public WritableBuffer allocate(int capacityHint) {
     // okio buffer uses fixed size Segments, round capacityHint up

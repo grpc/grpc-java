@@ -39,6 +39,7 @@ public class OkHttpWritableBufferAllocatorTest extends WritableBufferAllocatorTe
     return allocator;
   }
 
+  @SuppressWarnings("KotlinInternal")
   @Test
   public void testCapacity() {
     WritableBuffer buffer = allocator().allocate(4096);
@@ -53,6 +54,7 @@ public class OkHttpWritableBufferAllocatorTest extends WritableBufferAllocatorTe
     assertEquals(1024 * 1024, buffer.writableBytes());
   }
 
+  @SuppressWarnings("KotlinInternal")
   @Test
   public void testIsExactBelowMaxCapacity() {
     WritableBuffer buffer = allocator().allocate(Segment.SIZE + 1);
