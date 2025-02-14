@@ -47,6 +47,8 @@ def migrate(String name, String inputDir, SourceSet sourceSet) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
     sourceSet.java.srcDir tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
         into(outputDir)
+	// Increment when changing the filter, to inform Gradle it needs to rebuild
+	inputs.property("filter-version", "1")
         from("$inputDir/io/grpc/servlet") {
             into('io/grpc/servlet/jakarta')
             filter { String line ->
