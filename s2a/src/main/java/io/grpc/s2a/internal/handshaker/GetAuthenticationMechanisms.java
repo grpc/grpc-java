@@ -24,19 +24,21 @@ import java.util.Optional;
 /** Retrieves the authentication mechanism for a given local identity. */
 @Immutable
 final class GetAuthenticationMechanisms {
-  private static final Optional<AccessTokenManager> TOKEN_MANAGER = AccessTokenManager.create();
+  static final Optional<AccessTokenManager> TOKEN_MANAGER = AccessTokenManager.create();
 
   /**
    * Retrieves the authentication mechanism for a given local identity.
    *
    * @param localIdentity the identity for which to fetch a token.
+   * @param tokenManager the token manager to use for fetching tokens.
    * @return an {@link AuthenticationMechanism} for the given local identity.
    */
-  static Optional<AuthenticationMechanism> getAuthMechanism(Optional<S2AIdentity> localIdentity) {
-    if (!TOKEN_MANAGER.isPresent()) {
+  static Optional<AuthenticationMechanism> getAuthMechanism(Optional<S2AIdentity> localIdentity,
+      Optional<AccessTokenManager> tokenManager) {
+    if (!tokenManager.isPresent()) {
       return Optional.empty();
     }
-    AccessTokenManager manager = TOKEN_MANAGER.get();
+    AccessTokenManager manager = tokenManager.get();
     // If no identity is provided, fetch the default access token and DO NOT attach an identity
     // to the request.
     if (!localIdentity.isPresent()) {
