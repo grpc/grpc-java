@@ -391,6 +391,8 @@ public class MessageFramer implements Framer {
    * {@link OutputStream}.
    */
   private final class BufferChainOutputStream extends OutputStream {
+    private static final int FIRST_BUFFER_SIZE = 4096;
+
     private final List<WritableBuffer> bufferList = new ArrayList<>();
     private WritableBuffer current;
 
@@ -408,8 +410,6 @@ public class MessageFramer implements Framer {
       byte[] singleByte = new byte[]{(byte)b};
       write(singleByte, 0, 1);
     }
-
-    private static final int FIRST_BUFFER_SIZE = 4096;
 
     @Override
     public void write(byte[] b, int off, int len) {
