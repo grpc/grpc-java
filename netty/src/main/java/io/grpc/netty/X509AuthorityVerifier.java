@@ -28,7 +28,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.X509TrustManager;
 
-public class X509AuthorityVerifier implements AuthorityVerifier {
+final class X509AuthorityVerifier implements AuthorityVerifier {
   private final SSLEngine sslEngine;
   private final X509TrustManager x509ExtendedTrustManager;
 
@@ -57,17 +57,15 @@ public class X509AuthorityVerifier implements AuthorityVerifier {
 
   @Override
   public Status verifyAuthority(@Nonnull String authority) {
-    // sslEngine won't be set when creating ClientTlsHandler from InternalProtocolNegotiators
-    // for example.
     if (sslEngine == null || x509ExtendedTrustManager == null) {
-      return Status.FAILED_PRECONDITION.withDescription(
+      return Status.UNAVAILABLE.withDescription(
               "Can't allow authority override in rpc when SslEngine or X509ExtendedTrustManager"
                       + " is not available");
     }
     Status peerVerificationStatus;
     try {
       // Because the authority pseudo-header can contain a port number:
-      // https://www.rfc-editor.org/rfc/rfc7540#section-8.1.2.3com
+      // https://www.rfc-editor.org/rfc/rfc7540#section-8.1.2.3
       verifyAuthorityAllowedForPeerCert(removeAnyPortNumber(authority));
       peerVerificationStatus = Status.OK;
     } catch (SSLPeerUnverifiedException | CertificateException | InvocationTargetException
@@ -98,6 +96,9 @@ public class X509AuthorityVerifier implements AuthorityVerifier {
     X509Certificate[] x509PeerCertificates = new X509Certificate[peerCertificates.length];
     for (int i = 0; i < peerCertificates.length; i++) {
       x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+    }
+    if (checkServerTrustedMethod == null) {
+      throw new IllegalStateException("checkServerTrustedMethod not found");
     }
     checkServerTrustedMethod.invoke(
             x509ExtendedTrustManager, x509PeerCertificates, "RSA", sslEngineWrapper);

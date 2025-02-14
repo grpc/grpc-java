@@ -888,7 +888,7 @@ public class NettyClientTransportTest {
         Status status = ((StatusException) ex.getCause()).getStatus();
         assertThat(status.getDescription()).isEqualTo("Can't allow authority override in rpc "
                 + "when SslEngine or X509ExtendedTrustManager is not available");
-        assertThat(status.getCode()).isEqualTo(Code.FAILED_PRECONDITION);
+        assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
       }
     } finally {
       NettyClientHandler.enablePerRpcAuthorityCheck = false;

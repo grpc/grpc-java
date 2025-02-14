@@ -32,7 +32,7 @@ import javax.security.auth.x500.X500Principal;
 /**
  * Contains certificate/key PEM file utility method(s) for internal usage.
  */
-public class CertificateUtils {
+public final class CertificateUtils {
   /**
    * Creates X509TrustManagers using the provided CA certs.
    */
