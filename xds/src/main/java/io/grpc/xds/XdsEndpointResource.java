@@ -295,7 +295,7 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     }
   }
 
-  static class AddressMetadataParser implements MetadataValueParser {
+  public static class AddressMetadataParser implements MetadataValueParser {
 
     @Override
     public String getTypeUrl() {
@@ -303,10 +303,13 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     }
 
     @Override
-    public java.net.SocketAddress parse(Any any) throws InvalidProtocolBufferException {
-      Address addressProto = any.unpack(Address.class);
-      SocketAddress socketAddress = addressProto.getSocketAddress();
-
+    public java.net.SocketAddress parse(Any any) throws ResourceInvalidException {
+      SocketAddress socketAddress;
+      try {
+        socketAddress = any.unpack(Address.class).getSocketAddress();
+      } catch (InvalidProtocolBufferException ex) {
+        throw new ResourceInvalidException("Invalid Resource in address proto", ex);
+      }
       validateAddress(socketAddress);
 
       String ip = socketAddress.getAddress();
@@ -319,18 +322,18 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       }
     }
 
-    private void validateAddress(SocketAddress socketAddress) throws InvalidProtocolBufferException {
+    private void validateAddress(SocketAddress socketAddress) throws ResourceInvalidException {
       if (socketAddress.getAddress().isEmpty()) {
         throw createException("Address field is empty or invalid.");
       }
       long port = Integer.toUnsignedLong(socketAddress.getPortValue());
-      if (port == 0 || port > 65535) {
+      if (port > 65535) {
         throw createException(String.format("Port value %d out of range 1-65535.", port));
       }
     }
 
-    private InvalidProtocolBufferException createException(String message) {
-      return new InvalidProtocolBufferException("Failed to parse envoy.config.core.v3.Address: " + message);
+    private ResourceInvalidException createException(String message) {
+      return new ResourceInvalidException("Failed to parse envoy.config.core.v3.Address: " + message);
     }
   }
 }

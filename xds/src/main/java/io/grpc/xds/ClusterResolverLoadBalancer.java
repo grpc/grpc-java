@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.net.InetAddresses;
+import com.google.protobuf.Any;
 import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -488,21 +489,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (!(addr instanceof InetSocketAddress)) {
           return addr;
         }
-
-        SocketAddress proxyAddress;
-        try {
-          proxyAddress = (SocketAddress) endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
-          if (proxyAddress == null) {
-            proxyAddress = (SocketAddress) localityMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
-          }
-        } catch (ClassCastException e) {
-          throw new AssertionError("Proxy address metadata is not an InetSocketAddress", e);
-        }
+        Object proxyAddress = endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
 
         if (proxyAddress != null) {
           return HttpConnectProxiedSocketAddress.newBuilder()
               .setTargetAddress((InetSocketAddress) addr)
-              .setProxyAddress(proxyAddress)
+              .setProxyAddress((SocketAddress) proxyAddress)
               .build();
         }
         return addr;

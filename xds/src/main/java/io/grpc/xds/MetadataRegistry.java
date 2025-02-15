@@ -24,6 +24,7 @@ import com.google.protobuf.Struct;
 import io.envoyproxy.envoy.config.core.v3.Metadata;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser;
 import io.grpc.xds.XdsEndpointResource.AddressMetadataParser;
+import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.internal.ProtobufJsonConverter;
 import java.util.HashMap;
 import java.util.Map;
@@ -74,7 +75,7 @@ final class MetadataRegistry {
    * @throws InvalidProtocolBufferException if parsing {@code typed_filter_metadata} fails.
    */
   public static ImmutableMap<String, Object> parseMetadata(Metadata metadata)
-      throws InvalidProtocolBufferException {
+      throws ResourceInvalidException, InvalidProtocolBufferException {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
 
     MetadataRegistry registry = MetadataRegistry.getInstance();
@@ -115,6 +116,6 @@ final class MetadataRegistry {
      * @return the parsed metadata value.
      * @throws InvalidProtocolBufferException if the parsing fails.
      */
-    Object parse(Any any) throws InvalidProtocolBufferException;
+    Object parse(Any any) throws ResourceInvalidException;
   }
 }
