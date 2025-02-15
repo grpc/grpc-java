@@ -45,7 +45,6 @@ import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
-import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.Locale;
 import java.util.concurrent.Executor;
@@ -56,10 +55,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /** HttpFault filter implementation. */
-final class FaultFilter implements Filter, ClientInterceptorBuilder {
+final class FaultFilter implements Filter {
 
-  static final FaultFilter INSTANCE =
+  private static final FaultFilter INSTANCE =
       new FaultFilter(ThreadSafeRandomImpl.instance, new AtomicLong());
+
   @VisibleForTesting
   static final Metadata.Key<String> HEADER_DELAY_KEY =
       Metadata.Key.of("x-envoy-fault-delay-request", Metadata.ASCII_STRING_MARSHALLER);
@@ -87,96 +87,108 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
     this.activeFaultCounter = activeFaultCounter;
   }
 
-  @Override
-  public String[] typeUrls() {
-    return new String[] { TYPE_URL };
-  }
+  static final class Provider implements Filter.Provider {
+    @Override
+    public String[] typeUrls() {
+      return new String[]{TYPE_URL};
+    }
 
-  @Override
-  public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
-    HTTPFault httpFaultProto;
-    if (!(rawProtoMessage instanceof Any)) {
-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+    @Override
+    public boolean isClientFilter() {
+      return true;
     }
-    Any anyMessage = (Any) rawProtoMessage;
-    try {
-      httpFaultProto = anyMessage.unpack(HTTPFault.class);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Invalid proto: " + e);
-    }
-    return parseHttpFault(httpFaultProto);
-  }
 
-  private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
-    FaultDelay faultDelay = null;
-    FaultAbort faultAbort = null;
-    if (httpFault.hasDelay()) {
-      faultDelay = parseFaultDelay(httpFault.getDelay());
+    @Override
+    public FaultFilter newInstance() {
+      return INSTANCE;
     }
-    if (httpFault.hasAbort()) {
-      ConfigOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
-      if (faultAbortOrError.errorDetail != null) {
-        return ConfigOrError.fromError(
-            "HttpFault contains invalid FaultAbort: " + faultAbortOrError.errorDetail);
+
+    @Override
+    public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
+      HTTPFault httpFaultProto;
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
       }
-      faultAbort = faultAbortOrError.config;
+      Any anyMessage = (Any) rawProtoMessage;
+      try {
+        httpFaultProto = anyMessage.unpack(HTTPFault.class);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+      return parseHttpFault(httpFaultProto);
     }
-    Integer maxActiveFaults = null;
-    if (httpFault.hasMaxActiveFaults()) {
-      maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
-      if (maxActiveFaults < 0) {
-        maxActiveFaults = Integer.MAX_VALUE;
+
+    @Override
+    public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      return parseFilterConfig(rawProtoMessage);
+    }
+
+    private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
+      FaultDelay faultDelay = null;
+      FaultAbort faultAbort = null;
+      if (httpFault.hasDelay()) {
+        faultDelay = parseFaultDelay(httpFault.getDelay());
+      }
+      if (httpFault.hasAbort()) {
+        ConfigOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
+        if (faultAbortOrError.errorDetail != null) {
+          return ConfigOrError.fromError(
+              "HttpFault contains invalid FaultAbort: " + faultAbortOrError.errorDetail);
+        }
+        faultAbort = faultAbortOrError.config;
+      }
+      Integer maxActiveFaults = null;
+      if (httpFault.hasMaxActiveFaults()) {
+        maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
+        if (maxActiveFaults < 0) {
+          maxActiveFaults = Integer.MAX_VALUE;
+        }
+      }
+      return ConfigOrError.fromConfig(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
+    }
+
+    private static FaultDelay parseFaultDelay(
+        io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
+      FaultConfig.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
+      if (faultDelay.hasHeaderDelay()) {
+        return FaultDelay.forHeader(percent);
+      }
+      return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
+    }
+
+    @VisibleForTesting
+    static ConfigOrError<FaultAbort> parseFaultAbort(
+        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
+      FaultConfig.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
+      switch (faultAbort.getErrorTypeCase()) {
+        case HEADER_ABORT:
+          return ConfigOrError.fromConfig(FaultAbort.forHeader(percent));
+        case HTTP_STATUS:
+          return ConfigOrError.fromConfig(FaultAbort.forStatus(
+              GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
+        case GRPC_STATUS:
+          return ConfigOrError.fromConfig(FaultAbort.forStatus(
+              Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
+        case ERRORTYPE_NOT_SET:
+        default:
+          return ConfigOrError.fromError(
+              "Unknown error type case: " + faultAbort.getErrorTypeCase());
       }
     }
-    return ConfigOrError.fromConfig(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
-  }
 
-  private static FaultDelay parseFaultDelay(
-      io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
-    FaultConfig.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
-    if (faultDelay.hasHeaderDelay()) {
-      return FaultDelay.forHeader(percent);
+    private static FaultConfig.FractionalPercent parsePercent(FractionalPercent proto) {
+      switch (proto.getDenominator()) {
+        case HUNDRED:
+          return FaultConfig.FractionalPercent.perHundred(proto.getNumerator());
+        case TEN_THOUSAND:
+          return FaultConfig.FractionalPercent.perTenThousand(proto.getNumerator());
+        case MILLION:
+          return FaultConfig.FractionalPercent.perMillion(proto.getNumerator());
+        case UNRECOGNIZED:
+        default:
+          throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
+      }
     }
-    return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
-  }
-
-  @VisibleForTesting
-  static ConfigOrError<FaultAbort> parseFaultAbort(
-      io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
-    FaultConfig.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
-    switch (faultAbort.getErrorTypeCase()) {
-      case HEADER_ABORT:
-        return ConfigOrError.fromConfig(FaultAbort.forHeader(percent));
-      case HTTP_STATUS:
-        return ConfigOrError.fromConfig(FaultAbort.forStatus(
-            GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
-      case GRPC_STATUS:
-        return ConfigOrError.fromConfig(FaultAbort.forStatus(
-            Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
-      case ERRORTYPE_NOT_SET:
-      default:
-        return ConfigOrError.fromError(
-            "Unknown error type case: " + faultAbort.getErrorTypeCase());
-    }
-  }
-
-  private static FaultConfig.FractionalPercent parsePercent(FractionalPercent proto) {
-    switch (proto.getDenominator()) {
-      case HUNDRED:
-        return FaultConfig.FractionalPercent.perHundred(proto.getNumerator());
-      case TEN_THOUSAND:
-        return FaultConfig.FractionalPercent.perTenThousand(proto.getNumerator());
-      case MILLION:
-        return FaultConfig.FractionalPercent.perMillion(proto.getNumerator());
-      case UNRECOGNIZED:
-      default:
-        throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
-    }
-  }
-
-  @Override
-  public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-    return parseFilterConfig(rawProtoMessage);
   }
 
   @Nullable
