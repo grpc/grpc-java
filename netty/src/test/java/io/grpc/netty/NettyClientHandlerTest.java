@@ -36,6 +36,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -64,6 +65,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedClientTransport;
@@ -90,10 +92,12 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.InputStream;
+import java.security.cert.CertificateException;
 import java.text.MessageFormat;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Handler;
@@ -108,6 +112,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -189,7 +194,11 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
           })
         .when(streamListener)
         .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
-
+    doAnswer((attributes) -> Attributes.newBuilder().set(
+            GrpcAttributes.ATTR_AUTHORITY_VERIFIER,
+            (authority) -> Status.OK).build())
+          .when(listener)
+          .filterTransport(ArgumentMatchers.any(Attributes.class));
     lifecycleManager = new ClientTransportLifecycleManager(listener);
     // This mocks the keepalive manager only for there's in which we verify it. For other tests
     // it'll be null which will be testing if we behave correctly when it's not present.
@@ -917,6 +926,159 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Once https://github.com/netty/netty/issues/4316 is resolved, we should also verify that
     // any open streams are closed properly.
     assertFalse(channel().isOpen());
+  }
+
+  @Test
+  public void missingAuthorityHeader_streamCreationShouldFail() throws Exception {
+    Http2Headers grpcHeadersWithoutAuthority = new DefaultHttp2Headers()
+            .scheme(HTTPS)
+            .path(as("/fakemethod"))
+            .method(HTTP_METHOD)
+            .add(as("auth"), as("sometoken"))
+            .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+            .add(TE_HEADER, TE_TRAILERS);
+    ChannelFuture channelFuture = enqueue(newCreateStreamCommand(grpcHeadersWithoutAuthority, streamTransportState));
+    try {
+      channelFuture.get();
+      fail("Expected stream creation failure");
+    } catch (ExecutionException e) {
+      assertThat(e.getCause().getMessage()).isEqualTo("UNAVAILABLE: Missing authority header");
+    }
+  }
+
+  @Test
+  public void missingAuthorityVerifierInAttributes_streamCreationShouldFail() throws Exception {
+    doAnswer(
+            new Answer<Void>() {
+              @Override
+              public Void answer(InvocationOnMock invocation) throws Throwable {
+                StreamListener.MessageProducer producer =
+                        (StreamListener.MessageProducer) invocation.getArguments()[0];
+                InputStream message;
+                while ((message = producer.next()) != null) {
+                  streamListenerMessageQueue.add(message);
+                }
+                return null;
+              }
+            })
+            .when(streamListener)
+            .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+    doAnswer((attributes) -> Attributes.EMPTY)
+            .when(listener)
+            .filterTransport(ArgumentMatchers.any(Attributes.class));
+    lifecycleManager = new ClientTransportLifecycleManager(listener);
+    // This mocks the keepalive manager only for there's in which we verify it. For other tests
+    // it'll be null which will be testing if we behave correctly when it's not present.
+    if (setKeepaliveManagerFor.contains(testNameRule.getMethodName())) {
+      mockKeepAliveManager = mock(KeepAliveManager.class);
+    }
+
+    initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
+    streamTransportState = new TransportStateImpl(
+            handler(),
+            channel().eventLoop(),
+            DEFAULT_MAX_MESSAGE_SIZE,
+            transportTracer);
+    streamTransportState.setListener(streamListener);
+
+    grpcHeaders = new DefaultHttp2Headers()
+            .scheme(HTTPS)
+            .authority(as("www.fake.com"))
+            .path(as("/fakemethod"))
+            .method(HTTP_METHOD)
+            .add(as("auth"), as("sometoken"))
+            .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+            .add(TE_HEADER, TE_TRAILERS);
+
+    // Simulate receipt of initial remote settings.
+    ByteBuf serializedSettings = serializeSettings(new Http2Settings());
+    channelRead(serializedSettings);
+    channel().releaseOutbound();
+
+    ChannelFuture channelFuture = createStream();
+    try {
+      channelFuture.get();
+      fail("Expected stream creation failure");
+    } catch (ExecutionException e) {
+      assertThat(e.getCause().getMessage()).isEqualTo("UNAVAILABLE: Authority verifier not found to verify authority");
+    }
+  }
+
+  @Test
+  public void authorityVerificationSuccess_streamCreationSucceeds() throws Exception {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      ChannelFuture channelFuture = createStream();
+      channelFuture.get();
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void authorityVerificationFailure_streamCreationFails() throws Exception {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      doAnswer(
+              new Answer<Void>() {
+                @Override
+                public Void answer(InvocationOnMock invocation) throws Throwable {
+                  StreamListener.MessageProducer producer =
+                          (StreamListener.MessageProducer) invocation.getArguments()[0];
+                  InputStream message;
+                  while ((message = producer.next()) != null) {
+                    streamListenerMessageQueue.add(message);
+                  }
+                  return null;
+                }
+              })
+              .when(streamListener)
+              .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+      doAnswer((attributes) -> Attributes.newBuilder().set(
+              GrpcAttributes.ATTR_AUTHORITY_VERIFIER,
+              (authority) -> Status.UNAVAILABLE.withCause(
+                      new CertificateException("Peer verification failed"))).build())
+              .when(listener)
+              .filterTransport(ArgumentMatchers.any(Attributes.class));
+      lifecycleManager = new ClientTransportLifecycleManager(listener);
+      // This mocks the keepalive manager only for there's in which we verify it. For other tests
+      // it'll be null which will be testing if we behave correctly when it's not present.
+      if (setKeepaliveManagerFor.contains(testNameRule.getMethodName())) {
+        mockKeepAliveManager = mock(KeepAliveManager.class);
+      }
+
+      initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
+      streamTransportState = new TransportStateImpl(
+              handler(),
+              channel().eventLoop(),
+              DEFAULT_MAX_MESSAGE_SIZE,
+              transportTracer);
+      streamTransportState.setListener(streamListener);
+
+      grpcHeaders = new DefaultHttp2Headers()
+              .scheme(HTTPS)
+              .authority(as("www.fake.com"))
+              .path(as("/fakemethod"))
+              .method(HTTP_METHOD)
+              .add(as("auth"), as("sometoken"))
+              .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+              .add(TE_HEADER, TE_TRAILERS);
+
+      // Simulate receipt of initial remote settings.
+      ByteBuf serializedSettings = serializeSettings(new Http2Settings());
+      channelRead(serializedSettings);
+      channel().releaseOutbound();
+
+      ChannelFuture channelFuture = createStream();
+      try {
+        channelFuture.get();
+        fail("Expected stream creation failure");
+      } catch (ExecutionException e) {
+        assertThat(e.getMessage()).isEqualTo("io.grpc.InternalStatusRuntimeException: UNAVAILABLE");
+      }
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
   }
 
   @Override
