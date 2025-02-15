@@ -1197,7 +1197,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void parseLocalityLbEndpoints_invalidPriority() {
+  public void parseLocalityLbEndpoints_invalidPriority() throws ResourceInvalidException {
     io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
         io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
             .setLocality(Locality.newBuilder()
