@@ -377,7 +377,21 @@ final class XdsServerWrapper extends Server {
         return;
       }
       logger.log(Level.FINEST, "Received Lds update {0}", update);
-      checkNotNull(update.listener(), "update");
+      if (update.listener() == null) {
+        handleConfigNotFoundOrMismatch(Status.NOT_FOUND.withDescription(
+            "No non-API Listener found").asException());
+        return;
+      }
+
+      /*String ldsAddress = update.listener().address();
+      if (!listenerAddress.equals(ldsAddress)) {
+        handleConfigNotFoundOrMismatch(
+            Status.UNKNOWN.withDescription(
+                String.format(
+                    "Listener address mismatch: expected %s, but got %s.",
+                    listenerAddress, ldsAddress)).asException());
+        return;
+      }*/
       if (!pendingRds.isEmpty()) {
         // filter chain state has not yet been applied to filterChainSelectorManager and there
         // are two sets of sslContextProviderSuppliers, so we release the old ones.
@@ -428,7 +442,7 @@ final class XdsServerWrapper extends Server {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
           String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
               xdsClient.getBootstrapInfo().node().getId())).asException();
-      handleConfigNotFound(statusException);
+      handleConfigNotFoundOrMismatch(statusException);
     }
 
     @Override
@@ -558,7 +572,7 @@ final class XdsServerWrapper extends Server {
       };
     }
 
-    private void handleConfigNotFound(StatusException exception) {
+    private void handleConfigNotFoundOrMismatch(StatusException exception) {
       cleanUpRouteDiscoveryStates();
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorManager.updateSelector(FilterChainSelector.NO_FILTER_CHAIN);

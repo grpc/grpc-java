@@ -659,6 +659,10 @@ final class XdsNameResolver extends NameResolver {
       }
       logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
+      if (httpConnectionManager == null) {
+        onResourceDoesNotExist("API Listener: httpConnectionManager");
+        return;
+      }
       List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
       String rdsName = httpConnectionManager.rdsName();
       cleanUpRouteDiscoveryState();
