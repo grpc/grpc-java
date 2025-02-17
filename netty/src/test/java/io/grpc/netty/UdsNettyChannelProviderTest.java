@@ -28,6 +28,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
 import io.grpc.ManagedChannelRegistryAccessor;
+import io.grpc.NameResolverRegistry;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -113,6 +114,19 @@ public class UdsNettyChannelProviderTest {
     Assume.assumeTrue(Utils.isEpollAvailable());
     ManagedChannelBuilder<?> managedChannelBuilder
             = Grpc.newChannelBuilder("unix:///sock.sock", InsecureChannelCredentials.create());
+    assertThat(managedChannelBuilder).isNotNull();
+    ManagedChannel channel = managedChannelBuilder.build();
+    assertThat(channel).isNotNull();
+    assertThat(channel.authority()).isEqualTo("/sock.sock");
+    channel.shutdownNow();
+  }
+
+  @Test
+  public void managedChannelRegistry_newChannelBuilderForNameResolverRegistry() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
+    ManagedChannelBuilder<?> managedChannelBuilder
+            = Grpc.newChannelBuilderForNameResolverRegistry("unix:///sock.sock",
+             InsecureChannelCredentials.create(), NameResolverRegistry.getDefaultRegistry());
     assertThat(managedChannelBuilder).isNotNull();
     ManagedChannel channel = managedChannelBuilder.build();
     assertThat(channel).isNotNull();

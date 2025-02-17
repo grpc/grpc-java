@@ -102,6 +102,15 @@ public final class Grpc {
   }
 
   /**
+   * Creates a channel builder with a target string, credentials and nameResolverRegistry.
+   */
+  public static ManagedChannelBuilder<?> newChannelBuilderForNameResolverRegistry(String target,
+      ChannelCredentials creds, NameResolverRegistry nameResolverRegistry) {
+    return ManagedChannelRegistry.getDefaultRegistry().newChannelBuilder(nameResolverRegistry,
+      target, creds);
+  }
+
+  /**
    * Creates a channel builder from a host, port, and credentials. The host and port are combined to
    * form an authority string and then passed to {@link #newChannelBuilder(String,
    * ChannelCredentials)}. IPv6 addresses are properly surrounded by square brackets ("[]").
