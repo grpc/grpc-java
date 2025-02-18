@@ -1,5 +1,3 @@
-load("@rules_proto//proto:defs.bzl", "proto_library")
-load("//:java_grpc_library.bzl", "java_grpc_library")
 load("@rules_jvm_external//:defs.bzl", "artifact")
 
 java_library(
@@ -70,6 +68,7 @@ java_library(
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
+        artifact("com.google.s2a.proto.v2:s2a-proto"),
         artifact("org.checkerframework:checker-qual"),
         "@com_google_protobuf//:protobuf_java",
         artifact("io.netty:netty-common"),
@@ -94,67 +93,4 @@ java_library(
         artifact("com.google.guava:guava"), 
         artifact("org.checkerframework:checker-qual"), 
     ],
-)
-
-# bazel only accepts proto import with absolute path.
-genrule(
-    name = "protobuf_imports",
-    srcs = glob(["src/main/proto/grpc/gcp/s2a/*.proto"]),
-    outs = [
-        "protobuf_out/grpc/gcp/s2a/s2a.proto",
-        "protobuf_out/grpc/gcp/s2a/s2a_context.proto",
-        "protobuf_out/grpc/gcp/s2a/common.proto",
-    ],
-    cmd = "for fname in $(SRCS); do " +
-          "sed 's,import \",import \"s2a/protobuf_out/,g' $$fname > " +
-          "$(@D)/protobuf_out/grpc/gcp/s2a/$$(basename $$fname); done",
-)
-
-proto_library(
-    name = "common_proto",
-    srcs = [
-        "protobuf_out/grpc/gcp/s2a/common.proto",
-    ],
-)
-
-proto_library(
-    name = "s2a_context_proto",
-    srcs = [
-        "protobuf_out/grpc/gcp/s2a/s2a_context.proto",
-    ],
-    deps = [
-        ":common_proto",
-    ],
-)
-
-proto_library(
-    name = "s2a_proto",
-    srcs = [
-        "protobuf_out/grpc/gcp/s2a/s2a.proto",
-    ],
-    deps = [
-        ":common_proto",
-        ":s2a_context_proto",
-    ],
-)
-
-java_proto_library(
-    name = "s2a_java_proto",
-    deps = [":s2a_proto"],
-)
-
-java_proto_library(
-    name = "s2a_context_java_proto",
-    deps = [":s2a_context_proto"],
-)
-
-java_proto_library(
-    name = "common_java_proto",
-    deps = [":common_proto"],
-)
-
-java_grpc_library(
-    name = "s2a_java_grpc_proto",
-    srcs = [":s2a_proto"],
-    deps = [":s2a_java_proto"],
 )
