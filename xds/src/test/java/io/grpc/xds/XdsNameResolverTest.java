@@ -22,10 +22,12 @@ import static io.grpc.xds.FaultFilter.HEADER_ABORT_HTTP_STATUS_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_ABORT_PERCENTAGE_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_KEY;
 import static io.grpc.xds.FaultFilter.HEADER_DELAY_PERCENTAGE_KEY;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -130,6 +132,9 @@ public class XdsNameResolverTest {
   private static final String RDS_RESOURCE_NAME = "route-configuration.googleapis.com";
   private static final String FAULT_FILTER_INSTANCE_NAME = "envoy.fault";
   private static final String ROUTER_FILTER_INSTANCE_NAME = "envoy.router";
+  private static final FaultFilter.Provider FAULT_FILTER_PROVIDER = new FaultFilter.Provider();
+  private static final RouterFilter.Provider ROUTER_FILTER_PROVIDER = new RouterFilter.Provider();
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -184,9 +189,19 @@ public class XdsNameResolverTest {
 
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
+
+    // Replace FaultFilter.Provider with the one returning FaultFilter injected with mockRandom.
+    Filter.Provider faultFilterProvider =
+        mock(Filter.Provider.class, delegatesTo(FAULT_FILTER_PROVIDER));
+    // Lenient: suppress [MockitoHint] Unused warning, only used in resolved_fault* tests.
+    lenient()
+        .doReturn(new FaultFilter(mockRandom, new AtomicLong()))
+        .when(faultFilterProvider).newInstance();
+
     FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
-        new FaultFilter(mockRandom, new AtomicLong()),
-        RouterFilter.INSTANCE);
+        ROUTER_FILTER_PROVIDER,
+        faultFilterProvider);
+
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
         serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, filterRegistry, null, metricRecorder);

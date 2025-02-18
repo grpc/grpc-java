@@ -575,12 +575,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     String filterName = httpFilter.getName();
     boolean isOptional = httpFilter.getIsOptional();
     if (!httpFilter.hasTypedConfig()) {
-      if (isOptional) {
-        return null;
-      } else {
-        return StructOrError.fromError(
-            "HttpFilter [" + filterName + "] is not optional and has no typed config");
-      }
+      return isOptional ? null : StructOrError.fromError(
+          "HttpFilter [" + filterName + "] is not optional and has no typed config");
     }
     Message rawConfig = httpFilter.getTypedConfig();
     String typeUrl = httpFilter.getTypedConfig().getTypeUrl();
@@ -600,18 +596,17 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       return StructOrError.fromError(
           "HttpFilter [" + filterName + "] contains invalid proto: " + e);
     }
-    Filter filter = filterRegistry.get(typeUrl);
-    if ((isForClient && !(filter instanceof Filter.ClientInterceptorBuilder))
-        || (!isForClient && !(filter instanceof Filter.ServerInterceptorBuilder))) {
-      if (isOptional) {
-        return null;
-      } else {
-        return StructOrError.fromError(
-            "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for "
-                + (isForClient ? "client" : "server"));
-      }
+
+    Filter.Provider provider = filterRegistry.get(typeUrl);
+    if (provider == null
+        || (isForClient && !provider.isClientFilter())
+        || (!isForClient && !provider.isServerFilter())) {
+      // Filter type not supported.
+      return isOptional ? null : StructOrError.fromError(
+          "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for " + (
+              isForClient ? "client" : "server"));
     }
-    ConfigOrError<? extends FilterConfig> filterConfig = filter.parseFilterConfig(rawConfig);
+    ConfigOrError<? extends FilterConfig> filterConfig = provider.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
