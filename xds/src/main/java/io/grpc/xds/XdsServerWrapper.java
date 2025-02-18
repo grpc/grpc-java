@@ -445,6 +445,7 @@ final class XdsServerWrapper extends Server {
     }
 
     private void shutdown() {
+      System.out.println("calling shutdown in XdsServerWrapper");
       stopped = true;
       cleanUpRouteDiscoveryStates();
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);

@@ -76,6 +76,34 @@ public final class InternalProtocolNegotiators {
   }
 
   /**
+   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
+   * may happen immediately, even before the TLS Handshake is complete.
+   */
+  public static InternalProtocolNegotiator.ProtocolNegotiator ClientTls(SslContext sslContext) {
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.serverTls(sslContext);
+    final class ClientTlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
+
+      @Override
+      public AsciiString scheme() {
+        return negotiator.scheme();
+      }
+
+      @Override
+      public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        return negotiator.newHandler(grpcHandler);
+      }
+
+      @Override
+      public void close() {
+        negotiator.close();
+      }
+    }
+
+    return new ClientTlsNegotiator();
+  }
+
+  /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will be
    * negotiated, the server TLS {@code handler} is added and writes to the {@link
    * io.netty.channel.Channel} may happen immediately, even before the TLS Handshake is complete.

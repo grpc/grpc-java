@@ -90,6 +90,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   @Override
   public void start() {
     scheduleNextRefreshCertificate(/* delayInSeconds= */0);
+    //System.out.println("Executed start()");
   }
 
   @Override
@@ -101,6 +102,8 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
       scheduledFuture = null;
     }
     getWatcher().close();
+    //System.out.println("FWCP close()=" + this);
+    System.out.println("Executed close()");
   }
 
   private synchronized void scheduleNextRefreshCertificate(long delayInSeconds) {

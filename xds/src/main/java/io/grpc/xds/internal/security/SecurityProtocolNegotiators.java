@@ -134,6 +134,7 @@ public final class SecurityProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      System.out.println("inside newHandler()");
       // check if SslContextProviderSupplier was passed via attributes
       SslContextProviderSupplier localSslContextProviderSupplier =
           grpcHandler.getEagAttributes().get(ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
@@ -202,10 +203,15 @@ public final class SecurityProtocolNegotiators {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
+
+      //new Throwable().printStackTrace();
+      //System.out.println("SecurityProtocolNegotiators.ClientSecurityHandler instance=" + this);
     }
 
     @Override
     protected void handlerAdded0(final ChannelHandlerContext ctx) {
+      System.out.println("inside ClientSecurityHandler handlerAdded0()");
+      System.out.println("ctx.name=" + ctx.name() + "ctx.handler=" + ctx.handler());
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
@@ -222,12 +228,14 @@ public final class SecurityProtocolNegotiators {
                   "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
-                  InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.ClientTls(sslContext).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
-              ctx.pipeline().addAfter(ctx.name(), null, handler);
-              fireProtocolNegotiationEvent(ctx);
-              ctx.pipeline().remove(bufferReads);
+              //if(!ctx.isRemoved()) {
+                ctx.pipeline().addAfter(ctx.name(), null, handler);
+                fireProtocolNegotiationEvent(ctx);
+                ctx.pipeline().remove(bufferReads);
+              //}
             }
 
             @Override
@@ -308,13 +316,22 @@ public final class SecurityProtocolNegotiators {
           ctx.fireUserEventTriggered(pne);
           return;
         } else {
-          ctx.pipeline()
+          if (ctx.name().contains("ClientSecurityHandler")) {
+            ctx.pipeline()
+                .replace(
+                    this,
+                    null,
+                    new ClientSecurityHandler(
+                        grpcHandler, sslContextProviderSupplier));
+          } else {
+            ctx.pipeline()
               .replace(
                   this,
                   null,
                   new ServerSecurityHandler(
                       grpcHandler, sslContextProviderSupplier));
-          ctx.fireUserEventTriggered(pne);
+            ctx.fireUserEventTriggered(pne);
+          }
           return;
         }
       } else {
@@ -345,10 +362,13 @@ public final class SecurityProtocolNegotiators {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
+      //new Throwable().printStackTrace();
+      //System.out.println("SecurityProtocolNegotiators.ServerSecurityHandler instance=" + this);
     }
 
     @Override
     protected void handlerAdded0(final ChannelHandlerContext ctx) {
+      System.out.println("inside ServerSecurityHandler handlerAdded0()");
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
