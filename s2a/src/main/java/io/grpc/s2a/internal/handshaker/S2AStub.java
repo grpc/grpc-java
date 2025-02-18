@@ -22,6 +22,9 @@ import static com.google.common.base.Verify.verify;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.s2a.proto.v2.S2AServiceGrpc;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Optional;

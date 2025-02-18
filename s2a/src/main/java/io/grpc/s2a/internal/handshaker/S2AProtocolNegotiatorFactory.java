@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.ThreadSafe;
+import com.google.s2a.proto.v2.S2AServiceGrpc;
 import io.grpc.Channel;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;

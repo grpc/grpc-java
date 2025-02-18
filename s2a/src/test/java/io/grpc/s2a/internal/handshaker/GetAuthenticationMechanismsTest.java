@@ -17,6 +17,7 @@
 package io.grpc.s2a.internal.handshaker;
 
 import com.google.common.truth.Expect;
+import com.google.s2a.proto.v2.AuthenticationMechanism;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.grpc.s2a.internal.handshaker.tokenmanager.AccessTokenManager;
 import io.grpc.s2a.internal.handshaker.tokenmanager.SingleTokenFetcher;

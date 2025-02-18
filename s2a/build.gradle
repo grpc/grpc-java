@@ -11,6 +11,7 @@ plugins {
 description = "gRPC: S2A"
 
 dependencies {
+    implementation 'com.google.s2a.proto.v2:s2a-proto:0.1.0'
 
     api project(':grpc-api')
     implementation project(':grpc-stub'),

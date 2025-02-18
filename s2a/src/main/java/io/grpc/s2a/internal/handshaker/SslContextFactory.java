@@ -20,6 +20,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.s2a.proto.v2.AuthenticationMechanism;
+import com.google.s2a.proto.v2.ConnectionSide;
+import com.google.s2a.proto.v2.GetTlsConfigurationReq;
+import com.google.s2a.proto.v2.GetTlsConfigurationResp;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.netty.handler.ssl.OpenSslContextOption;
