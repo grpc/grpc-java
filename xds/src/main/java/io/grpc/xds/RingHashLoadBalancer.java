@@ -51,7 +51,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -358,7 +357,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     private final Map<Endpoint, SubchannelView> pickableSubchannels;  // read-only
     private final String requestHashHeader;
     private final ThreadSafeRandom random;
-    private boolean hasEndpointInConnectingState = false;
+    private final boolean hasEndpointInConnectingState;
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
@@ -369,13 +368,15 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       this.requestHashHeader = requestHashHeader;
       this.random = random;
       pickableSubchannels = new HashMap<>(children.size());
+      boolean hasConnectingState = false;
       for (ChildLbState childLbState : children) {
         pickableSubchannels.put((Endpoint)childLbState.getKey(),
             new SubchannelView(childLbState, childLbState.getCurrentState()));
         if (childLbState.getCurrentState() == CONNECTING) {
-          hasEndpointInConnectingState = true;
+          hasConnectingState = true;
         }
       }
+      this.hasEndpointInConnectingState = hasConnectingState;
     }
 
     // Find the ring entry with hash next to (clockwise) the RPC's hash (binary search).
