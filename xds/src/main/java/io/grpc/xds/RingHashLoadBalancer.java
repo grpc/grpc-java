@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultiset;
@@ -39,6 +40,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.util.MultiChildLoadBalancer;
+import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.SocketAddress;
@@ -72,14 +74,21 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       new LazyLoadBalancer.Factory(pickFirstLbProvider);
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
+  private final ThreadSafeRandom random;
   private List<RingEntry> ring;
   private String requestHashHeader = "";
 
   RingHashLoadBalancer(Helper helper) {
+    this(helper, ThreadSafeRandomImpl.instance);
+  }
+
+  @VisibleForTesting
+  RingHashLoadBalancer(Helper helper, ThreadSafeRandom random) {
     super(helper);
     syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     logger = XdsLogger.withLogId(InternalLogId.allocate("ring_hash_lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
+    this.random = checkNotNull(random, "random");
   }
 
   @Override
@@ -219,7 +228,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
 
     RingHashPicker picker =
-        new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeader);
+        new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeader, random);
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
   }
@@ -340,7 +349,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   private static final class RingHashPicker extends SubchannelPicker {
-    private final Random random = new Random();
     private final SynchronizationContext syncContext;
     private final List<RingEntry> ring;
     // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,
@@ -349,14 +357,17 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     //  IdentityHashMap<Subchannel, ConnectivityStateInfo> and RingEntry contains Subchannel.
     private final Map<Endpoint, SubchannelView> pickableSubchannels;  // read-only
     private final String requestHashHeader;
+    private final ThreadSafeRandom random;
     private boolean hasEndpointInConnectingState = false;
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
-        Collection<ChildLbState> children, String requestHashHeader) {
+        Collection<ChildLbState> children, String requestHashHeader,
+        ThreadSafeRandom random) {
       this.syncContext = syncContext;
       this.ring = ring;
       this.requestHashHeader = requestHashHeader;
+      this.random = random;
       pickableSubchannels = new HashMap<>(children.size());
       for (ChildLbState childLbState : children) {
         pickableSubchannels.put((Endpoint)childLbState.getKey(),

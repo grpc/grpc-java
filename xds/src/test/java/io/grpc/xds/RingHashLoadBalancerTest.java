@@ -477,8 +477,9 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void pickWithRandomHash_allSubchannelsReady() {
-    // Large ring to better reflect the request distribution.
-    RingHashConfig config = new RingHashConfig(10000, 10000, "dummy-random-hash");
+    loadBalancer = new RingHashLoadBalancer(helper, new FakeRandom());
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(2, 2, "dummy-random-hash");
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
     initializeLbSubchannels(config, servers);
     InOrder inOrder = Mockito.inOrder(helper);
@@ -491,18 +492,18 @@ public class RingHashLoadBalancerTest {
       inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     }
 
-    // Pick subchannel 10000 times with random hash.
+    // Pick subchannel 100 times with random hash.
     SubchannelPicker picker = pickerCaptor.getValue();
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < 100; ++i) {
       Subchannel pickedSubchannel = picker.pickSubchannel(args).getSubchannel();
       EquivalentAddressGroup addr = pickedSubchannel.getAddresses();
       pickCounts.put(addr, pickCounts.get(addr) + 1);
     }
 
-    // Verify the distribution is uniform where server0 and server1 are roughly picked 5000 times.
-    assertThat(pickCounts.get(servers.get(0))).isWithin(500).of(5000);
-    assertThat(pickCounts.get(servers.get(1))).isWithin(500).of(5000);
+    // Verify the distribution is uniform where server0 and server1 are exactly picked 50 times.
+    assertThat(pickCounts.get(servers.get(0))).isEqualTo(50);
+    assertThat(pickCounts.get(servers.get(1))).isEqualTo(50);
   }
 
   @Test
@@ -1299,6 +1300,30 @@ public class RingHashLoadBalancerTest {
         connectionRequestedQueue.offer(getMockSubchannel(this));
       }
 
+    }
+  }
+
+  private static final class FakeRandom implements ThreadSafeRandom {
+    int counter = 0;
+
+    @Override
+    public int nextInt(int bound) {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public long nextLong() {
+      ++counter;
+      if (counter % 2 == 0) {
+        return XxHash64.INSTANCE.hashAsciiString("FakeSocketAddress-server0_0");
+      } else {
+        return XxHash64.INSTANCE.hashAsciiString("FakeSocketAddress-server1_0");
+      }
+    }
+
+    @Override
+    public long nextLong(long bound) {
+      throw new UnsupportedOperationException("Should not be called");
     }
   }
 
