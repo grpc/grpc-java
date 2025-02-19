@@ -23,6 +23,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.3.1-android",
     "com.google.re2j:re2j:1.8",
+    "com.google.s2a.proto.v2:s2a-proto:0.1.1",
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
