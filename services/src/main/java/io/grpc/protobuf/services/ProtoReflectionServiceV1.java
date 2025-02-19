@@ -19,6 +19,7 @@ package io.grpc.protobuf.services;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
@@ -52,7 +53,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.WeakHashMap;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Provides a reflection service for Protobuf services (including the reflection service itself).

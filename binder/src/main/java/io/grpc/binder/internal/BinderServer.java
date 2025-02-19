@@ -25,6 +25,7 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
 import com.google.common.collect.ImmutableList;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
@@ -48,7 +49,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**

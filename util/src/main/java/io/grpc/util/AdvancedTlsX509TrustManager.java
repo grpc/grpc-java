@@ -265,7 +265,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     }
     final ScheduledFuture<?> future =
         checkNotNull(executor, "executor").scheduleWithFixedDelay(
-            new LoadFilePathExecution(trustCertFile), period, period, unit);
+            new LoadFilePathExecution(trustCertFile, updatedTime), period, period, unit);
     return () -> future.cancel(false);
   }
 
@@ -312,9 +312,9 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     File file;
     long currentTime;
 
-    public LoadFilePathExecution(File file) {
+    public LoadFilePathExecution(File file, long currentTime) {
       this.file = file;
-      this.currentTime = 0;
+      this.currentTime = currentTime;
     }
 
     @Override

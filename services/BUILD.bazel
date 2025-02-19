@@ -121,6 +121,7 @@ java_library(
         "@io_grpc_grpc_proto//:reflection_java_proto",
         "@io_grpc_grpc_proto//:reflection_java_proto_deprecated",
         artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
     ],
 )
@@ -139,6 +140,7 @@ java_library(
         "//stub",
         "@io_grpc_grpc_proto//:health_java_proto",
         artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
     ],
 )

@@ -105,7 +105,8 @@ final class SslContextFactory {
       reqBuilder.setLocalIdentity(localIdentity.get().getIdentity());
     }
     Optional<AuthenticationMechanism> authMechanism =
-        GetAuthenticationMechanisms.getAuthMechanism(localIdentity);
+        GetAuthenticationMechanisms.getAuthMechanism(localIdentity,
+        GetAuthenticationMechanisms.TOKEN_MANAGER);
     if (authMechanism.isPresent()) {
       reqBuilder.addAuthenticationMechanisms(authMechanism.get());
     }

@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import com.google.common.base.Stopwatch;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.internal.ClientTransport.PingCallback;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -24,7 +25,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Represents an outstanding PING operation on an HTTP/2 channel. This can be used by HTTP/2-based

@@ -18,9 +18,11 @@ package io.grpc.s2a.internal.handshaker;
 
 import com.google.common.truth.Expect;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
+import io.grpc.s2a.internal.handshaker.tokenmanager.AccessTokenManager;
 import io.grpc.s2a.internal.handshaker.tokenmanager.SingleTokenFetcher;
 import java.util.Optional;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -33,12 +35,18 @@ public final class GetAuthenticationMechanismsTest {
   @Rule public final Expect expect = Expect.create();
   private static final String TOKEN = "access_token";
   private static String originalAccessToken;
+  private Optional<AccessTokenManager> tokenManager;
 
   @BeforeClass
   public static void setUpClass() {
     originalAccessToken = SingleTokenFetcher.getAccessToken();
     // Set the token that the client will use to authenticate to the S2A.
     SingleTokenFetcher.setAccessToken(TOKEN);
+  }
+
+  @Before
+  public void setUp() {
+    tokenManager = AccessTokenManager.create();
   }
 
   @AfterClass
@@ -49,7 +57,7 @@ public final class GetAuthenticationMechanismsTest {
   @Test
   public void getAuthMechanisms_emptyIdentity_success() {
     expect
-        .that(GetAuthenticationMechanisms.getAuthMechanism(Optional.empty()))
+        .that(GetAuthenticationMechanisms.getAuthMechanism(Optional.empty(), tokenManager))
         .isEqualTo(
             Optional.of(AuthenticationMechanism.newBuilder().setToken("access_token").build()));
   }
@@ -58,7 +66,7 @@ public final class GetAuthenticationMechanismsTest {
   public void getAuthMechanisms_nonEmptyIdentity_success() {
     S2AIdentity fakeIdentity = S2AIdentity.fromSpiffeId("fake-spiffe-id");
     expect
-        .that(GetAuthenticationMechanisms.getAuthMechanism(Optional.of(fakeIdentity)))
+        .that(GetAuthenticationMechanisms.getAuthMechanism(Optional.of(fakeIdentity), tokenManager))
         .isEqualTo(
             Optional.of(
                 AuthenticationMechanism.newBuilder()

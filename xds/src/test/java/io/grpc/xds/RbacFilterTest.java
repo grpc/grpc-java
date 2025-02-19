@@ -78,6 +78,13 @@ public class RbacFilterTest {
   private static final String PATH = "auth";
   private static final StringMatcher STRING_MATCHER =
           StringMatcher.newBuilder().setExact("/" + PATH).setIgnoreCase(true).build();
+  private static final RbacFilter.Provider FILTER_PROVIDER = new RbacFilter.Provider();
+
+  @Test
+  public void filterType_serverOnly() {
+    assertThat(FILTER_PROVIDER.isClientFilter()).isFalse();
+    assertThat(FILTER_PROVIDER.isServerFilter()).isTrue();
+  }
 
   @Test
   @SuppressWarnings({"unchecked", "deprecation"})
@@ -219,14 +226,15 @@ public class RbacFilterTest {
   @SuppressWarnings("unchecked")
   public void compositeRules() {
     MetadataMatcher metadataMatcher = MetadataMatcher.newBuilder().build();
+    @SuppressWarnings("deprecation")
+    Permission permissionMetadata = Permission.newBuilder().setMetadata(metadataMatcher).build();
     List<Permission> permissionList = Arrays.asList(
             Permission.newBuilder().setOrRules(Permission.Set.newBuilder().addRules(
-                    Permission.newBuilder().setMetadata(metadataMatcher).build()
-            ).build()).build());
+                    permissionMetadata).build()).build());
+    @SuppressWarnings("deprecation")
+    Principal principalMetadata = Principal.newBuilder().setMetadata(metadataMatcher).build();
     List<Principal> principalList = Arrays.asList(
-            Principal.newBuilder().setNotId(
-                    Principal.newBuilder().setMetadata(metadataMatcher).build()
-            ).build());
+            Principal.newBuilder().setNotId(principalMetadata).build());
     ConfigOrError<? extends FilterConfig> result = parse(permissionList, principalList);
     assertThat(result.errorDetail).isNull();
     assertThat(result.config).isInstanceOf(RbacConfig.class);
@@ -251,7 +259,7 @@ public class RbacFilterTest {
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
     AuthConfig authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.ALLOW);
-    new RbacFilter().buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance().buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler, never()).startCall(eq(mockServerCall), any(Metadata.class));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
@@ -263,7 +271,7 @@ public class RbacFilterTest {
 
     authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.DENY);
-    new RbacFilter().buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance().buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
   }
@@ -289,7 +297,7 @@ public class RbacFilterTest {
                     .putPolicies("policy-name",
                             Policy.newBuilder().setCondition(Expr.newBuilder().build()).build())
                     .build()).build();
-    result = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+    result = FILTER_PROVIDER.parseFilterConfig(Any.pack(rawProto));
     assertThat(result.errorDetail).isNotNull();
   }
 
@@ -311,10 +319,10 @@ public class RbacFilterTest {
     RbacConfig original = RbacConfig.create(authconfig);
 
     RBACPerRoute rbacPerRoute = RBACPerRoute.newBuilder().build();
-    RbacConfig override =
-            new RbacFilter().parseFilterConfigOverride(Any.pack(rbacPerRoute)).config;
+    RbacConfig override = FILTER_PROVIDER.parseFilterConfigOverride(Any.pack(rbacPerRoute)).config;
     assertThat(override).isEqualTo(RbacConfig.create(null));
-    ServerInterceptor interceptor = new RbacFilter().buildServerInterceptor(original, override);
+    ServerInterceptor interceptor =
+        FILTER_PROVIDER.newInstance().buildServerInterceptor(original, override);
     assertThat(interceptor).isNull();
 
     policyMatcher = PolicyMatcher.create("policy-matcher-override",
@@ -324,7 +332,7 @@ public class RbacFilterTest {
             GrpcAuthorizationEngine.Action.ALLOW);
     override = RbacConfig.create(authconfig);
 
-    new RbacFilter().buildServerInterceptor(original, override)
+    FILTER_PROVIDER.newInstance().buildServerInterceptor(original, override)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
     verify(mockServerCall).getAttributes();
@@ -336,22 +344,22 @@ public class RbacFilterTest {
     Message rawProto = io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
             .setRules(RBAC.newBuilder().setAction(Action.LOG)
                     .putPolicies("policy-name", Policy.newBuilder().build()).build()).build();
-    ConfigOrError<RbacConfig> result = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+    ConfigOrError<RbacConfig> result = FILTER_PROVIDER.parseFilterConfig(Any.pack(rawProto));
     assertThat(result.config).isEqualTo(RbacConfig.create(null));
   }
 
   @Test
   public void testOrderIndependenceOfPolicies() {
     Message rawProto = buildComplexRbac(ImmutableList.of(1, 2, 3, 4, 5, 6), true);
-    ConfigOrError<RbacConfig> ascFirst = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+    ConfigOrError<RbacConfig> ascFirst = FILTER_PROVIDER.parseFilterConfig(Any.pack(rawProto));
 
     rawProto = buildComplexRbac(ImmutableList.of(1, 2, 3, 4, 5, 6), false);
-    ConfigOrError<RbacConfig> ascLast = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+    ConfigOrError<RbacConfig> ascLast = FILTER_PROVIDER.parseFilterConfig(Any.pack(rawProto));
 
     assertThat(ascFirst.config).isEqualTo(ascLast.config);
 
     rawProto = buildComplexRbac(ImmutableList.of(6, 5, 4, 3, 2, 1), true);
-    ConfigOrError<RbacConfig> decFirst = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+    ConfigOrError<RbacConfig> decFirst = FILTER_PROVIDER.parseFilterConfig(Any.pack(rawProto));
 
     assertThat(ascFirst.config).isEqualTo(decFirst.config);
   }
@@ -373,14 +381,14 @@ public class RbacFilterTest {
   private ConfigOrError<RbacConfig> parse(List<Permission> permissionList,
                                                       List<Principal> principalList) {
 
-    return RbacFilter.parseRbacConfig(buildRbac(permissionList, principalList));
+    return RbacFilter.Provider.parseRbacConfig(buildRbac(permissionList, principalList));
   }
 
   private ConfigOrError<RbacConfig> parseRaw(List<Permission> permissionList,
                                                       List<Principal> principalList) {
     Message rawProto = buildRbac(permissionList, principalList);
     Any proto = Any.pack(rawProto);
-    return new RbacFilter().parseFilterConfig(proto);
+    return FILTER_PROVIDER.parseFilterConfig(proto);
   }
 
   private io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC buildRbac(
@@ -448,6 +456,6 @@ public class RbacFilterTest {
     RBACPerRoute rbacPerRoute = RBACPerRoute.newBuilder().setRbac(
             buildRbac(permissionList, principalList)).build();
     Any proto = Any.pack(rbacPerRoute);
-    return new RbacFilter().parseFilterConfigOverride(proto);
+    return FILTER_PROVIDER.parseFilterConfigOverride(proto);
   }
 }
