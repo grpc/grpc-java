@@ -23,9 +23,9 @@ java_library(
     name = "s2a_identity",
     srcs = ["src/main/java/io/grpc/s2a/internal/handshaker/S2AIdentity.java"],
     deps = [
-        ":common_java_proto",
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
+        artifact("com.google.s2a.proto.v2:s2a-proto"),
     ],
 )
 
@@ -56,11 +56,8 @@ java_library(
     ],
     deps = [
         ":token_manager",
-        ":common_java_proto",
         ":s2a_channel_pool",
         ":s2a_identity",
-        ":s2a_java_proto",
-        ":s2a_java_grpc_proto",
         "//api",
         "//core:internal",
         "//netty",
