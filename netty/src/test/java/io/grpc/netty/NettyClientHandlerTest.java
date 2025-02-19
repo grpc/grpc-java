@@ -112,7 +112,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -937,7 +936,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
             .add(as("auth"), as("sometoken"))
             .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
             .add(TE_HEADER, TE_TRAILERS);
-    ChannelFuture channelFuture = enqueue(newCreateStreamCommand(grpcHeadersWithoutAuthority, streamTransportState));
+    ChannelFuture channelFuture = enqueue(newCreateStreamCommand(
+            grpcHeadersWithoutAuthority, streamTransportState));
     try {
       channelFuture.get();
       fail("Expected stream creation failure");
@@ -948,24 +948,23 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
   @Test
   public void missingAuthorityVerifierInAttributes_streamCreationShouldFail() throws Exception {
-    doAnswer(
-            new Answer<Void>() {
-              @Override
-              public Void answer(InvocationOnMock invocation) throws Throwable {
-                StreamListener.MessageProducer producer =
-                        (StreamListener.MessageProducer) invocation.getArguments()[0];
-                InputStream message;
-                while ((message = producer.next()) != null) {
-                  streamListenerMessageQueue.add(message);
-                }
-                return null;
-              }
-            })
-            .when(streamListener)
-            .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        StreamListener.MessageProducer producer =
+                (StreamListener.MessageProducer) invocation.getArguments()[0];
+        InputStream message;
+        while ((message = producer.next()) != null) {
+          streamListenerMessageQueue.add(message);
+        }
+        return null;
+      }
+    })
+        .when(streamListener)
+        .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
     doAnswer((attributes) -> Attributes.EMPTY)
-            .when(listener)
-            .filterTransport(ArgumentMatchers.any(Attributes.class));
+        .when(listener)
+        .filterTransport(ArgumentMatchers.any(Attributes.class));
     lifecycleManager = new ClientTransportLifecycleManager(listener);
     // This mocks the keepalive manager only for there's in which we verify it. For other tests
     // it'll be null which will be testing if we behave correctly when it's not present.
@@ -1000,7 +999,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
       channelFuture.get();
       fail("Expected stream creation failure");
     } catch (ExecutionException e) {
-      assertThat(e.getCause().getMessage()).isEqualTo("UNAVAILABLE: Authority verifier not found to verify authority");
+      assertThat(e.getCause().getMessage()).isEqualTo(
+              "UNAVAILABLE: Authority verifier not found to verify authority");
     }
   }
 
@@ -1019,27 +1019,26 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void authorityVerificationFailure_streamCreationFails() throws Exception {
     NettyClientHandler.enablePerRpcAuthorityCheck = true;
     try {
-      doAnswer(
-              new Answer<Void>() {
-                @Override
-                public Void answer(InvocationOnMock invocation) throws Throwable {
-                  StreamListener.MessageProducer producer =
-                          (StreamListener.MessageProducer) invocation.getArguments()[0];
-                  InputStream message;
-                  while ((message = producer.next()) != null) {
-                    streamListenerMessageQueue.add(message);
-                  }
-                  return null;
-                }
-              })
-              .when(streamListener)
-              .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+      doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) throws Throwable {
+          StreamListener.MessageProducer producer =
+                  (StreamListener.MessageProducer) invocation.getArguments()[0];
+          InputStream message;
+          while ((message = producer.next()) != null) {
+            streamListenerMessageQueue.add(message);
+          }
+          return null;
+        }
+      })
+          .when(streamListener)
+          .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
       doAnswer((attributes) -> Attributes.newBuilder().set(
-              GrpcAttributes.ATTR_AUTHORITY_VERIFIER,
-              (authority) -> Status.UNAVAILABLE.withCause(
-                      new CertificateException("Peer verification failed"))).build())
-              .when(listener)
-              .filterTransport(ArgumentMatchers.any(Attributes.class));
+          GrpcAttributes.ATTR_AUTHORITY_VERIFIER,
+          (authority) -> Status.UNAVAILABLE.withCause(
+                  new CertificateException("Peer verification failed"))).build())
+          .when(listener)
+          .filterTransport(ArgumentMatchers.any(Attributes.class));
       lifecycleManager = new ClientTransportLifecycleManager(listener);
       // This mocks the keepalive manager only for there's in which we verify it. For other tests
       // it'll be null which will be testing if we behave correctly when it's not present.

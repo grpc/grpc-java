@@ -603,38 +603,46 @@ class NettyClientHandler extends AbstractNettyHandler {
       return;
     }
 
-    CharSequence authority = command.headers().authority();
-    if (authority != null) {
-      Status authorityVerificationStatus = peerVerificationResults.get(authority.toString());
-      if (authorityVerificationStatus == null) {
-        if (attributes != null
-                && attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER) != null) {
-          authorityVerificationStatus = attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER)
-                  .verifyAuthority(authority.toString());
-          peerVerificationResults.put(authority.toString(), authorityVerificationStatus);
-          if (!authorityVerificationStatus.isOk() && !enablePerRpcAuthorityCheck) {
-            logger.log(Level.WARNING, String.format("%s.%s",
-                            authorityVerificationStatus.getDescription(), enablePerRpcAuthorityCheck
-                                    ? "" : " This will be an error in the future."),
-                    InternalStatus.asRuntimeExceptionWithoutStacktrace(authorityVerificationStatus, null));
+    CharSequence authorityHeader = command.headers().authority();
+    if (authorityHeader != null) {
+      // No need to verify authority for the rpc outgoing header if it is same as the authority
+      // for the transport
+      if (!authority.contentEquals(authorityHeader)) {
+        Status authorityVerificationStatus = peerVerificationResults.get(
+                authorityHeader.toString());
+        if (authorityVerificationStatus == null) {
+          if (attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER) != null) {
+            authorityVerificationStatus = attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER)
+                    .verifyAuthority(authorityHeader.toString());
+            peerVerificationResults.put(authorityHeader.toString(), authorityVerificationStatus);
+            if (!authorityVerificationStatus.isOk() && !enablePerRpcAuthorityCheck) {
+              logger.log(Level.WARNING, String.format("%s.%s",
+                              authorityVerificationStatus.getDescription(),
+                              enablePerRpcAuthorityCheck
+                                      ? "" : " This will be an error in the future."),
+                      InternalStatus.asRuntimeExceptionWithoutStacktrace(
+                              authorityVerificationStatus, null));
+            }
+          } else {
+            authorityVerificationStatus = Status.UNAVAILABLE.withDescription(
+                    "Authority verifier not found to verify authority");
+            command.stream().setNonExistent();
+            command.stream().transportReportStatus(
+                    authorityVerificationStatus, RpcProgress.PROCESSED, true, new Metadata());
+            promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+                    authorityVerificationStatus, null));
+            return;
           }
-        } else {
-          authorityVerificationStatus = Status.UNAVAILABLE.withDescription(
-                  "Authority verifier not found to verify authority");
-          command.stream().setNonExistent();
-          command.stream().transportReportStatus(
-                  authorityVerificationStatus, RpcProgress.DROPPED, true, new Metadata());
-          promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(authorityVerificationStatus, null));
-          return;
         }
-      }
-      if (authorityVerificationStatus != null && !authorityVerificationStatus.isOk()) {
-        if (enablePerRpcAuthorityCheck) {
-          command.stream().setNonExistent();
-          command.stream().transportReportStatus(
-                  authorityVerificationStatus, RpcProgress.DROPPED, true, new Metadata());
-          promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(authorityVerificationStatus, null));
-          return;
+        if (authorityVerificationStatus != null && !authorityVerificationStatus.isOk()) {
+          if (enablePerRpcAuthorityCheck) {
+            command.stream().setNonExistent();
+            command.stream().transportReportStatus(
+                    authorityVerificationStatus, RpcProgress.PROCESSED, true, new Metadata());
+            promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+                    authorityVerificationStatus, null));
+            return;
+          }
         }
       }
     } else {
@@ -643,7 +651,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       command.stream().setNonExistent();
       command.stream().transportReportStatus(
               Status.UNAVAILABLE, RpcProgress.DROPPED, true, new Metadata());
-      promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(authorityVerificationStatus, null));
+      promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+              authorityVerificationStatus, null));
       return;
     }
     // Get the stream ID for the new stream.
