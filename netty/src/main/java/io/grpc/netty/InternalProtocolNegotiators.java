@@ -81,7 +81,7 @@ public final class InternalProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator ClientTls(SslContext sslContext) {
-    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.serverTls(sslContext);
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext);
     final class ClientTlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override

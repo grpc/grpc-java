@@ -203,9 +203,8 @@ public final class SecurityProtocolNegotiators {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
-
-      //new Throwable().printStackTrace();
-      //System.out.println("SecurityProtocolNegotiators.ClientSecurityHandler instance=" + this);
+      new Throwable().printStackTrace();
+      System.out.println("SecurityProtocolNegotiators.ClientSecurityHandler instance=" + this);
     }
 
     @Override
@@ -221,6 +220,7 @@ public final class SecurityProtocolNegotiators {
             @Override
             public void updateSslContext(SslContext sslContext) {
               if (ctx.isRemoved()) {
+                System.out.println("ctx.isRemoved() invoked");
                 return;
               }
               logger.log(
@@ -235,6 +235,7 @@ public final class SecurityProtocolNegotiators {
                 ctx.pipeline().addAfter(ctx.name(), null, handler);
                 fireProtocolNegotiationEvent(ctx);
                 ctx.pipeline().remove(bufferReads);
+                System.out.println("ClientSecurityHandler.updateSslContext invoked");
               //}
             }
 
@@ -362,8 +363,8 @@ public final class SecurityProtocolNegotiators {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
-      //new Throwable().printStackTrace();
-      //System.out.println("SecurityProtocolNegotiators.ServerSecurityHandler instance=" + this);
+      new Throwable().printStackTrace();
+      System.out.println("SecurityProtocolNegotiators.ServerSecurityHandler instance=" + this);
     }
 
     @Override
