@@ -75,7 +75,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   private final SynchronizationContext syncContext;
   private final ThreadSafeRandom random;
   private List<RingEntry> ring;
-  private String requestHashHeader = "";
+  @Nullable private Metadata.Key<String> requestHashHeaderKey;
 
   RingHashLoadBalancer(Helper helper) {
     this(helper, ThreadSafeRandomImpl.instance);
@@ -111,7 +111,10 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       if (config == null) {
         throw new IllegalArgumentException("Missing RingHash configuration");
       }
-      requestHashHeader = config.requestHashHeader;
+      requestHashHeaderKey =
+          config.requestHashHeader.isEmpty()
+              ? null
+              : Metadata.Key.of(config.requestHashHeader, Metadata.ASCII_STRING_MARSHALLER);
       Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
       long totalWeight = 0L;
       for (EquivalentAddressGroup eag : addrList) {
@@ -227,7 +230,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
 
     RingHashPicker picker =
-        new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeader, random);
+        new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeaderKey, random);
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
   }
@@ -355,17 +358,17 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     // TODO(chengyuanzhang): can be more performance-friendly with
     //  IdentityHashMap<Subchannel, ConnectivityStateInfo> and RingEntry contains Subchannel.
     private final Map<Endpoint, SubchannelView> pickableSubchannels;  // read-only
-    private final String requestHashHeader;
+    @Nullable private final Metadata.Key<String> requestHashHeaderKey;
     private final ThreadSafeRandom random;
     private final boolean hasEndpointInConnectingState;
 
     private RingHashPicker(
         SynchronizationContext syncContext, List<RingEntry> ring,
-        Collection<ChildLbState> children, String requestHashHeader,
+        Collection<ChildLbState> children, Metadata.Key<String> requestHashHeaderKey,
         ThreadSafeRandom random) {
       this.syncContext = syncContext;
       this.ring = ring;
-      this.requestHashHeader = requestHashHeader;
+      this.requestHashHeaderKey = requestHashHeaderKey;
       this.random = random;
       pickableSubchannels = new HashMap<>(children.size());
       boolean hasConnectingState = false;
@@ -409,7 +412,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       // Determine request hash.
       boolean usingRandomHash = false;
       long requestHash;
-      if (requestHashHeader.isEmpty()) {
+      if (requestHashHeaderKey == null) {
         // Set by the xDS config selector.
         Long rpcHashFromCallOptions = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
         if (rpcHashFromCallOptions == null) {
@@ -417,9 +420,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
         }
         requestHash = rpcHashFromCallOptions;
       } else {
-        Iterable<String> headerValues =
-            args.getHeaders()
-                .getAll(Metadata.Key.of(requestHashHeader, Metadata.ASCII_STRING_MARSHALLER));
+        Iterable<String> headerValues = args.getHeaders().getAll(requestHashHeaderKey);
         if (headerValues != null) {
           requestHash = hashFunc.hashAsciiString(Joiner.on(",").join(headerValues));
         } else {
