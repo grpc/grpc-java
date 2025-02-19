@@ -324,6 +324,8 @@ public final class SecurityProtocolNegotiators {
                     null,
                     new ClientSecurityHandler(
                         grpcHandler, sslContextProviderSupplier));
+            ctx.fireUserEventTriggered(pne);
+            return;
           } else {
             ctx.pipeline()
               .replace(
@@ -332,8 +334,8 @@ public final class SecurityProtocolNegotiators {
                   new ServerSecurityHandler(
                       grpcHandler, sslContextProviderSupplier));
             ctx.fireUserEventTriggered(pne);
+            return;
           }
-          return;
         }
       } else {
         super.userEventTriggered(ctx, evt);

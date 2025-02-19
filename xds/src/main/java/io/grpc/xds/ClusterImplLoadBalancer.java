@@ -101,7 +101,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   ClusterImplLoadBalancer(Helper helper) {
     this(helper, ThreadSafeRandomImpl.instance);
-    System.out.println("inside ClusterImplLoadBalancer constructor with 1 param");
   }
 
   ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random) {
@@ -110,7 +109,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     InternalLogId logId = InternalLogId.allocate("cluster-impl-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
-    System.out.println("inside ClusterImplLoadBalancer constructor with 2 params");
   }
 
   @Override
