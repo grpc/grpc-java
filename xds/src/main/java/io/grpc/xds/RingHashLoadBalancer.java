@@ -380,7 +380,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     }
 
     // Find the ring entry with hash next to (clockwise) the RPC's hash (binary search).
-    private int getTargetIndex(Long requestHash) {
+    private int getTargetIndex(long requestHash) {
       if (ring.size() <= 1) {
         return 0;
       }
@@ -408,13 +408,14 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       // Determine request hash.
       boolean usingRandomHash = false;
-      Long requestHash;
+      long requestHash;
       if (requestHashHeader.isEmpty()) {
         // Set by the xDS config selector.
-        requestHash = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
-        if (requestHash == null) {
+        Long rpcHashFromCallOptions = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
+        if (rpcHashFromCallOptions == null) {
           return PickResult.withError(RPC_HASH_NOT_FOUND);
         }
+        requestHash = rpcHashFromCallOptions;
       } else {
         Iterable<String> headerValues =
             args.getHeaders()
