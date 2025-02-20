@@ -113,12 +113,10 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
     Object switchConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
         lbRegistry.getProvider(WEIGHTED_TARGET_POLICY_NAME),
         new WeightedTargetConfig(weightedPolicySelections));
-    switchLb.handleResolvedAddresses(
+    return switchLb.acceptResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setLoadBalancingPolicyConfig(switchConfig)
             .build());
-
-    return Status.OK;
   }
 
   @Override

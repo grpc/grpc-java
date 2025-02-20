@@ -88,6 +88,15 @@ public class RpcBehaviorLoadBalancerProviderTest {
   }
 
   @Test
+  public void acceptResolvedAddressesDelegated() {
+    RpcBehaviorLoadBalancer lb = new RpcBehaviorLoadBalancer(new RpcBehaviorHelper(mockHelper),
+        mockDelegateLb);
+    ResolvedAddresses resolvedAddresses = buildResolvedAddresses(buildConfig());
+    lb.acceptResolvedAddresses(resolvedAddresses);
+    verify(mockDelegateLb).acceptResolvedAddresses(resolvedAddresses);
+  }
+
+  @Test
   public void helperWrapsPicker() {
     RpcBehaviorHelper helper = new RpcBehaviorHelper(mockHelper);
     helper.setRpcBehavior("error-code-15");
