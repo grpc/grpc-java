@@ -103,6 +103,7 @@ protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.8"
 robolectric = "org.robolectric:robolectric:4.14.1"
+s2a-proto = "com.google.s2a.proto.v2:s2a-proto:0.1.1"
 signature-android = "net.sf.androidscents.signature:android-api-level-21:5.0.1_r2"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 # 11.0.0+ require Java 17+

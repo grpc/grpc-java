@@ -21,6 +21,15 @@ import static com.google.common.truth.extensions.proto.ProtoTruth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.google.common.truth.Expect;
+import com.google.s2a.proto.v2.Ciphersuite;
+import com.google.s2a.proto.v2.ConnectionSide;
+import com.google.s2a.proto.v2.GetTlsConfigurationReq;
+import com.google.s2a.proto.v2.GetTlsConfigurationResp;
+import com.google.s2a.proto.v2.S2AServiceGrpc;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
+import com.google.s2a.proto.v2.Status;
+import com.google.s2a.proto.v2.TLSVersion;
 import io.grpc.Channel;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
