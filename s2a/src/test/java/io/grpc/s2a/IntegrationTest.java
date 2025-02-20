@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc.s2a.internal.handshaker;
+package io.grpc.s2a;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import com.google.s2a.proto.v2.S2AServiceGrpc;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
@@ -37,6 +38,7 @@ import io.grpc.netty.NettyServerBuilder;
 import io.grpc.s2a.S2AChannelCredentials;
 import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.internal.handshaker.FakeS2AServer;
+import io.grpc.s2a.internal.handshaker.S2AStub;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;

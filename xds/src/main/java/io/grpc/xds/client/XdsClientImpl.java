@@ -582,8 +582,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     String errorDetail = null;
     if (errors.isEmpty()) {
       checkArgument(invalidResources.isEmpty(), "found invalid resources but missing errors");
-      controlPlaneClient.ackResponse(xdsResourceType, args.versionInfo,
-          args.nonce);
+      controlPlaneClient.ackResponse(xdsResourceType, args.versionInfo, args.nonce);
     } else {
       errorDetail = Joiner.on('\n').join(errors);
       logger.log(XdsLogLevel.WARNING,

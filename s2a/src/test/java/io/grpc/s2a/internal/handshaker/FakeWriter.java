@@ -16,13 +16,25 @@
 
 package io.grpc.s2a.internal.handshaker;
 
-import static io.grpc.s2a.internal.handshaker.TLSVersion.TLS_VERSION_1_2;
-import static io.grpc.s2a.internal.handshaker.TLSVersion.TLS_VERSION_1_3;
+import static com.google.s2a.proto.v2.TLSVersion.TLS_VERSION_1_2;
+import static com.google.s2a.proto.v2.TLSVersion.TLS_VERSION_1_3;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.CharStreams;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.ByteString;
+import com.google.s2a.proto.v2.Ciphersuite;
+import com.google.s2a.proto.v2.ConnectionSide;
+import com.google.s2a.proto.v2.GetTlsConfigurationReq;
+import com.google.s2a.proto.v2.GetTlsConfigurationResp;
+import com.google.s2a.proto.v2.OffloadPrivateKeyOperationReq;
+import com.google.s2a.proto.v2.OffloadPrivateKeyOperationResp;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
+import com.google.s2a.proto.v2.SignatureAlgorithm;
+import com.google.s2a.proto.v2.Status;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainReq;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainResp;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.CertificateUtils;
 import java.io.FileNotFoundException;

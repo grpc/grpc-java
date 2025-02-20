@@ -21,8 +21,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainReq;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainReq.VerificationMode;
+import com.google.s2a.proto.v2.ValidatePeerCertificateChainResp;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
-import io.grpc.s2a.internal.handshaker.ValidatePeerCertificateChainReq.VerificationMode;
 import java.io.IOException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;

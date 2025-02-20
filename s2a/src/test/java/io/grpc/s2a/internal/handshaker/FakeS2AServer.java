@@ -16,6 +16,9 @@
 
 package io.grpc.s2a.internal.handshaker;
 
+import com.google.s2a.proto.v2.S2AServiceGrpc;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
