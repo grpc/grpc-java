@@ -68,14 +68,12 @@ final class GrpcHttp2OutboundHeaders extends AbstractHttp2Headers {
 
   @Override
   public CharSequence authority() {
-    CharSequence authority = null;
     for (int i = 0; i < preHeaders.length / 2; i++) {
       if (preHeaders[i].equals(Http2Headers.PseudoHeaderName.AUTHORITY.value())) {
-        authority = preHeaders[i + 1];
+        return preHeaders[i * 2 + 1];
       }
     }
-    assert authority != null;
-    return authority;
+    return null;
   }
 
   @Override

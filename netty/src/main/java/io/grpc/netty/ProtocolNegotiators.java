@@ -836,7 +836,9 @@ final class ProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler upgradeHandler =
           new Http2UpgradeAndGrpcHandler(grpcHandler.getAuthority(), grpcHandler);
-      return new WaitUntilActiveHandler(upgradeHandler, grpcHandler.getNegotiationLogger());
+      ChannelHandler plaintextHandler =
+          new PlaintextHandler(upgradeHandler, grpcHandler.getNegotiationLogger());
+      return new WaitUntilActiveHandler(plaintextHandler, grpcHandler.getNegotiationLogger());
     }
 
     @Override
@@ -1033,7 +1035,9 @@ final class ProtocolNegotiators {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler grpcNegotiationHandler = new GrpcNegotiationHandler(grpcHandler);
-      ChannelHandler activeHandler = new WaitUntilActiveHandler(grpcNegotiationHandler,
+      ChannelHandler plaintextHandler =
+          new PlaintextHandler(grpcNegotiationHandler, grpcHandler.getNegotiationLogger());
+      ChannelHandler activeHandler = new WaitUntilActiveHandler(plaintextHandler,
           grpcHandler.getNegotiationLogger());
       return activeHandler;
     }
@@ -1044,6 +1048,22 @@ final class ProtocolNegotiators {
     @Override
     public AsciiString scheme() {
       return Utils.HTTP;
+    }
+  }
+
+  static final class PlaintextHandler extends ProtocolNegotiationHandler {
+    PlaintextHandler(ChannelHandler next, ChannelLogger negotiationLogger) {
+      super(next, negotiationLogger);
+    }
+
+    @Override
+    protected void protocolNegotiationEventTriggered(ChannelHandlerContext ctx) {
+      ProtocolNegotiationEvent existingPne = getProtocolNegotiationEvent();
+      Attributes attrs = existingPne.getAttributes().toBuilder()
+              .set(GrpcAttributes.ATTR_AUTHORITY_VERIFIER, (authority) -> Status.OK)
+              .build();
+      replaceProtocolNegotiationEvent(existingPne.withAttributes(attrs));
+      fireProtocolNegotiationEvent(ctx);
     }
   }
 

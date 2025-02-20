@@ -16,6 +16,8 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.Status;
 import io.grpc.internal.AuthorityVerifier;
 import java.lang.reflect.InvocationTargetException;
@@ -51,15 +53,15 @@ final class X509AuthorityVerifier implements AuthorityVerifier {
   }
 
   public X509AuthorityVerifier(SSLEngine sslEngine, X509TrustManager x509ExtendedTrustManager) {
-    this.sslEngine = sslEngine;
+    this.sslEngine = checkNotNull(sslEngine);
     this.x509ExtendedTrustManager = x509ExtendedTrustManager;
   }
 
   @Override
   public Status verifyAuthority(@Nonnull String authority) {
-    if (sslEngine == null || x509ExtendedTrustManager == null) {
+    if (x509ExtendedTrustManager == null) {
       return Status.UNAVAILABLE.withDescription(
-              "Can't allow authority override in rpc when SslEngine or X509ExtendedTrustManager"
+              "Can't allow authority override in rpc when X509ExtendedTrustManager"
                       + " is not available");
     }
     Status peerVerificationStatus;
