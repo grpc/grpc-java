@@ -44,28 +44,14 @@ import javax.annotation.concurrent.NotThreadSafe;
  * generally created by calling {@link #parseLoadBalancingPolicyConfig(List)} from a
  * {@link io.grpc.LoadBalancerProvider#parseLoadBalancingPolicyConfig
  * provider's parseLoadBalancingPolicyConfig()} implementation.
- *
- * <p>Alternatively, the balancer may {@link #switchTo(LoadBalancer.Factory) switch to} a policy
- * prior to {@link
- * LoadBalancer#handleResolvedAddresses(ResolvedAddresses) handling resolved addresses} for the
- * first time. This causes graceful switch to ignore the service config and pass through the
- * resolved addresses directly to the child policy.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      //  Most LB policies using this class will receive child policy configuration within the
-      //  service config, so they are naturally calling switchTo() just before
-      //  handleResolvedAddresses(), within their own handleResolvedAddresses(). If switchTo() is
-      //  not called immediately after construction that does open up potential for bugs in the
-      //  parent policies, where they fail to call switchTo(). So we will use the exception to try
-      //  to notice those bugs quickly, as it will fail very loudly.
-      throw new IllegalStateException(
-          "GracefulSwitchLoadBalancer must switch to a load balancing policy before handling"
-              + " ResolvedAddresses");
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      throw new AssertionError("real LB is called instead");
     }
 
     @Override
@@ -104,7 +90,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private LoadBalancer pendingLb = defaultBalancer;
   private ConnectivityState pendingState;
   private SubchannelPicker pendingPicker;
-  private boolean switchToCalled;
 
   private boolean currentLbIsReady;
 
@@ -114,10 +99,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (switchToCalled) {
-      delegate().handleResolvedAddresses(resolvedAddresses);
-      return;
-    }
     Config config = (Config) resolvedAddresses.getLoadBalancingPolicyConfig();
     switchToInternal(config.childFactory);
     delegate().handleResolvedAddresses(
@@ -128,28 +109,12 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (switchToCalled) {
-      return delegate().acceptResolvedAddresses(resolvedAddresses);
-    }
     Config config = (Config) resolvedAddresses.getLoadBalancingPolicyConfig();
     switchToInternal(config.childFactory);
     return delegate().acceptResolvedAddresses(
         resolvedAddresses.toBuilder()
           .setLoadBalancingPolicyConfig(config.childConfig)
           .build());
-  }
-
-  /**
-   * Gracefully switch to a new policy defined by the given factory, if the given factory isn't
-   * equal to the current one.
-   *
-   * @deprecated Use {@code parseLoadBalancingPolicyConfig()} and pass the configuration to
-   *     {@link io.grpc.LoadBalancer.ResolvedAddresses.Builder#setLoadBalancingPolicyConfig}
-   */
-  @Deprecated
-  public void switchTo(LoadBalancer.Factory newBalancerFactory) {
-    switchToCalled = true;
-    switchToInternal(newBalancerFactory);
   }
 
   private void switchToInternal(LoadBalancer.Factory newBalancerFactory) {
