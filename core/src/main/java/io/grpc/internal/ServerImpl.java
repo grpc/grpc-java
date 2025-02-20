@@ -778,6 +778,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     private final Tag tag;
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
+
     public JumpToApplicationThreadServerStreamListener(
         Executor executor,
         Executor cancelExecutor,
