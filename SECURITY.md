@@ -372,6 +372,7 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.0.0-1.0.1        | 4.1.3.Final           | 1.1.33.Fork19
 1.0.2-1.0.3        | 4.1.6.Final           | 1.1.33.Fork23
 1.1.x-1.3.x        | 4.1.8.Final           | 1.1.33.Fork26
+1.4.x              | 4.1.18.Final          | 2.0.1.Final
 1.4.x              | 4.1.11.Final          | 2.0.1.Final
 1.5.x              | 4.1.12.Final          | 2.0.5.Final
 1.6.x              | 4.1.14.Final          | 2.0.5.Final
