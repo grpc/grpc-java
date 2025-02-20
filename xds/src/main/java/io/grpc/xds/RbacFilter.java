@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -34,7 +33,6 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
-import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine;
@@ -66,10 +64,10 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /** RBAC Http filter implementation. */
-final class RbacFilter implements Filter, ServerInterceptorBuilder {
+final class RbacFilter implements Filter {
   private static final Logger logger = Logger.getLogger(RbacFilter.class.getName());
 
-  static final RbacFilter INSTANCE = new RbacFilter();
+  private static final RbacFilter INSTANCE = new RbacFilter();
 
   static final String TYPE_URL =
           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC";
@@ -77,87 +75,99 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
   private static final String TYPE_URL_OVERRIDE_CONFIG =
           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute";
 
-  RbacFilter() {}
+  private RbacFilter() {}
 
-  @Override
-  public String[] typeUrls() {
-    return new String[] { TYPE_URL, TYPE_URL_OVERRIDE_CONFIG };
-  }
+  static final class Provider implements Filter.Provider {
+    @Override
+    public String[] typeUrls() {
+      return new String[] {TYPE_URL, TYPE_URL_OVERRIDE_CONFIG};
+    }
 
-  @Override
-  public ConfigOrError<RbacConfig> parseFilterConfig(Message rawProtoMessage) {
-    RBAC rbacProto;
-    if (!(rawProtoMessage instanceof Any)) {
-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+    @Override
+    public boolean isServerFilter() {
+      return true;
     }
-    Any anyMessage = (Any) rawProtoMessage;
-    try {
-      rbacProto = anyMessage.unpack(RBAC.class);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Invalid proto: " + e);
-    }
-    return parseRbacConfig(rbacProto);
-  }
 
-  @VisibleForTesting
-  static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
-    if (!rbac.hasRules()) {
-      return ConfigOrError.fromConfig(RbacConfig.create(null));
+    @Override
+    public RbacFilter newInstance() {
+      return INSTANCE;
     }
-    io.envoyproxy.envoy.config.rbac.v3.RBAC rbacConfig = rbac.getRules();
-    GrpcAuthorizationEngine.Action authAction;
-    switch (rbacConfig.getAction()) {
-      case ALLOW:
-        authAction = GrpcAuthorizationEngine.Action.ALLOW;
-        break;
-      case DENY:
-        authAction = GrpcAuthorizationEngine.Action.DENY;
-        break;
-      case LOG:
-        return ConfigOrError.fromConfig(RbacConfig.create(null));
-      case UNRECOGNIZED:
-      default:
-        return ConfigOrError.fromError("Unknown rbacConfig action type: " + rbacConfig.getAction());
-    }
-    List<GrpcAuthorizationEngine.PolicyMatcher> policyMatchers = new ArrayList<>();
-    List<Entry<String, Policy>> sortedPolicyEntries = rbacConfig.getPoliciesMap().entrySet()
-        .stream()
-        .sorted((a,b) -> a.getKey().compareTo(b.getKey()))
-        .collect(Collectors.toList());
-    for (Map.Entry<String, Policy> entry: sortedPolicyEntries) {
+
+    @Override
+    public ConfigOrError<RbacConfig> parseFilterConfig(Message rawProtoMessage) {
+      RBAC rbacProto;
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+      }
+      Any anyMessage = (Any) rawProtoMessage;
       try {
-        Policy policy = entry.getValue();
-        if (policy.hasCondition() || policy.hasCheckedCondition()) {
-          return ConfigOrError.fromError(
-                  "Policy.condition and Policy.checked_condition must not set: " + entry.getKey());
-        }
-        policyMatchers.add(PolicyMatcher.create(entry.getKey(),
-                parsePermissionList(policy.getPermissionsList()),
-                parsePrincipalList(policy.getPrincipalsList())));
-      } catch (Exception e) {
-        return ConfigOrError.fromError("Encountered error parsing policy: " + e);
+        rbacProto = anyMessage.unpack(RBAC.class);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+      return parseRbacConfig(rbacProto);
+    }
+
+    @Override
+    public ConfigOrError<RbacConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      RBACPerRoute rbacPerRoute;
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+      }
+      Any anyMessage = (Any) rawProtoMessage;
+      try {
+        rbacPerRoute = anyMessage.unpack(RBACPerRoute.class);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+      if (rbacPerRoute.hasRbac()) {
+        return parseRbacConfig(rbacPerRoute.getRbac());
+      } else {
+        return ConfigOrError.fromConfig(RbacConfig.create(null));
       }
     }
-    return ConfigOrError.fromConfig(RbacConfig.create(
-        AuthConfig.create(policyMatchers, authAction)));
-  }
 
-  @Override
-  public ConfigOrError<RbacConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-    RBACPerRoute rbacPerRoute;
-    if (!(rawProtoMessage instanceof Any)) {
-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
-    }
-    Any anyMessage = (Any) rawProtoMessage;
-    try {
-      rbacPerRoute = anyMessage.unpack(RBACPerRoute.class);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Invalid proto: " + e);
-    }
-    if (rbacPerRoute.hasRbac()) {
-      return parseRbacConfig(rbacPerRoute.getRbac());
-    } else {
-      return ConfigOrError.fromConfig(RbacConfig.create(null));
+    static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
+      if (!rbac.hasRules()) {
+        return ConfigOrError.fromConfig(RbacConfig.create(null));
+      }
+      io.envoyproxy.envoy.config.rbac.v3.RBAC rbacConfig = rbac.getRules();
+      GrpcAuthorizationEngine.Action authAction;
+      switch (rbacConfig.getAction()) {
+        case ALLOW:
+          authAction = GrpcAuthorizationEngine.Action.ALLOW;
+          break;
+        case DENY:
+          authAction = GrpcAuthorizationEngine.Action.DENY;
+          break;
+        case LOG:
+          return ConfigOrError.fromConfig(RbacConfig.create(null));
+        case UNRECOGNIZED:
+        default:
+          return ConfigOrError.fromError(
+              "Unknown rbacConfig action type: " + rbacConfig.getAction());
+      }
+      List<GrpcAuthorizationEngine.PolicyMatcher> policyMatchers = new ArrayList<>();
+      List<Entry<String, Policy>> sortedPolicyEntries = rbacConfig.getPoliciesMap().entrySet()
+          .stream()
+          .sorted((a,b) -> a.getKey().compareTo(b.getKey()))
+          .collect(Collectors.toList());
+      for (Map.Entry<String, Policy> entry: sortedPolicyEntries) {
+        try {
+          Policy policy = entry.getValue();
+          if (policy.hasCondition() || policy.hasCheckedCondition()) {
+            return ConfigOrError.fromError(
+                "Policy.condition and Policy.checked_condition must not set: " + entry.getKey());
+          }
+          policyMatchers.add(PolicyMatcher.create(entry.getKey(),
+              parsePermissionList(policy.getPermissionsList()),
+              parsePrincipalList(policy.getPrincipalsList())));
+        } catch (Exception e) {
+          return ConfigOrError.fromError("Encountered error parsing policy: " + e);
+        }
+      }
+      return ConfigOrError.fromConfig(RbacConfig.create(
+          AuthConfig.create(policyMatchers, authAction)));
     }
   }
 

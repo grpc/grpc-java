@@ -7,7 +7,6 @@ set -exu -o pipefail
 
 cd github/grpc-java
 
-export GRADLE_OPTS=-Xmx512m
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
@@ -30,7 +29,7 @@ sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
 # Unset any existing JAVA_HOME env var to stop Gradle from using it
 unset JAVA_HOME
 
-GRADLE_FLAGS="-Pandroid.useAndroidX=true"
+GRADLE_FLAGS="-Pandroid.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx1024m"
 
 ./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebug
 ./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebugAndroidTest

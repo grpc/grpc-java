@@ -12,7 +12,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.48.0",
+    "com.google.api.grpc:proto-google-common-protos:2.51.0",
     "com.google.auth:google-auth-library-credentials:1.24.1",
     "com.google.auth:google-auth-library-oauth2-http:1.24.1",
     "com.google.auto.value:auto-value-annotations:1.11.0",
@@ -22,7 +22,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.errorprone:error_prone_annotations:2.30.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.3.1-android",
-    "com.google.re2j:re2j:1.7",
+    "com.google.re2j:re2j:1.8",
+    "com.google.s2a.proto.v2:s2a-proto:0.1.1",
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
@@ -35,8 +36,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-handler-proxy:4.1.110.Final",
     "io.netty:netty-handler:4.1.110.Final",
     "io.netty:netty-resolver:4.1.110.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.65.Final",
-    "io.netty:netty-tcnative-classes:2.0.65.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.70.Final",
+    "io.netty:netty-tcnative-classes:2.0.70.Final",
     "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.110.Final",
     "io.netty:netty-transport-native-unix-common:4.1.110.Final",
     "io.netty:netty-transport:4.1.110.Final",

@@ -19,55 +19,88 @@ package io.grpc.xds;
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.ServerInterceptor;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
- * Defines the parsing functionality of an HTTP filter. A Filter may optionally implement either
- * {@link ClientInterceptorBuilder} or {@link ServerInterceptorBuilder} or both, indicating it is
- * capable of working on the client side or server side or both, respectively.
+ * Defines the parsing functionality of an HTTP filter.
+ *
+ * <p>A Filter may optionally implement either {@link Filter#buildClientInterceptor} or
+ * {@link Filter#buildServerInterceptor} or both, and return true from corresponding
+ * {@link Provider#isClientFilter()}, {@link Provider#isServerFilter()} to indicate that the filter
+ * is capable of working on the client side or server side or both, respectively.
  */
 interface Filter {
-
-  /**
-   * The proto message types supported by this filter. A filter will be registered by each of its
-   * supported message types.
-   */
-  String[] typeUrls();
-
-  /**
-   * Parses the top-level filter config from raw proto message. The message may be either a {@link
-   * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
-   */
-  ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
-
-  /**
-   * Parses the per-filter override filter config from raw proto message. The message may be either
-   * a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
-   */
-  ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
 
   /** Represents an opaque data structure holding configuration for a filter. */
   interface FilterConfig {
     String typeUrl();
   }
 
+  /**
+   * Common interface for filter providers.
+   */
+  interface Provider {
+    /**
+     * The proto message types supported by this filter. A filter will be registered by each of its
+     * supported message types.
+     */
+    String[] typeUrls();
+
+    /**
+     * Whether the filter can be installed on the client side.
+     *
+     * <p>Returns true if the filter implements {@link Filter#buildClientInterceptor}.
+     */
+    default boolean isClientFilter() {
+      return false;
+    }
+
+    /**
+     * Whether the filter can be installed into xDS-enabled servers.
+     *
+     * <p>Returns true if the filter implements {@link Filter#buildServerInterceptor}.
+     */
+    default boolean isServerFilter() {
+      return false;
+    }
+
+    /**
+     * Creates a new instance of the filter.
+     *
+     * <p>Returns a filter instance registered with the same typeUrls as the provider,
+     * capable of working with the same FilterConfig type returned by provider's parse functions.
+     */
+    Filter newInstance();
+
+    /**
+     * Parses the top-level filter config from raw proto message. The message may be either a {@link
+     * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
+     */
+    ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
+
+    /**
+     * Parses the per-filter override filter config from raw proto message. The message may be
+     * either a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
+     */
+    ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
+  }
+
   /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for clients. */
-  interface ClientInterceptorBuilder {
-    @Nullable
-    ClientInterceptor buildClientInterceptor(
-        FilterConfig config, @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
-        ScheduledExecutorService scheduler);
+  @Nullable
+  default ClientInterceptor buildClientInterceptor(
+      FilterConfig config, @Nullable FilterConfig overrideConfig,
+      ScheduledExecutorService scheduler) {
+    return null;
   }
 
   /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for the server. */
-  interface ServerInterceptorBuilder {
-    @Nullable
-    ServerInterceptor buildServerInterceptor(
-        FilterConfig config, @Nullable FilterConfig overrideConfig);
+  @Nullable
+  default ServerInterceptor buildServerInterceptor(
+      FilterConfig config, @Nullable FilterConfig overrideConfig) {
+    return null;
   }
 
   /** Filter config with instance name. */
