@@ -503,7 +503,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(
-                  wrappedExecutor, executor, stream, context, tag, headers);
+                  wrappedExecutor, executor, stream, context, tag);
       stream.setListener(jumpListener);
       final SettableFuture<ServerCallParameters<?,?>> future = SettableFuture.create();
       // Run in serializing executor so jumpListener.setListener() is called before any callbacks
@@ -778,7 +778,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     private final Tag tag;
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
-    private Metadata trailers;
+    private boolean closeCalled;
 
     public JumpToApplicationThreadServerStreamListener(
         Executor executor,
@@ -786,22 +786,11 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         ServerStream stream,
         Context.CancellableContext context,
         Tag tag) {
-      this(executor, cancelExecutor, stream, context, tag, new Metadata());
-    }
-
-    public JumpToApplicationThreadServerStreamListener(
-        Executor executor,
-        Executor cancelExecutor,
-        ServerStream stream,
-        Context.CancellableContext context,
-        Tag tag,
-        Metadata trailers) {
       this.callExecutor = executor;
       this.cancelExecutor = cancelExecutor;
       this.stream = stream;
       this.context = context;
       this.tag = tag;
-      this.trailers = trailers;
     }
 
     /**
@@ -824,9 +813,13 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /**
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
-    private synchronized void internalClose(Throwable t) {
+    private void internalClose(Throwable t) {
       String description = "Application error processing RPC";
-      stream.close(Status.UNKNOWN.withDescription(description).withCause(t), this.trailers);
+      Metadata metadata = Status.trailersFromThrowable(t);
+      if (metadata == null) {
+        metadata = new Metadata();
+      }
+      stream.close(Status.UNKNOWN.withDescription(description).withCause(t), metadata);
     }
 
     @Override
