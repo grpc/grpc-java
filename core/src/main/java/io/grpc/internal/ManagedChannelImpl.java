@@ -151,6 +151,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
         public Result selectConfig(PickSubchannelArgs args) {
           throw new IllegalStateException("Resolution is pending");
         }
+        @Override
+        public String toString() {
+          return "Resolution is pending";
+        }
       };
   private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
       new LoadBalancer.PickDetailsConsumer() {};
@@ -934,6 +938,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     void updateConfigSelector(@Nullable InternalConfigSelector config) {
       InternalConfigSelector prevConfig = configSelector.get();
       configSelector.set(config);
+      channelLogger.log(ChannelLogLevel.INFO,
+        "Current service config is replaced", prevConfig, config);
       if (prevConfig == INITIAL_PENDING_SELECTOR && pendingCalls != null) {
         for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
           pendingCall.reprocess();

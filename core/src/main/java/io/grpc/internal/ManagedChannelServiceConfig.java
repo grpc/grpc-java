@@ -412,5 +412,12 @@ final class ManagedChannelServiceConfig {
           .setConfig(config)
           .build();
     }
+
+    @Override
+    public String toString() {
+     return "ServiceConfigConvertedSelector{" +
+          "config=" + config +
+          '}';
+    }
   }
 }
