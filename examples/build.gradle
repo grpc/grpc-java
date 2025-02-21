@@ -45,7 +45,7 @@ dependencies {
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
     plugins {
-        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
+        grpc { artifact = "io.grpc:protoc-gen-grpc-java:1.70.0" }
     }
     generateProtoTasks {
         all()*.plugins { grpc {} }
