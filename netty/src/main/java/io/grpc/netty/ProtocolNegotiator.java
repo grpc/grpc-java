@@ -63,4 +63,5 @@ interface ProtocolNegotiator {
      */
     ProtocolNegotiator newNegotiator(ObjectPool<? extends Executor> offloadExecutorPool);
   }
+
 }
