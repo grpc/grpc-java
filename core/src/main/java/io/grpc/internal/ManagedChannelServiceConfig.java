@@ -415,9 +415,10 @@ final class ManagedChannelServiceConfig {
 
     @Override
     public String toString() {
-     return "ServiceConfigConvertedSelector{" +
-          "config=" + config +
-          '}';
+      return "ServiceConfigConvertedSelector{"
+          + "config="
+          + config
+          + '}';
     }
   }
 }

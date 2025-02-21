@@ -151,6 +151,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         public Result selectConfig(PickSubchannelArgs args) {
           throw new IllegalStateException("Resolution is pending");
         }
+
         @Override
         public String toString() {
           return "Resolution is pending";
@@ -939,7 +940,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       InternalConfigSelector prevConfig = configSelector.get();
       configSelector.set(config);
       channelLogger.log(ChannelLogLevel.INFO,
-        "Current service config is replaced", prevConfig, config);
+          "Current service config is replaced", prevConfig, config);
       if (prevConfig == INITIAL_PENDING_SELECTOR && pendingCalls != null) {
         for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
           pendingCall.reprocess();
