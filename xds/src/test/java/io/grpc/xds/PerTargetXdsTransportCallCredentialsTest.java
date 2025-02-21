@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The gRPC Authors
+ * Copyright 2024 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import static org.mockito.Mockito.when;
 
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.OAuth2Credentials;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
@@ -131,7 +133,7 @@ public class PerTargetXdsTransportCallCredentialsTest {
           new StreamObserver<DiscoveryRequest>() {
             @Override
             public void onNext(DiscoveryRequest value) {
-              token = TOKEN_CONTEXT_KEY.get();
+              token = TOKEN_CONTEXT_KEY.get().substring("Bearer".length()).trim();
               responseObserver.onNext(DiscoveryResponse.newBuilder().build());
               notifyRequestDone();
             }
@@ -153,7 +155,7 @@ public class PerTargetXdsTransportCallCredentialsTest {
     }
 
     public boolean receivedToken(String expected) {
-      return token.contains(expected);
+      return token.equals(expected);
     }
 
     public void notifyRequestDone() {
@@ -182,11 +184,17 @@ public class PerTargetXdsTransportCallCredentialsTest {
     CallCredentials sampleCreds1 =
         MoreCallCredentials.from(
             OAuth2Credentials.create(new AccessToken("token1", /* expirationTime= */ null)));
-    XdsTransportCallCredentialsProvider.setTransportCallCredentials("target1", sampleCreds1);
+    assertThat(
+            XdsTransportCallCredentialsProvider.setTransportCallCredentials(
+                "target1", sampleCreds1))
+        .isTrue();
     CallCredentials sampleCreds2 =
         MoreCallCredentials.from(
             OAuth2Credentials.create(new AccessToken("token2", /* expirationTime= */ null)));
-    XdsTransportCallCredentialsProvider.setTransportCallCredentials("target2", sampleCreds2);
+    assertThat(
+            XdsTransportCallCredentialsProvider.setTransportCallCredentials(
+                "target2", sampleCreds2))
+        .isTrue();
 
     // Create xDS clients & transports, and verify that the appropriate custom CallCredentials were
     // used for each target
@@ -203,6 +211,47 @@ public class PerTargetXdsTransportCallCredentialsTest {
         XdsListenerResource.getInstance(), "someLDSresource2", ldsResourceWatcher);
     waitForXdsServerDone();
     assertThat(adsService.receivedToken("token2")).isTrue();
+  }
+
+  @Test
+  public void setXdsTransportCallCredentialsOnceForTarget() throws XdsInitializationException {
+    // Set up bootstrap & xDS client pool provider
+    SharedXdsClientPoolProvider provider = SharedXdsClientPoolProvider.getDefaultProvider();
+    provider.setBootstrapOverride(
+        ImmutableMap.of(
+            "xds_servers",
+            ImmutableList.of(
+                ImmutableMap.of(
+                    "server_uri",
+                    xdsServerUri,
+                    "channel_creds",
+                    Collections.singletonList(ImmutableMap.of("type", "insecure"))))));
+
+    // Create & register custom transport CallCredentials for a target
+    CallCredentials sampleCreds =
+        MoreCallCredentials.from(
+            OAuth2Credentials.create(new AccessToken("token", /* expirationTime= */ null)));
+    assertThat(
+            XdsTransportCallCredentialsProvider.setTransportCallCredentials("target", sampleCreds))
+        .isTrue();
+
+    // Create xDS client pool for the target
+    ObjectPool<XdsClient> xdsClientPool = provider.getOrCreate("target", metricRecorder);
+
+    // Try to register a different custom transport CallCredentials for the target, and verify
+    // that the original custom CallCredentials was used
+    CallCredentials otherCreds =
+        MoreCallCredentials.from(
+            OAuth2Credentials.create(new AccessToken("otherToken", /* expirationTime= */ null)));
+    assertThat(
+            XdsTransportCallCredentialsProvider.setTransportCallCredentials("target", otherCreds))
+        .isFalse();
+    XdsClient xdsClient = xdsClientPool.getObject();
+    xdsClient.watchXdsResource(
+        XdsListenerResource.getInstance(), "someLDSresource", ldsResourceWatcher);
+    waitForXdsServerDone();
+    assertThat(adsService.receivedToken("token")).isTrue();
+    assertThat(adsService.receivedToken("otherToken")).isFalse();
   }
 
   private void waitForXdsServerDone() {
