@@ -77,7 +77,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       this.channel = checkNotNull(channel, "channel");
     }
 
-    public void setCallCredentials(CallCredentials callCredentials) {
+    void setCallCredentials(CallCredentials callCredentials) {
       this.callCredentials = callCredentials;
     }
 
