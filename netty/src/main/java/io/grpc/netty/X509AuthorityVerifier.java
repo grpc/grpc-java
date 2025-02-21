@@ -53,7 +53,7 @@ final class X509AuthorityVerifier implements AuthorityVerifier {
   }
 
   public X509AuthorityVerifier(SSLEngine sslEngine, X509TrustManager x509ExtendedTrustManager) {
-    this.sslEngine = checkNotNull(sslEngine);
+    this.sslEngine = checkNotNull(sslEngine, "sslEngine");
     this.x509ExtendedTrustManager = x509ExtendedTrustManager;
   }
 
