@@ -2,7 +2,7 @@
 
 The dualstack example uses a custom name resolver that provides both IPv4 and IPv6 localhost
 endpoints for each of 3 server instances. The client will first use the default name resolver and
-load balancers which will only connect tot he first server.  It will then use the 
+load balancers which will only connect to the first server.  It will then use the 
 custom name resolver with round robin to connect to each of the servers in turn.  The 3 instances
 of the server will bind respectively to: both IPv4 and IPv6, IPv4 only, and IPv6 only.
 
