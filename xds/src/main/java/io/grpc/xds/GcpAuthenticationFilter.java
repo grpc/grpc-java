@@ -36,6 +36,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
+import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -240,11 +241,16 @@ final class GcpAuthenticationFilter implements Filter {
     }
 
     @Override
-    public String parse(Any any) throws InvalidProtocolBufferException {
-      Audience audience = any.unpack(Audience.class);
+    public String parse(Any any) throws ResourceInvalidException {
+      Audience audience;
+      try {
+        audience = any.unpack(Audience.class);
+      } catch (InvalidProtocolBufferException ex) {
+        throw new ResourceInvalidException("Invalid Resource in address proto", ex);
+      }
       String url = audience.getUrl();
       if (url.isEmpty()) {
-        throw new InvalidProtocolBufferException(
+        throw new ResourceInvalidException(
             "Audience URL is empty. Metadata value must contain a valid URL.");
       }
       return url;
