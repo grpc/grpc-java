@@ -175,6 +175,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
+    System.out.println("calling shutdown in ClusterImplLoadBalancer");
     if (dropStats != null) {
       dropStats.release();
     }
@@ -346,6 +347,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     private void updateSslContextProviderSupplier(@Nullable UpstreamTlsContext tlsContext) {
+      System.out.println("calling updateSslContextProviderSupplier in ClusterImplLoadBalancer");
       UpstreamTlsContext currentTlsContext =
           sslContextProviderSupplier != null
               ? (UpstreamTlsContext)sslContextProviderSupplier.getTlsContext()
