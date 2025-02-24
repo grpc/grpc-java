@@ -152,7 +152,8 @@ public class XdsDependencyManagerTest {
     channel = cleanupRule.register(
         InProcessChannelBuilder.forName(serverName).directExecutor().build());
     XdsTransportFactory xdsTransportFactory =
-        ignore -> new GrpcXdsTransportFactory.GrpcXdsTransport(channel);
+        ignore -> new GrpcXdsTransportFactory.GrpcXdsTransport(channel,
+         /* callCredentials= */ null);
 
     xdsClient = CommonBootstrapperTestUtils.createXdsClient(
         Collections.singletonList(SERVER_URI), xdsTransportFactory, fakeClock,
