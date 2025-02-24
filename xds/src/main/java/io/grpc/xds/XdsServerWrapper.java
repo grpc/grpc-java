@@ -24,6 +24,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.HostAndPort;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
@@ -383,15 +384,15 @@ final class XdsServerWrapper extends Server {
         return;
       }
 
-      /*String ldsAddress = update.listener().address();
-      if (!listenerAddress.equals(ldsAddress)) {
+      String ldsAddress = update.listener().address();
+      if (ldsAddress != null && !ipAddressesMatch(ldsAddress)) {
         handleConfigNotFoundOrMismatch(
             Status.UNKNOWN.withDescription(
                 String.format(
                     "Listener address mismatch: expected %s, but got %s.",
                     listenerAddress, ldsAddress)).asException());
         return;
-      }*/
+      }
       if (!pendingRds.isEmpty()) {
         // filter chain state has not yet been applied to filterChainSelectorManager and there
         // are two sets of sslContextProviderSuppliers, so we release the old ones.
@@ -432,6 +433,25 @@ final class XdsServerWrapper extends Server {
       if (pendingRds.isEmpty()) {
         updateSelector();
       }
+    }
+
+    private boolean ipAddressesMatch(String ldsAddress) {
+      String listenerAddressHost = getHost(listenerAddress);
+      String ldsAddressHost = getHost(ldsAddress);
+
+      if (isWildcard(listenerAddressHost)) {
+        return true;
+      }
+      return listenerAddressHost.equals(ldsAddressHost);
+    }
+
+    private String getHost(String address) {
+      return HostAndPort.fromString(address).getHost();
+    }
+
+    private boolean isWildcard(String host) {
+      return host.equals("0.0.0.0") || host.equals("::0") || host.equals("0:0:0:0:0:0:0:0")
+          || host.equals("::") || host.equals("::/128");
     }
 
     @Override
@@ -587,6 +607,7 @@ final class XdsServerWrapper extends Server {
       }
       isServing = false;
       listener.onNotServing(exception);
+      initialStartFuture.set(exception);
     }
 
     private void cleanUpRouteDiscoveryStates() {

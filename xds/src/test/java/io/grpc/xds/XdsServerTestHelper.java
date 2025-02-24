@@ -249,6 +249,12 @@ public class XdsServerTestHelper {
       ldsWatcher.onChanged(ldsUpdate);
     }
 
+    void deliverLdsUpdate2(List<FilterChain> filterChains,
+        FilterChain defaultFilterChain) {
+      ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
+          "listener", "20.3.4.5:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+    }
+
     void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
       rdsWatchers.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
     }
