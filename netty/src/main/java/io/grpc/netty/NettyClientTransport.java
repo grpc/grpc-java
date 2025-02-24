@@ -106,6 +106,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
 
+
   NettyClientTransport(
       SocketAddress address,
       ChannelFactory<? extends Channel> channelFactory,
