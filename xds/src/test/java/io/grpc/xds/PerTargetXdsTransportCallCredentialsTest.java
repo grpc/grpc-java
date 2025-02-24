@@ -43,6 +43,7 @@ import io.grpc.Status;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.ObjectPool;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.SharedXdsClientPoolProvider.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
@@ -184,16 +185,12 @@ public class PerTargetXdsTransportCallCredentialsTest {
     CallCredentials sampleCreds1 =
         MoreCallCredentials.from(
             OAuth2Credentials.create(new AccessToken("token1", /* expirationTime= */ null)));
-    assertThat(
-            XdsTransportCallCredentialsProvider.setTransportCallCredentials(
-                "target1", sampleCreds1))
+    assertThat(SharedXdsClientPoolProvider.setTransportCallCredentials("target1", sampleCreds1))
         .isTrue();
     CallCredentials sampleCreds2 =
         MoreCallCredentials.from(
             OAuth2Credentials.create(new AccessToken("token2", /* expirationTime= */ null)));
-    assertThat(
-            XdsTransportCallCredentialsProvider.setTransportCallCredentials(
-                "target2", sampleCreds2))
+    assertThat(SharedXdsClientPoolProvider.setTransportCallCredentials("target2", sampleCreds2))
         .isTrue();
 
     // Create xDS clients & transports, and verify that the appropriate custom CallCredentials were
@@ -231,8 +228,7 @@ public class PerTargetXdsTransportCallCredentialsTest {
     CallCredentials sampleCreds =
         MoreCallCredentials.from(
             OAuth2Credentials.create(new AccessToken("token", /* expirationTime= */ null)));
-    assertThat(
-            XdsTransportCallCredentialsProvider.setTransportCallCredentials("target", sampleCreds))
+    assertThat(SharedXdsClientPoolProvider.setTransportCallCredentials("target", sampleCreds))
         .isTrue();
 
     // Create xDS client pool for the target
@@ -243,8 +239,7 @@ public class PerTargetXdsTransportCallCredentialsTest {
     CallCredentials otherCreds =
         MoreCallCredentials.from(
             OAuth2Credentials.create(new AccessToken("otherToken", /* expirationTime= */ null)));
-    assertThat(
-            XdsTransportCallCredentialsProvider.setTransportCallCredentials("target", otherCreds))
+    assertThat(SharedXdsClientPoolProvider.setTransportCallCredentials("target", otherCreds))
         .isFalse();
     XdsClient xdsClient = xdsClientPool.getObject();
     xdsClient.watchXdsResource(
@@ -252,6 +247,35 @@ public class PerTargetXdsTransportCallCredentialsTest {
     waitForXdsServerDone();
     assertThat(adsService.receivedToken("token")).isTrue();
     assertThat(adsService.receivedToken("otherToken")).isFalse();
+  }
+
+  @Test
+  public void removeXdsTransportCallCredentials() throws XdsInitializationException {
+    // Set up bootstrap & xDS client pool provider
+    ServerInfo server = ServerInfo.create(xdsServerUri, InsecureChannelCredentials.create());
+    BootstrapInfo bootstrapInfo =
+        BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
+
+    // Create & register custom transport CallCredentials for a target
+    CallCredentials sampleCreds =
+        MoreCallCredentials.from(
+            OAuth2Credentials.create(new AccessToken("token", /* expirationTime= */ null)));
+    assertThat(SharedXdsClientPoolProvider.setTransportCallCredentials("target", sampleCreds))
+        .isTrue();
+    assertThat(SharedXdsClientPoolProvider.getTransportCallCredentials("target"))
+        .isSameInstanceAs(sampleCreds);
+
+    // Create refcounted xDS client object pool
+    RefCountedXdsClientObjectPool xdsClientPool =
+        provider.new RefCountedXdsClientObjectPool(bootstrapInfo, "target", metricRecorder);
+
+    // Increment and decrement the xDS client back to zero, and check that custom transport
+    // CallCredentials are cleaned up
+    XdsClient xdsClient = xdsClientPool.getObject();
+    xdsClientPool.returnObject(xdsClient);
+    assertThat(SharedXdsClientPoolProvider.getTransportCallCredentials("target")).isNull();
   }
 
   private void waitForXdsServerDone() {

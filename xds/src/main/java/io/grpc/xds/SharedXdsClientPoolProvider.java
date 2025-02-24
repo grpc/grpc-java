@@ -59,6 +59,8 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private final Object lock = new Object();
   private final AtomicReference<Map<String, ?>> bootstrapOverride = new AtomicReference<>();
   private final Map<String, ObjectPool<XdsClient>> targetToXdsClientMap = new ConcurrentHashMap<>();
+  private static final Map<String, CallCredentials> transportCallCredentials =
+      new ConcurrentHashMap<>();
 
   SharedXdsClientPoolProvider() {
     this(new GrpcBootstrapperImpl());
@@ -115,6 +117,29 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     return ImmutableList.copyOf(targetToXdsClientMap.keySet());
   }
 
+  public static CallCredentials getTransportCallCredentials(String target) {
+    return transportCallCredentials.get(target);
+  }
+
+  /**
+   * Registers a custom {@link CallCredentials} that is to be used on the xDS transport when
+   * resolving the given target. Must be called before the xDS client for the target is created
+   * (i.e. before the application creates a channel to the target).
+   *
+   * <p>A custom {@code CallCredentials} can only be set once on the xDS transport; in other words,
+   * it is not possible to change the custom transport {@code CallCredentials} for an existing xDS
+   * client. This ignores {@code creds} and tries to return false if {@code
+   * setTransportCallCredentials} is called when there is already an existing xDS client for the
+   * target.
+   */
+  public static boolean setTransportCallCredentials(String target, CallCredentials creds) {
+    if (SharedXdsClientPoolProvider.getDefaultProvider().get(target) != null) {
+      return false;
+    }
+    transportCallCredentials.put(target, creds);
+    return true;
+  }
+
   private static class SharedXdsClientPoolProviderHolder {
     private static final SharedXdsClientPoolProvider instance = new SharedXdsClientPoolProvider();
   }
@@ -153,8 +178,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           metricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
-          CallCredentials transportCallCreds =
-              XdsTransportCallCredentialsProvider.getTransportCallCredentials(target);
+          CallCredentials transportCallCreds = getTransportCallCredentials(target);
           GrpcXdsTransportFactory xdsTransportFactory =
               new GrpcXdsTransportFactory(transportCallCreds);
           xdsClient =
@@ -185,6 +209,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           metricReporter.close();
           metricReporter = null;
           targetToXdsClientMap.remove(target);
+          transportCallCredentials.remove(target);
           scheduler = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
         }
         return null;
