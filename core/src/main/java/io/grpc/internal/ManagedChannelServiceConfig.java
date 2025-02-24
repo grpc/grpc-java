@@ -402,7 +402,7 @@ final class ManagedChannelServiceConfig {
     final ManagedChannelServiceConfig config;
 
     /** Converts the service config to config selector. */
-    private ServiceConfigConvertedSelector(ManagedChannelServiceConfig config) {
+    ServiceConfigConvertedSelector(ManagedChannelServiceConfig config) {
       this.config = config;
     }
 
