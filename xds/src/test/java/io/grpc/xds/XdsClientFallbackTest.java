@@ -344,17 +344,19 @@ public class XdsClientFallbackTest {
     mainXdsServer.restartXdsServer();
     fallbackServer.restartXdsServer();
     ExecutorService executor = Executors.newFixedThreadPool(1);
-    XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
-      @Override
-      public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-        ChannelCredentials channelCredentials =
-            (ChannelCredentials) serverInfo.implSpecificConfig();
-        return new GrpcXdsTransportFactory.GrpcXdsTransport(
-            Grpc.newChannelBuilder(serverInfo.target(), channelCredentials)
-              .executor(executor)
-              .build());
-      }
-    };
+    XdsTransportFactory xdsTransportFactory =
+        new XdsTransportFactory() {
+          @Override
+          public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
+            ChannelCredentials channelCredentials =
+                (ChannelCredentials) serverInfo.implSpecificConfig();
+            return new GrpcXdsTransportFactory.GrpcXdsTransport(
+                Grpc.newChannelBuilder(serverInfo.target(), channelCredentials)
+                    .executor(executor)
+                    .build(),
+                /* callCredentials= */ null);
+          }
+        };
     XdsClientImpl xdsClient = CommonBootstrapperTestUtils.createXdsClient(
         new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride()),
         xdsTransportFactory, fakeClock, new ExponentialBackoffPolicy.Provider(),

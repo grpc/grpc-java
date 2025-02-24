@@ -46,15 +46,13 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-    GrpcXdsTransport transport = new GrpcXdsTransport(serverInfo);
-    transport.setCallCredentials(callCredentials);
+    GrpcXdsTransport transport = new GrpcXdsTransport(serverInfo, callCredentials);
     return transport;
   }
 
   @VisibleForTesting
   public XdsTransport createForTest(ManagedChannel channel) {
-    GrpcXdsTransport transport = new GrpcXdsTransport(channel);
-    transport.setCallCredentials(callCredentials);
+    GrpcXdsTransport transport = new GrpcXdsTransport(channel, callCredentials);
     return transport;
   }
 
@@ -64,20 +62,18 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     private final ManagedChannel channel;
     private CallCredentials callCredentials;
 
-    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
       this.channel = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
+      this.callCredentials = callCredentials;
     }
 
     @VisibleForTesting
-    public GrpcXdsTransport(ManagedChannel channel) {
+    public GrpcXdsTransport(ManagedChannel channel, CallCredentials callCredentials) {
       this.channel = checkNotNull(channel, "channel");
-    }
-
-    void setCallCredentials(CallCredentials callCredentials) {
       this.callCredentials = callCredentials;
     }
 
