@@ -1209,6 +1209,14 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void testToStringForInternalConfigSelector() {
+    String expected = "Resolution is pending";
+    String actual = ManagedChannelImpl.INITIAL_PENDING_SELECTOR.toString();
+    // Assert that the actual string equals the expected string
+    assertEquals("toString() should return 'Resolution is pending'", expected, actual);
+  }
+
+  @Test
   public void interceptor() throws Exception {
     final AtomicLong atomic = new AtomicLong();
     ClientInterceptor interceptor = new ClientInterceptor() {

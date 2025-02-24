@@ -145,7 +145,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private static final ManagedChannelServiceConfig EMPTY_SERVICE_CONFIG =
       ManagedChannelServiceConfig.empty();
-  private static final InternalConfigSelector INITIAL_PENDING_SELECTOR =
+  static final InternalConfigSelector INITIAL_PENDING_SELECTOR =
       new InternalConfigSelector() {
         @Override
         public Result selectConfig(PickSubchannelArgs args) {
@@ -941,6 +941,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       configSelector.set(config);
       channelLogger.log(ChannelLogLevel.INFO,
           "Current service config is replaced", prevConfig, config);
+      //System.out.println("prevConfig="+ prevConfig + " config=" + config);
       if (prevConfig == INITIAL_PENDING_SELECTOR && pendingCalls != null) {
         for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
           pendingCall.reprocess();
