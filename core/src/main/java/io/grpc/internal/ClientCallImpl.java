@@ -561,7 +561,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
-    observer.onClose(status, trailers);
+    try {
+      observer.onClose(status, trailers);
+    } catch (RuntimeException ex) {
+      log.log(Level.WARNING, "Exception thrown by onClose() in ClientCall", ex);
+    }
   }
 
   @Override

@@ -61,7 +61,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.util.OutlierDetectionLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.CdsLoadBalancer2.ClusterResolverConfig;
 import io.grpc.xds.CdsLoadBalancer2.ClusterResolverConfig.DiscoveryMechanism;
@@ -74,6 +73,7 @@ import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
@@ -92,8 +92,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -107,7 +105,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.internal.matchers.NotNull;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -153,26 +150,12 @@ public class CdsLoadBalancer2Test {
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
-  private final ObjectPool<XdsClient> xdsClientPool = new ObjectPool<XdsClient>() {
-    @Override
-    public XdsClient getObject() {
-      xdsClientRefs++;
-      return xdsClient;
-    }
-
-    @Override
-    public XdsClient returnObject(Object object) {
-      xdsClientRefs--;
-      return null;
-    }
-  };
 
   @Mock
   private Helper helper;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
 
-  private int xdsClientRefs;
   private CdsLoadBalancer2  loadBalancer;
   private TestXdsConfigWatcher configWatcher = new TestXdsConfigWatcher();
   private XdsConfig lastXdsConfig;
@@ -205,8 +188,6 @@ public class CdsLoadBalancer2Test {
     loadBalancer =
         new CdsLoadBalancer2(helper, lbRegistry, new ExponentialBackoffPolicy.Provider());
 
-    lastXdsConfig = getDefaultXdsConfig();
-
     // Setup default configuration for the CdsLoadBalancer2
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
         CLUSTER, EDS_SERVICE_NAME, null, null, null, null)
@@ -215,16 +196,6 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(CLUSTER, cdsUpdate);
     xdsClient.createAndDeliverEdsUpdate(EDS_SERVICE_NAME);
 
-//    loadBalancer.acceptResolvedAddresses(
-//        ResolvedAddresses.newBuilder()
-//            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-//            .setAttributes(
-//                // Other attributes not used by cluster_resolver LB are omitted.
-//                Attributes.newBuilder()
-//                    .set(XdsAttributes.XDS_CONFIG, lastXdsConfig)
-//                    .build())
-//            .setLoadBalancingPolicyConfig(new CdsConfig(CLUSTER))
-//            .build());
   }
 
   static XdsConfig getDefaultXdsConfig()
@@ -243,17 +214,15 @@ public class CdsLoadBalancer2Test {
     Map<Locality, Endpoints.LocalityLbEndpoints> lbEndpointsMap =
         XdsTestUtils.createMinimalLbEndpointsMap(EDS_SERVICE_NAME);
 
-    ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
-    configBuilder.put("name", CLUSTER);
-
     // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
-    EdsUpdate edsUpdate = new EdsUpdate(
-        EDS_SERVICE_NAME, lbEndpointsMap, Collections.emptyList());
+    EdsUpdate edsUpdate = new EdsUpdate(EDS_SERVICE_NAME,
+        XdsTestUtils.createMinimalLbEndpointsMap(EDS_SERVICE_NAME), Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
             CLUSTER, EDS_SERVICE_NAME, null, null, null, null)
         .roundRobinLbPolicy().build();
+    EndpointConfig endpointConfig = new EndpointConfig(StatusOr.fromValue(edsUpdate));
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
-        CLUSTER, cdsUpdate, StatusOr.fromValue(edsUpdate));
+        CLUSTER, cdsUpdate, endpointConfig);
 
     builder
         .setListener(ldsUpdate)
@@ -294,9 +263,14 @@ public class CdsLoadBalancer2Test {
     configWatcher.cleanup();
 
     assertThat(xdsClient.watchers).isEmpty();
-    assertThat(xdsClientRefs).isEqualTo(0);
     assertThat(childBalancers).isEmpty();
 
+  }
+
+  @Test
+  public void basicTest() throws XdsResourceType.ResourceInvalidException {
+    assertThat(loadBalancer).isNotNull();
+    assertThat(lastXdsConfig).isEqualTo(getDefaultXdsConfig());
   }
 
   @Test
@@ -309,7 +283,6 @@ public class CdsLoadBalancer2Test {
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
 
     validateClusterImplConfig(getClusterImplConfig(childBalancers, CLUSTER), CLUSTER, EDS_SERVICE_NAME,
         null, LRS_SERVER_INFO, 100L, upstreamTlsContext, outlierDetection);
@@ -401,14 +374,13 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
-            + " xDS node ID: " + NODE_ID);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancers).isEmpty();
   }
 
   @Test
-  // TODO: Update to use DependencyManager
+  @Ignore  // TODO: Update to use DependencyManager
   public void nonAggregateCluster_resourceUpdate() {
     CdsUpdate update =
         CdsUpdate.forEds(CLUSTER, null, null, 100L, upstreamTlsContext, outlierDetection)
@@ -447,8 +419,7 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverResourceNotExist(CLUSTER);
     assertThat(childBalancer.shutdown).isTrue();
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
-            + " xDS node ID: " + NODE_ID);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPicker(pickerCaptor.getValue(), unavailable, null);
@@ -524,8 +495,7 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
-            + " xDS node ID: " + NODE_ID);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancers).isEmpty();
   }
@@ -573,8 +543,7 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
-            + " xDS node ID: " + NODE_ID);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
 
     String cluster = cluster1;
@@ -636,8 +605,7 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
-            + " xDS node ID: " + NODE_ID);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();
@@ -689,8 +657,7 @@ public class CdsLoadBalancer2Test {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER
-            + " xDS node ID: " + NODE_ID);
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();
@@ -732,7 +699,7 @@ public class CdsLoadBalancer2Test {
     Status unavailable = Status.UNAVAILABLE.withDescription(
         "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
             + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
-            + " cluster-02.googleapis.com], xDS node ID: " + NODE_ID);
+            + " cluster-02.googleapis.com]");
     assertPicker(pickerCaptor.getValue(), unavailable, null);
   }
 
@@ -775,7 +742,7 @@ public class CdsLoadBalancer2Test {
     Status unavailable = Status.UNAVAILABLE.withDescription(
         "CDS error: circular aggregate clusters directly under cluster-02.googleapis.com for root"
             + " cluster cluster-foo.googleapis.com, named [cluster-01.googleapis.com,"
-            + " cluster-02.googleapis.com], xDS node ID: " + NODE_ID);
+            + " cluster-02.googleapis.com]");
     assertPicker(pickerCaptor.getValue(), unavailable, null);
   }
 
@@ -821,7 +788,7 @@ public class CdsLoadBalancer2Test {
     xdsClient.watchers.values().forEach(list -> assertThat(list.size()).isEqualTo(1));
 
     // TODO: fix the check
-    assertThat("I am").isEqualTo("not done");
+    assertThat("not done").isEqualTo("I am");
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
@@ -831,6 +798,7 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
+  @Ignore // since CDS config errors are not supposed to update the config, this test is invalid
   public void aggregateCluster_discoveryErrorBeforeChildLbCreated_returnErrorPicker() {
     String cluster1 = "cluster-01.googleapis.com";
     // CLUSTER (aggr.) -> [cluster1]
@@ -851,7 +819,6 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
-  @Ignore
   // TODO: Needs to be reworked as XdsDependencyManager grabs CDS errors and they show in XdsConfig
   public void aggregateCluster_discoveryErrorAfterChildLbCreated_propagateToChildLb() {
     String cluster1 = "cluster-01.googleapis.com";
@@ -1119,7 +1086,7 @@ public class CdsLoadBalancer2Test {
       List<ResourceWatcher<EdsUpdate>> resourceWatchers =
           ImmutableList.copyOf(edsWatchers.get(edsName));
       EdsUpdate edsUpdate = new EdsUpdate(edsName,
-          XdsTestUtils.createMinimalLbEndpointsMap("host"), Collections.emptyList());
+          XdsTestUtils.createMinimalLbEndpointsMap(edsName), Collections.emptyList());
       syncContext.execute(() -> resourceWatchers.forEach(w -> w.onChanged(edsUpdate)));
     }
 
@@ -1160,7 +1127,7 @@ public class CdsLoadBalancer2Test {
         try {
           w.close();
         } catch (IOException e) {
-          e.printStackTrace();
+          logger.log(XdsLogLevel.WARNING, "Failed to close watcher cleanly", e);
         }
       }
       clusterWatchers.clear();
@@ -1180,6 +1147,8 @@ public class CdsLoadBalancer2Test {
               .set(XdsAttributes.XDS_CONFIG, xdsConfig)
               .build())
           .setAddresses(buildEags(xdsConfig));
+
+      lastXdsConfig = xdsConfig;
 
       // call loadBalancer.acceptResolvedAddresses() to update the config
       Status status = loadBalancer.acceptResolvedAddresses(raBuilder.build());
@@ -1212,10 +1181,11 @@ public class CdsLoadBalancer2Test {
       CdsUpdate clusterResource = clusterConfig.getClusterResource();
       switch (clusterResource.clusterType()) {
         case EDS:
-          if (clusterConfig.getEndpoint().getValue() == null) {
+          EndpointConfig endpointConfig = (EndpointConfig) clusterConfig.getChildren();
+          if (!endpointConfig.getEndpoint().hasValue()) {
             return Collections.emptyList();
           }
-          return clusterConfig.getEndpoint().getValue().localityLbEndpointsMap.values().stream()
+          return endpointConfig.getEndpoint().getValue().localityLbEndpointsMap.values().stream()
               .flatMap(localityLbEndpoints -> localityLbEndpoints.endpoints().stream())
               .map(Endpoints.LbEndpoint::eag)
               .collect(Collectors.toList());

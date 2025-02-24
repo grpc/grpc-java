@@ -47,7 +47,6 @@ import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
@@ -60,7 +59,6 @@ import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -459,81 +457,122 @@ final class XdsServerWrapper extends Server {
     }
 
     private void updateSelector() {
-      Map<FilterChain, AtomicReference<ServerRoutingConfig>> filterChainRouting = new HashMap<>();
+      // This is regenerated in generateRoutingConfig() calls below.
       savedRdsRoutingConfigRef.clear();
+
+      // Prepare server routing config map.
+      ImmutableMap.Builder<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs =
+          ImmutableMap.builder();
       for (FilterChain filterChain: filterChains) {
-        filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
+        routingConfigs.put(filterChain, generateRoutingConfig(filterChain));
       }
-      FilterChainSelector selector = new FilterChainSelector(
-          Collections.unmodifiableMap(filterChainRouting),
-          defaultFilterChain == null ? null : defaultFilterChain.sslContextProviderSupplier(),
-          defaultFilterChain == null ? new AtomicReference<ServerRoutingConfig>() :
-              generateRoutingConfig(defaultFilterChain));
-      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
+
+      // Prepare the new selector.
+      FilterChainSelector selector;
+      if (defaultFilterChain != null) {
+        selector = new FilterChainSelector(
+            routingConfigs.build(),
+            defaultFilterChain.sslContextProviderSupplier(),
+            generateRoutingConfig(defaultFilterChain));
+      } else {
+        selector = new FilterChainSelector(routingConfigs.build(), null, new AtomicReference<>());
+      }
+
+      // Prepare the list of current selector's resources to close later.
+      List<SslContextProviderSupplier> oldSslSuppliers = getSuppliersInUse();
+
+      // Swap the selectors, initiate a graceful shutdown of the old one.
       logger.log(Level.FINEST, "Updating selector {0}", selector);
       filterChainSelectorManager.updateSelector(selector);
-      for (SslContextProviderSupplier e: toRelease) {
-        e.close();
+
+      // Release old resources.
+      for (SslContextProviderSupplier supplier: oldSslSuppliers) {
+        supplier.close();
       }
+
+      // Now that we have valid Transport Socket config, we can start/restart listening on a port.
       startDelegateServer();
     }
 
     private AtomicReference<ServerRoutingConfig> generateRoutingConfig(FilterChain filterChain) {
       HttpConnectionManager hcm = filterChain.httpConnectionManager();
+      ImmutableMap<Route, ServerInterceptor> interceptors;
+
+      // Inlined routes.
       if (hcm.virtualHosts() != null) {
-        ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
-                hcm.httpFilterConfigs(), hcm.virtualHosts());
-        return new AtomicReference<>(ServerRoutingConfig.create(hcm.virtualHosts(),interceptors));
-      } else {
-        RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
-        checkNotNull(rds, "rds");
-        AtomicReference<ServerRoutingConfig> serverRoutingConfigRef = new AtomicReference<>();
-        if (rds.savedVirtualHosts != null) {
-          ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
-              hcm.httpFilterConfigs(), rds.savedVirtualHosts);
-          ServerRoutingConfig serverRoutingConfig =
-              ServerRoutingConfig.create(rds.savedVirtualHosts, interceptors);
-          serverRoutingConfigRef.set(serverRoutingConfig);
-        } else {
-          serverRoutingConfigRef.set(ServerRoutingConfig.FAILING_ROUTING_CONFIG);
-        }
-        savedRdsRoutingConfigRef.put(filterChain, serverRoutingConfigRef);
-        return serverRoutingConfigRef;
+        interceptors = generatePerRouteInterceptors(hcm.httpFilterConfigs(), hcm.virtualHosts());
+        return new AtomicReference<>(ServerRoutingConfig.create(hcm.virtualHosts(), interceptors));
       }
+
+      // Routes from RDS.
+      RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
+      checkNotNull(rds, "rds");
+
+      ServerRoutingConfig routingConfig;
+      ImmutableList<VirtualHost> savedVhosts = rds.savedVirtualHosts;
+      if (savedVhosts != null) {
+        interceptors = generatePerRouteInterceptors(hcm.httpFilterConfigs(), savedVhosts);
+        routingConfig = ServerRoutingConfig.create(savedVhosts, interceptors);
+      } else {
+        routingConfig = ServerRoutingConfig.FAILING_ROUTING_CONFIG;
+      }
+
+      AtomicReference<ServerRoutingConfig> routingConfigRef = new AtomicReference<>(routingConfig);
+      savedRdsRoutingConfigRef.put(filterChain, routingConfigRef);
+      return routingConfigRef;
     }
 
     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
-        List<NamedFilterConfig> namedFilterConfigs, List<VirtualHost> virtualHosts) {
+        @Nullable List<NamedFilterConfig> filterConfigs, List<VirtualHost> virtualHosts) {
+      // This should always be called from the sync context.
+      // Ideally we'd want to throw otherwise, but this breaks the tests now.
+      // syncContext.throwIfNotInThisSynchronizationContext();
+
       ImmutableMap.Builder<Route, ServerInterceptor> perRouteInterceptors =
           new ImmutableMap.Builder<>();
+
       for (VirtualHost virtualHost : virtualHosts) {
         for (Route route : virtualHost.routes()) {
-          List<ServerInterceptor> filterInterceptors = new ArrayList<>();
-          Map<String, FilterConfig> selectedOverrideConfigs =
-              new HashMap<>(virtualHost.filterConfigOverrides());
-          selectedOverrideConfigs.putAll(route.filterConfigOverrides());
-          if (namedFilterConfigs != null) {
-            for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
-              FilterConfig filterConfig = namedFilterConfig.filterConfig;
-              Filter filter = filterRegistry.get(filterConfig.typeUrl());
-              if (filter instanceof ServerInterceptorBuilder) {
-                ServerInterceptor interceptor =
-                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
-                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
-                if (interceptor != null) {
-                  filterInterceptors.add(interceptor);
-                }
-              } else {
-                logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
-                    + filterConfig.typeUrl() + ") is not supported on server-side. "
-                    + "Probably a bug at ClientXdsClient verification.");
-              }
+          // Short circuit.
+          if (filterConfigs == null) {
+            perRouteInterceptors.put(route, noopInterceptor);
+            continue;
+          }
+
+          // Override vhost filter configs with more specific per-route configs.
+          Map<String, FilterConfig> perRouteOverrides = ImmutableMap.<String, FilterConfig>builder()
+              .putAll(virtualHost.filterConfigOverrides())
+              .putAll(route.filterConfigOverrides())
+              .buildKeepingLast();
+
+          // Interceptors for this vhost/route combo.
+          List<ServerInterceptor> interceptors = new ArrayList<>(filterConfigs.size());
+
+          for (NamedFilterConfig namedFilter : filterConfigs) {
+            FilterConfig config = namedFilter.filterConfig;
+            String name = namedFilter.name;
+            String typeUrl = config.typeUrl();
+
+            Filter.Provider provider = filterRegistry.get(typeUrl);
+            if (provider == null || !provider.isServerFilter()) {
+              logger.warning("HttpFilter[" + name + "]: not supported on server-side: " + typeUrl);
+              continue;
+            }
+
+            Filter filter = provider.newInstance();
+            ServerInterceptor interceptor =
+                filter.buildServerInterceptor(config, perRouteOverrides.get(name));
+            if (interceptor != null) {
+              interceptors.add(interceptor);
             }
           }
-          ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
-          perRouteInterceptors.put(route, interceptor);
+
+          // Combine interceptors produced by different filters into a single one that executes
+          // them sequentially. The order is preserved.
+          perRouteInterceptors.put(route, combineInterceptors(interceptors));
         }
       }
+
       return perRouteInterceptors.buildOrThrow();
     }
 

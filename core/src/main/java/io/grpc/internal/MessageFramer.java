@@ -75,6 +75,10 @@ public class MessageFramer implements Framer {
   // effectively final.  Can only be set once.
   private int maxOutboundMessageSize = NO_MAX_OUTBOUND_MESSAGE_SIZE;
   private WritableBuffer buffer;
+  /**
+   * if &gt; 0 - the number of bytes to allocate for the current known-length message.
+   */
+  private int knownLengthPendingAllocation;
   private Compressor compressor = Codec.Identity.NONE;
   private boolean messageCompression = true;
   private final OutputStreamAdapter outputStreamAdapter = new OutputStreamAdapter();
@@ -222,9 +226,7 @@ public class MessageFramer implements Framer {
     headerScratch.put(UNCOMPRESSED).putInt(messageLength);
     // Allocate the initial buffer chunk based on frame header + payload length.
     // Note that the allocator may allocate a buffer larger or smaller than this length
-    if (buffer == null) {
-      buffer = bufferAllocator.allocate(headerScratch.position() + messageLength);
-    }
+    knownLengthPendingAllocation = HEADER_LENGTH + messageLength;
     writeRaw(headerScratch.array(), 0, headerScratch.position());
     return writeToOutputStream(message, outputStreamAdapter);
   }
@@ -288,8 +290,9 @@ public class MessageFramer implements Framer {
         commitToSink(false, false);
       }
       if (buffer == null) {
-        // Request a buffer allocation using the message length as a hint.
-        buffer = bufferAllocator.allocate(len);
+        checkState(knownLengthPendingAllocation > 0, "knownLengthPendingAllocation reached 0");
+        buffer = bufferAllocator.allocate(knownLengthPendingAllocation);
+        knownLengthPendingAllocation -= min(knownLengthPendingAllocation, buffer.writableBytes());
       }
       int toWrite = min(len, buffer.writableBytes());
       buffer.write(b, off, toWrite);
@@ -388,6 +391,8 @@ public class MessageFramer implements Framer {
    * {@link OutputStream}.
    */
   private final class BufferChainOutputStream extends OutputStream {
+    private static final int FIRST_BUFFER_SIZE = 4096;
+
     private final List<WritableBuffer> bufferList = new ArrayList<>();
     private WritableBuffer current;
 
@@ -397,7 +402,7 @@ public class MessageFramer implements Framer {
      * {@link #write(byte[], int, int)}.
      */
     @Override
-    public void write(int b) throws IOException {
+    public void write(int b) {
       if (current != null && current.writableBytes() > 0) {
         current.write((byte)b);
         return;
@@ -410,7 +415,7 @@ public class MessageFramer implements Framer {
     public void write(byte[] b, int off, int len) {
       if (current == null) {
         // Request len bytes initially from the allocator, it may give us more.
-        current = bufferAllocator.allocate(len);
+        current = bufferAllocator.allocate(Math.max(FIRST_BUFFER_SIZE, len));
         bufferList.add(current);
       }
       while (len > 0) {

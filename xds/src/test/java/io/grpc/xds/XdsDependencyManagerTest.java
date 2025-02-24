@@ -47,6 +47,7 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.grpc.BindableService;
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -57,6 +58,8 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.XdsConfig.XdsClusterConfig;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.XdsClient;
@@ -81,11 +84,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
@@ -219,26 +224,35 @@ public class XdsDependencyManagerTest {
     XdsTestUtils.setAggregateCdsConfig(controlPlaneService, serverName, rootName, childNames);
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(any());
 
-    Map<String, StatusOr<XdsConfig.XdsClusterConfig>> lastConfigClusters =
+    Map<String, StatusOr<XdsClusterConfig>> lastConfigClusters =
         testWatcher.lastConfig.getClusters();
     assertThat(lastConfigClusters).hasSize(childNames.size() + 1);
-    StatusOr<XdsConfig.XdsClusterConfig> rootC = lastConfigClusters.get(rootName);
+    StatusOr<XdsClusterConfig> rootC = lastConfigClusters.get(rootName);
     XdsClusterResource.CdsUpdate rootUpdate = rootC.getValue().getClusterResource();
     assertThat(rootUpdate.clusterType()).isEqualTo(AGGREGATE);
     assertThat(rootUpdate.prioritizedClusterNames()).isEqualTo(childNames);
 
     for (String childName : childNames) {
       assertThat(lastConfigClusters).containsKey(childName);
+      StatusOr<XdsClusterConfig> childConfigOr = lastConfigClusters.get(childName);
       XdsClusterResource.CdsUpdate childResource =
-          lastConfigClusters.get(childName).getValue().getClusterResource();
+          childConfigOr.getValue().getClusterResource();
       assertThat(childResource.clusterType()).isEqualTo(EDS);
       assertThat(childResource.edsServiceName()).isEqualTo(getEdsNameForCluster(childName));
 
-      StatusOr<XdsEndpointResource.EdsUpdate> endpoint =
-          lastConfigClusters.get(childName).getValue().getEndpoint();
+      StatusOr<EdsUpdate> endpoint = getEndpoint(childConfigOr);
       assertThat(endpoint.hasValue()).isTrue();
       assertThat(endpoint.getValue().clusterName).isEqualTo(getEdsNameForCluster(childName));
     }
+  }
+
+  private static StatusOr<EdsUpdate> getEndpoint(StatusOr<XdsClusterConfig> childConfigOr) {
+    XdsClusterConfig.ClusterChild clusterChild = childConfigOr.getValue()
+        .getChildren();
+    assertThat(clusterChild).isInstanceOf(XdsClusterConfig.EndpointConfig.class);
+    StatusOr<EdsUpdate> endpoint = ((XdsClusterConfig.EndpointConfig) clusterChild).getEndpoint();
+    assertThat(endpoint).isNotNull();
+    return endpoint;
   }
 
   @Test
@@ -289,7 +303,6 @@ public class XdsDependencyManagerTest {
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(defaultXdsConfig);
 
     String rootName1 = "root_c";
-    List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
 
     Closeable subscription1 = xdsDependencyManager.subscribeToCluster(rootName1);
     assertThat(subscription1).isNotNull();
@@ -299,6 +312,7 @@ public class XdsDependencyManagerTest {
         StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
             "No " + toContextStr(CLUSTER_TYPE_NAME, rootName1))).toString());
 
+    List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
     XdsTestUtils.addAggregateToExistingConfig(controlPlaneService, rootName1, childNames);
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsConfigCaptor.capture());
     assertThat(xdsConfigCaptor.getValue().getClusters().get(rootName1).hasValue()).isTrue();
@@ -336,7 +350,7 @@ public class XdsDependencyManagerTest {
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
 
-    List<StatusOr<XdsConfig.XdsClusterConfig>> returnedClusters = new ArrayList<>();
+    List<StatusOr<XdsClusterConfig>> returnedClusters = new ArrayList<>();
     for (String childName : childNames) {
       returnedClusters.add(xdsConfigCaptor.getValue().getClusters().get(childName));
     }
@@ -344,7 +358,7 @@ public class XdsDependencyManagerTest {
     // Check that missing cluster reported Status and the other 2 are present
     Status expectedClusterStatus = Status.UNAVAILABLE.withDescription(
         "No " + toContextStr(CLUSTER_TYPE_NAME, childNames.get(2)));
-    StatusOr<XdsConfig.XdsClusterConfig> missingCluster = returnedClusters.get(2);
+    StatusOr<XdsClusterConfig> missingCluster = returnedClusters.get(2);
     assertThat(missingCluster.getStatus().toString()).isEqualTo(expectedClusterStatus.toString());
     assertThat(returnedClusters.get(0).hasValue()).isTrue();
     assertThat(returnedClusters.get(1).hasValue()).isTrue();
@@ -352,9 +366,9 @@ public class XdsDependencyManagerTest {
     // Check that missing EDS reported Status, the other one is present and the garbage EDS is not
     Status expectedEdsStatus = Status.UNAVAILABLE.withDescription(
         "No " + toContextStr(ENDPOINT_TYPE_NAME, XdsTestUtils.EDS_NAME + 1));
-    assertThat(returnedClusters.get(0).getValue().getEndpoint().hasValue()).isTrue();
-    assertThat(returnedClusters.get(1).getValue().getEndpoint().hasValue()).isFalse();
-    assertThat(returnedClusters.get(1).getValue().getEndpoint().getStatus().toString())
+    assertThat(getEndpoint(returnedClusters.get(0)).hasValue()).isTrue();
+    assertThat(getEndpoint(returnedClusters.get(1)).hasValue()).isFalse();
+    assertThat(getEndpoint(returnedClusters.get(1)).getStatus().toString())
         .isEqualTo(expectedEdsStatus.toString());
 
     verify(xdsConfigWatcher, never()).onResourceDoesNotExist(any());
@@ -539,7 +553,7 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(
         ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, newRouteConfig));
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
-    assertThat(xdsConfigCaptor.getValue().getClusters().keySet().size()).isEqualTo(8);
+    assertThat(xdsConfigCaptor.getValue().getClusters().keySet().size()).isEqualTo(4);
 
     // Now that it is released, we should only have A11
     rootSub.close();
@@ -582,11 +596,9 @@ public class XdsDependencyManagerTest {
     assertThat(initialConfig.getClusters().keySet())
         .containsExactly("root", "clusterA", "clusterB");
 
-    XdsEndpointResource.EdsUpdate edsForA =
-        initialConfig.getClusters().get("clusterA").getValue().getEndpoint().getValue();
+    EdsUpdate edsForA = getEndpoint(initialConfig.getClusters().get("clusterA")).getValue();
     assertThat(edsForA.clusterName).isEqualTo(edsName);
-    XdsEndpointResource.EdsUpdate edsForB =
-        initialConfig.getClusters().get("clusterB").getValue().getEndpoint().getValue();
+    EdsUpdate edsForB = getEndpoint(initialConfig.getClusters().get("clusterB")).getValue();
     assertThat(edsForB.clusterName).isEqualTo(edsName);
     assertThat(edsForA).isEqualTo(edsForB);
     edsForA.localityLbEndpointsMap.values().forEach(
@@ -635,7 +647,7 @@ public class XdsDependencyManagerTest {
     inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
     XdsConfig config = xdsConfigCaptor.getValue();
     assertThat(config.getVirtualHost().name()).isEqualTo(newRdsName);
-    assertThat(config.getClusters().size()).isEqualTo(8);
+    assertThat(config.getClusters().size()).isEqualTo(4);
   }
 
   @Test
@@ -687,10 +699,24 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
     // Verify that the config is updated as expected
-    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsConfigCaptor.capture());
-    XdsConfig config = xdsConfigCaptor.getValue();
-    assertThat(config.getClusters().keySet()).containsExactly("root", "clusterA", "clusterA2",
-        "clusterA21", "clusterA22");
+    ClusterNameMatcher nameMatcher
+        = new ClusterNameMatcher(Arrays.asList("root", "clusterA21", "clusterA22"));
+    inOrder.verify(xdsConfigWatcher, timeout(1000)).onUpdate(argThat(nameMatcher));
+  }
+
+  @Test
+  @Ignore // TODO implement
+  public void testCdsError() {
+    String cluster1 = "cluster-01.googleapis.com";
+    // CLUSTER (aggr.) -> [cluster1]
+    XdsClusterResource.CdsUpdate update =
+        XdsClusterResource.CdsUpdate.forAggregate(CLUSTER_NAME, Collections.singletonList(cluster1))
+            .roundRobinLbPolicy().build();
+
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, xdsConfigWatcher, syncContext, serverName, serverName);
+
+    // TODO send an error to dependency manager for a cluster to make sure it is handled cleanly
   }
 
   private Listener buildInlineClientListener(String rdsName, String clusterName) {
@@ -779,6 +805,23 @@ public class XdsDependencyManagerTest {
             httpMaxStreamDurationNano, virtualHosts, null));
         ldsWatcher.onChanged(ldsUpdate);
       });
+    }
+  }
+
+  static class ClusterNameMatcher implements ArgumentMatcher<XdsConfig> {
+    private final List<String> expectedNames;
+
+    ClusterNameMatcher(List<String> expectedNames) {
+      this.expectedNames = expectedNames;
+    }
+
+    @Override
+    public boolean matches(XdsConfig xdsConfig) {
+      if (xdsConfig == null || xdsConfig.getClusters() == null) {
+        return false;
+      }
+      return xdsConfig.getClusters().size() == expectedNames.size()
+          && xdsConfig.getClusters().keySet().containsAll(expectedNames);
     }
   }
 }

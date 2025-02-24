@@ -137,14 +137,15 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
         ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
 
-    if (rawConnectivityState == READY) {
-      // If the previous ready subchannel exists in new address list,
+    if (rawConnectivityState == READY || rawConnectivityState == CONNECTING) {
+      // If the previous ready (or connecting) subchannel exists in new address list,
       // keep this connection and don't create new subchannels
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
         SubchannelData subchannelData = subchannels.get(previousAddress);
         subchannelData.getSubchannel().updateAddresses(addressIndex.getCurrentEagAsList());
+        shutdownRemovedAddresses(newImmutableAddressGroups);
         return Status.OK;
       }
       // Previous ready subchannel not in the new list of addresses
@@ -152,23 +153,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       addressIndex.updateGroups(newImmutableAddressGroups);
     }
 
-    // remove old subchannels that were not in new address list
-    Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
+    // No old addresses means first time through, so we will do an explicit move to CONNECTING
+    // which is what we implicitly started with
+    boolean noOldAddrs = shutdownRemovedAddresses(newImmutableAddressGroups);
 
-    // Flatten the new EAGs addresses
-    Set<SocketAddress> newAddrs = new HashSet<>();
-    for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
-      newAddrs.addAll(endpoint.getAddresses());
-    }
-
-    // Shut them down and remove them
-    for (SocketAddress oldAddr : oldAddrs) {
-      if (!newAddrs.contains(oldAddr)) {
-        subchannels.remove(oldAddr).getSubchannel().shutdown();
-      }
-    }
-
-    if (oldAddrs.size() == 0) {
+    if (noOldAddrs) {
       // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
       updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
@@ -186,6 +175,31 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     return Status.OK;
+  }
+
+  /**
+   * Compute the difference between the flattened new addresses and the old addresses that had been
+   * made into subchannels and then shutdown the matching subchannels.
+   * @return true if there were no old addresses
+   */
+  private boolean shutdownRemovedAddresses(
+      ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups) {
+
+    Set<SocketAddress> oldAddrs = new HashSet<>(subchannels.keySet());
+
+    // Flatten the new EAGs addresses
+    Set<SocketAddress> newAddrs = new HashSet<>();
+    for (EquivalentAddressGroup endpoint : newImmutableAddressGroups) {
+      newAddrs.addAll(endpoint.getAddresses());
+    }
+
+    // Shut them down and remove them
+    for (SocketAddress oldAddr : oldAddrs) {
+      if (!newAddrs.contains(oldAddr)) {
+        subchannels.remove(oldAddr).getSubchannel().shutdown();
+      }
+    }
+    return oldAddrs.isEmpty();
   }
 
   private static List<EquivalentAddressGroup> deDupAddresses(List<EquivalentAddressGroup> groups) {
@@ -290,7 +304,14 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
             cancelScheduleTask();
             requestConnection(); // is recursive so might hit the end of the addresses
           } else {
-            scheduleBackoff();
+            if (subchannels.size() >= addressIndex.size()) {
+              scheduleBackoff();
+            } else {
+              // We must have done a seek to the middle of the list lets start over from the
+              // beginning
+              addressIndex.reset();
+              requestConnection();
+            }
           }
         }
 

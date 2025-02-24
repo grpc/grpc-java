@@ -46,6 +46,7 @@ import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Locality;
@@ -1029,7 +1030,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     private LoadBalancer childLb;
 
     private CdsLbState(String rootCluster,
-                       ImmutableMap<String, StatusOr<XdsConfig.XdsClusterConfig>> clusterConfigs,
+                       ImmutableMap<String, StatusOr<XdsClusterConfig>> clusterConfigs,
                        String rootName) {
       root = new ClusterStateDetails(rootName, clusterConfigs.get(rootName));
       clusterStates.put(rootCluster, root);
@@ -1050,7 +1051,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
     // If doesn't have children is a no-op
     private void initializeChildren(ImmutableMap<String,
-        StatusOr<XdsConfig.XdsClusterConfig>> clusterConfigs, ClusterStateDetails curRoot) {
+        StatusOr<XdsClusterConfig>> clusterConfigs, ClusterStateDetails curRoot) {
       if (curRoot.result == null) {
         return;
       }
@@ -1060,7 +1061,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       for (String clusterName : childNames) {
-        StatusOr<XdsConfig.XdsClusterConfig> configStatusOr = clusterConfigs.get(clusterName);
+        StatusOr<XdsClusterConfig> configStatusOr = clusterConfigs.get(clusterName);
         if (configStatusOr == null) {
           logger.log(XdsLogLevel.DEBUG, "Child cluster %s of %s has no matching config",
               clusterName, this.root.name);
@@ -1155,7 +1156,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           childLb = null;
         }
         Status unavailable = Status.UNAVAILABLE.withDescription(String.format(
-            "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + root.name));
+            "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster %s", root.name));
         helper.updateBalancingState(
             TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(unavailable)));
         return;
@@ -1233,17 +1234,21 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       private EdsUpdate endpointConfig;
       private Status error;
 
-      private ClusterStateDetails(String name, StatusOr<XdsConfig.XdsClusterConfig> configOr) {
+      private ClusterStateDetails(String name, StatusOr<XdsClusterConfig> configOr) {
         this.name = name;
         if (configOr.hasValue()) {
-          XdsConfig.XdsClusterConfig config = configOr.getValue();
+          XdsClusterConfig config = configOr.getValue();
           this.result = config.getClusterResource();
           this.isLeaf = result.clusterType() != ClusterType.AGGREGATE;
-          if (config.getEndpoint() != null) {
-            if (config.getEndpoint().hasValue()) {
-              endpointConfig = config.getEndpoint().getValue();
+          if (isLeaf && config.getChildren() != null) {
+            // We should only see leaf clusters here.
+            assert config.getChildren() instanceof XdsClusterConfig.EndpointConfig;
+            StatusOr<EdsUpdate> endpointConfigOr =
+               ((XdsClusterConfig.EndpointConfig) config.getChildren()).getEndpoint();
+            if (endpointConfigOr.hasValue()) {
+              endpointConfig = endpointConfigOr.getValue();
             } else {
-              this.error = config.getEndpoint().getStatus();
+              this.error = endpointConfigOr.getStatus();
               this.result = null;
             }
           }

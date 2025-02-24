@@ -24,6 +24,8 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
@@ -33,7 +35,9 @@ import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
+import com.google.rpc.Code;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
@@ -45,6 +49,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
@@ -57,6 +62,7 @@ import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
@@ -64,12 +70,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
@@ -255,7 +264,12 @@ public class XdsTestUtils {
     VirtualHost virtualHost = rdsUpdate.virtualHosts.get(0);
 
     // Need to create endpoints to create locality endpoints map to create edsUpdate
-    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = createMinimalLbEndpointsMap(serverHostName);
+    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
+    LbEndpoint lbEndpoint =
+        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
+    lbEndpointsMap.put(
+        Locality.create("", "", ""),
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
 
     // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
@@ -264,7 +278,7 @@ public class XdsTestUtils {
         CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
-        CLUSTER_NAME, cdsUpdate, StatusOr.fromValue(edsUpdate));
+        CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
 
     builder
         .setListener(ldsUpdate)
@@ -357,7 +371,71 @@ public class XdsTestUtils {
     return Listener.newBuilder()
         .setName(serverName)
         .setApiListener(clientListenerBuilder.build()).build();
+  }
 
+  /**
+   * Matches a {@link DiscoveryRequest} with the same node metadata, versionInfo, typeUrl,
+   * response nonce and collection of resource names regardless of order.
+   */
+  static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
+    private final Node node;
+    private final String versionInfo;
+    private final String typeUrl;
+    private final Set<String> resources;
+    private final String responseNonce;
+    @Nullable
+    private final Integer errorCode;
+    private final List<String> errorMessages;
+
+    private DiscoveryRequestMatcher(
+        Node node, String versionInfo, List<String> resources,
+        String typeUrl, String responseNonce, @Nullable Integer errorCode,
+        @Nullable List<String> errorMessages) {
+      this.node = node;
+      this.versionInfo = versionInfo;
+      this.resources = new HashSet<>(resources);
+      this.typeUrl = typeUrl;
+      this.responseNonce = responseNonce;
+      this.errorCode = errorCode;
+      this.errorMessages = errorMessages != null ? errorMessages : ImmutableList.<String>of();
+    }
+
+    @Override
+    public boolean matches(DiscoveryRequest argument) {
+      if (!typeUrl.equals(argument.getTypeUrl())) {
+        return false;
+      }
+      if (!versionInfo.equals(argument.getVersionInfo())) {
+        return false;
+      }
+      if (!responseNonce.equals(argument.getResponseNonce())) {
+        return false;
+      }
+      if (!resources.equals(new HashSet<>(argument.getResourceNamesList()))) {
+        return false;
+      }
+      if (errorCode == null && argument.hasErrorDetail()) {
+        return false;
+      }
+      if (errorCode != null
+          && !matchErrorDetail(argument.getErrorDetail(), errorCode, errorMessages)) {
+        return false;
+      }
+      return node.equals(argument.getNode());
+    }
+
+    @Override
+    public String toString() {
+      return "DiscoveryRequestMatcher{"
+          + "node=" + node
+          + ", versionInfo='" + versionInfo + '\''
+          + ", typeUrl='" + typeUrl + '\''
+          + ", resources=" + resources
+          + ", responseNonce='" + responseNonce + '\''
+          + ", errorCode=" + errorCode
+          + ", errorMessages=" + errorMessages
+          + '}';
+    }
   }
 
   /**

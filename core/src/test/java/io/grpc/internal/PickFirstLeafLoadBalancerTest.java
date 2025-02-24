@@ -2133,18 +2133,20 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
 
-    // Verify that no new subchannels were created or started
+    // Subchannel 2 should be reused since it was trying to connect and is present.
     inOrder.verify(mockSubchannel1).shutdown();
+    inOrder.verify(mockSubchannel3, never()).start(stateListenerCaptor.capture());
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
+    // Second address connection attempt is unsuccessful, so since at end, but don't have all
+    // subchannels, schedule a backoff for the first address
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener3 = stateListenerCaptor.getValue();
-    inOrder.verify(mockSubchannel3).requestConnection();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
-    // Second address connection attempt is unsuccessful, but should not go into transient failure
-    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
-    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
-
-    // Third address connection attempt is unsuccessful, now we enter transient failure
+    // Third address connection attempt is unsuccessful, now we enter TF, do name resolution
     stateListener3.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
 

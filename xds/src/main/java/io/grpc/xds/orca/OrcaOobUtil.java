@@ -83,7 +83,7 @@ public final class OrcaOobUtil {
    *       class WrrLoadbalancer extends LoadBalancer {
    *         private final Helper originHelper;  // the original Helper
    *
-   *         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+   *         public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
    *           // listener implements the logic for WRR's usage of backend metrics.
    *           OrcaReportingHelper orcaHelper =
    *               OrcaOobUtil.newOrcaReportingHelper(originHelper);

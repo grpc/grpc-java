@@ -26,6 +26,7 @@ import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.io.Closeable;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -118,19 +119,17 @@ final class XdsConfig {
   static final class XdsClusterConfig {
     private final String clusterName;
     private final CdsUpdate clusterResource;
-    private final StatusOr<EdsUpdate> endpoint; //Will be null for non-EDS clusters
+    private final ClusterChild children; // holds details
 
-    XdsClusterConfig(String clusterName, CdsUpdate clusterResource,
-                      StatusOr<EdsUpdate> endpoint) {
+    XdsClusterConfig(String clusterName, CdsUpdate clusterResource, ClusterChild details) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.clusterResource = checkNotNull(clusterResource, "clusterResource");
-      this.endpoint = endpoint;
+      this.children = checkNotNull(details, "details");
     }
 
     @Override
     public int hashCode() {
-      int endpointHash = (endpoint != null) ? endpoint.hashCode() : 0;
-      return clusterName.hashCode() + clusterResource.hashCode() + endpointHash;
+      return clusterName.hashCode() + clusterResource.hashCode() + children.hashCode();
     }
 
     @Override
@@ -141,7 +140,7 @@ final class XdsConfig {
       XdsClusterConfig o = (XdsClusterConfig) obj;
       return Objects.equals(clusterName, o.clusterName)
           && Objects.equals(clusterResource, o.clusterResource)
-          && Objects.equals(endpoint, o.endpoint);
+          && Objects.equals(children, o.children);
     }
 
     @Override
@@ -149,7 +148,8 @@ final class XdsConfig {
       StringBuilder builder = new StringBuilder();
       builder.append("XdsClusterConfig{clusterName=").append(clusterName)
           .append(", clusterResource=").append(clusterResource)
-          .append(", endpoint=").append(endpoint).append("}");
+          .append(", children={").append(children)
+          .append("}");
       return builder.toString();
     }
 
@@ -161,8 +161,69 @@ final class XdsConfig {
       return clusterResource;
     }
 
-    public StatusOr<EdsUpdate> getEndpoint() {
-      return endpoint;
+    public ClusterChild getChildren() {
+      return children;
+    }
+
+    interface ClusterChild {}
+
+    /** Endpoint info for EDS and LOGICAL_DNS clusters.  If there was an
+     * error, endpoints will be null and resolution_note will be set.
+     */
+    static final class EndpointConfig implements ClusterChild {
+      private final StatusOr<EdsUpdate> endpoint;
+
+      public EndpointConfig(StatusOr<EdsUpdate> endpoint) {
+        this.endpoint = checkNotNull(endpoint, "endpoint");
+      }
+
+      @Override
+      public int hashCode() {
+        return endpoint.hashCode();
+      }
+
+      @Override
+      public boolean equals(Object obj) {
+        if (!(obj instanceof EndpointConfig)) {
+          return false;
+        }
+        return Objects.equals(endpoint, ((EndpointConfig)obj).endpoint);
+      }
+
+      public StatusOr<EdsUpdate> getEndpoint() {
+        return endpoint;
+      }
+
+      @Override
+      public String toString() {
+        if (endpoint.hasValue()) {
+          return "EndpointConfig{endpoint=" + endpoint.getValue() + "}";
+        } else {
+          return "EndpointConfig{error=" + endpoint.getStatus() + "}";
+        }
+      }
+    }
+
+    // The list of leaf clusters for an aggregate cluster.
+    static final class AggregateConfig implements ClusterChild {
+      private final List<String> leafNames;
+
+      public AggregateConfig(List<String> leafNames) {
+        this.leafNames = checkNotNull(leafNames, "leafNames");
+      }
+
+      @Override
+      public int hashCode() {
+        return leafNames.hashCode();
+      }
+
+      @Override
+      public boolean equals(Object obj) {
+        if (!(obj instanceof AggregateConfig)) {
+          return false;
+        }
+        return Objects.equals(leafNames, ((AggregateConfig) obj).leafNames);
+      }
     }
   }
 
@@ -196,6 +257,7 @@ final class XdsConfig {
 
     XdsConfig build() {
       checkNotNull(listener, "listener");
+      checkNotNull(route, "route");
       return new XdsConfig(listener, route, clusters, virtualHost);
     }
   }

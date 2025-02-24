@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
@@ -110,7 +111,8 @@ public final class S2AChannelCredentials {
      * Sets the stub to use to communicate with S2A. This is only used for testing that the
      * stream to S2A gets closed.
      */
-    public Builder setStub(S2AStub stub) {
+    @VisibleForTesting
+    Builder setStub(S2AStub stub) {
       checkNotNull(stub);
       this.stub = stub;
       return this;

@@ -24,6 +24,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
+import io.grpc.ClientCall;
 import io.grpc.ServerCall;
 import io.grpc.alts.AltsContext.SecurityLevel;
 import io.grpc.alts.internal.AltsInternalContext;
@@ -37,27 +38,28 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link AltsContextUtil}. */
 @RunWith(JUnit4.class)
 public class AltsContextUtilTest {
-
-  private final ServerCall<?,?> call = mock(ServerCall.class);
-
   @Test
   public void check_noAttributeValue() {
-    when(call.getAttributes()).thenReturn(Attributes.newBuilder().build());
-
-    assertFalse(AltsContextUtil.check(call));
+    assertFalse(AltsContextUtil.check(Attributes.newBuilder().build()));
   }
 
   @Test
-  public void contains_unexpectedAttributeValueType() {
-    when(call.getAttributes()).thenReturn(Attributes.newBuilder()
+  public void check_unexpectedAttributeValueType() {
+    assertFalse(AltsContextUtil.check(Attributes.newBuilder()
         .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, new Object())
-        .build());
-
-    assertFalse(AltsContextUtil.check(call));
+        .build()));
   }
 
   @Test
-  public void contains_altsInternalContext() {
+  public void check_altsInternalContext() {
+    assertTrue(AltsContextUtil.check(Attributes.newBuilder()
+        .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, AltsInternalContext.getDefaultInstance())
+        .build()));
+  }
+
+  @Test
+  public void checkServer_altsInternalContext() {
+    ServerCall<?,?> call = mock(ServerCall.class);
     when(call.getAttributes()).thenReturn(Attributes.newBuilder()
         .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, AltsInternalContext.getDefaultInstance())
         .build());
@@ -66,26 +68,67 @@ public class AltsContextUtilTest {
   }
 
   @Test
-  public void from_altsInternalContext() {
+  public void checkClient_altsInternalContext() {
+    ClientCall<?,?> call = mock(ClientCall.class);
+    when(call.getAttributes()).thenReturn(Attributes.newBuilder()
+        .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, AltsInternalContext.getDefaultInstance())
+        .build());
+
+    assertTrue(AltsContextUtil.check(call));
+  }
+
+  @Test
+  public void createFrom_altsInternalContext() {
     HandshakerResult handshakerResult =
         HandshakerResult.newBuilder()
             .setPeerIdentity(Identity.newBuilder().setServiceAccount("remote@peer"))
             .setLocalIdentity(Identity.newBuilder().setServiceAccount("local@peer"))
             .build();
-    when(call.getAttributes()).thenReturn(Attributes.newBuilder()
-        .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY,  new AltsInternalContext(handshakerResult))
-        .build());
 
-    AltsContext context = AltsContextUtil.createFrom(call);
+    AltsContext context = AltsContextUtil.createFrom(Attributes.newBuilder()
+        .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, new AltsInternalContext(handshakerResult))
+        .build());
     assertEquals("remote@peer", context.getPeerServiceAccount());
     assertEquals("local@peer", context.getLocalServiceAccount());
     assertEquals(SecurityLevel.INTEGRITY_AND_PRIVACY, context.getSecurityLevel());
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void from_noAttributeValue() {
-    when(call.getAttributes()).thenReturn(Attributes.newBuilder().build());
+  public void createFrom_noAttributeValue() {
+    AltsContextUtil.createFrom(Attributes.newBuilder().build());
+  }
 
-    AltsContextUtil.createFrom(call);
+  @Test
+  public void createFromServer_altsInternalContext() {
+    HandshakerResult handshakerResult =
+        HandshakerResult.newBuilder()
+            .setPeerIdentity(Identity.newBuilder().setServiceAccount("remote@peer"))
+            .setLocalIdentity(Identity.newBuilder().setServiceAccount("local@peer"))
+            .build();
+
+    ServerCall<?,?> call = mock(ServerCall.class);
+    when(call.getAttributes()).thenReturn(Attributes.newBuilder()
+        .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, new AltsInternalContext(handshakerResult))
+        .build());
+
+    AltsContext context = AltsContextUtil.createFrom(call);
+    assertEquals("remote@peer", context.getPeerServiceAccount());
+  }
+
+  @Test
+  public void createFromClient_altsInternalContext() {
+    HandshakerResult handshakerResult =
+        HandshakerResult.newBuilder()
+            .setPeerIdentity(Identity.newBuilder().setServiceAccount("remote@peer"))
+            .setLocalIdentity(Identity.newBuilder().setServiceAccount("local@peer"))
+            .build();
+
+    ClientCall<?,?> call = mock(ClientCall.class);
+    when(call.getAttributes()).thenReturn(Attributes.newBuilder()
+        .set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, new AltsInternalContext(handshakerResult))
+        .build());
+
+    AltsContext context = AltsContextUtil.createFrom(call);
+    assertEquals("remote@peer", context.getPeerServiceAccount());
   }
 }
