@@ -68,7 +68,6 @@ import io.netty.handler.codec.http2.Http2Settings;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -198,8 +197,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
       fail("Start should throw exception");
     } catch (TimeoutException ex) {
       assertThat(start.isDone()).isFalse();
-    } catch (ExecutionException e) {
-      // do nothing
     }
     assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
   }

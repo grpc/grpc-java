@@ -379,8 +379,10 @@ final class XdsServerWrapper extends Server {
       }
       logger.log(Level.FINEST, "Received Lds update {0}", update);
       if (update.listener() == null) {
-        handleConfigNotFoundOrMismatch(Status.NOT_FOUND.withDescription(
-            "No non-API Listener found").asException());
+        StatusException exception = Status.NOT_FOUND.withDescription(
+            "No non-API Listener found").asException();
+        handleConfigNotFoundOrMismatch(exception);
+        initialStartFuture.set(exception);
         return;
       }
 
@@ -607,7 +609,6 @@ final class XdsServerWrapper extends Server {
       }
       isServing = false;
       listener.onNotServing(exception);
-      initialStartFuture.set(exception);
     }
 
     private void cleanUpRouteDiscoveryStates() {

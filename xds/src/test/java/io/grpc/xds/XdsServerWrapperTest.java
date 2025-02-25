@@ -334,8 +334,6 @@ public class XdsServerWrapperTest {
     } catch (TimeoutException ex) {
       // expect to block here.
       assertThat(start.isDone()).isFalse();
-    } catch (ExecutionException e) {
-      // do nothing
     }
     verify(mockBuilder, times(1)).build();
     verify(mockServer, never()).start();
@@ -563,10 +561,6 @@ public class XdsServerWrapperTest {
 
     xdsClient.deliverLdsUpdate2(Collections.singletonList(filterChain), null);
     verify(listener, timeout(10000)).onNotServing(any());
-
-    /*FilterChain filterChain = createFilterChain("filter-chain-2", createRds("rds"));
-    xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
-    verify(listener, timeout(10000)).onNotServing(any());*/
   }
 
   @Test
@@ -714,7 +708,6 @@ public class XdsServerWrapperTest {
 
   @Test
   public void discoverState_rds_onError_and_resourceNotExist() throws Exception {
-    // hi
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
@@ -789,8 +782,6 @@ public class XdsServerWrapperTest {
     } catch (TimeoutException ex) {
       // expect to block here.
       assertThat(start.isDone()).isFalse();
-    } catch (ExecutionException e) {
-      // do nothing
     }
     verify(listener, times(1)).onNotServing(any(StatusException.class));
     verify(mockBuilder, times(1)).build();
@@ -818,7 +809,7 @@ public class XdsServerWrapperTest {
       fail("Start should throw exception");
     } catch (ExecutionException ex) {
       assertThat(ex.getCause()).isInstanceOf(IOException.class);
-      // assertThat(ex.getCause().getMessage()).isEqualTo("error!");
+      assertThat(ex.getCause().getMessage()).isEqualTo("error!");
     }
     assertThat(executor.forwardNanos(RETRY_DELAY_NANOS)).isEqualTo(1);
     verify(mockBuilder, times(1)).build();
