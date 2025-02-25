@@ -85,6 +85,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
@@ -3375,9 +3376,14 @@ public class ManagedChannelImplTest {
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+
+    Event configEvent = getStats(channel).channelTrace.events.get(prevSize);
+
+    assertThat(configEvent.description)
+        .contains("Current config is replaced with new config. prevConfig=");
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Previous service config updated to current")
+            .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3402,9 +3408,9 @@ public class ManagedChannelImplTest {
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Previous service config updated to current")
+            .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3436,9 +3442,9 @@ public class ManagedChannelImplTest {
     channel.syncContext.execute(() ->
         nameResolverFactory.resolvers.get(0).listener.onResult2(resolutionResult1));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Previous service config updated to current")
+            .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3465,9 +3471,9 @@ public class ManagedChannelImplTest {
     channel.syncContext.execute(() ->
         nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3));
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Previous service config updated to current")
+            .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());

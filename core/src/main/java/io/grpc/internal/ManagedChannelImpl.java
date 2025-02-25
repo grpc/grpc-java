@@ -936,11 +936,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     // Must run in SynchronizationContext.
-    void updateConfigSelector(@Nullable InternalConfigSelector currentConfig) {
+    void updateConfigSelector(@Nullable InternalConfigSelector newConfig) {
       InternalConfigSelector prevConfig = configSelector.get();
-      configSelector.set(currentConfig);
+      configSelector.set(newConfig);
       channelLogger.log(ChannelLogLevel.INFO,
-          "Previous service config updated to current", prevConfig, currentConfig);
+          "Current config is replaced with new config. prevConfig={0}, newConfig={1}",
+          prevConfig, newConfig);
       if (prevConfig == INITIAL_PENDING_SELECTOR && pendingCalls != null) {
         for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
           pendingCall.reprocess();
