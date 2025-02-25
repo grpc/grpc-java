@@ -123,14 +123,16 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
 
   /**
    * Registers a custom {@link CallCredentials} that is to be used on the xDS transport when
-   * resolving the given target. Must be called before the xDS client for the target is created
-   * (i.e. before the application creates a channel to the target).
+   * resolving {@code target}. Must be called before the xDS client for {@code target} is created
+   * (i.e. before the application creates a channel for {@code target}).
    *
    * <p>A custom {@code CallCredentials} can only be set once on the xDS transport; in other words,
    * it is not possible to change the custom transport {@code CallCredentials} for an existing xDS
-   * client. This ignores {@code creds} and tries to return false if {@code
-   * setTransportCallCredentials} is called when there is already an existing xDS client for the
-   * target.
+   * client. {@code setTransportCallCredentials} ignores {@code creds} and tries to return false if
+   * it is called when there is already an existing xDS client for {@code target}.
+   *
+   * <p>When the xDS client refcount reaches 0, the mapping from {@code target} to {@code creds}
+   * will be deleted, and a new {@code CallCredentials} can be set for {@code target}.
    */
   public static boolean setTransportCallCredentials(String target, CallCredentials creds) {
     if (SharedXdsClientPoolProvider.getDefaultProvider().get(target) != null) {
