@@ -697,7 +697,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
       if (virtualHosts != null) {
         // No RDS watcher since we are getting RDS updates via LDS
-        boolean updateSuccessful = updateRoutes(virtualHosts, this, activeVirtualHost, this.rdsName == null);
+        boolean updateSuccessful =
+            updateRoutes(virtualHosts, this, activeVirtualHost, this.rdsName == null);
         this.rdsName = null;
         if (!updateSuccessful) {
           lastXdsConfig = null;

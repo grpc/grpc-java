@@ -269,8 +269,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CONFIG);
 
     if (xdsConfig.getClusters().get(rootClusterName) == null) {
-       return Status.UNAVAILABLE.withDescription(
-           "CDS resource not found for root cluster: " + rootClusterName);
+      return Status.UNAVAILABLE.withDescription(
+          "CDS resource not found for root cluster: " + rootClusterName);
     }
 
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
@@ -1155,8 +1155,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           childLb.shutdown();
           childLb = null;
         }
-        Status unavailable = Status.UNAVAILABLE.withDescription(String.format(
-            "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster %s", root.name));
+        Status unavailable = Status.UNAVAILABLE.withDescription(
+            "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + root.name);
         helper.updateBalancingState(
             TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(unavailable)));
         return;
@@ -1244,7 +1244,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             // We should only see leaf clusters here.
             assert config.getChildren() instanceof XdsClusterConfig.EndpointConfig;
             StatusOr<EdsUpdate> endpointConfigOr =
-               ((XdsClusterConfig.EndpointConfig) config.getChildren()).getEndpoint();
+                ((XdsClusterConfig.EndpointConfig) config.getChildren()).getEndpoint();
             if (endpointConfigOr.hasValue()) {
               endpointConfig = endpointConfigOr.getValue();
             } else {
@@ -1327,7 +1327,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           case EDS:
             isLeaf = true;
             assert endpointConfig != null;
-            if (endpointConfig.getStatus() != null) {
+            if (!endpointConfig.getStatus().isOk()) {
               logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}, error: {2}",
                   update.clusterName(), update.edsServiceName(), endpointConfig.getStatus());
             } else {

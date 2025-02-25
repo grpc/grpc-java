@@ -60,7 +60,6 @@ import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ObjectPool;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.CdsLoadBalancer2.ClusterResolverConfig;
 import io.grpc.xds.CdsLoadBalancer2.ClusterResolverConfig.DiscoveryMechanism;
@@ -92,6 +91,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -274,7 +274,8 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
-  //TODO: Code looks broken creating a second LB instead of updating the existing one or shutting it down
+  //TODO: Code looks broken creating a second LB instead of updating the existing one or shutting
+  // it down
   public void discoverTopLevelEdsCluster() {
     configWatcher.watchCluster(CLUSTER);
     CdsUpdate update =
@@ -284,8 +285,8 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
 
-    validateClusterImplConfig(getClusterImplConfig(childBalancers, CLUSTER), CLUSTER, EDS_SERVICE_NAME,
-        null, LRS_SERVER_INFO, 100L, upstreamTlsContext, outlierDetection);
+    validateClusterImplConfig(getConfigOfPriorityGrandChild(childBalancers, CLUSTER), CLUSTER,
+        EDS_SERVICE_NAME, null, LRS_SERVER_INFO, 100L, upstreamTlsContext, outlierDetection);
 
     PriorityLbConfig.PriorityChildConfig priorityChildConfig =
         getPriorityChildConfig(childBalancers, CLUSTER);
@@ -293,24 +294,17 @@ public class CdsLoadBalancer2Test {
         .getPolicyName()).isEqualTo("round_robin");
   }
 
-  private static ClusterImplConfig getClusterImplConfig(List<FakeLoadBalancer> childBalancers,
-                                                        String cluster) {
+  private static Object getConfigOfPriorityGrandChild(List<FakeLoadBalancer> childBalancers,
+                                                      String cluster) {
     PriorityLbConfig.PriorityChildConfig priorityChildConfig =
         getPriorityChildConfig(childBalancers, cluster);
     assertNotNull("No cluster " + cluster + " in childBalancers", priorityChildConfig);
     Object clusterImplConfig = getChildConfig(priorityChildConfig.childConfig);
-    if (clusterImplConfig instanceof ClusterImplConfig) {
-      return (ClusterImplConfig) clusterImplConfig;
-    }
-    if (clusterImplConfig instanceof OutlierDetectionLoadBalancerConfig) {
-      clusterImplConfig = getChildConfig(((OutlierDetectionLoadBalancerConfig) clusterImplConfig).childConfig);
-    }
-    
-    assertThat(clusterImplConfig).isInstanceOf(ClusterImplConfig.class);
-    return (ClusterImplConfig) clusterImplConfig;
+    return clusterImplConfig;
   }
 
-  private static PriorityLbConfig.PriorityChildConfig getPriorityChildConfig(List<FakeLoadBalancer> childBalancers, String cluster) {
+  private static PriorityLbConfig.PriorityChildConfig
+  getPriorityChildConfig(List<FakeLoadBalancer> childBalancers, String cluster) {
     for (FakeLoadBalancer fakeLB : childBalancers) {
       if (fakeLB.config instanceof PriorityLbConfig) {
         Map<String, PriorityLbConfig.PriorityChildConfig> childConfigs =
@@ -523,17 +517,15 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(cluster2, update2);
     xdsClient.createAndDeliverEdsUpdate(update1.edsServiceName());
 
-    validateClusterImplConfig(getClusterImplConfig(childBalancers, cluster1), cluster1,
-        EDS_SERVICE_NAME, null, LRS_SERVER_INFO, 200L,
-        upstreamTlsContext, outlierDetection);
-    validateClusterImplConfig(getClusterImplConfig(childBalancers, cluster2), cluster2,
-        null, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null,
-        null);
+    validateClusterImplConfig(getConfigOfPriorityGrandChild(childBalancers, cluster1), cluster1,
+        EDS_SERVICE_NAME, null, LRS_SERVER_INFO, 200L, upstreamTlsContext, outlierDetection);
+    validateClusterImplConfig(getConfigOfPriorityGrandChild(childBalancers, cluster2), cluster2,
+        null, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null, null);
 
     // Revoke cluster1, should still be able to proceed with cluster2.
     xdsClient.deliverResourceNotExist(cluster1);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
-    validateClusterImplConfig(getClusterImplConfig(childBalancers, CLUSTER),
+    validateClusterImplConfig(getConfigOfPriorityGrandChild(childBalancers, CLUSTER),
         cluster2, null, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null, null);
     verify(helper, never()).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), any(SubchannelPicker.class));
@@ -908,6 +900,7 @@ public class CdsLoadBalancer2Test {
     }
   }
 
+  // TODO anything calling this needs to be updated to use validateClusterImplConfig
   private static void validateDiscoveryMechanism(
       DiscoveryMechanism instance, String name,
       @Nullable String edsServiceName, @Nullable String dnsHostName,
@@ -915,25 +908,87 @@ public class CdsLoadBalancer2Test {
       @Nullable UpstreamTlsContext tlsContext, @Nullable OutlierDetection outlierDetection) {
     assertThat(instance.cluster).isEqualTo(name);
     assertThat(instance.edsServiceName).isEqualTo(edsServiceName);
-//    assertThat(instance.dnsHostName).isEqualTo(dnsHostName);
+    assertThat(instance.dnsHostName).isEqualTo(dnsHostName);
     assertThat(instance.lrsServerInfo).isEqualTo(lrsServerInfo);
     assertThat(instance.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
     assertThat(instance.tlsContext).isEqualTo(tlsContext);
-//    assertThat(instance.outlierDetection).isEqualTo(outlierDetection);
+    assertThat(instance.outlierDetection).isEqualTo(outlierDetection);
+  }
+
+  private static boolean outlierDetectionEquals(OutlierDetection outlierDetection,
+                                        OutlierDetectionLoadBalancerConfig oDLbConfig) {
+    if (outlierDetection == null || oDLbConfig == null) {
+      return true;
+    }
+
+    OutlierDetectionLoadBalancerConfig defaultConfig =
+        new OutlierDetectionLoadBalancerConfig.Builder().build();
+    // split out for readability and debugging
+    Long expectedBaseEjectionTimeNanos = outlierDetection.baseEjectionTimeNanos() == null
+                 ? outlierDetection.baseEjectionTimeNanos()
+                 : defaultConfig.baseEjectionTimeNanos;
+
+    Long expectedIntervalNanos = outlierDetection.intervalNanos() == null
+                                 ? outlierDetection.intervalNanos()
+                                 : defaultConfig.intervalNanos;
+
+    OutlierDetectionLoadBalancerConfig.FailurePercentageEjection expectedFailurePercentageEjection =
+        outlierDetection.failurePercentageEjection() == null
+                                             ? outlierDetection.failurePercentageEjection()
+                                             : defaultConfig.failurePercentageEjection;
+
+    OutlierDetectionLoadBalancerConfig.SuccessRateEjection expectedSuccessRateEjection =
+        outlierDetection.successRateEjection() == null
+                 ? outlierDetection.successRateEjection()
+                 : defaultConfig.successRateEjection;
+
+    Long expectedMaxEjectionTimeNanos = outlierDetection.maxEjectionTimeNanos() == null
+                 ? outlierDetection.maxEjectionTimeNanos()
+                 : defaultConfig.maxEjectionTimeNanos;
+
+    Integer expectedMaxEjectionPercent = outlierDetection.maxEjectionPercent() == null
+                 ? outlierDetection.maxEjectionPercent()
+                 : defaultConfig.maxEjectionPercent;
+
+    boolean baseEjNanosEqual =
+        Objects.equals(expectedBaseEjectionTimeNanos, oDLbConfig.baseEjectionTimeNanos);
+    boolean intervalNanosEqual = Objects.equals(expectedIntervalNanos, oDLbConfig.intervalNanos);
+    boolean failurePctEqual = Objects.equals(expectedFailurePercentageEjection,
+        oDLbConfig.failurePercentageEjection);
+    boolean successRateEjectEqual =
+        Objects.equals(expectedSuccessRateEjection, oDLbConfig.successRateEjection);
+    boolean maxEjectTimeEqual =
+        Objects.equals(expectedMaxEjectionTimeNanos, oDLbConfig.maxEjectionTimeNanos);
+    boolean maxEjectPctEqual =
+        Objects.equals(expectedMaxEjectionPercent, oDLbConfig.maxEjectionPercent);
+
+    return baseEjNanosEqual && intervalNanosEqual && failurePctEqual && successRateEjectEqual
+        && maxEjectTimeEqual && maxEjectPctEqual;
   }
 
   private static void validateClusterImplConfig(
-      ClusterImplConfig instance, String name,
+      Object lbConfig, String name,
       @Nullable String edsServiceName, @Nullable String dnsHostName,
       @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
       @Nullable UpstreamTlsContext tlsContext, @Nullable OutlierDetection outlierDetection) {
+    ClusterImplConfig instance;
+
+    if (lbConfig instanceof OutlierDetectionLoadBalancerConfig) {
+      instance = (ClusterImplConfig)
+          getChildConfig(((OutlierDetectionLoadBalancerConfig) lbConfig).childConfig);
+      assertThat(outlierDetectionEquals(outlierDetection,
+          (OutlierDetectionLoadBalancerConfig) lbConfig)).isTrue();
+
+    } else {
+      instance = (ClusterImplConfig) lbConfig;
+    }
+
     assertThat(instance.cluster).isEqualTo(name);
     assertThat(instance.edsServiceName).isEqualTo(edsServiceName);
-//    assertThat(instance.dnsHostName).isEqualTo(dnsHostName);
     assertThat(instance.lrsServerInfo).isEqualTo(lrsServerInfo);
     assertThat(instance.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
     assertThat(instance.tlsContext).isEqualTo(tlsContext);
-//    assertThat(instance.outlierDetection).isEqualTo(outlierDetection);
+    // TODO look in instance.childConfig for dns
   }
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
@@ -1216,8 +1271,23 @@ public class CdsLoadBalancer2Test {
     }
 
     private Object buildLbConfig(XdsConfig xdsConfig) {
-      // TODO build it for real
-      return new CdsConfig(CLUSTER);
+      ImmutableMap<String, StatusOr<XdsConfig.XdsClusterConfig>> clusters = xdsConfig.getClusters();
+      if (clusters == null || clusters.isEmpty()) {
+        return null;
+      }
+
+      // find the aggregate in xdsConfig.getClusters()
+      for (Map.Entry<String, StatusOr<XdsConfig.XdsClusterConfig>> entry : clusters.entrySet()) {
+        CdsUpdate.ClusterType clusterType =
+            entry.getValue().getValue().getClusterResource().clusterType();
+        if (clusterType == CdsUpdate.ClusterType.AGGREGATE) {
+          return new CdsConfig(entry.getKey());
+        }
+      }
+
+      // If no aggregate grab the first leaf cluster
+      String clusterName = clusters.keySet().stream().findFirst().get();
+      return new CdsConfig(clusterName);
     }
 
     @Override
