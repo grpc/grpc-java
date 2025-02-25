@@ -3377,7 +3377,7 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Current service config is replaced")
+            .setDescription("Previous service config updated to current")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3404,7 +3404,7 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Current service config is replaced")
+            .setDescription("Previous service config updated to current")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3438,7 +3438,7 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Current service config is replaced")
+            .setDescription("Previous service config updated to current")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3467,7 +3467,7 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Current service config is replaced")
+            .setDescription("Previous service config updated to current")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
