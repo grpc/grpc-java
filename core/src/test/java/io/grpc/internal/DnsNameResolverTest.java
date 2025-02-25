@@ -911,14 +911,13 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_failsOnMisspelling() {
+  public void maybeChooseServiceConfig_nullOnMispelling() {
     Map<String, Object> bad = new LinkedHashMap<>();
     bad.put("parcentage", 1.0);
-    thrown.expectMessage("Bad key");
-
+    thrown.expectMessage("key '{parcentage=1.0}' missing in 'serviceConfig'");
     DnsNameResolver.maybeChooseServiceConfig(bad, new Random(), "host");
   }
-
+  
   @Test
   public void maybeChooseServiceConfig_clientLanguageMatchesJava() {
     Map<String, Object> choice = new LinkedHashMap<>();
