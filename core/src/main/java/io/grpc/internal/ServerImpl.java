@@ -779,8 +779,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
 
-    public JumpToApplicationThreadServerStreamListener(Executor executor,
-        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context, Tag tag) {
+    public JumpToApplicationThreadServerStreamListener(Executor executor, Executor cancelExecutor,
+        ServerStream stream, Context.CancellableContext context, Tag tag) {
       this.callExecutor = executor;
       this.cancelExecutor = cancelExecutor;
       this.stream = stream;
@@ -809,9 +809,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
     private void internalClose(Throwable t) {
-      // TODO(ejona86): this is not thread-safe :)
       String description = "Application error processing RPC";
-      stream.close(Status.UNKNOWN.withDescription(description).withCause(t), new Metadata());
+      Metadata metadata = Status.trailersFromThrowable(t);
+      if (metadata == null) {
+        metadata = new Metadata();
+      }
+      stream.close(Status.UNKNOWN.withDescription(description).withCause(t), metadata);
     }
 
     @Override

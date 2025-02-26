@@ -17,6 +17,7 @@
 package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
@@ -414,6 +415,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       private boolean closed;
       @GuardedBy("this")
       private int outboundSeqNo;
+      private boolean closeCalled;
 
       InProcessServerStream(MethodDescriptor<?, ?> method, Metadata headers) {
         statsTraceCtx = StatsTraceContext.newServerContext(
@@ -431,6 +433,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void request(int numMessages) {
+        checkState(!closeCalled, "call already closed");
         boolean onReady = clientStream.serverRequested(numMessages);
         if (onReady) {
           synchronized (this) {
@@ -487,6 +490,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeMessage(InputStream message) {
+        checkState(!closeCalled, "call already closed");
         long messageLength = 0;
         if (isEnabledSupportTracingMessageSizes) {
           try {
@@ -546,6 +550,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void writeHeaders(Metadata headers, boolean flush) {
+        checkState(!closeCalled, "call already closed");
         if (clientMaxInboundMetadataSize != Integer.MAX_VALUE) {
           int metadataSize = metadataSize(headers);
           if (metadataSize > clientMaxInboundMetadataSize) {
