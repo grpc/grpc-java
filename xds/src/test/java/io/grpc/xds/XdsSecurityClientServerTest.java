@@ -50,6 +50,7 @@ import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.StatusRuntimeException;
+import io.grpc.SynchronizationContext;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -127,7 +128,10 @@ public class XdsSecurityClientServerTest {
   private Bootstrapper.BootstrapInfo bootstrapInfoForServer = null;
   private TlsContextManagerImpl tlsContextManagerForClient;
   private TlsContextManagerImpl tlsContextManagerForServer;
-  private FakeXdsClient xdsClient = new FakeXdsClient();
+  private final SynchronizationContext syncContext = new SynchronizationContext((t, e) -> {
+    throw new AssertionError(e);
+  });
+  private final FakeXdsClient xdsClient = new FakeXdsClient(syncContext);
   private FakeXdsClientPoolFactory fakePoolFactory = new FakeXdsClientPoolFactory(xdsClient);
   private static final String OVERRIDE_AUTHORITY = "foo.test.google.fr";
 
@@ -581,6 +585,7 @@ public class XdsSecurityClientServerTest {
     ServerCredentials xdsCredentials = XdsServerCredentials.create(fallbackCredentials);
     XdsServerBuilder builder = XdsServerBuilder.forPort(0, xdsCredentials)
             .xdsClientPoolFactory(fakePoolFactory)
+            .syncContext(syncContext)
             .addService(new SimpleServiceImpl());
     buildServer(builder, downstreamTlsContext);
   }

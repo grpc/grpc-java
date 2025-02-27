@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -175,11 +176,22 @@ public class XdsServerTestHelper {
   }
 
   static final class FakeXdsClient extends XdsClient {
-    boolean shutdown;
-    SettableFuture<String> ldsResource = SettableFuture.create();
-    ResourceWatcher<LdsUpdate> ldsWatcher;
-    CountDownLatch rdsCount = new CountDownLatch(1);
+    private volatile boolean shutdown;
+    volatile SettableFuture<String> ldsResource = SettableFuture.create();
+    volatile ResourceWatcher<LdsUpdate> ldsWatcher;
+    volatile CountDownLatch rdsCount = new CountDownLatch(1);
     final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
+    private final SynchronizationContext syncContext;
+
+    FakeXdsClient() {
+      this(new SynchronizationContext((t, e) -> {
+        throw new AssertionError(e);
+      }));
+    }
+
+    FakeXdsClient(SynchronizationContext syncContext) {
+      this.syncContext = syncContext;
+    }
 
     @Override
     public TlsContextManager getSecurityConfig() {
@@ -231,7 +243,12 @@ public class XdsServerTestHelper {
 
     @Override
     public void shutdown() {
-      shutdown = true;
+      syncContext.execute(() -> {
+        if (shutdown) {
+          return;
+        }
+        shutdown = true;
+      });
     }
 
     @Override
@@ -241,16 +258,18 @@ public class XdsServerTestHelper {
 
     void deliverLdsUpdate(List<FilterChain> filterChains,
                           FilterChain defaultFilterChain) {
-      ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
-              "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+      syncContext.execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
+            "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+      });
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
-      ldsWatcher.onChanged(ldsUpdate);
+      syncContext.execute(() -> ldsWatcher.onChanged(ldsUpdate));
     }
 
     void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
-      rdsWatchers.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
+      syncContext.execute(() -> rdsWatchers.get(rdsName).onChanged(new RdsUpdate(virtualHosts)));
     }
   }
 }

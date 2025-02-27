@@ -35,7 +35,10 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessSocketAddress;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -103,7 +106,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
   Server mockServer;
   @Mock
   private XdsServingStatusListener listener;
-  private FakeXdsClient xdsClient = new FakeXdsClient();
+  private final SynchronizationContext syncContext = new SynchronizationContext((t, e) -> {
+    throw new AssertionError(e);
+  });
+  private final FakeXdsClient xdsClient = new FakeXdsClient(syncContext);
   private FilterChainSelectorManager selectorManager = new FilterChainSelectorManager();
   private XdsServerWrapper xdsServerWrapper;
 
@@ -119,7 +125,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     when(mockBuilder.build()).thenReturn(mockServer);
     when(mockServer.isShutdown()).thenReturn(false);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:" + PORT, mockBuilder, listener,
-            selectorManager, new FakeXdsClientPoolFactory(xdsClient), FilterRegistry.newRegistry());
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), FilterRegistry.newRegistry(),
+        syncContext, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
   }
 
   @Test

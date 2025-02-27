@@ -32,6 +32,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.SynchronizationContext;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
@@ -66,7 +67,10 @@ public class XdsServerBuilderTest {
   private XdsServerWrapper xdsServer;
   private int port;
   private TlsContextManager tlsContextManager;
-  private FakeXdsClient xdsClient = new FakeXdsClient();
+  private final SynchronizationContext syncContext = new SynchronizationContext((t, e) -> {
+    throw new AssertionError(e);
+  });
+  private final FakeXdsClient xdsClient = new FakeXdsClient(syncContext);
   private FakeXdsClientPoolFactory xdsClientPoolFactory = new FakeXdsClientPoolFactory(xdsClient);
 
   private void buildServer(XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener)
@@ -80,7 +84,7 @@ public class XdsServerBuilderTest {
     builder =
         XdsServerBuilder.forPort(
             port, XdsServerCredentials.create(InsecureServerCredentials.create()));
-    builder.xdsClientPoolFactory(xdsClientPoolFactory);
+    builder.xdsClientPoolFactory(xdsClientPoolFactory).syncContext(syncContext);
     if (xdsServingStatusListener != null) {
       builder.xdsServingStatusListener(xdsServingStatusListener);
     }

@@ -107,7 +107,10 @@ public class XdsServerWrapperTest {
 
   private FilterChainSelectorManager selectorManager = new FilterChainSelectorManager();
   private FakeClock executor = new FakeClock();
-  private FakeXdsClient xdsClient = new FakeXdsClient();
+  private final SynchronizationContext syncContext = new SynchronizationContext((t, e) -> {
+    throw new AssertionError(e);
+  });
+  private FakeXdsClient xdsClient = new FakeXdsClient(syncContext);
   private FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private XdsServerWrapper xdsServerWrapper;
   private ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
@@ -118,7 +121,7 @@ public class XdsServerWrapperTest {
     when(mockBuilder.build()).thenReturn(mockServer);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
             selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-            filterRegistry, executor.getScheduledExecutorService());
+            filterRegistry, syncContext, executor.getScheduledExecutorService());
   }
 
   @After
@@ -140,7 +143,7 @@ public class XdsServerWrapperTest {
     XdsListenerResource listenerResource = XdsListenerResource.getInstance();
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
-        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry, syncContext);
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
       public void run() {
@@ -173,7 +176,7 @@ public class XdsServerWrapperTest {
     XdsClient xdsClient = mock(XdsClient.class);
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
-            selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry, syncContext);
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
@@ -212,7 +215,7 @@ public class XdsServerWrapperTest {
     XdsListenerResource listenerResource = XdsListenerResource.getInstance();
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
-        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry, syncContext);
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
       public void run() {
@@ -261,7 +264,7 @@ public class XdsServerWrapperTest {
     xdsServerWrapper.shutdown();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
     assertThat(xdsClient.ldsResource).isNull();
-    assertThat(xdsClient.shutdown).isTrue();
+    assertThat(xdsClient.isShutDown()).isTrue();
     verify(mockServer).shutdown();
     assertThat(f0.sslContextProviderSupplier().isShutdown()).isTrue();
     assertThat(f1.sslContextProviderSupplier().isShutdown()).isTrue();
@@ -303,7 +306,7 @@ public class XdsServerWrapperTest {
     verify(mockServer, never()).start();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
     assertThat(xdsClient.ldsResource).isNull();
-    assertThat(xdsClient.shutdown).isTrue();
+    assertThat(xdsClient.isShutDown()).isTrue();
     verify(mockServer).shutdown();
     assertThat(f0.sslContextProviderSupplier().isShutdown()).isTrue();
     assertThat(f1.sslContextProviderSupplier().isShutdown()).isTrue();
@@ -342,7 +345,7 @@ public class XdsServerWrapperTest {
     xdsServerWrapper.shutdown();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
     assertThat(xdsClient.ldsResource).isNull();
-    assertThat(xdsClient.shutdown).isTrue();
+    assertThat(xdsClient.isShutDown()).isTrue();
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(1)).shutdown();
     xdsServerWrapper.awaitTermination(1, TimeUnit.SECONDS);

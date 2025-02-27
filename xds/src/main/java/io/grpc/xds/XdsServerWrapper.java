@@ -77,14 +77,7 @@ import javax.annotation.Nullable;
 final class XdsServerWrapper extends Server {
   private static final Logger logger = Logger.getLogger(XdsServerWrapper.class.getName());
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          logger.log(Level.SEVERE, "Exception!" + e);
-          // TODO(chengyuanzhang): implement cleanup.
-        }
-      });
+  private final SynchronizationContext syncContext;
 
   public static final Attributes.Key<AtomicReference<ServerRoutingConfig>>
       ATTR_SERVER_ROUTING_CONFIG =
@@ -119,9 +112,11 @@ final class XdsServerWrapper extends Server {
       XdsServingStatusListener listener,
       FilterChainSelectorManager filterChainSelectorManager,
       XdsClientPoolFactory xdsClientPoolFactory,
-      FilterRegistry filterRegistry) {
+      FilterRegistry filterRegistry,
+      @Nullable SynchronizationContext syncContext) {
     this(listenerAddress, delegateBuilder, listener, filterChainSelectorManager,
-        xdsClientPoolFactory, filterRegistry, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+        xdsClientPoolFactory, filterRegistry, syncContext,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
   }
 
@@ -133,6 +128,7 @@ final class XdsServerWrapper extends Server {
           FilterChainSelectorManager filterChainSelectorManager,
           XdsClientPoolFactory xdsClientPoolFactory,
           FilterRegistry filterRegistry,
+          @Nullable SynchronizationContext syncContext,
           ScheduledExecutorService timeService) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
@@ -141,6 +137,14 @@ final class XdsServerWrapper extends Server {
     this.filterChainSelectorManager
         = checkNotNull(filterChainSelectorManager, "filterChainSelectorManager");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    if (syncContext == null) {
+      this.syncContext = new SynchronizationContext((t, e) -> {
+        logger.log(Level.SEVERE, "Exception!" + e);
+        // TODO(chengyuanzhang): implement cleanup.
+      });
+    } else {
+      this.syncContext = syncContext;
+    }
     this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.delegate = delegateBuilder.build();
@@ -524,9 +528,7 @@ final class XdsServerWrapper extends Server {
 
     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
         @Nullable List<NamedFilterConfig> filterConfigs, List<VirtualHost> virtualHosts) {
-      // This should always be called from the sync context.
-      // Ideally we'd want to throw otherwise, but this breaks the tests now.
-      // syncContext.throwIfNotInThisSynchronizationContext();
+      syncContext.throwIfNotInThisSynchronizationContext();
 
       ImmutableMap.Builder<Route, ServerInterceptor> perRouteInterceptors =
           new ImmutableMap.Builder<>();

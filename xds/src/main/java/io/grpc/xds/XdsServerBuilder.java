@@ -31,6 +31,7 @@ import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.SynchronizationContext;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.InternalNettyServerCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
@@ -55,6 +56,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private XdsClientPoolFactory xdsClientPoolFactory =
           SharedXdsClientPoolProvider.getDefaultProvider();
+  private SynchronizationContext syncContext = null;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
 
@@ -127,12 +129,18 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     }
     InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
-            filterChainSelectorManager, xdsClientPoolFactory, filterRegistry);
+            filterChainSelectorManager, xdsClientPoolFactory, filterRegistry, syncContext);
   }
 
   @VisibleForTesting
   XdsServerBuilder xdsClientPoolFactory(XdsClientPoolFactory xdsClientPoolFactory) {
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    return this;
+  }
+
+  @VisibleForTesting
+  XdsServerBuilder syncContext(SynchronizationContext syncContext) {
+    this.syncContext = checkNotNull(syncContext, "syncContext");
     return this;
   }
 
