@@ -23,7 +23,6 @@ import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Struct;
 import io.grpc.Attributes;
@@ -35,10 +34,6 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StatusOr;
-import io.grpc.SynchronizationContext;
-import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
@@ -52,8 +47,8 @@ import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -69,7 +64,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -80,51 +74,20 @@ import javax.annotation.Nullable;
 final class CdsLoadBalancer2 extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
-  private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
   private CdsLbState rootCdsLbState;
   private ResolvedAddresses resolvedAddresses;
-  private final BackoffPolicy.Provider backoffPolicyProvider;
 
   CdsLoadBalancer2(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry(),
-        new ExponentialBackoffPolicy.Provider());
+    this(helper, LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting
-  CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry,
-                   BackoffPolicy.Provider backoffPolicyProvider) {
+  CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
-    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
-  }
-
-  /**
-   * Generates the config to be used in the priority LB policy for the single priority of
-   * logical DNS cluster.
-   *
-   * <p>priority LB -> cluster_impl LB (single hardcoded priority) -> pick_first
-   */
-  static PriorityChildConfig generateDnsBasedPriorityChildConfig(
-      String cluster, @Nullable Bootstrapper.ServerInfo lrsServerInfo,
-      @Nullable Long maxConcurrentRequests,
-      @Nullable EnvoyServerProtoData.UpstreamTlsContext tlsContext,
-      Map<String, Struct> filterMetadata,
-      LoadBalancerRegistry lbRegistry, List<Endpoints.DropOverload> dropOverloads) {
-    // Override endpoint-level LB policy with pick_first for logical DNS cluster.
-    Object endpointLbConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-        lbRegistry.getProvider("pick_first"), null);
-    ClusterImplLoadBalancerProvider.ClusterImplConfig clusterImplConfig =
-        new ClusterImplLoadBalancerProvider.ClusterImplConfig(cluster, null, lrsServerInfo,
-            maxConcurrentRequests, dropOverloads, endpointLbConfig, tlsContext, filterMetadata);
-    LoadBalancerProvider clusterImplLbProvider =
-        lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
-    Object clusterImplPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-        clusterImplLbProvider, clusterImplConfig);
-    return new PriorityChildConfig(clusterImplPolicy, false /* ignoreReresolution*/);
   }
 
   /**
@@ -142,7 +105,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       @Nullable EnvoyServerProtoData.OutlierDetection outlierDetection, Object endpointLbConfig,
       LoadBalancerRegistry lbRegistry, Map<String,
       Map<Locality, Integer>> prioritizedLocalityWeights,
-      List<Endpoints.DropOverload> dropOverloads) {
+      List<Endpoints.DropOverload> dropOverloads, boolean dynamic) {
     Map<String, PriorityChildConfig> configs = new HashMap<>();
     for (String priority : prioritizedLocalityWeights.keySet()) {
       ClusterImplLoadBalancerProvider.ClusterImplConfig clusterImplConfig =
@@ -165,7 +128,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       PriorityChildConfig priorityChildConfig =
-          new PriorityChildConfig(priorityChildPolicy, true /* ignoreReresolution */);
+          new PriorityChildConfig(priorityChildPolicy, !dynamic);
       configs.put(priority, priorityChildConfig);
     }
     return configs;
@@ -274,6 +237,16 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     }
 
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
+    if (rootCdsLbState != null && this.resolvedAddresses != null
+        && rootClusterName.equals(rootCdsLbState.root.name)
+        && this.resolvedAddresses.equals(resolvedAddresses)) {
+      return Status.OK; // no changes
+    }
+
+    if (rootCdsLbState != null) {
+      rootCdsLbState.shutdown();
+    }
+
     this.resolvedAddresses = resolvedAddresses;
     rootCdsLbState =
         new CdsLbState(rootClusterName, xdsConfig.getClusters(), rootClusterName);
@@ -323,7 +296,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
 
     ClusterResolverLbState(Helper helper) {
-      this.helper = new RefreshableHelper(checkNotNull(helper, "helper"));
+      this.helper = checkNotNull(helper, "helper");
       logger.log(XdsLogLevel.DEBUG, "New ClusterResolverLbState");
     }
 
@@ -335,17 +308,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       endpointLbConfig = config.lbConfig;
       for (DiscoveryMechanism instance : config.discoveryMechanisms) {
         clusters.add(instance.cluster);
-        ClusterState state;
-        if (instance.type == DiscoveryMechanism.Type.EDS) {
-          state = new EdsClusterState(instance.cluster, instance.edsServiceName,
-              instance.endpointConfig,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata, instance.outlierDetection);
-        } else {  // logical DNS
-          state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata);
-        }
+        // Doesn't matter if it is really an EDS cluster because we always have an endpointConfig
+        ClusterState state = new EdsClusterState(instance.cluster, instance.edsServiceName,
+            instance.endpointConfig,
+            instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
+            instance.filterMetadata, instance.outlierDetection,
+            instance.type == DiscoveryMechanism.Type.LOGICAL_DNS);
         clusterStates.put(instance.cluster, state);
         state.start();
       }
@@ -416,7 +384,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (childLb == null) {
         childLb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(helper);
       }
-      childLb.handleResolvedAddresses(
+      childLb.acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setLoadBalancingPolicyConfig(childConfig)
               .setAddresses(Collections.unmodifiableList(addresses))
@@ -441,31 +409,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           helper.updateBalancingState(
               TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
         }
-      }
-    }
-
-    /**
-     * Wires re-resolution requests from downstream LB policies with DNS resolver.
-     */
-    private final class RefreshableHelper extends ForwardingLoadBalancerHelper {
-      private final Helper delegate;
-
-      private RefreshableHelper(Helper delegate) {
-        this.delegate = checkNotNull(delegate, "delegate");
-      }
-
-      @Override
-      public void refreshNameResolution() {
-        for (ClusterState state : clusterStates.values()) {
-          if (state instanceof LogicalDnsClusterState) {
-            ((LogicalDnsClusterState) state).refresh();
-          }
-        }
-      }
-
-      @Override
-      protected Helper delegate() {
-        return delegate;
       }
     }
 
@@ -520,6 +463,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
       int priorityNameGenId = 1;
       private EdsUpdate edsUpdate;
+      private final boolean dynamic;
+      private Closeable subscription = null;
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
                               StatusOr<EdsUpdate> edsUpdate,
@@ -527,7 +472,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                               @Nullable Long maxConcurrentRequests,
                               @Nullable EnvoyServerProtoData.UpstreamTlsContext tlsContext,
                               Map<String, Struct> filterMetadata,
-                              @Nullable EnvoyServerProtoData.OutlierDetection outlierDetection) {
+                              @Nullable EnvoyServerProtoData.OutlierDetection outlierDetection,
+                              boolean dynamic) {
         super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
             outlierDetection);
         this.edsServiceName = edsServiceName;
@@ -536,16 +482,31 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         } else {
           onError(edsUpdate.getStatus());
         }
+        this.dynamic = dynamic;
       }
 
       @Override
       void start() {
+        if (dynamic) {
+          // register insterest in cluster
+          XdsConfig.XdsClusterSubscriptionRegistry clusterSubscr =
+              resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY);
+          subscription = clusterSubscr.subscribeToCluster(name);
+        }
         onChanged(edsUpdate);
       }
 
       @Override
       protected void shutdown() {
         super.shutdown();
+        if (subscription != null) {
+          // unregister interest in cluster;
+          try {
+            subscription.close();
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        }
       }
 
       public void onChanged(final EdsUpdate update) {
@@ -616,7 +577,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                 generateEdsBasedPriorityChildConfigs(name, edsServiceName,
                     lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
                     outlierDetection, endpointLbConfig, lbRegistry, prioritizedLocalityWeights,
-                    dropOverloads);
+                    dropOverloads, dynamic);
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityChildConfigs,
@@ -676,170 +637,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
     }
 
-    private final class LogicalDnsClusterState extends ClusterState {
-      private final String dnsHostName;
-      private final NameResolver.Factory nameResolverFactory;
-      private final NameResolver.Args nameResolverArgs;
-      private NameResolver resolver;
-      @Nullable
-      private BackoffPolicy backoffPolicy;
-      @Nullable
-      private SynchronizationContext.ScheduledHandle scheduledRefresh;
-
-      private LogicalDnsClusterState(String name, String dnsHostName,
-                                     @Nullable Bootstrapper.ServerInfo lrsServerInfo,
-                                     @Nullable Long maxConcurrentRequests,
-                                     @Nullable EnvoyServerProtoData.UpstreamTlsContext tlsContext,
-                                     Map<String, Struct> filterMetadata) {
-        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null);
-        this.dnsHostName = checkNotNull(dnsHostName, "dnsHostName");
-        nameResolverFactory =
-            checkNotNull(helper.getNameResolverRegistry().asFactory(), "nameResolverFactory");
-        nameResolverArgs = checkNotNull(helper.getNameResolverArgs(), "nameResolverArgs");
-      }
-
-      @Override
-      void start() {
-        URI uri;
-        try {
-          uri = new URI("dns", "", "/" + dnsHostName, null);
-        } catch (URISyntaxException e) {
-          status = Status.INTERNAL.withDescription(
-              "Bug, invalid URI creation: " + dnsHostName).withCause(e);
-          handleEndpointResolutionError();
-          return;
-        }
-        resolver = nameResolverFactory.newNameResolver(uri, nameResolverArgs);
-        if (resolver == null) {
-          status = Status.INTERNAL.withDescription("Xds cluster resolver lb for logical DNS "
-              + "cluster [" + name + "] cannot find DNS resolver with uri:" + uri);
-          handleEndpointResolutionError();
-          return;
-        }
-        resolver.start(new LogicalDnsClusterState.NameResolverListener(dnsHostName));
-      }
-
-      void refresh() {
-        if (resolver == null) {
-          return;
-        }
-        cancelBackoff();
-        resolver.refresh();
-      }
-
-      @Override
-      void shutdown() {
-        super.shutdown();
-        if (resolver != null) {
-          resolver.shutdown();
-        }
-        cancelBackoff();
-      }
-
-      private void cancelBackoff() {
-        if (scheduledRefresh != null) {
-          scheduledRefresh.cancel();
-          scheduledRefresh = null;
-          backoffPolicy = null;
-        }
-      }
-
-      private class DelayedNameResolverRefresh implements Runnable {
-        @Override
-        public void run() {
-          scheduledRefresh = null;
-          if (!shutdown) {
-            resolver.refresh();
-          }
-        }
-      }
-
-      private class NameResolverListener extends NameResolver.Listener2 {
-        private final String dnsHostName;
-
-        NameResolverListener(String dnsHostName) {
-          this.dnsHostName = dnsHostName;
-        }
-
-        @Override
-        public void onResult(final NameResolver.ResolutionResult resolutionResult) {
-          class NameResolved implements Runnable {
-            @Override
-            public void run() {
-              if (shutdown) {
-                return;
-              }
-              backoffPolicy = null;  // reset backoff sequence if succeeded
-              // Arbitrary priority notation for all DNS-resolved endpoints.
-              String priorityName = priorityName(name, 0);  // value doesn't matter
-              List<EquivalentAddressGroup> addresses = new ArrayList<>();
-              for (EquivalentAddressGroup eag : resolutionResult.getAddresses()) {
-                // No weight attribute is attached, all endpoint-level LB policy should be able
-                // to handle such it.
-                String localityName = localityName(XdsNameResolver.LOGICAL_DNS_CLUSTER_LOCALITY);
-                Attributes attr = eag.getAttributes().toBuilder()
-                    .set(XdsAttributes.ATTR_LOCALITY, XdsNameResolver.LOGICAL_DNS_CLUSTER_LOCALITY)
-                    .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
-                    .set(XdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
-                    .build();
-                eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
-                eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
-                addresses.add(eag);
-              }
-              PriorityChildConfig priorityChildConfig =
-                  generateDnsBasedPriorityChildConfig(
-                  name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
-                  lbRegistry, Collections.<Endpoints.DropOverload>emptyList());
-              status = Status.OK;
-              resolved = true;
-              result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
-              handleEndpointResourceUpdate();
-            }
-          }
-
-          syncContext.execute(new NameResolved());
-        }
-
-        @Override
-        public void onError(final Status error) {
-          syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              if (shutdown) {
-                return;
-              }
-              status = error;
-              // NameResolver.Listener API cannot distinguish between address-not-found and
-              // transient errors. If the error occurs in the first resolution, treat it as
-              // address not found. Otherwise, either there is previously resolved addresses
-              // previously encountered error, propagate the error to downstream/upstream and
-              // let downstream/upstream handle it.
-              if (!resolved) {
-                resolved = true;
-                handleEndpointResourceUpdate();
-              } else {
-                handleEndpointResolutionError();
-              }
-              if (scheduledRefresh != null && scheduledRefresh.isPending()) {
-                return;
-              }
-              if (backoffPolicy == null) {
-                backoffPolicy = backoffPolicyProvider.get();
-              }
-              long delayNanos = backoffPolicy.nextBackoffNanos();
-              logger.log(XdsLogLevel.DEBUG,
-                  "Logical DNS resolver for cluster {0} encountered name resolution "
-                      + "error: {1}, scheduling DNS resolution backoff for {2} ns",
-                  name, error, delayNanos);
-              scheduledRefresh =
-                  syncContext.schedule(
-                      new LogicalDnsClusterState.DelayedNameResolverRefresh(), delayNanos,
-                      TimeUnit.NANOSECONDS, helper.getScheduledExecutorService());
-            }
-          });
-        }
-      }
-    }
   }
 
   static class ClusterResolutionResult {
@@ -969,9 +766,10 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           String cluster, String dnsHostName,
           @Nullable Bootstrapper.ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable EnvoyServerProtoData.UpstreamTlsContext tlsContext,
-          Map<String, Struct> filterMetadata) {
+          Map<String, Struct> filterMetadata, StatusOr<EdsUpdate> endpointConfig) {
         return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, dnsHostName,
-            lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null, null);
+            lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null,
+            endpointConfig);
       }
 
       @Override
@@ -1034,7 +832,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                        String rootName) {
       root = new ClusterStateDetails(rootName, clusterConfigs.get(rootName));
       clusterStates.put(rootCluster, root);
-      initializeChildren(clusterConfigs, root);
+      initializeChildren(clusterConfigs, rootName);
     }
 
     private void start() {
@@ -1049,18 +847,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
     }
 
-    // If doesn't have children is a no-op
-    private void initializeChildren(ImmutableMap<String,
-        StatusOr<XdsClusterConfig>> clusterConfigs, ClusterStateDetails curRoot) {
-      if (curRoot.result == null) {
-        return;
-      }
-      ImmutableList<String> childNames = curRoot.result.prioritizedClusterNames();
-      if (childNames == null) {
-        return;
-      }
+    private void initializeChildren(
+        ImmutableMap<String, StatusOr<XdsClusterConfig>> clusterConfigs, String rootName) {
+      for (String clusterName : clusterConfigs.keySet()) {
+        if (clusterName.equals(rootName)) {
+          continue;
+        }
 
-      for (String clusterName : childNames) {
         StatusOr<XdsClusterConfig> configStatusOr = clusterConfigs.get(clusterName);
         if (configStatusOr == null) {
           logger.log(XdsLogLevel.DEBUG, "Child cluster %s of %s has no matching config",
@@ -1072,7 +865,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           clusterStateDetails = new ClusterStateDetails(clusterName, configStatusOr);
           clusterStates.put(clusterName, clusterStateDetails);
         }
-        initializeChildren(clusterConfigs, clusterStateDetails);
       }
     }
 
@@ -1113,7 +905,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                     clusterState.result.lrsServerInfo(),
                     clusterState.result.maxConcurrentRequests(),
                     clusterState.result.upstreamTlsContext(),
-                    clusterState.result.filterMetadata());
+                    clusterState.result.filterMetadata(),
+                    clusterState.getEndpointConfigStatusOr());
               }
               instances.add(instance);
             }
@@ -1240,6 +1033,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           XdsClusterConfig config = configOr.getValue();
           this.result = config.getClusterResource();
           this.isLeaf = result.clusterType() != ClusterType.AGGREGATE;
+
           if (isLeaf && config.getChildren() != null) {
             // We should only see leaf clusters here.
             assert config.getChildren() instanceof XdsClusterConfig.EndpointConfig;

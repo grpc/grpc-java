@@ -148,7 +148,7 @@ public class ClusterResolverLoadBalancerTest {
           Collections.emptyMap(), outlierDetection, null);
   private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
       DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null,
-          Collections.emptyMap());
+          Collections.emptyMap(), null);
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {

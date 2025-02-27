@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1060,6 +1061,26 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         this.enforcementPercentage = enforcementPercentage;
         this.minimumHosts = minimumHosts;
         this.requestVolume = requestVolume;
+      }
+
+      @Override
+      public int hashCode() {
+        return Objects.hash(stdevFactor, enforcementPercentage, minimumHosts, requestVolume);
+      }
+
+      @Override
+      public boolean equals(Object obj) {
+        if (this == obj) {
+          return true;
+        }
+        if (! (obj instanceof SuccessRateEjection)) {
+          return false;
+        }
+        return Objects.equals(stdevFactor, ((SuccessRateEjection) obj).stdevFactor)
+            && Objects.equals(
+                enforcementPercentage, ((SuccessRateEjection) obj).enforcementPercentage)
+            && Objects.equals(minimumHosts, ((SuccessRateEjection) obj).minimumHosts)
+            && Objects.equals(requestVolume, ((SuccessRateEjection) obj).requestVolume);
       }
 
       /** Builds new instances of {@link SuccessRateEjection}. */

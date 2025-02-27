@@ -129,6 +129,7 @@ final class XdsNameResolver extends NameResolver {
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
   private final MetricRecorder metricRecorder;
+  private final Args nameResolverArgs;
 
   private volatile RoutingConfig routingConfig = RoutingConfig.EMPTY;
   private Listener2 listener;
@@ -145,11 +146,11 @@ final class XdsNameResolver extends NameResolver {
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride,
-      MetricRecorder metricRecorder) {
+      MetricRecorder metricRecorder, Args nameResolverArgs) {
     this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
         ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
-        metricRecorder);
+        metricRecorder, nameResolverArgs);
   }
 
   @VisibleForTesting
@@ -159,7 +160,7 @@ final class XdsNameResolver extends NameResolver {
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride,
-      MetricRecorder metricRecorder) {
+      MetricRecorder metricRecorder, Args nameResolverArgs) {
     this.targetAuthority = targetAuthority;
     target = targetUri.toString();
 
@@ -172,12 +173,15 @@ final class XdsNameResolver extends NameResolver {
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
-    this.xdsClientPoolFactory = bootstrapOverride == null ? checkNotNull(xdsClientPoolFactory,
-            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
+    this.xdsClientPoolFactory = bootstrapOverride == null
+                                ? checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory")
+                                : new SharedXdsClientPoolProvider();
     this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     this.metricRecorder = metricRecorder;
+    this.nameResolverArgs = nameResolverArgs;
+
     randomChannelId = random.nextLong();
     logId = InternalLogId.allocate("xds-resolver", name);
     logger = XdsLogger.withLogId(logId);
@@ -232,6 +236,12 @@ final class XdsNameResolver extends NameResolver {
 
   private static String expandPercentS(String template, String replacement) {
     return template.replace("%s", replacement);
+  }
+
+  @Override
+  public void refresh() {
+    super.refresh();
+    resolveState2.xdsDependencyManager.requestReresolution();
   }
 
   @Override
@@ -310,6 +320,7 @@ final class XdsNameResolver extends NameResolver {
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .set(XdsAttributes.XDS_CONFIG, resolveState2.lastConfig)
+            .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, resolveState2.xdsDependencyManager)
             .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
             .build();
@@ -650,7 +661,8 @@ final class XdsNameResolver extends NameResolver {
     private ResolveState2(String ldsResourceName) {
       authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
       xdsDependencyManager =
-          new XdsDependencyManager(xdsClient, this, syncContext, authority, ldsResourceName );
+          new XdsDependencyManager(xdsClient, this, syncContext, authority, ldsResourceName,
+              nameResolverArgs, scheduler );
     }
 
     private void shutdown() {
