@@ -58,9 +58,10 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.FailurePercentageEjection;
 import io.grpc.xds.CdsLoadBalancer2.ClusterResolverConfig;
 import io.grpc.xds.CdsLoadBalancer2.ClusterResolverConfig.DiscoveryMechanism;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
@@ -138,7 +139,6 @@ public class CdsLoadBalancer2Test {
   private final OutlierDetection outlierDetection = OutlierDetection.create(
       null, null, null, null, SuccessRateEjection.create(null, null, null, null), null);
 
-
   private static final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -150,6 +150,8 @@ public class CdsLoadBalancer2Test {
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
+  private final FakeClock fakeClock = new FakeClock();
+  private final TestXdsConfigWatcher configWatcher = new TestXdsConfigWatcher();
 
   @Mock
   private Helper helper;
@@ -157,7 +159,6 @@ public class CdsLoadBalancer2Test {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
 
   private CdsLoadBalancer2  loadBalancer;
-  private TestXdsConfigWatcher configWatcher = new TestXdsConfigWatcher();
   private XdsConfig lastXdsConfig;
 
   @Before
@@ -185,8 +186,7 @@ public class CdsLoadBalancer2Test {
         new LeastRequestLoadBalancerProvider()));
 
 
-    loadBalancer =
-        new CdsLoadBalancer2(helper, lbRegistry, new ExponentialBackoffPolicy.Provider());
+    loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
 
     // Setup default configuration for the CdsLoadBalancer2
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
@@ -209,10 +209,6 @@ public class CdsLoadBalancer2Test {
     // Take advantage of knowing that there is only 1 virtual host in the route configuration
     assertThat(rdsUpdate.virtualHosts).hasSize(1);
     VirtualHost virtualHost = rdsUpdate.virtualHosts.get(0);
-
-    // Need to create endpoints to create locality endpoints map to create edsUpdate
-    Map<Locality, Endpoints.LocalityLbEndpoints> lbEndpointsMap =
-        XdsTestUtils.createMinimalLbEndpointsMap(EDS_SERVICE_NAME);
 
     // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
     EdsUpdate edsUpdate = new EdsUpdate(EDS_SERVICE_NAME,
@@ -304,7 +300,7 @@ public class CdsLoadBalancer2Test {
   }
 
   private static PriorityLbConfig.PriorityChildConfig
-  getPriorityChildConfig(List<FakeLoadBalancer> childBalancers, String cluster) {
+      getPriorityChildConfig(List<FakeLoadBalancer> childBalancers, String cluster) {
     for (FakeLoadBalancer fakeLB : childBalancers) {
       if (fakeLB.config instanceof PriorityLbConfig) {
         Map<String, PriorityLbConfig.PriorityChildConfig> childConfigs =
@@ -321,7 +317,8 @@ public class CdsLoadBalancer2Test {
     return null;
   }
 
-  private FakeLoadBalancer getFakeLoadBalancer(List<FakeLoadBalancer> childBalancers, String cluster) {
+  private FakeLoadBalancer getFakeLoadBalancer(
+      List<FakeLoadBalancer> childBalancers, String cluster) {
     for (FakeLoadBalancer fakeLB : childBalancers) {
       if (fakeLB.config instanceof PriorityLbConfig) {
         Map<String, PriorityLbConfig.PriorityChildConfig> childConfigs =
@@ -925,30 +922,30 @@ public class CdsLoadBalancer2Test {
         new OutlierDetectionLoadBalancerConfig.Builder().build();
     // split out for readability and debugging
     Long expectedBaseEjectionTimeNanos = outlierDetection.baseEjectionTimeNanos() == null
-                 ? outlierDetection.baseEjectionTimeNanos()
-                 : defaultConfig.baseEjectionTimeNanos;
+                                         ? outlierDetection.baseEjectionTimeNanos()
+                                         : defaultConfig.baseEjectionTimeNanos;
 
     Long expectedIntervalNanos = outlierDetection.intervalNanos() == null
                                  ? outlierDetection.intervalNanos()
                                  : defaultConfig.intervalNanos;
 
-    OutlierDetectionLoadBalancerConfig.FailurePercentageEjection expectedFailurePercentageEjection =
+    FailurePercentageEjection expectedFailurePercentageEjection =
         outlierDetection.failurePercentageEjection() == null
-                                             ? outlierDetection.failurePercentageEjection()
-                                             : defaultConfig.failurePercentageEjection;
+        ? toLbConfigVersionFpE(outlierDetection.failurePercentageEjection())
+        : defaultConfig.failurePercentageEjection;
 
     OutlierDetectionLoadBalancerConfig.SuccessRateEjection expectedSuccessRateEjection =
         outlierDetection.successRateEjection() == null
-                 ? outlierDetection.successRateEjection()
-                 : defaultConfig.successRateEjection;
+        ? toLbConfigVersionSrE(outlierDetection.successRateEjection())
+        : defaultConfig.successRateEjection;
 
     Long expectedMaxEjectionTimeNanos = outlierDetection.maxEjectionTimeNanos() == null
-                 ? outlierDetection.maxEjectionTimeNanos()
-                 : defaultConfig.maxEjectionTimeNanos;
+                                        ? outlierDetection.maxEjectionTimeNanos()
+                                        : defaultConfig.maxEjectionTimeNanos;
 
     Integer expectedMaxEjectionPercent = outlierDetection.maxEjectionPercent() == null
-                 ? outlierDetection.maxEjectionPercent()
-                 : defaultConfig.maxEjectionPercent;
+                                         ? outlierDetection.maxEjectionPercent()
+                                         : defaultConfig.maxEjectionPercent;
 
     boolean baseEjNanosEqual =
         Objects.equals(expectedBaseEjectionTimeNanos, oDLbConfig.baseEjectionTimeNanos);
@@ -966,6 +963,26 @@ public class CdsLoadBalancer2Test {
         && maxEjectTimeEqual && maxEjectPctEqual;
   }
 
+  private static OutlierDetectionLoadBalancerConfig.SuccessRateEjection toLbConfigVersionSrE(
+      SuccessRateEjection successRateEjection) {
+    return new OutlierDetectionLoadBalancerConfig.SuccessRateEjection.Builder()
+        .setEnforcementPercentage(successRateEjection.enforcementPercentage())
+        .setMinimumHosts(successRateEjection.minimumHosts())
+        .setRequestVolume(successRateEjection.requestVolume())
+        .setStdevFactor(successRateEjection.stdevFactor()).build();
+  }
+
+  private static FailurePercentageEjection toLbConfigVersionFpE(
+      EnvoyServerProtoData.FailurePercentageEjection failurePercentageEjection) {
+    return new FailurePercentageEjection.Builder()
+        .setEnforcementPercentage(failurePercentageEjection.enforcementPercentage())
+        .setMinimumHosts(failurePercentageEjection.minimumHosts())
+        .setRequestVolume(failurePercentageEjection.requestVolume())
+        .setThreshold(failurePercentageEjection.threshold())
+        .build();
+  }
+
+  // TODO how to validate dnsHostName
   private static void validateClusterImplConfig(
       Object lbConfig, String name,
       @Nullable String edsServiceName, @Nullable String dnsHostName,
@@ -1106,14 +1123,14 @@ public class CdsLoadBalancer2Test {
             watchers.remove(resourceName);
           }
           break;
-          case "EDS":
-            assertThat(edsWatchers).containsKey(resourceName);
-            List<ResourceWatcher<EdsUpdate>> edsWatcherList = edsWatchers.get(resourceName);
-            assertThat(edsWatcherList.remove(watcher)).isTrue();
-            if (edsWatcherList.isEmpty()) {
-              edsWatchers.remove(resourceName);
-            }
-            break;
+        case "EDS":
+          assertThat(edsWatchers).containsKey(resourceName);
+          List<ResourceWatcher<EdsUpdate>> edsWatcherList = edsWatchers.get(resourceName);
+          assertThat(edsWatcherList.remove(watcher)).isTrue();
+          if (edsWatcherList.isEmpty()) {
+            edsWatchers.remove(resourceName);
+          }
+          break;
         default:
           // ignore for other types
       }
@@ -1166,9 +1183,11 @@ public class CdsLoadBalancer2Test {
   private class TestXdsConfigWatcher implements XdsDependencyManager.XdsConfigWatcher {
     XdsDependencyManager dependencyManager;
     List<java.io.Closeable> clusterWatchers = new ArrayList<>();
+    NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder().build();
 
     public TestXdsConfigWatcher() {
-      dependencyManager = new XdsDependencyManager(xdsClient, this, syncContext, EDS_SERVICE_NAME, "" );
+      dependencyManager = new XdsDependencyManager(xdsClient, this, syncContext, EDS_SERVICE_NAME,
+          "", nameResolverArgs, fakeClock.getScheduledExecutorService());
     }
 
     public Closeable watchCluster(String clusterName) {
