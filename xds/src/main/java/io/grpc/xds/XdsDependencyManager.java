@@ -314,6 +314,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       return;
     }
 
+    // Check for unresolved logical clusters
+    if (resourceWatchers.get(XdsClusterResource.getInstance()).watchers.values().stream()
+        .filter(watcher -> watcher.hasDataValue())
+        .map(watcher -> (CdsWatcher) watcher)
+        .filter(watcher -> watcher.getData().getValue().clusterType() == ClusterType.LOGICAL_DNS)
+        .anyMatch(watcher -> !watcher.clusterState.resolved)) {
+      return;
+    }
+
     XdsConfig newConfig = buildConfig();
     if (Objects.equals(newConfig, lastXdsConfig)) {
       return;

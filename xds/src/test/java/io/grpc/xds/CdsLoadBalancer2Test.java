@@ -78,7 +78,6 @@ import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.EnvoyProtoData;
-import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
@@ -1183,7 +1182,14 @@ public class CdsLoadBalancer2Test {
   private class TestXdsConfigWatcher implements XdsDependencyManager.XdsConfigWatcher {
     XdsDependencyManager dependencyManager;
     List<java.io.Closeable> clusterWatchers = new ArrayList<>();
-    NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder().build();
+    NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
+        .setSynchronizationContext(syncContext)
+        .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
+        .build();
 
     public TestXdsConfigWatcher() {
       dependencyManager = new XdsDependencyManager(xdsClient, this, syncContext, EDS_SERVICE_NAME,
