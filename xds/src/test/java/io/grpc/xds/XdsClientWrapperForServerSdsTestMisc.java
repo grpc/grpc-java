@@ -37,8 +37,6 @@ import io.grpc.ServerBuilder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessSocketAddress;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -126,7 +124,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     when(mockServer.isShutdown()).thenReturn(false);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:" + PORT, mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient), FilterRegistry.newRegistry(),
-        syncContext, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+        syncContext);
   }
 
   @Test
