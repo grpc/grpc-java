@@ -165,7 +165,7 @@ public class ClusterResolverLoadBalancerTest {
           GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
               new FakeLoadBalancerProvider("round_robin"), null)));
   private final Object ringHash = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-      new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L));
+      new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L, ""));
   private final Object leastRequest = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
       new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
           GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(

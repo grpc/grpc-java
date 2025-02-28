@@ -20,6 +20,7 @@ import static org.junit.Assert.assertThrows;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.truth.Expect;
+import com.google.s2a.proto.v2.TLSVersion;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;

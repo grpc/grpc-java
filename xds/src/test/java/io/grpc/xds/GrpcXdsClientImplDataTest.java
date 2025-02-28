@@ -112,10 +112,8 @@ import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
-import io.grpc.ClientInterceptor;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
 import io.grpc.internal.JsonUtil;
@@ -153,9 +151,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -167,6 +163,10 @@ import org.junit.runners.JUnit4;
 @SuppressWarnings("DataFlowIssue")
 @RunWith(JUnit4.class)
 public class GrpcXdsClientImplDataTest {
+
+  private static final FaultFilter.Provider FAULT_FILTER_PROVIDER = new FaultFilter.Provider();
+  private static final RbacFilter.Provider RBAC_FILTER_PROVIDER = new RbacFilter.Provider();
+  private static final RouterFilter.Provider ROUTER_FILTER_PROVIDER = new RouterFilter.Provider();
 
   private static final ServerInfo LRS_SERVER_INFO =
       ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
@@ -1253,37 +1253,39 @@ public class GrpcXdsClientImplDataTest {
     }
   }
 
-  private static class TestFilter implements io.grpc.xds.Filter,
-      io.grpc.xds.Filter.ClientInterceptorBuilder {
-    @Override
-    public String[] typeUrls() {
-      return new String[]{"test-url"};
-    }
+  private static class TestFilter implements io.grpc.xds.Filter {
 
-    @Override
-    public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
-      return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
-    }
+    static final class Provider implements io.grpc.xds.Filter.Provider {
+      @Override
+      public String[] typeUrls() {
+        return new String[]{"test-url"};
+      }
 
-    @Override
-    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
-        Message rawProtoMessage) {
-      return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
-    }
+      @Override
+      public boolean isClientFilter() {
+        return true;
+      }
 
-    @Nullable
-    @Override
-    public ClientInterceptor buildClientInterceptor(FilterConfig config,
-                                                    @Nullable FilterConfig overrideConfig,
-                                                    LoadBalancer.PickSubchannelArgs args,
-                                                    ScheduledExecutorService scheduler) {
-      return null;
+      @Override
+      public TestFilter newInstance() {
+        return new TestFilter();
+      }
+
+      @Override
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfig(Message rawProtoMessage) {
+        return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
+      }
+
+      @Override
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+        return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
+      }
     }
   }
 
   @Test
   public void parseHttpFilter_typedStructMigration() {
-    filterRegistry.register(new TestFilter());
+    filterRegistry.register(new TestFilter.Provider());
     Struct rawStruct = Struct.newBuilder()
         .putFields("name", Value.newBuilder().setStringValue("default").build())
         .build();
@@ -1312,7 +1314,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseOverrideHttpFilter_typedStructMigration() {
-    filterRegistry.register(new TestFilter());
+    filterRegistry.register(new TestFilter.Provider());
     Struct rawStruct0 = Struct.newBuilder()
         .putFields("name", Value.newBuilder().setStringValue("default0").build())
         .build();
@@ -1353,7 +1355,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpFilter_routerFilterForClient() {
-    filterRegistry.register(RouterFilter.INSTANCE);
+    filterRegistry.register(ROUTER_FILTER_PROVIDER);
     HttpFilter httpFilter =
         HttpFilter.newBuilder()
             .setIsOptional(false)
@@ -1367,7 +1369,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpFilter_routerFilterForServer() {
-    filterRegistry.register(RouterFilter.INSTANCE);
+    filterRegistry.register(ROUTER_FILTER_PROVIDER);
     HttpFilter httpFilter =
         HttpFilter.newBuilder()
             .setIsOptional(false)
@@ -1381,7 +1383,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpFilter_faultConfigForClient() {
-    filterRegistry.register(FaultFilter.INSTANCE);
+    filterRegistry.register(FAULT_FILTER_PROVIDER);
     HttpFilter httpFilter =
         HttpFilter.newBuilder()
             .setIsOptional(false)
@@ -1408,7 +1410,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpFilter_faultConfigUnsupportedForServer() {
-    filterRegistry.register(FaultFilter.INSTANCE);
+    filterRegistry.register(FAULT_FILTER_PROVIDER);
     HttpFilter httpFilter =
         HttpFilter.newBuilder()
             .setIsOptional(false)
@@ -1437,7 +1439,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpFilter_rbacConfigForServer() {
-    filterRegistry.register(RbacFilter.INSTANCE);
+    filterRegistry.register(RBAC_FILTER_PROVIDER);
     HttpFilter httpFilter =
         HttpFilter.newBuilder()
             .setIsOptional(false)
@@ -1464,7 +1466,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpFilter_rbacConfigUnsupportedForClient() {
-    filterRegistry.register(RbacFilter.INSTANCE);
+    filterRegistry.register(RBAC_FILTER_PROVIDER);
     HttpFilter httpFilter =
         HttpFilter.newBuilder()
             .setIsOptional(false)
@@ -1493,7 +1495,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseOverrideRbacFilterConfig() {
-    filterRegistry.register(RbacFilter.INSTANCE);
+    filterRegistry.register(RBAC_FILTER_PROVIDER);
     RBACPerRoute rbacPerRoute =
         RBACPerRoute.newBuilder()
             .setRbac(
@@ -1519,7 +1521,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseOverrideFilterConfigs_unsupportedButOptional() {
-    filterRegistry.register(FaultFilter.INSTANCE);
+    filterRegistry.register(FAULT_FILTER_PROVIDER);
     HTTPFault httpFault = HTTPFault.newBuilder()
         .setDelay(FaultDelay.newBuilder().setFixedDelay(Durations.fromNanos(3000)))
         .build();
@@ -1539,7 +1541,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseOverrideFilterConfigs_unsupportedAndRequired() {
-    filterRegistry.register(FaultFilter.INSTANCE);
+    filterRegistry.register(FAULT_FILTER_PROVIDER);
     HTTPFault httpFault = HTTPFault.newBuilder()
         .setDelay(FaultDelay.newBuilder().setFixedDelay(Durations.fromNanos(3000)))
         .build();
@@ -1631,7 +1633,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpConnectionManager_lastNotTerminal() throws ResourceInvalidException {
-    filterRegistry.register(FaultFilter.INSTANCE);
+    filterRegistry.register(FAULT_FILTER_PROVIDER);
     HttpConnectionManager hcm =
           HttpConnectionManager.newBuilder()
               .addHttpFilters(
@@ -1649,7 +1651,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseHttpConnectionManager_terminalNotLast() throws ResourceInvalidException {
-    filterRegistry.register(RouterFilter.INSTANCE);
+    filterRegistry.register(ROUTER_FILTER_PROVIDER);
     HttpConnectionManager hcm =
             HttpConnectionManager.newBuilder()
                     .addHttpFilters(
@@ -2820,7 +2822,7 @@ public class GrpcXdsClientImplDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
@@ -2839,7 +2841,7 @@ public class GrpcXdsClientImplDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
@@ -2858,7 +2860,7 @@ public class GrpcXdsClientImplDataTest {
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
             + "without typed_config");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
@@ -2881,13 +2883,13 @@ public class GrpcXdsClientImplDataTest {
         "FilterChain filter-chain-foo contains filter unsupported with unsupported "
             + "typed_config type unsupported-type-url");
     XdsListenerResource.parseFilterChain(
-        filterChain, null, filterRegistry, null, null,
+        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
         getXdsResourceTypeArgs(true));
   }
 
   @Test
   public void parseFilterChain_noName() throws ResourceInvalidException {
-    FilterChain filterChain1 =
+    FilterChain filterChain0 =
         FilterChain.newBuilder()
             .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
             .addFilters(buildHttpConnectionManagerFilter(
@@ -2897,9 +2899,11 @@ public class GrpcXdsClientImplDataTest {
                     .setTypedConfig(Any.pack(Router.newBuilder().build()))
                     .build()))
             .build();
-    FilterChain filterChain2 =
+
+    FilterChain filterChain1 =
         FilterChain.newBuilder()
-            .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
+            .setFilterChainMatch(
+                FilterChainMatch.newBuilder().addAllSourcePorts(Arrays.asList(443, 8080)))
             .addFilters(buildHttpConnectionManagerFilter(
                 HttpFilter.newBuilder()
                     .setName("http-filter-bar")
@@ -2908,13 +2912,19 @@ public class GrpcXdsClientImplDataTest {
                     .build()))
             .build();
 
-    EnvoyServerProtoData.FilterChain parsedFilterChain1 = XdsListenerResource.parseFilterChain(
-        filterChain1, null, filterRegistry, null,
-        null, getXdsResourceTypeArgs(true));
-    EnvoyServerProtoData.FilterChain parsedFilterChain2 = XdsListenerResource.parseFilterChain(
-        filterChain2, null, filterRegistry, null,
-        null, getXdsResourceTypeArgs(true));
-    assertThat(parsedFilterChain1.name()).isEqualTo(parsedFilterChain2.name());
+    Listener listenerProto =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .addAllFilterChains(Arrays.asList(filterChain0, filterChain1))
+            .setDefaultFilterChain(filterChain0)
+            .build();
+    EnvoyServerProtoData.Listener listener = XdsListenerResource.parseServerSideListener(
+        listenerProto, null, filterRegistry, null, getXdsResourceTypeArgs(true));
+
+    assertThat(listener.filterChains().get(0).name()).isEqualTo("chain_0");
+    assertThat(listener.filterChains().get(1).name()).isEqualTo("chain_1");
+    assertThat(listener.defaultFilterChain().name()).isEqualTo("chain_default");
   }
 
   @Test
