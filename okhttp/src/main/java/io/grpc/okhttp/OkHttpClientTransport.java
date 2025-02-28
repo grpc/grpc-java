@@ -46,7 +46,6 @@ import io.grpc.Status.Code;
 import io.grpc.StatusException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.CertificateUtils;
-import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
@@ -245,13 +244,20 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
-  private final Map<String, Status> peerVerificationResults = Collections.synchronizedMap(
-      new LinkedHashMap<String, Status>() {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
-          return size() > 100;
-        }
-      });
+  private final TrustManager x509ExtendedTrustManager;
+
+  @SuppressWarnings("serial")
+  private static class LruCache<T> extends LinkedHashMap<String, T> {
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<String, T> eldest) {
+      return size() > 100;
+    }
+  }
+
+  private final Map<String, Boolean> hostnameVerificationResults =
+      Collections.synchronizedMap(new LruCache<>());
+  private final Map<String, Status> peerVerificationResults =
+      Collections.synchronizedMap(new LruCache<>());
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -344,6 +350,21 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.useGetForSafeMethods = transportFactory.useGetForSafeMethods;
     this.channelCredentials = channelCredentials;
     initTransportTracer();
+    TrustManager tempX509ExtendedTrustManager;
+    if (channelCredentials instanceof TlsChannelCredentials
+        && x509ExtendedTrustManagerClass != null) {
+      try {
+        tempX509ExtendedTrustManager = getX509ExtendedTrustManager(
+                (TlsChannelCredentials) channelCredentials);
+      } catch (GeneralSecurityException e) {
+        tempX509ExtendedTrustManager = null;
+        log.log(Level.WARNING, "Obtaining X509ExtendedTrustManager for the transport failed."
+            + "Per-rpc authority overrides will be disallowed.", e);
+      }
+    } else {
+      tempX509ExtendedTrustManager = null;
+    }
+    x509ExtendedTrustManager = tempX509ExtendedTrustManager;
   }
 
   /**
@@ -442,7 +463,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @Override
-  public ClientStream newStream(
+  public OkHttpClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
       ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
@@ -501,21 +522,28 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       pendingStreams.add(clientStream);
       setInUse(clientStream);
     } else {
-      if (hostnameVerifier != null
-              && socket instanceof SSLSocket
-              && !hostnameVerifier.verify(authority,
-              ((SSLSocket) socket).getSession())) {
-        if (enablePerRpcAuthorityCheck) {
-          clientStream.transportState().transportReportStatus(
-                  Status.UNAVAILABLE.withDescription(
-                          String.format("HostNameVerifier verification failed for authority '%s'",
-                                  authority)),
-                  RpcProgress.DROPPED, true, new Metadata());
-          return;
+      if (hostnameVerifier != null && socket instanceof SSLSocket) {
+        Boolean hostnameVerificationResult;
+        if (hostnameVerificationResults.containsKey(authority)) {
+          hostnameVerificationResult = hostnameVerificationResults.get(authority);
         } else {
-          log.log(Level.WARNING, String.format("HostNameVerifier verification failed for authority "
-                          + "'%s'. This will be an error in the future.",
-                  authority));
+          hostnameVerificationResult = hostnameVerifier.verify(
+                  authority, ((SSLSocket) socket).getSession());
+          hostnameVerificationResults.put(authority, hostnameVerificationResult);
+        }
+        if (!hostnameVerificationResult) {
+          if (enablePerRpcAuthorityCheck) {
+            clientStream.transportState().transportReportStatus(
+                    Status.UNAVAILABLE.withDescription(
+                            String.format("HostNameVerifier verification failed for authority '%s'",
+                                    authority)),
+                    RpcProgress.DROPPED, true, new Metadata());
+            return;
+          } else {
+            log.log(Level.WARNING, String.format("HostNameVerifier verification failed for "
+                    + "authority '%s'. This will be an error in the future.",
+                    authority));
+          }
         }
       }
       if (socket instanceof SSLSocket && authority != null
@@ -525,16 +553,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         if (peerVerificationResults.containsKey(authority)) {
           peerVerificationStatus = peerVerificationResults.get(authority);
         } else {
-          TrustManager x509ExtendedTrustManager = null;
-          try {
-            x509ExtendedTrustManager = x509ExtendedTrustManagerClass != null
-                    ? getX509ExtendedTrustManager((TlsChannelCredentials) channelCredentials)
-                    : null;
-          } catch (GeneralSecurityException e) {
-            peerVerificationStatus = Status.UNAVAILABLE.withCause(e)
-                    .withDescription("Could not verify authority due to failure getting "
-                            + "X509ExtendedTrustManager from TlsCredentials");
-          }
           if (x509ExtendedTrustManager == null) {
             peerVerificationStatus = Status.UNAVAILABLE.withDescription(
                     String.format("Could not verify authority '%s' for the rpc with no "

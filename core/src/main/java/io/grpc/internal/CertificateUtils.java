@@ -41,7 +41,7 @@ public class CertificateUtils {
       throws GeneralSecurityException {
     InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
     try {
-      return io.grpc.internal.CertificateUtils.createTrustManager(rootCertsStream);
+      return CertificateUtils.createTrustManager(rootCertsStream);
     } finally {
       GrpcUtil.closeQuietly(rootCertsStream);
     }

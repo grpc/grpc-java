@@ -23,7 +23,6 @@ import io.grpc.Server;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -101,11 +100,6 @@ public class DeadlineServer {
 
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
-              (ServerCallStreamObserver<HelloReply>) responseObserver;
-      serverCallStreamObserver.setOnCloseHandler(() -> {
-        System.out.println("rpc close called.");
-      });
       try {
         Thread.sleep(500);
       } catch (InterruptedException e) {
