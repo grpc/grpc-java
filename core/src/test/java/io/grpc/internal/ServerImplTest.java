@@ -78,7 +78,6 @@ import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
-import io.grpc.internal.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
 import io.perfmark.PerfMark;
@@ -1533,6 +1532,25 @@ public class ServerImplTest {
         .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
     assertThat(after.sockets).isEmpty();
     assertTrue(after.end);
+  }
+
+  @Test
+  public void testInternalClose_withNullMetadata() {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+        executor.getScheduledExecutorService(),
+        executor.getScheduledExecutorService(),
+        stream,
+        Context.ROOT.withCancellation(),
+        PerfMark.createTag());
+    Throwable throwableMock = mock(Throwable.class);
+    // Stub Status.trailersFromThrowable to return null, simulating the case where metadata is null
+    when(Status.trailersFromThrowable(throwableMock)).thenReturn(null);
+    listener.internalClose(throwableMock);
+    // Capture the arguments passed to stream.close()
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
   }
 
   private void createAndStartServer() throws IOException {
