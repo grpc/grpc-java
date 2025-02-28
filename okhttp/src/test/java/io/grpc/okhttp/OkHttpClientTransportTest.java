@@ -2192,13 +2192,11 @@ public class OkHttpClientTransportTest {
     initTransport();
     setMaxConcurrentStreams(1);
     final MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream =
-        (OkHttpClientStream) clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT,
-            tracers);
+    OkHttpClientStream stream = clientTransport.newStream(
+            method, new Metadata(), CallOptions.DEFAULT, tracers);
     stream.start(listener);
-    OkHttpClientStream pendingStream =
-        (OkHttpClientStream) clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT,
-            tracers);
+    OkHttpClientStream pendingStream = clientTransport.newStream(
+            method, new Metadata(), CallOptions.DEFAULT, tracers);
     pendingStream.start(listener);
     waitForStreamPending(1);
     clientTransport.finishStream(stream.transportState().id(), Status.OK, PROCESSED,
