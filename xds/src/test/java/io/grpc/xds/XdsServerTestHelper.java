@@ -183,12 +183,6 @@ public class XdsServerTestHelper {
     final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
     private final SynchronizationContext syncContext;
 
-    FakeXdsClient() {
-      this(new SynchronizationContext((t, e) -> {
-        throw new AssertionError(e);
-      }));
-    }
-
     FakeXdsClient(SynchronizationContext syncContext) {
       this.syncContext = syncContext;
     }
