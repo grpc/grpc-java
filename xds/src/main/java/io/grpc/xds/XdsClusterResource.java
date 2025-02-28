@@ -26,7 +26,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -79,7 +78,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
-  private static final String TRANSPORT_SOCKET_NAME_HTTP11_PROXY =
+  static final String TRANSPORT_SOCKET_NAME_HTTP11_PROXY =
       "type.googleapis.com/envoy.extensions.transport_sockets.http_11_proxy.v3"
           + ".Http11ProxyUpstreamTransport";
   private final LoadBalancerRegistry loadBalancerRegistry
@@ -219,7 +218,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     Long maxConcurrentRequests = null;
     UpstreamTlsContext upstreamTlsContext = null;
     OutlierDetection outlierDetection = null;
-    boolean isHttp11ProxyEnabled = false;
+    boolean isHttp11ProxyAvailable = false;
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {
         return StructOrError.fromError(
@@ -245,15 +244,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     boolean hasTransportSocket = cluster.hasTransportSocket();
     TransportSocket transportSocket = cluster.getTransportSocket();
 
-    if (hasTransportSocket && !TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName()) &&
-        !(isEnabledXdsHttpConnect && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName()))) {
+    if (hasTransportSocket && !TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName())
+        && !(isEnabledXdsHttpConnect
+        && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName()))) {
       return StructOrError.fromError(
-          "Transport socket with name " + transportSocket.getName() + " not supported.");
+          "transport-socket with name " + transportSocket.getName() + " not supported.");
     }
 
-    if (hasTransportSocket && isEnabledXdsHttpConnect &&
-        TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName())) {
-      isHttp11ProxyEnabled = true;
+    if (hasTransportSocket && isEnabledXdsHttpConnect
+        && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName())) {
+      isHttp11ProxyAvailable = true;
       try {
         Http11ProxyUpstreamTransport wrappedTransportSocket = transportSocket
             .getTypedConfig().unpack(io.envoyproxy.envoy.extensions.transport_sockets
@@ -265,7 +265,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
             "Cluster " + clusterName + ": malformed Http11ProxyUpstreamTransport: " + e);
       } catch (ClassCastException e) {
         return StructOrError.fromError(
-            "Cluster " + clusterName + ": invalid transport_socket type in Http11ProxyUpstreamTransport");
+            "Cluster " + clusterName
+                + ": invalid transport_socket type in Http11ProxyUpstreamTransport");
       }
     }
 
@@ -274,7 +275,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
             validateUpstreamTlsContext(
                 unpackCompatibleType(transportSocket.getTypedConfig(),
-                    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
+                    io.envoyproxy.envoy.extensions
+                        .transport_sockets.tls.v3.UpstreamTlsContext.class,
                     TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
                 certProviderInstances));
       } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
@@ -316,7 +318,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,
-          outlierDetection, isHttp11ProxyEnabled));
+          outlierDetection, isHttp11ProxyAvailable));
     } else if (type.equals(Cluster.DiscoveryType.LOGICAL_DNS)) {
       if (!cluster.hasLoadAssignment()) {
         return StructOrError.fromError(
@@ -352,7 +354,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           Locale.US, "%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
           clusterName, dnsHostName, lrsServerInfo, maxConcurrentRequests,
-          upstreamTlsContext, isHttp11ProxyEnabled));
+          upstreamTlsContext, isHttp11ProxyAvailable));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
@@ -606,7 +608,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     @Nullable
     abstract UpstreamTlsContext upstreamTlsContext();
 
-    abstract boolean isHttp11ProxyEnabled();
+    abstract boolean isHttp11ProxyAvailable();
 
     // List of underlying clusters making of this aggregate cluster.
     // Only valid for AGGREGATE cluster.
@@ -629,7 +631,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .choiceCount(0)
           .filterMetadata(ImmutableMap.of())
           .parsedMetadata(ImmutableMap.of())
-          .isHttp11ProxyEnabled(false);
+          .isHttp11ProxyAvailable(false);
     }
 
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
@@ -643,7 +645,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
                           @Nullable UpstreamTlsContext upstreamTlsContext,
                           @Nullable OutlierDetection outlierDetection,
-                          boolean isHttp11ProxyEnabled) {
+                          boolean isHttp11ProxyAvailable) {
       return newBuilder(clusterName)
           .clusterType(ClusterType.EDS)
           .edsServiceName(edsServiceName)
@@ -651,21 +653,21 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext)
           .outlierDetection(outlierDetection)
-          .isHttp11ProxyEnabled(isHttp11ProxyEnabled);
+          .isHttp11ProxyAvailable(isHttp11ProxyAvailable);
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
                                  @Nullable ServerInfo lrsServerInfo,
                                  @Nullable Long maxConcurrentRequests,
                                  @Nullable UpstreamTlsContext upstreamTlsContext,
-                                 boolean isHttp11ProxyEnabled) {
+                                 boolean isHttp11ProxyAvailable) {
       return newBuilder(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .dnsHostName(dnsHostName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext)
-          .isHttp11ProxyEnabled(isHttp11ProxyEnabled);
+          .isHttp11ProxyAvailable(isHttp11ProxyAvailable);
     }
 
     enum ClusterType {
@@ -742,7 +744,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       // Private, use one of the static factory methods instead.
       protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
 
-      protected abstract Builder isHttp11ProxyEnabled(boolean isHttp11ProxyEnabled);
+      protected abstract Builder isHttp11ProxyAvailable(boolean isHttp11ProxyAvailable);
 
       // Private, use one of the static factory methods instead.
       protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);

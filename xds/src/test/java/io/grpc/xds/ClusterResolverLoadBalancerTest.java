@@ -36,6 +36,7 @@ import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -83,6 +84,7 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -252,14 +254,18 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
             Arrays.asList(
-                LbEndpoint.create(endpoint1, 0 /* loadBalancingWeight */, true, "hostname1"),
-                LbEndpoint.create(endpoint2, 0 /* loadBalancingWeight */, true, "hostname2")),
-            10 /* localityWeight */, 1 /* priority */);
+                LbEndpoint.create(endpoint1, 0 /* loadBalancingWeight */,
+                    true, "hostname1", ImmutableMap.of()),
+                LbEndpoint.create(endpoint2, 0 /* loadBalancingWeight */,
+                    true, "hostname2", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
         LocalityLbEndpoints.create(
             Collections.singletonList(
-                LbEndpoint.create(endpoint3, 60 /* loadBalancingWeight */, true, "hostname3")),
-            50 /* localityWeight */, 1 /* priority */);
+                LbEndpoint.create(
+                    endpoint3, 60 /* loadBalancingWeight */, true,
+                    "hostname3", ImmutableMap.of())),
+            50 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1,
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
@@ -312,8 +318,9 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
             Arrays.asList(
-                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true, "hostname1")),
-            100 /* localityWeight */, 1 /* priority */);
+                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
+                    "hostname1", ImmutableMap.of())),
+            100 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1,
         ImmutableMap.of(locality1, localityLbEndpoints));
@@ -358,8 +365,9 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
             Arrays.asList(
-                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true, "hostname1")),
-            100 /* localityWeight */, 1 /* priority */);
+                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
+                    "hostname1", ImmutableMap.of())),
+            100 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1,
         ImmutableMap.of(locality1, localityLbEndpoints));
@@ -371,6 +379,109 @@ public class ClusterResolverLoadBalancerTest {
             .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
+  @Test
+  @SuppressWarnings("AddressSelection")
+  public void endpointAddressRewritten_whenProxyMetadataIsInEndpointMetadata() {
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest);
+    deliverLbConfig(config);
+    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
+    assertThat(childBalancers).isEmpty();
+
+    // Create a fake address for the endpoint
+    EquivalentAddressGroup endpoint =
+        new EquivalentAddressGroup(new InetSocketAddress("endpoint-addr-1", 80));
+
+    // Proxy address in endpointMetadata (use FakeSocketAddress directly)
+    SocketAddress proxyAddress = new FakeSocketAddress("proxy-addr");
+    ImmutableMap<String, Object> endpointMetadata =
+        ImmutableMap.of("envoy.http11_proxy_transport_socket.proxy_address", proxyAddress);
+
+    // No proxy in locality metadata
+    ImmutableMap<String, Object> localityMetadata = ImmutableMap.of();
+
+    LocalityLbEndpoints localityLbEndpoints = LocalityLbEndpoints.create(
+        Arrays.asList(
+            LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
+                "hostname1", endpointMetadata)),
+        100 /* localityWeight */, 1 /* priority */, localityMetadata);
+
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME1,
+        ImmutableMap.of(locality1, localityLbEndpoints));
+
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+
+    // Get the rewritten address
+    SocketAddress rewrittenAddress =
+        childBalancer.addresses.get(0).getAddresses().get(0);
+    System.out.println("Hi, it's Shiva");
+    System.out.println(rewrittenAddress);
+    assertThat(rewrittenAddress).isInstanceOf(HttpConnectProxiedSocketAddress.class);
+    HttpConnectProxiedSocketAddress proxiedSocket =
+        (HttpConnectProxiedSocketAddress) rewrittenAddress;
+
+    // Assert that the target address is the original address
+    assertThat(proxiedSocket.getTargetAddress())
+        .isEqualTo(new InetSocketAddress("endpoint-addr-1", 80));
+
+    // Assert that the proxy address is correctly set
+    assertThat(proxiedSocket.getProxyAddress()).isEqualTo(proxyAddress);
+  }
+
+  @Test
+  @SuppressWarnings("AddressSelection")
+  public void endpointAddressRewritten_whenProxyMetadataIsInLocalityMetadata() {
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest);
+    deliverLbConfig(config);
+    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
+    assertThat(childBalancers).isEmpty();
+
+    // Create a fake address for the endpoint
+    EquivalentAddressGroup endpoint =
+        new EquivalentAddressGroup(new InetSocketAddress("endpoint-addr-2", 80));
+
+    // No proxy in endpointMetadata
+    ImmutableMap<String, Object> endpointMetadata = ImmutableMap.of();
+
+    // Proxy address is now in localityMetadata
+    SocketAddress proxyAddress = new FakeSocketAddress("proxy-addr");
+    ImmutableMap<String, Object> localityMetadata =
+        ImmutableMap.of("envoy.http11_proxy_transport_socket.proxy_address", proxyAddress);
+
+    LocalityLbEndpoints localityLbEndpoints = LocalityLbEndpoints.create(
+        Arrays.asList(
+            LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
+                "hostname2", endpointMetadata)),
+        100 /* localityWeight */, 1 /* priority */, localityMetadata);
+
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME1,
+        ImmutableMap.of(locality1, localityLbEndpoints));
+
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+
+    // Get the rewritten address
+    SocketAddress rewrittenAddress =
+        childBalancer.addresses.get(0).getAddresses().get(0);
+    System.out.println("Hi, it's Shiva");
+    System.out.println(rewrittenAddress);
+
+    // Assert that the address was rewritten
+    assertThat(rewrittenAddress).isInstanceOf(HttpConnectProxiedSocketAddress.class);
+    HttpConnectProxiedSocketAddress proxiedSocket =
+        (HttpConnectProxiedSocketAddress) rewrittenAddress;
+
+    // Assert that the target address is the original address
+    assertThat(proxiedSocket.getTargetAddress())
+        .isEqualTo(new InetSocketAddress("endpoint-addr-2", 80));
+
+    // Assert that the proxy address is correctly set from locality metadata
+    assertThat(proxiedSocket.getProxyAddress()).isEqualTo(proxyAddress);
+  }
 
   @Test
   public void onlyEdsClusters_receivedEndpoints() {
@@ -389,17 +500,21 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
             Arrays.asList(
-                LbEndpoint.create(endpoint1, 100, true, "hostname1"),
-                LbEndpoint.create(endpoint2, 100, true, "hostname1")),
-            70 /* localityWeight */, 1 /* priority */);
+                LbEndpoint.create(endpoint1, 100,
+                    true, "hostname1", ImmutableMap.of()),
+                LbEndpoint.create(endpoint2, 100,
+                    true, "hostname1", ImmutableMap.of())),
+            70 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint3, 100, true, "hostname2")),
-            10 /* localityWeight */, 1 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint3, 100, true,
+                "hostname2", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints3 =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint4, 100, true, "hostname3")),
-            20 /* localityWeight */, 2 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint4, 100, true,
+                "hostname3", ImmutableMap.of())),
+            20 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
     String priority1 = CLUSTER2 + "[child1]";
     String priority2 = CLUSTER2 + "[child2]";
     String priority3 = CLUSTER1 + "[child1]";
@@ -553,9 +668,11 @@ public class ClusterResolverLoadBalancerTest {
   private LocalityLbEndpoints createEndpoints(int priority) {
     return LocalityLbEndpoints.create(
         Arrays.asList(
-            LbEndpoint.create(makeAddress("endpoint-addr-1"), 100, true, "hostname1"),
-            LbEndpoint.create(makeAddress("endpoint-addr-2"), 100, true, "hostname2")),
-        70 /* localityWeight */, priority /* priority */);
+            LbEndpoint.create(makeAddress("endpoint-addr-1"), 100,
+                true, "hostname1", ImmutableMap.of()),
+            LbEndpoint.create(makeAddress("endpoint-addr-2"), 100,
+                true, "hostname2", ImmutableMap.of())),
+        70 /* localityWeight */, priority /* priority */, ImmutableMap.of());
   }
 
   @Test
@@ -592,12 +709,14 @@ public class ClusterResolverLoadBalancerTest {
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint1, 100, true, "hostname1")),
-            10 /* localityWeight */, 1 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint1, 100, true,
+                "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint2, 100, true, "hostname2")),
-            20 /* localityWeight */, 2 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint2, 100, true,
+                "hostname2", ImmutableMap.of())),
+            20 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints1));
     xdsClient.deliverClusterLoadAssignment(
@@ -626,9 +745,11 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
             Arrays.asList(
-                LbEndpoint.create(endpoint1, 100, false /* isHealthy */, "hostname1"),
-                LbEndpoint.create(endpoint2, 100, true /* isHealthy */, "hostname2")),
-            10 /* localityWeight */, 1 /* priority */);
+                LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
+                    "hostname1", ImmutableMap.of()),
+                LbEndpoint.create(endpoint2, 100, true /* isHealthy */,
+                    "hostname2", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -646,13 +767,13 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-                "hostname1")),
-            10 /* localityWeight */, 1 /* priority */);
+                "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint2, 100, true /* isHealthy */,
-                "hostname2")),
-            10 /* localityWeight */, 1 /* priority */);
+                "hostname2", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1,
         ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
@@ -673,13 +794,13 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-                "hostname1")),
-            10 /* localityWeight */, 1 /* priority */);
+                "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint2, 200, true /* isHealthy */,
-                "hostname2")),
-            10 /* localityWeight */, 2 /* priority */);
+                "hostname2", ImmutableMap.of())),
+            10 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
     String priority2 = CLUSTER1 + "[child2]";
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1,
@@ -698,8 +819,8 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint, 100, false /* isHealthy */,
-                "hostname1")),
-            10 /* localityWeight */, 1 /* priority */);
+                "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(EDS_SERVICE_NAME1,
         Collections.singletonMap(locality1, localityLbEndpoints));  // single endpoint, unhealthy
 
@@ -862,8 +983,9 @@ public class ClusterResolverLoadBalancerTest {
     resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint3, 100, true, "hostname3")),
-            10 /* localityWeight */, 1 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint3, 100, true,
+                "hostname3", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
 
@@ -919,8 +1041,9 @@ public class ClusterResolverLoadBalancerTest {
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint, 100, true, "hostname1")),
-            10 /* localityWeight */, 1 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint, 100, true,
+                "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
     resolver.deliverError(Status.UNKNOWN.withDescription("I am lost"));
@@ -950,8 +1073,9 @@ public class ClusterResolverLoadBalancerTest {
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint, 100, true, "hostname1")),
-            10 /* localityWeight */, 1 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint, 100, true,
+                "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
     assertThat(childBalancers).isEmpty();  // not created until all clusters resolved.
@@ -1043,8 +1167,9 @@ public class ClusterResolverLoadBalancerTest {
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints =
         LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint1, 100, true, "hostname1")),
-            10 /* localityWeight */, 1 /* priority */);
+            Collections.singletonList(LbEndpoint.create(endpoint1, 100, true,
+                "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
     resolver.deliverEndpointAddresses(Collections.singletonList(endpoint2));
@@ -1118,37 +1243,37 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private static EquivalentAddressGroup makeAddress(final String name) {
-    class FakeSocketAddress extends SocketAddress {
-      private final String name;
+    return new EquivalentAddressGroup(new FakeSocketAddress(name));
+  }
 
-      private FakeSocketAddress(String name) {
-        this.name = name;
-      }
+  static class FakeSocketAddress extends SocketAddress {
+    private final String name;
 
-      @Override
-      public int hashCode() {
-        return Objects.hash(name);
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (!(o instanceof FakeSocketAddress)) {
-          return false;
-        }
-        FakeSocketAddress that = (FakeSocketAddress) o;
-        return Objects.equals(name, that.name);
-      }
-
-      @Override
-      public String toString() {
-        return name;
-      }
+    private FakeSocketAddress(String name) {
+      this.name = name;
     }
 
-    return new EquivalentAddressGroup(new FakeSocketAddress(name));
+    @Override
+    public int hashCode() {
+      return Objects.hash(name);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof FakeSocketAddress)) {
+        return false;
+      }
+      FakeSocketAddress that = (FakeSocketAddress) o;
+      return Objects.equals(name, that.name);
+    }
+
+    @Override
+    public String toString() {
+      return name;
+    }
   }
 
   private static final class FakeXdsClient extends XdsClient {

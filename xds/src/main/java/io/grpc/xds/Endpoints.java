@@ -70,7 +70,8 @@ final class Endpoints {
 
     static LbEndpoint create(EquivalentAddressGroup eag, int loadBalancingWeight,
         boolean isHealthy, String hostname, ImmutableMap<String, Object> endpointMetadata) {
-      return new AutoValue_Endpoints_LbEndpoint(eag, loadBalancingWeight, isHealthy, hostname, endpointMetadata);
+      return new AutoValue_Endpoints_LbEndpoint(
+          eag, loadBalancingWeight, isHealthy, hostname, endpointMetadata);
     }
 
     // Only for testing.

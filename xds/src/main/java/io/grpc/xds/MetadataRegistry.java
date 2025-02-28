@@ -114,7 +114,7 @@ final class MetadataRegistry {
      *
      * @param any the {@link Any} object to parse.
      * @return the parsed metadata value.
-     * @throws InvalidProtocolBufferException if the parsing fails.
+     * @throws ResourceInvalidException if the parsing fails.
      */
     Object parse(Any any) throws ResourceInvalidException;
   }

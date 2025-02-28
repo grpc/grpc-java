@@ -21,10 +21,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.net.InetAddresses;
-import com.google.protobuf.Any;
 import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -63,12 +60,10 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -446,8 +441,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   }
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
                       rewrittenAddresses, attr);
-                  eag = AddressFilter.setPathFilter(
-                      eag, Arrays.asList(priorityName, localityName));
+                  eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
                   addresses.add(eag);
                 }
               }
@@ -489,12 +483,23 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (!(addr instanceof InetSocketAddress)) {
           return addr;
         }
-        Object proxyAddress = endpointMetadata.get("envoy.http11_proxy_transport_socket.proxy_address");
+
+        SocketAddress proxyAddress;
+        try {
+          proxyAddress = (SocketAddress) endpointMetadata.get(
+              "envoy.http11_proxy_transport_socket.proxy_address");
+          if (proxyAddress == null) {
+            proxyAddress = (SocketAddress) localityMetadata.get(
+                "envoy.http11_proxy_transport_socket.proxy_address");
+          }
+        } catch (Exception e) {
+          return addr;
+        }
 
         if (proxyAddress != null) {
           return HttpConnectProxiedSocketAddress.newBuilder()
               .setTargetAddress((InetSocketAddress) addr)
-              .setProxyAddress((SocketAddress) proxyAddress)
+              .setProxyAddress(proxyAddress)
               .build();
         }
         return addr;

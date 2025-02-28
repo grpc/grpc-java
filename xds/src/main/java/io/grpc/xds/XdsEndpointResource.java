@@ -241,7 +241,8 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
           endpointMetadata));
     }
     return StructOrError.fromStruct(Endpoints.LocalityLbEndpoints.create(
-        endpoints, proto.getLoadBalancingWeight().getValue(), proto.getPriority(), localityMetadata));
+        endpoints, proto.getLoadBalancingWeight().getValue(),
+        proto.getPriority(), localityMetadata));
   }
 
   private static InetSocketAddress getInetSocketAddress(Address address) {
@@ -333,7 +334,8 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     }
 
     private ResourceInvalidException createException(String message) {
-      return new ResourceInvalidException("Failed to parse envoy.config.core.v3.Address: " + message);
+      return new ResourceInvalidException(
+          "Failed to parse envoy.config.core.v3.Address: " + message);
     }
   }
 }
