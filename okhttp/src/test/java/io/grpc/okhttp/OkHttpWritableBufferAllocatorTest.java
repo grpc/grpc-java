@@ -16,11 +16,13 @@
 
 package io.grpc.okhttp;
 
+import static io.grpc.okhttp.OkHttpWritableBufferAllocator.SEGMENT_SIZE_COPY;
 import static org.junit.Assert.assertEquals;
 
 import io.grpc.internal.WritableBuffer;
 import io.grpc.internal.WritableBufferAllocator;
 import io.grpc.internal.WritableBufferAllocatorTestBase;
+import okio.Segment;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -38,11 +40,12 @@ public class OkHttpWritableBufferAllocatorTest extends WritableBufferAllocatorTe
     return allocator;
   }
 
+  @SuppressWarnings("KotlinInternal")
   @Test
   public void testCapacity() {
     WritableBuffer buffer = allocator().allocate(4096);
     assertEquals(0, buffer.readableBytes());
-    assertEquals(4096, buffer.writableBytes());
+    assertEquals(SEGMENT_SIZE_COPY, buffer.writableBytes());
   }
 
   @Test
@@ -54,8 +57,14 @@ public class OkHttpWritableBufferAllocatorTest extends WritableBufferAllocatorTe
 
   @Test
   public void testIsExactBelowMaxCapacity() {
-    WritableBuffer buffer = allocator().allocate(4097);
+    WritableBuffer buffer = allocator().allocate(SEGMENT_SIZE_COPY + 1);
     assertEquals(0, buffer.readableBytes());
-    assertEquals(4097, buffer.writableBytes());
+    assertEquals(SEGMENT_SIZE_COPY * 2, buffer.writableBytes());
+  }
+
+  @SuppressWarnings("KotlinInternal")
+  @Test
+  public void testSegmentSizeMatchesKotlin() {
+    assertEquals(Segment.SIZE, SEGMENT_SIZE_COPY);
   }
 }

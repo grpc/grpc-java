@@ -27,11 +27,9 @@ import okio.Buffer;
  */
 class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
 
-  // Use 4k as our minimum buffer size.
-  private static final int MIN_BUFFER = 4096;
-
   // Set the maximum buffer size to 1MB
   private static final int MAX_BUFFER = 1024 * 1024;
+  public static final int SEGMENT_SIZE_COPY = 8192; // Should equal Segment.SIZE
 
   /**
    * Construct a new instance.
@@ -45,7 +43,9 @@ class OkHttpWritableBufferAllocator implements WritableBufferAllocator {
    */
   @Override
   public WritableBuffer allocate(int capacityHint) {
-    capacityHint = Math.min(MAX_BUFFER, Math.max(MIN_BUFFER, capacityHint));
+    // okio buffer uses fixed size Segments, round capacityHint up
+    capacityHint = Math.min(MAX_BUFFER,
+        (capacityHint + SEGMENT_SIZE_COPY - 1) / SEGMENT_SIZE_COPY * SEGMENT_SIZE_COPY);
     return new OkHttpWritableBuffer(new Buffer(), capacityHint);
   }
 }

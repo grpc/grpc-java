@@ -34,6 +34,6 @@ public final class NettySslContextChannelCredentials {
     Preconditions.checkArgument(sslContext.isClient(),
         "Server SSL context can not be used for client channel");
     GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
-    return NettyChannelCredentials.create(ProtocolNegotiators.tlsClientFactory(sslContext));
+    return NettyChannelCredentials.create(ProtocolNegotiators.tlsClientFactory(sslContext, null));
   }
 }

@@ -245,8 +245,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         return StructOrError.fromError(
             "FilterConfig [" + name + "] contains invalid proto: " + e);
       }
-      Filter filter = filterRegistry.get(typeUrl);
-      if (filter == null) {
+      Filter.Provider provider = filterRegistry.get(typeUrl);
+      if (provider == null) {
         if (isOptional) {
           continue;
         }
@@ -254,7 +254,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             "HttpFilter [" + name + "](" + typeUrl + ") is required but unsupported");
       }
       ConfigOrError<? extends Filter.FilterConfig> filterConfig =
-          filter.parseFilterConfigOverride(rawConfig);
+          provider.parseFilterConfigOverride(rawConfig);
       if (filterConfig.errorDetail != null) {
         return StructOrError.fromError(
             "Invalid filter config for HttpFilter [" + name + "]: " + filterConfig.errorDetail);
@@ -496,8 +496,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
           }
-          clusterWeightSum += clusterWeight.getWeight().getValue();
-          weightedClusters.add(clusterWeightOrError.getStruct());
+          ClusterWeight parsedWeight = clusterWeightOrError.getStruct();
+          clusterWeightSum += parsedWeight.weight();
+          weightedClusters.add(parsedWeight);
         }
         if (clusterWeightSum <= 0) {
           return StructOrError.fromError("Sum of cluster weights should be above 0.");
@@ -609,7 +610,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
               + overrideConfigs.getErrorDetail());
     }
     return StructOrError.fromStruct(VirtualHost.Route.RouteAction.ClusterWeight.create(
-        proto.getName(), proto.getWeight().getValue(), overrideConfigs.getStruct()));
+        proto.getName(),
+        Integer.toUnsignedLong(proto.getWeight().getValue()),
+        overrideConfigs.getStruct()));
   }
 
   @Nullable // null if the plugin is not supported, but it's marked as optional.

@@ -705,6 +705,15 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     return keyManagerFactory.getKeyManagers();
   }
 
+  static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
+    InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
+    try {
+      return io.grpc.internal.CertificateUtils.createTrustManager(rootCertsStream);
+    } finally {
+      GrpcUtil.closeQuietly(rootCertsStream);
+    }
+  }
+
   static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
   }

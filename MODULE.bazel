@@ -2,13 +2,13 @@ module(
     name = "grpc-java",
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
-    version = "1.71.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
+    version = "1.72.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
 )
 
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.48.0",
+    "com.google.api.grpc:proto-google-common-protos:2.51.0",
     "com.google.auth:google-auth-library-credentials:1.24.1",
     "com.google.auth:google-auth-library-oauth2-http:1.24.1",
     "com.google.auto.value:auto-value-annotations:1.11.0",
@@ -18,7 +18,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.errorprone:error_prone_annotations:2.30.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.3.1-android",
-    "com.google.re2j:re2j:1.7",
+    "com.google.re2j:re2j:1.8",
+    "com.google.s2a.proto.v2:s2a-proto:0.1.1",
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
@@ -31,8 +32,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-handler-proxy:4.1.110.Final",
     "io.netty:netty-handler:4.1.110.Final",
     "io.netty:netty-resolver:4.1.110.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.65.Final",
-    "io.netty:netty-tcnative-classes:2.0.65.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.70.Final",
+    "io.netty:netty-tcnative-classes:2.0.70.Final",
     "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.110.Final",
     "io.netty:netty-transport-native-unix-common:4.1.110.Final",
     "io.netty:netty-transport:4.1.110.Final",
@@ -48,6 +49,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
+
 # CEL Spec may be removed when cncf/xds MODULE is no longer using protobuf 27.x
 bazel_dep(name = "cel-spec", repo_name = "dev_cel", version = "0.15.0")
 bazel_dep(name = "grpc", repo_name = "com_github_grpc_grpc", version = "1.56.3.bcr.1")

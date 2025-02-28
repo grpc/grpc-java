@@ -19,6 +19,7 @@ package io.grpc.s2a.internal.handshaker;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.errorprone.annotations.ThreadSafe;
+import com.google.s2a.proto.v2.Identity;
 
 /**
  * Stores an identity in such a way that it can be sent to the S2A handshaker service. The identity
