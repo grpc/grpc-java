@@ -383,6 +383,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         cdsWatchers.values().stream()
             .filter(XdsDependencyManager::isTopLevelCluster)
             .map(XdsWatcherBase::resourceName)
+            .distinct()
             .collect(Collectors.toList());
 
     // Flatten multi-level aggregates into lists of leaf clusters
@@ -441,7 +442,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     List<Endpoints.LbEndpoint> endpoints = new ArrayList<>();
     for (EquivalentAddressGroup eag : cdsWatcher.clusterState.addressGroupList) {
       // TODO: should this really be health and null hostname?
-      endpoints.add(Endpoints.LbEndpoint.create(eag, 1, true, null));
+      endpoints.add(Endpoints.LbEndpoint.create(eag, 1, true, ""));
     }
     LocalityLbEndpoints lbEndpoints = LocalityLbEndpoints.create(endpoints, 1, 0);
     localityLbEndpoints.put(locality, lbEndpoints);
@@ -470,9 +471,12 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       XdsConfig.XdsClusterConfig.ClusterChild child;
       switch (cdsUpdate.clusterType()) {
         case AGGREGATE:
-          List<String> leafNames = getLeafNames(cdsUpdate);
+          Set<String> leafNames = new HashSet<>();
+          addLeafNames(leafNames, cdsUpdate);
           child = new AggregateConfig(leafNames);
           leafClusterNames.addAll(leafNames);
+          cdsUpdate = cdsUpdate.toBuilder().prioritizedClusterNames(ImmutableList.copyOf(leafNames))
+              .build();
           break;
         case EDS:
           EdsWatcher edsWatcher = (EdsWatcher) edsWatchers.get(cdsUpdate.edsServiceName());
@@ -503,23 +507,24 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     return leafClusterNames;
   }
 
-  private List<String> getLeafNames(XdsClusterResource.CdsUpdate cdsUpdate) {
-    List<String> childNames = new ArrayList<>();
+  private void addLeafNames(Set<String> leafNames, XdsClusterResource.CdsUpdate cdsUpdate) {
+    Set<String> childNames = new HashSet<>();
 
     for (String cluster : cdsUpdate.prioritizedClusterNames()) {
+      if (leafNames.contains(cluster)) {
+        continue;
+      }
       StatusOr<XdsClusterResource.CdsUpdate> data = getCluster(cluster).getData();
       if (data == null || !data.hasValue() || data.getValue() == null) {
         childNames.add(cluster);
         continue;
       }
       if (data.getValue().clusterType() == ClusterType.AGGREGATE) {
-        childNames.addAll(getLeafNames(data.getValue()));
+        addLeafNames(leafNames, data.getValue());
       } else {
-        childNames.add(cluster);
+        leafNames.add(cluster);
       }
     }
-
-    return childNames;
   }
 
   private static boolean isTopLevelCluster(XdsWatcherBase<?> cdsWatcher) {

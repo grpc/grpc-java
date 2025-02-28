@@ -239,6 +239,16 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     }
 
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
+    if (rootCdsLbState != null && this.resolvedAddresses != null
+        && rootClusterName.equals(rootCdsLbState.root.name)
+        && this.resolvedAddresses.equals(resolvedAddresses)) {
+      return Status.OK; // no changes
+    }
+
+    if (rootCdsLbState != null) {
+      rootCdsLbState.shutdown();
+    }
+
     this.resolvedAddresses = resolvedAddresses;
     rootCdsLbState =
         new CdsLbState(rootClusterName, xdsConfig.getClusters(), rootClusterName);
@@ -376,7 +386,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (childLb == null) {
         childLb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(helper);
       }
-      childLb.handleResolvedAddresses(
+      childLb.acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setLoadBalancingPolicyConfig(childConfig)
               .setAddresses(Collections.unmodifiableList(addresses))
@@ -805,7 +815,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                        String rootName) {
       root = new ClusterStateDetails(rootName, clusterConfigs.get(rootName));
       clusterStates.put(rootCluster, root);
-      initializeChildren(clusterConfigs, root);
+      initializeChildren(clusterConfigs, rootName);
     }
 
     private void start() {
@@ -820,18 +830,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
     }
 
-    // If doesn't have children is a no-op
-    private void initializeChildren(ImmutableMap<String,
-        StatusOr<XdsClusterConfig>> clusterConfigs, ClusterStateDetails curRoot) {
-      if (curRoot.result == null) {
-        return;
-      }
-      ImmutableList<String> childNames = curRoot.result.prioritizedClusterNames();
-      if (childNames == null) {
-        return;
-      }
+    private void initializeChildren(
+        ImmutableMap<String, StatusOr<XdsClusterConfig>> clusterConfigs, String rootName) {
+      for (String clusterName : clusterConfigs.keySet()) {
+        if (clusterName.equals(rootName)) {
+          continue;
+        }
 
-      for (String clusterName : childNames) {
         StatusOr<XdsClusterConfig> configStatusOr = clusterConfigs.get(clusterName);
         if (configStatusOr == null) {
           logger.log(XdsLogLevel.DEBUG, "Child cluster %s of %s has no matching config",
@@ -843,7 +848,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           clusterStateDetails = new ClusterStateDetails(clusterName, configStatusOr);
           clusterStates.put(clusterName, clusterStateDetails);
         }
-        initializeChildren(clusterConfigs, clusterStateDetails);
       }
     }
 

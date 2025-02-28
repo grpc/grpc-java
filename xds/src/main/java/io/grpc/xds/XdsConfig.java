@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Represents the xDS configuration tree for a specified Listener.
@@ -206,9 +207,9 @@ final class XdsConfig {
 
     // The list of leaf clusters for an aggregate cluster.
     static final class AggregateConfig implements ClusterChild {
-      private final List<String> leafNames;
+      private final Set<String> leafNames;
 
-      public AggregateConfig(List<String> leafNames) {
+      public AggregateConfig(Set<String> leafNames) {
         this.leafNames = checkNotNull(leafNames, "leafNames");
       }
 
