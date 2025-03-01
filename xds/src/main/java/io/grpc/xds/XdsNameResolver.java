@@ -320,6 +320,7 @@ final class XdsNameResolver extends NameResolver {
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
             .set(XdsAttributes.XDS_CONFIG, resolveState2.lastConfig)
+            .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, resolveState2.xdsDependencyManager)
             .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
             .build();

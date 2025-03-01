@@ -23,7 +23,6 @@ import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Struct;
 import io.grpc.Attributes;
@@ -49,6 +48,8 @@ import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -107,7 +108,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       @Nullable EnvoyServerProtoData.OutlierDetection outlierDetection, Object endpointLbConfig,
       LoadBalancerRegistry lbRegistry, Map<String,
       Map<Locality, Integer>> prioritizedLocalityWeights,
-      List<Endpoints.DropOverload> dropOverloads) {
+      List<Endpoints.DropOverload> dropOverloads, boolean dynamic) {
     Map<String, PriorityChildConfig> configs = new HashMap<>();
     for (String priority : prioritizedLocalityWeights.keySet()) {
       ClusterImplLoadBalancerProvider.ClusterImplConfig clusterImplConfig =
@@ -130,7 +131,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       PriorityChildConfig priorityChildConfig =
-          new PriorityChildConfig(priorityChildPolicy, true /* ignoreReresolution */);
+          new PriorityChildConfig(priorityChildPolicy, !dynamic);
       configs.put(priority, priorityChildConfig);
     }
     return configs;
@@ -309,13 +310,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       endpointLbConfig = config.lbConfig;
       for (DiscoveryMechanism instance : config.discoveryMechanisms) {
-        assert instance.type == DiscoveryMechanism.Type.EDS;
         clusters.add(instance.cluster);
-        ClusterState state;
-        state = new EdsClusterState(instance.cluster, instance.edsServiceName,
+        // Doesn't matter if it is really an EDS cluster because we always have an endpointConfig
+        ClusterState state = new EdsClusterState(instance.cluster, instance.edsServiceName,
             instance.endpointConfig,
             instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-            instance.filterMetadata, instance.outlierDetection);
+            instance.filterMetadata, instance.outlierDetection,
+            instance.type == DiscoveryMechanism.Type.LOGICAL_DNS);
         clusterStates.put(instance.cluster, state);
         state.start();
       }
@@ -465,6 +466,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
       int priorityNameGenId = 1;
       private EdsUpdate edsUpdate;
+      private final boolean dynamic;
+      private Closeable subscription = null;
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
                               StatusOr<EdsUpdate> edsUpdate,
@@ -472,7 +475,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                               @Nullable Long maxConcurrentRequests,
                               @Nullable EnvoyServerProtoData.UpstreamTlsContext tlsContext,
                               Map<String, Struct> filterMetadata,
-                              @Nullable EnvoyServerProtoData.OutlierDetection outlierDetection) {
+                              @Nullable EnvoyServerProtoData.OutlierDetection outlierDetection,
+                              boolean dynamic) {
         super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
             outlierDetection);
         this.edsServiceName = edsServiceName;
@@ -481,16 +485,31 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         } else {
           onError(edsUpdate.getStatus());
         }
+        this.dynamic = dynamic;
       }
 
       @Override
       void start() {
+        if (dynamic) {
+          // register insterest in cluster
+          XdsConfig.XdsClusterSubscriptionRegistry clusterSubscr =
+              resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY);
+          subscription = clusterSubscr.subscribeToCluster(name);
+        }
         onChanged(edsUpdate);
       }
 
       @Override
       protected void shutdown() {
         super.shutdown();
+        if (subscription != null) {
+          // unregister interest in cluster;
+          try {
+            subscription.close();
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        }
       }
 
       public void onChanged(final EdsUpdate update) {
@@ -561,7 +580,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                 generateEdsBasedPriorityChildConfigs(name, edsServiceName,
                     lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
                     outlierDetection, endpointLbConfig, lbRegistry, prioritizedLocalityWeights,
-                    dropOverloads);
+                    dropOverloads, dynamic);
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityChildConfigs,
@@ -750,9 +769,10 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           String cluster, String dnsHostName,
           @Nullable Bootstrapper.ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable EnvoyServerProtoData.UpstreamTlsContext tlsContext,
-          Map<String, Struct> filterMetadata) {
+          Map<String, Struct> filterMetadata, StatusOr<EdsUpdate> endpointConfig) {
         return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, dnsHostName,
-            lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null, null);
+            lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null,
+            endpointConfig);
       }
 
       @Override
@@ -888,7 +908,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                     clusterState.result.lrsServerInfo(),
                     clusterState.result.maxConcurrentRequests(),
                     clusterState.result.upstreamTlsContext(),
-                    clusterState.result.filterMetadata());
+                    clusterState.result.filterMetadata(),
+                    clusterState.getEndpointConfigStatusOr());
               }
               instances.add(instance);
             }
@@ -1015,6 +1036,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           XdsClusterConfig config = configOr.getValue();
           this.result = config.getClusterResource();
           this.isLeaf = result.clusterType() != ClusterType.AGGREGATE;
+
           if (isLeaf && config.getChildren() != null) {
             // We should only see leaf clusters here.
             assert config.getChildren() instanceof XdsClusterConfig.EndpointConfig;

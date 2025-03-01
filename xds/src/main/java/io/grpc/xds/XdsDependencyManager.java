@@ -315,8 +315,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     // Check for unresolved logical clusters
-    if (resourceWatchers.get(XdsClusterResource.getInstance()).watchers.values().stream()
-        .filter(watcher -> watcher.hasDataValue())
+    TypeWatchers<?> rawClusterWatchers = resourceWatchers.get(XdsClusterResource.getInstance());
+    if (rawClusterWatchers != null && rawClusterWatchers.watchers.values().stream()
+        .filter(XdsWatcherBase::hasDataValue)
         .map(watcher -> (CdsWatcher) watcher)
         .filter(watcher -> watcher.getData().getValue().clusterType() == ClusterType.LOGICAL_DNS)
         .anyMatch(watcher -> !watcher.clusterState.resolved)) {
