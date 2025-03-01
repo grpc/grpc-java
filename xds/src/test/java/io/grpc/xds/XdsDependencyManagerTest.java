@@ -61,6 +61,7 @@ import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
@@ -241,14 +242,14 @@ public class XdsDependencyManagerTest {
         testWatcher.lastConfig.getClusters();
     assertThat(lastConfigClusters).hasSize(childNames.size() + 1);
     StatusOr<XdsClusterConfig> rootC = lastConfigClusters.get(rootName);
-    XdsClusterResource.CdsUpdate rootUpdate = rootC.getValue().getClusterResource();
+    CdsUpdate rootUpdate = rootC.getValue().getClusterResource();
     assertThat(rootUpdate.clusterType()).isEqualTo(AGGREGATE);
     assertThat(rootUpdate.prioritizedClusterNames()).isEqualTo(childNames);
 
     for (String childName : childNames) {
       assertThat(lastConfigClusters).containsKey(childName);
       StatusOr<XdsClusterConfig> childConfigOr = lastConfigClusters.get(childName);
-      XdsClusterResource.CdsUpdate childResource =
+      CdsUpdate childResource =
           childConfigOr.getValue().getClusterResource();
       assertThat(childResource.clusterType()).isEqualTo(EDS);
       assertThat(childResource.edsServiceName()).isEqualTo(getEdsNameForCluster(childName));
@@ -332,6 +333,7 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
+  // TODO fix - clusters with bad status are being suppressed instead of returned
   public void testMissingCdsAndEds() {
     // update config so that agg cluster references 2 existing & 1 non-existing cluster
     List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
@@ -467,7 +469,8 @@ public class XdsDependencyManagerTest {
     String ldsResourceName =
         "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
+    FakeXdsClient fakeXdsClient = new FakeXdsClient();
+    xdsDependencyManager = new XdsDependencyManager(fakeXdsClient, xdsConfigWatcher, syncContext,
         serverName, serverName, nameResolverArgs, scheduler);
 
     Status expectedStatus = Status.INVALID_ARGUMENT.withDescription(
@@ -842,12 +845,12 @@ public class XdsDependencyManagerTest {
   }
 
   /**
-   * A fake XdsClient that can be used to send errors to the dependency manager
+   * A fake XdsClient that can be used to send errors to the dependency manager.
    */
   private class FakeXdsClient extends XdsClient {
     private ResourceWatcher<LdsUpdate> ldsWatcher;
     private ResourceWatcher<XdsRouteConfigureResource.RdsUpdate> rdsWatcher;
-    private final Map<String, List<ResourceWatcher<XdsClusterResource.CdsUpdate>>> cdsWatchers = new HashMap<>();
+    private final Map<String, List<ResourceWatcher<CdsUpdate>>> cdsWatchers = new HashMap<>();
     private final Map<String, List<ResourceWatcher<EdsUpdate>>> edsWatchers = new HashMap<>();
 
     private void deliverCdsResourceNotExist(String clusterName) {
@@ -884,7 +887,7 @@ public class XdsDependencyManagerTest {
             try {
               XdsConfig defaultConfig = XdsTestUtils.getDefaultXdsConfig(serverName);
               ldsWatcher.onChanged(defaultConfig.getListener());
-            } catch (XdsResourceType.ResourceInvalidException| IOException e) {
+            } catch (XdsResourceType.ResourceInvalidException | IOException e) {
               throw new RuntimeException(e);
             }
           });
@@ -895,13 +898,13 @@ public class XdsDependencyManagerTest {
           try {
             XdsConfig defaultConfig = XdsTestUtils.getDefaultXdsConfig(serverName);
             rdsWatcher.onChanged(defaultConfig.getRoute());
-          } catch (XdsResourceType.ResourceInvalidException| IOException e) {
+          } catch (XdsResourceType.ResourceInvalidException | IOException e) {
             throw new RuntimeException(e);
           }
           break;
         case "CDS":
           cdsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
-              .add((ResourceWatcher<XdsClusterResource.CdsUpdate>) watcher);
+              .add((ResourceWatcher<CdsUpdate>) watcher);
           break;
         case "EDS":
           edsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
@@ -928,7 +931,7 @@ public class XdsDependencyManagerTest {
         case "CDS":
           assertThat(cdsWatchers).containsKey(resourceName);
           assertThat(cdsWatchers.get(resourceName)).contains(watcher);
-          cdsWatchers.get(resourceName).remove((ResourceWatcher<XdsClusterResource.CdsUpdate>) watcher);
+          cdsWatchers.get(resourceName).remove((ResourceWatcher<CdsUpdate>) watcher);
           break;
         case "EDS":
           assertThat(edsWatchers).containsKey(resourceName);
