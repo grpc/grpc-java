@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -38,6 +39,7 @@ import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsResourceType;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -45,7 +47,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
 /**
@@ -174,12 +179,18 @@ public class XdsServerTestHelper {
     }
   }
 
+  // Implementation details:
+  // 1. Use `synchronized` in methods where XdsClientImpl uses its own `syncContext`.
+  // 2. Use `serverExecutor` via `execute()` in methods where XdsClientImpl uses watcher's executor.
   static final class FakeXdsClient extends XdsClient {
-    boolean shutdown;
-    SettableFuture<String> ldsResource = SettableFuture.create();
-    ResourceWatcher<LdsUpdate> ldsWatcher;
-    CountDownLatch rdsCount = new CountDownLatch(1);
+    public static final Duration WAIT_TIMEOUT = Duration.ofSeconds(5);
+
+    private boolean shutdown;
+    @Nullable SettableFuture<String> ldsResource = SettableFuture.create();
+    @Nullable ResourceWatcher<LdsUpdate> ldsWatcher;
+    private volatile CountDownLatch rdsCount = new CountDownLatch(1);
     final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
+    @Nullable private volatile SynchronizationContext serverExecutor;
 
     @Override
     public TlsContextManager getSecurityConfig() {
@@ -193,14 +204,21 @@ public class XdsServerTestHelper {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-                                                            String resourceName,
-                                                            ResourceWatcher<T> watcher,
-                                                            Executor syncContext) {
+     public synchronized <T extends ResourceUpdate> void watchXdsResource(
+        XdsResourceType<T> resourceType,
+        String resourceName,
+        ResourceWatcher<T> watcher,
+        Executor executor) {
+      SynchronizationContext newSyncContext = (SynchronizationContext) executor;
+      if (serverExecutor != null) {
+        assertThat(newSyncContext).isEqualTo(serverExecutor);
+      }
+
       switch (resourceType.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNull();
           ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
+          serverExecutor = newSyncContext;
           ldsResource.set(resourceName);
           break;
         case "RDS":
@@ -213,14 +231,14 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-        String resourceName,
-        ResourceWatcher<T> watcher) {
+    public synchronized <T extends ResourceUpdate>  void cancelXdsResourceWatch(
+        XdsResourceType<T> type, String resourceName, ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNotNull();
           ldsResource = null;
           ldsWatcher = null;
+          serverExecutor = null;
           break;
         case "RDS":
           rdsWatchers.remove(resourceName);
@@ -230,27 +248,61 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    public void shutdown() {
+    public synchronized void shutdown() {
       shutdown = true;
     }
 
     @Override
-    public boolean isShutDown() {
+    public synchronized boolean isShutDown() {
       return shutdown;
+    }
+
+    public void awaitRds() throws InterruptedException, TimeoutException {
+      if (!rdsCount.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+        throw new TimeoutException("Timeout " + WAIT_TIMEOUT + " waiting for RDSs");
+      }
+    }
+
+    public void setExpectedRdsCount(int count) {
+      rdsCount = new CountDownLatch(count);
+    }
+
+    private void execute(Runnable action) {
+      // This method ensures that all watcher updates:
+      // - Happen after the server started watching LDS.
+      // - Are executed within the sync context of the server.
+      //
+      // Note that this doesn't guarantee that any of the RDS watchers are created.
+      // Tests should use setExpectedRdsCount(int) and awaitRds() for that.
+      if (ldsResource == null) {
+        throw new IllegalStateException("xDS resource update after watcher cancel");
+      }
+      try {
+        ldsResource.get(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+      } catch (ExecutionException | TimeoutException e) {
+        throw new RuntimeException("Can't resolve LDS resource name in " + WAIT_TIMEOUT, e);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException(e);
+      }
+      assertThat(serverExecutor).isNotNull();
+      serverExecutor.execute(action);
     }
 
     void deliverLdsUpdate(List<FilterChain> filterChains,
                           FilterChain defaultFilterChain) {
-      ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
-              "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+      execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
+            "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+      });
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
-      ldsWatcher.onChanged(ldsUpdate);
+      execute(() -> ldsWatcher.onChanged(ldsUpdate));
     }
 
-    void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
-      rdsWatchers.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
+    void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
+      execute(() -> rdsWatchers.get(resourceName).onChanged(new RdsUpdate(virtualHosts)));
     }
   }
 }
