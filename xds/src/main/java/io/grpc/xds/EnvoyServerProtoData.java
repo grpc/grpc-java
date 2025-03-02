@@ -21,13 +21,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -150,9 +150,9 @@ public final class EnvoyServerProtoData {
 
     abstract int prefixLen();
 
-    static CidrRange create(String addressPrefix, int prefixLen) throws UnknownHostException {
+    static CidrRange create(String addressPrefix, int prefixLen) throws IllegalArgumentException {
       return new AutoValue_EnvoyServerProtoData_CidrRange(
-          InetAddress.getByName(addressPrefix), prefixLen);
+          InetAddresses.forString(addressPrefix), prefixLen);
     }
   }
 

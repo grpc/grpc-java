@@ -43,7 +43,6 @@ import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.XdsResourceType;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -453,7 +452,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
         sourcePrefixRanges.add(
             CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
       }
-    } catch (UnknownHostException e) {
+    } catch (IllegalArgumentException e) {
       throw new ResourceInvalidException("Failed to create CidrRange", e);
     }
     ConnectionSourceType sourceType;
