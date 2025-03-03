@@ -23,7 +23,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -183,14 +182,14 @@ public class XdsServerTestHelper {
   // 1. Use `synchronized` in methods where XdsClientImpl uses its own `syncContext`.
   // 2. Use `serverExecutor` via `execute()` in methods where XdsClientImpl uses watcher's executor.
   static final class FakeXdsClient extends XdsClient {
-    public static final Duration WAIT_TIMEOUT = Duration.ofSeconds(5);
+    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
 
     private boolean shutdown;
     @Nullable SettableFuture<String> ldsResource = SettableFuture.create();
     @Nullable ResourceWatcher<LdsUpdate> ldsWatcher;
-    private volatile CountDownLatch rdsCount = new CountDownLatch(1);
+    private CountDownLatch rdsCount = new CountDownLatch(1);
     final Map<String, ResourceWatcher<RdsUpdate>> rdsWatchers = new HashMap<>();
-    @Nullable private volatile SynchronizationContext serverExecutor;
+    @Nullable private volatile Executor serverExecutor;
 
     @Override
     public TlsContextManager getSecurityConfig() {
@@ -204,21 +203,20 @@ public class XdsServerTestHelper {
 
     @Override
     @SuppressWarnings("unchecked")
-     public synchronized <T extends ResourceUpdate> void watchXdsResource(
+    public synchronized <T extends ResourceUpdate> void watchXdsResource(
         XdsResourceType<T> resourceType,
         String resourceName,
         ResourceWatcher<T> watcher,
         Executor executor) {
-      SynchronizationContext newSyncContext = (SynchronizationContext) executor;
       if (serverExecutor != null) {
-        assertThat(newSyncContext).isEqualTo(serverExecutor);
+        assertThat(executor).isEqualTo(serverExecutor);
       }
 
       switch (resourceType.typeName()) {
         case "LDS":
           assertThat(ldsWatcher).isNull();
           ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
-          serverExecutor = newSyncContext;
+          serverExecutor = executor;
           ldsResource.set(resourceName);
           break;
         case "RDS":
@@ -257,9 +255,9 @@ public class XdsServerTestHelper {
       return shutdown;
     }
 
-    public void awaitRds() throws InterruptedException, TimeoutException {
-      if (!rdsCount.await(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
-        throw new TimeoutException("Timeout " + WAIT_TIMEOUT + " waiting for RDSs");
+    public void awaitRds(Duration timeout) throws InterruptedException, TimeoutException {
+      if (!rdsCount.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+        throw new TimeoutException("Timeout " + timeout + " waiting for RDSs");
       }
     }
 
@@ -278,23 +276,20 @@ public class XdsServerTestHelper {
         throw new IllegalStateException("xDS resource update after watcher cancel");
       }
       try {
-        ldsResource.get(WAIT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        ldsResource.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
       } catch (ExecutionException | TimeoutException e) {
-        throw new RuntimeException("Can't resolve LDS resource name in " + WAIT_TIMEOUT, e);
+        throw new RuntimeException("Can't resolve LDS resource name in " + DEFAULT_TIMEOUT, e);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new RuntimeException(e);
       }
-      assertThat(serverExecutor).isNotNull();
       serverExecutor.execute(action);
     }
 
     void deliverLdsUpdate(List<FilterChain> filterChains,
                           FilterChain defaultFilterChain) {
-      execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
-            "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
-      });
+      deliverLdsUpdate(LdsUpdate.forTcpListener(Listener.create(
+          "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
