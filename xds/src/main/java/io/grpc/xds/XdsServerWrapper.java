@@ -524,9 +524,7 @@ final class XdsServerWrapper extends Server {
 
     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
         @Nullable List<NamedFilterConfig> filterConfigs, List<VirtualHost> virtualHosts) {
-      // This should always be called from the sync context.
-      // Ideally we'd want to throw otherwise, but this breaks the tests now.
-      // syncContext.throwIfNotInThisSynchronizationContext();
+      syncContext.throwIfNotInThisSynchronizationContext();
 
       ImmutableMap.Builder<Route, ServerInterceptor> perRouteInterceptors =
           new ImmutableMap.Builder<>();
