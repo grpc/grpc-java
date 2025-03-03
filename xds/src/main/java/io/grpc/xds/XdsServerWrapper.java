@@ -379,10 +379,7 @@ final class XdsServerWrapper extends Server {
       }
       logger.log(Level.FINEST, "Received Lds update {0}", update);
       if (update.listener() == null) {
-        StatusException exception = Status.NOT_FOUND.withDescription(
-            "No non-API Listener found").asException();
-        handleConfigNotFoundOrMismatch(exception);
-        initialStartFuture.set(exception);
+        onResourceDoesNotExist("Non-API");
         return;
       }
 
@@ -462,7 +459,7 @@ final class XdsServerWrapper extends Server {
         return;
       }
       StatusException statusException = Status.UNAVAILABLE.withDescription(
-          String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
+          String.format("%s listener unavailable, xDS node ID: %s", resourceName,
               xdsClient.getBootstrapInfo().node().getId())).asException();
       handleConfigNotFoundOrMismatch(statusException);
     }
