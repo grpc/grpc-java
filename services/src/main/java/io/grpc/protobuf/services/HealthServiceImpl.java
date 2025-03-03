@@ -176,7 +176,11 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
         watchers.get(service);
     if (serviceWatchers != null) {
       for (StreamObserver<HealthCheckResponse> responseObserver : serviceWatchers.keySet()) {
-        responseObserver.onNext(response);
+        try {
+          responseObserver.onNext(response);
+        } catch (Exception e) {
+          logger.log(Level.WARNING, String.format("Exception notify service %s", service), e);
+        }
       }
     }
   }
