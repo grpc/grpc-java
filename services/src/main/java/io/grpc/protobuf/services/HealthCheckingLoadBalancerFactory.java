@@ -187,6 +187,17 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      Map<String, ?> healthCheckingConfig =
+          resolvedAddresses
+              .getAttributes()
+              .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG);
+      String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(healthCheckingConfig);
+      helper.setHealthCheckedService(serviceName);
+      delegate.handleResolvedAddresses(resolvedAddresses);
+    }
+
+    @Override
     public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       Map<String, ?> healthCheckingConfig =
           resolvedAddresses
@@ -194,7 +205,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
               .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG);
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(healthCheckingConfig);
       helper.setHealthCheckedService(serviceName);
-      return super.acceptResolvedAddresses(resolvedAddresses);
+      return delegate.acceptResolvedAddresses(resolvedAddresses);
     }
 
     @Override
