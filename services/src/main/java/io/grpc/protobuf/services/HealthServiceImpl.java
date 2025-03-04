@@ -28,9 +28,11 @@ import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
 import io.grpc.stub.StreamObserver;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -166,6 +168,18 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
         return 0;
       }
       return serviceWatchers.size();
+    }
+  }
+
+  @VisibleForTesting
+  Set<StreamObserver<HealthCheckResponse>> watchersForTest(String service) {
+    synchronized (watchLock) {
+      IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
+              watchers.get(service);
+      if (serviceWatchers == null) {
+        return Collections.emptySet();
+      }
+      return serviceWatchers.keySet();
     }
   }
 
