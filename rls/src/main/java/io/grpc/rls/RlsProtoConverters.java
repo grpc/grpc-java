@@ -152,10 +152,15 @@ final class RlsProtoConverters {
         checkArgument(staleAge == null, "to specify staleAge, must have maxAge");
         maxAge = MAX_AGE_NANOS;
       }
-      if (staleAge == null) {
+      // If staleAge is not set, clamp maxAge to <= 5.
+      if (staleAge == null && maxAge > MAX_AGE_NANOS) {
+        maxAge = MAX_AGE_NANOS;
+      }
+      // Clamp staleAge to <= 5
+      if (staleAge == null || staleAge > MAX_AGE_NANOS) {
         staleAge = MAX_AGE_NANOS;
       }
-      maxAge = Math.min(maxAge, MAX_AGE_NANOS);
+      // Ignore staleAge if greater than maxAge.
       staleAge = Math.min(staleAge, maxAge);
       long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), MAX_CACHE_SIZE);
       checkArgument(cacheSize > 0, "cacheSize must be positive");

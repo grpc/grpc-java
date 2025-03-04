@@ -33,6 +33,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -97,6 +98,8 @@ public class PriorityLoadBalancerTest {
         public LoadBalancer newLoadBalancer(Helper helper) {
           fooHelpers.add(helper);
           LoadBalancer childBalancer = mock(LoadBalancer.class);
+          when(childBalancer.acceptResolvedAddresses(any(ResolvedAddresses.class)))
+              .thenReturn(Status.OK);
           fooBalancers.add(childBalancer);
           return childBalancer;
         }
@@ -107,6 +110,8 @@ public class PriorityLoadBalancerTest {
         @Override
         public LoadBalancer newLoadBalancer(Helper helper) {
           LoadBalancer childBalancer = mock(LoadBalancer.class);
+          when(childBalancer.acceptResolvedAddresses(any(ResolvedAddresses.class)))
+              .thenReturn(Status.OK);
           barBalancers.add(childBalancer);
           return childBalancer;
         }
@@ -141,7 +146,7 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
-  public void handleResolvedAddresses() {
+  public void acceptResolvedAddresses() {
     SocketAddress socketAddress = new InetSocketAddress(8080);
     EquivalentAddressGroup eag = new EquivalentAddressGroup(socketAddress);
     eag = AddressFilter.setPathFilter(eag, ImmutableList.of("p1"));
@@ -162,16 +167,17 @@ public class PriorityLoadBalancerTest {
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1,
                 "p2", priorityChildConfig2),
             ImmutableList.of("p0", "p1", "p2"));
-    priorityLb.handleResolvedAddresses(
+    Status status = priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(addresses)
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(priorityLbConfig)
             .build());
+    assertThat(status.getCode()).isEqualTo(Status.Code.OK);
     assertThat(fooBalancers).hasSize(1);
     assertThat(barBalancers).isEmpty();
     LoadBalancer fooBalancer0 = Iterables.getOnlyElement(fooBalancers);
-    verify(fooBalancer0).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(fooBalancer0).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
     ResolvedAddresses addressesReceived = resolvedAddressesCaptor.getValue();
     assertThat(addressesReceived.getAddresses()).isEmpty();
     assertThat(addressesReceived.getAttributes()).isEqualTo(attributes);
@@ -182,7 +188,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fooBalancers).hasSize(1);
     assertThat(barBalancers).hasSize(1);
     LoadBalancer barBalancer0 = Iterables.getOnlyElement(barBalancers);
-    verify(barBalancer0).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(barBalancer0).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
     addressesReceived = resolvedAddressesCaptor.getValue();
     assertThat(Iterables.getOnlyElement(addressesReceived.getAddresses()).getAddresses())
         .containsExactly(socketAddress);
@@ -194,7 +200,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fooBalancers).hasSize(2);
     assertThat(barBalancers).hasSize(1);
     LoadBalancer fooBalancer1 = Iterables.getLast(fooBalancers);
-    verify(fooBalancer1).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(fooBalancer1).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
     addressesReceived = resolvedAddressesCaptor.getValue();
     assertThat(addressesReceived.getAddresses()).isEmpty();
     assertThat(addressesReceived.getAttributes()).isEqualTo(attributes);
@@ -211,14 +217,15 @@ public class PriorityLoadBalancerTest {
             ImmutableMap.of("p1",
                 new PriorityChildConfig(newChildConfig(barLbProvider, newBarConfig), true)),
             ImmutableList.of("p1"));
-    priorityLb.handleResolvedAddresses(
+    status = priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(newAddresses)
             .setLoadBalancingPolicyConfig(newPriorityLbConfig)
             .build());
+    assertThat(status.getCode()).isEqualTo(Status.Code.OK);
     assertThat(fooBalancers).hasSize(2);
     assertThat(barBalancers).hasSize(1);
-    verify(barBalancer0, times(2)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(barBalancer0, times(2)).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
     addressesReceived = resolvedAddressesCaptor.getValue();
     assertThat(Iterables.getOnlyElement(addressesReceived.getAddresses()).getAddresses())
         .containsExactly(newSocketAddress);
@@ -233,6 +240,60 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void acceptResolvedAddresses_propagatesChildFailures() {
+    LoadBalancerProvider lbProvider = new CannedLoadBalancer.Provider();
+    CannedLoadBalancer.Config internalTf = new CannedLoadBalancer.Config(
+        Status.INTERNAL, TRANSIENT_FAILURE);
+    CannedLoadBalancer.Config okTf = new CannedLoadBalancer.Config(Status.OK, TRANSIENT_FAILURE);
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.of())
+        .setAttributes(Attributes.EMPTY)
+        .build();
+
+    // tryNewPriority() propagates status
+    Status status = priorityLb.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(new PriorityLbConfig(
+            ImmutableMap.of(
+                "p0", newPriorityChildConfig(lbProvider, internalTf, true)),
+            ImmutableList.of("p0")))
+          .build());
+    assertThat(status.getCode()).isNotEqualTo(Status.Code.OK);
+
+    // Updating a child propagates status
+    status = priorityLb.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(new PriorityLbConfig(
+            ImmutableMap.of(
+                "p0", newPriorityChildConfig(lbProvider, internalTf, true)),
+            ImmutableList.of("p0")))
+          .build());
+    assertThat(status.getCode()).isNotEqualTo(Status.Code.OK);
+
+    // A single pre-existing child failure propagates
+    status = priorityLb.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(new PriorityLbConfig(
+            ImmutableMap.of(
+                "p0", newPriorityChildConfig(lbProvider, okTf, true),
+                "p1", newPriorityChildConfig(lbProvider, okTf, true),
+                "p2", newPriorityChildConfig(lbProvider, okTf, true)),
+            ImmutableList.of("p0", "p1", "p2")))
+          .build());
+    assertThat(status.getCode()).isEqualTo(Status.Code.OK);
+    status = priorityLb.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(new PriorityLbConfig(
+            ImmutableMap.of(
+                "p0", newPriorityChildConfig(lbProvider, okTf, true),
+                "p1", newPriorityChildConfig(lbProvider, internalTf, true),
+                "p2", newPriorityChildConfig(lbProvider, okTf, true)),
+            ImmutableList.of("p0", "p1", "p2")))
+          .build());
+    assertThat(status.getCode()).isNotEqualTo(Status.Code.OK);
+  }
+
+  @Test
   public void handleNameResolutionError() {
     Object fooConfig0 = new Object();
     PriorityChildConfig priorityChildConfig0 =
@@ -243,7 +304,7 @@ public class PriorityLoadBalancerTest {
 
     PriorityLbConfig priorityLbConfig =
         new PriorityLbConfig(ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -255,7 +316,7 @@ public class PriorityLoadBalancerTest {
 
     priorityLbConfig =
         new PriorityLbConfig(ImmutableMap.of("p1", priorityChildConfig1), ImmutableList.of("p1"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -286,7 +347,7 @@ public class PriorityLoadBalancerTest {
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1,
                 "p2", priorityChildConfig2, "p3", priorityChildConfig3),
             ImmutableList.of("p0", "p1", "p2", "p3"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -419,7 +480,7 @@ public class PriorityLoadBalancerTest {
         new PriorityLbConfig(
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
             ImmutableList.of("p0", "p1"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -455,7 +516,7 @@ public class PriorityLoadBalancerTest {
         new PriorityLbConfig(
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
             ImmutableList.of("p0", "p1"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -497,7 +558,7 @@ public class PriorityLoadBalancerTest {
         new PriorityLbConfig(
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
             ImmutableList.of("p0", "p1"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -530,7 +591,7 @@ public class PriorityLoadBalancerTest {
 
     // resolution update without priority change does not trigger failover
     Attributes.Key<String> fooKey = Attributes.Key.create("fooKey");
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -559,7 +620,7 @@ public class PriorityLoadBalancerTest {
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1,
                 "p2", priorityChildConfig2, "p3", priorityChildConfig3),
             ImmutableList.of("p0", "p1", "p2", "p3"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -653,6 +714,55 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void failover_propagatesChildFailures() {
+    LoadBalancerProvider lbProvider = new CannedLoadBalancer.Provider();
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.of())
+        .setAttributes(Attributes.EMPTY)
+        .build();
+
+    Status status = priorityLb.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(new PriorityLbConfig(
+            ImmutableMap.of(
+                "p0", newPriorityChildConfig(
+                    lbProvider, new CannedLoadBalancer.Config(Status.OK, TRANSIENT_FAILURE), true),
+                "p1", newPriorityChildConfig(
+                    lbProvider, new CannedLoadBalancer.Config(Status.INTERNAL, CONNECTING), true)),
+            ImmutableList.of("p0", "p1")))
+          .build());
+    // Since P1's activation wasn't noticed by the result status, it triggered name resolution
+    assertThat(status.getCode()).isEqualTo(Status.Code.OK);
+    verify(helper).refreshNameResolution();
+  }
+
+  @Test
+  public void failoverTimer_propagatesChildFailures() {
+    LoadBalancerProvider lbProvider = new CannedLoadBalancer.Provider();
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.of())
+        .setAttributes(Attributes.EMPTY)
+        .build();
+
+    Status status = priorityLb.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(new PriorityLbConfig(
+            ImmutableMap.of(
+                "p0", newPriorityChildConfig(
+                    lbProvider, new CannedLoadBalancer.Config(Status.OK, CONNECTING), true),
+                "p1", newPriorityChildConfig(
+                    lbProvider, new CannedLoadBalancer.Config(Status.INTERNAL, CONNECTING), true)),
+            ImmutableList.of("p0", "p1")))
+          .build());
+    assertThat(status.getCode()).isEqualTo(Status.Code.OK);
+
+    // P1's activation will refresh name resolution
+    verify(helper, never()).refreshNameResolution();
+    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    verify(helper).refreshNameResolution();
+  }
+
+  @Test
   public void bypassReresolutionRequestsIfConfiged() {
     PriorityChildConfig priorityChildConfig0 =
         new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
@@ -662,7 +772,7 @@ public class PriorityLoadBalancerTest {
         new PriorityLbConfig(
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
             ImmutableList.of("p0", "p1"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -690,7 +800,7 @@ public class PriorityLoadBalancerTest {
         new PriorityLbConfig(
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
             ImmutableList.of("p0", "p1"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -717,7 +827,7 @@ public class PriorityLoadBalancerTest {
         new PriorityLbConfig(
             ImmutableMap.of("p0", priorityChildConfig0),
             ImmutableList.of("p0"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -727,7 +837,7 @@ public class PriorityLoadBalancerTest {
         new PriorityLbConfig(
             ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
             ImmutableList.of("p0", "p1"));
-    priorityLb.handleResolvedAddresses(
+    priorityLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
@@ -769,6 +879,11 @@ public class PriorityLoadBalancerTest {
     return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
   }
 
+  private PriorityChildConfig newPriorityChildConfig(
+      LoadBalancerProvider provider, Object config, boolean ignoreRefresh) {
+    return new PriorityChildConfig(newChildConfig(provider, config), ignoreRefresh);
+  }
+
   private static class FakeLoadBalancerProvider extends LoadBalancerProvider {
 
     @Override
@@ -801,9 +916,10 @@ public class PriorityLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       helper.updateBalancingState(
           TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
+      return Status.OK;
     }
 
     @Override
@@ -812,6 +928,49 @@ public class PriorityLoadBalancerTest {
 
     @Override
     public void shutdown() {
+    }
+  }
+
+  static final class CannedLoadBalancer extends LoadBalancer {
+    private final Helper helper;
+
+    private CannedLoadBalancer(Helper helper) {
+      this.helper = helper;
+    }
+
+    @Override
+    public Status acceptResolvedAddresses(ResolvedAddresses addresses) {
+      Config config = (Config) addresses.getLoadBalancingPolicyConfig();
+      helper.updateBalancingState(
+          config.state, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
+      return config.resolvedAddressesResult;
+    }
+
+    @Override
+    public void handleNameResolutionError(Status status) {}
+
+    @Override
+    public void shutdown() {}
+
+    static final class Provider extends StandardLoadBalancerProvider {
+      public Provider() {
+        super("echo");
+      }
+
+      @Override
+      public LoadBalancer newLoadBalancer(Helper helper) {
+        return new CannedLoadBalancer(helper);
+      }
+    }
+
+    static final class Config {
+      final Status resolvedAddressesResult;
+      final ConnectivityState state;
+
+      public Config(Status resolvedAddressesResult, ConnectivityState state) {
+        this.resolvedAddressesResult = resolvedAddressesResult;
+        this.state = state;
+      }
     }
   }
 }
