@@ -25,6 +25,7 @@ import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -445,12 +446,14 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     try {
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
         prefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+            CidrRange.create(InetAddresses.forString(range.getAddressPrefix()),
+                range.getPrefixLen().getValue()));
       }
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range
           : proto.getSourcePrefixRangesList()) {
         sourcePrefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+            CidrRange.create(InetAddresses.forString(range.getAddressPrefix()),
+                range.getPrefixLen().getValue()));
       }
     } catch (IllegalArgumentException e) {
       throw new ResourceInvalidException("Failed to create CidrRange", e);

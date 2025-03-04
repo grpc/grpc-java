@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.net.InetAddresses;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
@@ -150,9 +149,9 @@ public final class EnvoyServerProtoData {
 
     abstract int prefixLen();
 
-    static CidrRange create(String addressPrefix, int prefixLen) throws IllegalArgumentException {
+    static CidrRange create(InetAddress addressPrefix, int prefixLen) {
       return new AutoValue_EnvoyServerProtoData_CidrRange(
-          InetAddresses.forString(addressPrefix), prefixLen);
+          addressPrefix, prefixLen);
     }
   }
 
