@@ -19,7 +19,6 @@ package io.grpc.xds;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import io.envoyproxy.envoy.config.core.v3.Metadata;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser;
@@ -72,21 +71,26 @@ final class MetadataRegistry {
    *
    * @param metadata the {@link Metadata} containing the fields to parse.
    * @return an immutable map of parsed metadata.
-   * @throws InvalidProtocolBufferException if parsing {@code typed_filter_metadata} fails.
+   * @throws ResourceInvalidException if parsing {@code typed_filter_metadata} fails.
    */
-  public static ImmutableMap<String, Object> parseMetadata(Metadata metadata)
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public ImmutableMap<String, Object> parseMetadata(Metadata metadata)
+      throws ResourceInvalidException {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
 
-    MetadataRegistry registry = MetadataRegistry.getInstance();
     // Process typed_filter_metadata
     for (Map.Entry<String, Any> entry : metadata.getTypedFilterMetadataMap().entrySet()) {
       String key = entry.getKey();
       Any value = entry.getValue();
-      MetadataValueParser parser = registry.findParser(value.getTypeUrl());
+      MetadataValueParser parser = INSTANCE.findParser(value.getTypeUrl());
       if (parser != null) {
-        Object parsedValue = parser.parse(value);
-        parsedMetadata.put(key, parsedValue);
+        try {
+          Object parsedValue = parser.parse(value);
+          parsedMetadata.put(key, parsedValue);
+        } catch (ResourceInvalidException e) {
+          throw new ResourceInvalidException(
+              String.format("Failed to parse metadata key: %s, type: %s. Error: %s",
+                  key, value.getTypeUrl(), e.getMessage()), e);
+        }
       }
     }
     // building once to reuse in the next loop

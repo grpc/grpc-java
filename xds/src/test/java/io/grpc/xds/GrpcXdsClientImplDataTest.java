@@ -2466,9 +2466,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void processCluster_parsesAddressMetadata()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
-    MetadataRegistry.getInstance();
+  public void processCluster_parsesAddressMetadata() throws Exception {
 
     // Create an Address message
     Address address = Address.newBuilder()

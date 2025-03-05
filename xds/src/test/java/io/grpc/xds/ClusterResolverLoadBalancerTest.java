@@ -242,7 +242,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsClustersWithRingHashEndpointLbPolicy() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanism1), ringHash);
+        Collections.singletonList(edsDiscoveryMechanism1), ringHash, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
@@ -308,7 +308,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsClustersWithLeastRequestEndpointLbPolicy() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanism1), leastRequest);
+        Collections.singletonList(edsDiscoveryMechanism1), leastRequest, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
@@ -355,7 +355,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsClustersEndpointHostname_addedToAddressAttribute() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest);
+        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
@@ -380,20 +380,18 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  @SuppressWarnings("AddressSelection")
   public void endpointAddressRewritten_whenProxyMetadataIsInEndpointMetadata() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest);
+        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest, true);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
 
-    // Create a fake address for the endpoint
     EquivalentAddressGroup endpoint =
-        new EquivalentAddressGroup(new InetSocketAddress("endpoint-addr-1", 80));
+        new EquivalentAddressGroup(InetSocketAddress.createUnresolved("127.0.0.1", 8080));
 
     // Proxy address in endpointMetadata (use FakeSocketAddress directly)
-    SocketAddress proxyAddress = new FakeSocketAddress("proxy-addr");
+    SocketAddress proxyAddress = new FakeSocketAddress("127.0.0.2");
     ImmutableMap<String, Object> endpointMetadata =
         ImmutableMap.of("envoy.http11_proxy_transport_socket.proxy_address", proxyAddress);
 
@@ -416,7 +414,6 @@ public class ClusterResolverLoadBalancerTest {
     // Get the rewritten address
     SocketAddress rewrittenAddress =
         childBalancer.addresses.get(0).getAddresses().get(0);
-    System.out.println("Hi, it's Shiva");
     System.out.println(rewrittenAddress);
     assertThat(rewrittenAddress).isInstanceOf(HttpConnectProxiedSocketAddress.class);
     HttpConnectProxiedSocketAddress proxiedSocket =
@@ -424,24 +421,22 @@ public class ClusterResolverLoadBalancerTest {
 
     // Assert that the target address is the original address
     assertThat(proxiedSocket.getTargetAddress())
-        .isEqualTo(new InetSocketAddress("endpoint-addr-1", 80));
+        .isEqualTo(endpoint.getAddresses().get(0));
 
     // Assert that the proxy address is correctly set
     assertThat(proxiedSocket.getProxyAddress()).isEqualTo(proxyAddress);
   }
 
   @Test
-  @SuppressWarnings("AddressSelection")
   public void endpointAddressRewritten_whenProxyMetadataIsInLocalityMetadata() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest);
+        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest, true);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
 
-    // Create a fake address for the endpoint
     EquivalentAddressGroup endpoint =
-        new EquivalentAddressGroup(new InetSocketAddress("endpoint-addr-2", 80));
+        new EquivalentAddressGroup(InetSocketAddress.createUnresolved("127.0.0.2", 8080));
 
     // No proxy in endpointMetadata
     ImmutableMap<String, Object> endpointMetadata = ImmutableMap.of();
@@ -465,9 +460,7 @@ public class ClusterResolverLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
 
     // Get the rewritten address
-    SocketAddress rewrittenAddress =
-        childBalancer.addresses.get(0).getAddresses().get(0);
-    System.out.println("Hi, it's Shiva");
+    SocketAddress rewrittenAddress = childBalancer.addresses.get(0).getAddresses().get(0);
     System.out.println(rewrittenAddress);
 
     // Assert that the address was rewritten
@@ -476,8 +469,7 @@ public class ClusterResolverLoadBalancerTest {
         (HttpConnectProxiedSocketAddress) rewrittenAddress;
 
     // Assert that the target address is the original address
-    assertThat(proxiedSocket.getTargetAddress())
-        .isEqualTo(new InetSocketAddress("endpoint-addr-2", 80));
+    assertThat(proxiedSocket.getTargetAddress()).isEqualTo(endpoint.getAddresses().get(0));
 
     // Assert that the proxy address is correctly set from locality metadata
     assertThat(proxiedSocket.getProxyAddress()).isEqualTo(proxyAddress);
@@ -486,7 +478,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void onlyEdsClusters_receivedEndpoints() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1, EDS_SERVICE_NAME2);
     assertThat(childBalancers).isEmpty();
@@ -602,7 +594,7 @@ public class ClusterResolverLoadBalancerTest {
   private void verifyEdsPriorityNames(List<String> want,
                                       Map<Locality, LocalityLbEndpoints>... updates) {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism2), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism2), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME2);
     assertThat(childBalancers).isEmpty();
@@ -678,7 +670,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void onlyEdsClusters_resourceNeverExist_returnErrorPicker() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1, EDS_SERVICE_NAME2);
     assertThat(childBalancers).isEmpty();
@@ -700,7 +692,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void onlyEdsClusters_allResourcesRevoked_shutDownChildLbPolicy() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1, EDS_SERVICE_NAME2);
     assertThat(childBalancers).isEmpty();
@@ -737,8 +729,8 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void handleEdsResource_ignoreUnhealthyEndpoints() {
-    ClusterResolverConfig config =
-        new ClusterResolverConfig(Collections.singletonList(edsDiscoveryMechanism1), roundRobin);
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanism1), roundRobin, false);
     deliverLbConfig(config);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
@@ -759,8 +751,8 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void handleEdsResource_ignoreLocalitiesWithNoHealthyEndpoints() {
-    ClusterResolverConfig config =
-        new ClusterResolverConfig(Collections.singletonList(edsDiscoveryMechanism1), roundRobin);
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanism1), roundRobin, false);
     deliverLbConfig(config);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
@@ -786,8 +778,8 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void handleEdsResource_ignorePrioritiesWithNoHealthyEndpoints() {
-    ClusterResolverConfig config =
-        new ClusterResolverConfig(Collections.singletonList(edsDiscoveryMechanism1), roundRobin);
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanism1), roundRobin, false);
     deliverLbConfig(config);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
@@ -812,8 +804,8 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void handleEdsResource_noHealthyEndpoint() {
-    ClusterResolverConfig config =
-        new ClusterResolverConfig(Collections.singletonList(edsDiscoveryMechanism1), roundRobin);
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanism1), roundRobin, false);
     deliverLbConfig(config);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints =
@@ -837,7 +829,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void onlyLogicalDnsCluster_endpointsResolved() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin);
+        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
     assertThat(childBalancers).isEmpty();
@@ -870,7 +862,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void onlyLogicalDnsCluster_handleRefreshNameResolution() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin);
+        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
     assertThat(childBalancers).isEmpty();
@@ -888,7 +880,7 @@ public class ClusterResolverLoadBalancerTest {
     InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
         backoffPolicy1, backoffPolicy2);
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin);
+        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
     assertThat(childBalancers).isEmpty();
@@ -934,7 +926,7 @@ public class ClusterResolverLoadBalancerTest {
   public void onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError() {
     InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin);
+        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
     assertThat(childBalancers).isEmpty();
@@ -972,7 +964,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsClustersAndLogicalDnsCluster_receivedEndpoints() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
@@ -1008,7 +1000,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void noEdsResourceExists_useDnsResolutionResults() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
@@ -1032,7 +1024,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsResourceRevoked_dnsResolutionError_shutDownChildLbPolicyAndReturnErrorPicker() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
@@ -1064,7 +1056,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void resolutionErrorAfterChildLbCreated_propagateErrorIfAllClustersEncounterError() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
@@ -1100,7 +1092,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void resolutionErrorBeforeChildLbCreated_returnErrorPickerIfAllClustersEncounterError() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
@@ -1123,7 +1115,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void resolutionErrorBeforeChildLbCreated_edsOnly_returnErrorPicker() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
@@ -1141,7 +1133,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void handleNameResolutionErrorFromUpstream_beforeChildLbCreated_returnErrorPicker() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertResolverCreated("/" + DNS_HOST_NAME);
@@ -1157,7 +1149,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void handleNameResolutionErrorFromUpstream_afterChildLbCreated_fallThrough() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
+        Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);

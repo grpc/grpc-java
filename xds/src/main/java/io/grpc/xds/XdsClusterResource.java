@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.MetadataRegistry.parseMetadata;
 import static io.grpc.xds.client.Bootstrapper.ServerInfo;
 
 import com.google.auto.value.AutoValue;
@@ -180,9 +179,11 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         ImmutableMap.copyOf(cluster.getMetadata().getFilterMetadataMap()));
 
     try {
-      ImmutableMap<String, Object> parsedFilterMetadata = parseMetadata(cluster.getMetadata());
+      MetadataRegistry registry = MetadataRegistry.getInstance();
+      ImmutableMap<String, Object> parsedFilterMetadata =
+          registry.parseMetadata(cluster.getMetadata());
       updateBuilder.parsedMetadata(parsedFilterMetadata);
-    } catch (InvalidProtocolBufferException e) {
+    } catch (ResourceInvalidException e) {
       throw new ResourceInvalidException(
           "Failed to parse xDS filter metadata for cluster '" + cluster.getName() + "': "
               + e.getMessage(), e);

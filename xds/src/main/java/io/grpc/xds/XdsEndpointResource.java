@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.MetadataRegistry.parseMetadata;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -204,8 +203,9 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
 
     ImmutableMap<String, Object> localityMetadata;
     try {
-      localityMetadata = parseMetadata(proto.getMetadata());
-    } catch (InvalidProtocolBufferException e) {
+      MetadataRegistry registry = MetadataRegistry.getInstance();
+      localityMetadata = registry.parseMetadata(proto.getMetadata());
+    } catch (ResourceInvalidException e) {
       throw new ResourceInvalidException("Failed to parse Locality Endpoint metadata: "
           + e.getMessage(), e);
     }
@@ -218,8 +218,9 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       }
       ImmutableMap<String, Object> endpointMetadata;
       try {
-        endpointMetadata = parseMetadata(endpoint.getMetadata());
-      } catch (InvalidProtocolBufferException e) {
+        MetadataRegistry registry = MetadataRegistry.getInstance();
+        endpointMetadata = registry.parseMetadata(endpoint.getMetadata());
+      } catch (ResourceInvalidException e) {
         throw new ResourceInvalidException("Failed to parse Endpoint metadata: "
             + e.getMessage(), e);
       }

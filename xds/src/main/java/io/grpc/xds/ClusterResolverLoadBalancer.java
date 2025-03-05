@@ -434,13 +434,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                           .set(XdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                           .build();
 
-                  List<SocketAddress> rewrittenAddresses = new ArrayList<>();
-                  for (SocketAddress addr : endpoint.eag().getAddresses()) {
-                    rewrittenAddresses.add(rewriteAddress(
-                        addr, endpoint.endpointMetadata(), localityLbInfo.localityMetadata()));
+                  EquivalentAddressGroup eag;
+                  if (config.isHttp11ProxyAvailable()) {
+                    List<SocketAddress> rewrittenAddresses = new ArrayList<>();
+                    for (SocketAddress addr : endpoint.eag().getAddresses()) {
+                      rewrittenAddresses.add(rewriteAddress(
+                          addr, endpoint.endpointMetadata(), localityLbInfo.localityMetadata()));
+                    }
+                    eag = new EquivalentAddressGroup(rewrittenAddresses, attr);
                   }
-                  EquivalentAddressGroup eag = new EquivalentAddressGroup(
-                      rewrittenAddresses, attr);
+                  else {
+                    eag = new EquivalentAddressGroup(endpoint.eag().getAddresses(), attr);
+                  }
                   eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
                   addresses.add(eag);
                 }
@@ -492,17 +497,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             proxyAddress = (SocketAddress) localityMetadata.get(
                 "envoy.http11_proxy_transport_socket.proxy_address");
           }
-        } catch (Exception e) {
+        } catch (ClassCastException e) {
           return addr;
         }
 
-        if (proxyAddress != null) {
-          return HttpConnectProxiedSocketAddress.newBuilder()
-              .setTargetAddress((InetSocketAddress) addr)
-              .setProxyAddress(proxyAddress)
-              .build();
+        if (proxyAddress == null) {
+          return addr;
         }
-        return addr;
+
+        return HttpConnectProxiedSocketAddress.newBuilder()
+            .setTargetAddress((InetSocketAddress) addr)
+            .setProxyAddress(proxyAddress)
+            .build();
       }
 
       private List<String> generatePriorityNames(String name,
