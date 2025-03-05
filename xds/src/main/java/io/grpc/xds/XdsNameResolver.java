@@ -727,16 +727,16 @@ final class XdsNameResolver extends NameResolver {
         String filterKey = namedFilter.filterStateKey();
 
         Filter.Provider provider = filterRegistry.get(typeUrl);
-        checkNotNull(provider, "provider " + typeUrl);
+        checkNotNull(provider, "provider %s", typeUrl);
         Filter filter = activeFilters.computeIfAbsent(filterKey, k -> provider.newInstance());
-        checkNotNull(filter, "filter " + filterKey);
+        checkNotNull(filter, "filter %s", filterKey);
         filtersToShutdown.remove(filterKey);
       }
 
       // Shutdown filters not present in current HCM.
       for (String filterKey : filtersToShutdown) {
         Filter filterToShutdown = activeFilters.remove(filterKey);
-        checkNotNull(filterToShutdown, "filterToShutdown " + filterKey);
+        checkNotNull(filterToShutdown, "filterToShutdown %s", filterKey);
         filterToShutdown.close();
       }
     }
@@ -874,9 +874,10 @@ final class XdsNameResolver extends NameResolver {
         String name = namedFilter.name;
         FilterConfig config = namedFilter.filterConfig;
         FilterConfig overrideConfig = selectedOverrideConfigs.get(name);
+        String filterKey = namedFilter.filterStateKey();
 
-        Filter filter = activeFilters.get(namedFilter.filterStateKey());
-        checkNotNull(filter, "activeFilters.get(" + namedFilter.filterStateKey() + ")");
+        Filter filter = activeFilters.get(filterKey);
+        checkNotNull(filter, "activeFilters.get(%s)", filterKey);
         ClientInterceptor interceptor =
             filter.buildClientInterceptor(config, overrideConfig, scheduler);
 

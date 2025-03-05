@@ -86,8 +86,6 @@ interface Filter extends Closeable {
      *   <li>FilterChain name,</li>
      *   <li>Filter name+typeUrl in FilterChain's HCM.http_filters.</li>
      * </ol>
-     *
-     * <p>See {@link Filter#close()} for details on filter instance shutdown.
      */
     Filter newInstance();
 
@@ -120,29 +118,10 @@ interface Filter extends Closeable {
   }
 
   /**
-   * Implement to perform cleanup on filter shutdown.
+   * Releases filter resources like shared resources and remote connections.
    *
    * <p>Stateful filters should implement this method to perform cleanup, f.e. release shared
    * resources, close remote connections, etc.
-   *
-   * <p>This method is called on the filter instance when an LDS update does not have
-   * the HttpConnectionManager that created the instance, or when HttpConnectionManager that created
-   * the instance no longer contains filter configuration for given name+typeUrl combination. More
-   * specifically:
-   *
-   * <p>Existing client-side filter instances are shutdown:
-   *   - A single a filter instance is shutdown when an LDS update contains HCM that is missing
-   *     filter configuration for name+typeUrl combination of this instance.
-   *   - All filter instances when watched LDS resource is missing from an LDS update.
-   *   - All filter instances name resolver shutdown.
-   *
-   * <p>Existing server-side filter instances are shutdown:
-   *   - A single a filter instance is shutdown when an LDS update contains FilterChain with
-   *     HCM.http_filters that is missing configuration for filter name+typeUrl.
-   *   - All filter instances associated with the FilterChain when an LDS update no longer
-   *     contains FilterChain's name.
-   *   - All filter instances when watched LDS resource is missing from an LDS update.
-   *   - All filter instances on server shutdown.
    *
    * <p>See {@link Provider#newInstance()} for details on filter instance creation.
    */

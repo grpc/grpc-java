@@ -523,7 +523,7 @@ final class XdsServerWrapper extends Server {
       // Shutdown all filters of chains missing from the LDS.
       for (String chainToShutdown : removedChains) {
         HashMap<String, Filter> filtersToShutdown = activeFilters.get(chainToShutdown);
-        checkNotNull(filtersToShutdown, "filtersToShutdown of " + chainToShutdown);
+        checkNotNull(filtersToShutdown, "filtersToShutdown of chain %s", chainToShutdown);
         updateActiveFiltersForChain(filtersToShutdown, null);
         activeFilters.remove(chainToShutdown);
       }
@@ -559,16 +559,16 @@ final class XdsServerWrapper extends Server {
         String filterKey = namedFilter.filterStateKey();
 
         Filter.Provider provider = filterRegistry.get(typeUrl);
-        checkNotNull(provider, "provider " + typeUrl);
+        checkNotNull(provider, "provider %s", typeUrl);
         Filter filter = chainFilters.computeIfAbsent(filterKey, k -> provider.newInstance());
-        checkNotNull(filter, "filter " + filterKey);
+        checkNotNull(filter, "filter %s", filterKey);
         filtersToShutdown.remove(filterKey);
       }
 
       // Shutdown filters not present in current HCM.
       for (String filterKey : filtersToShutdown) {
         Filter filterToShutdown = chainFilters.remove(filterKey);
-        checkNotNull(filterToShutdown, "filterToShutdown " + filterKey);
+        checkNotNull(filterToShutdown, "filterToShutdown %s", filterKey);
         filterToShutdown.close();
       }
     }
@@ -632,9 +632,10 @@ final class XdsServerWrapper extends Server {
             String name = namedFilter.name;
             FilterConfig config = namedFilter.filterConfig;
             FilterConfig overrideConfig = perRouteOverrides.get(name);
+            String filterKey = namedFilter.filterStateKey();
 
-            Filter filter = chainFilters.get(namedFilter.filterStateKey());
-            checkNotNull(filter, "chainFilters.get(" + namedFilter.filterStateKey() + ")");
+            Filter filter = chainFilters.get(filterKey);
+            checkNotNull(filter, "chainFilters.get(%s)", filterKey);
             ServerInterceptor interceptor = filter.buildServerInterceptor(config, overrideConfig);
 
             if (interceptor != null) {
