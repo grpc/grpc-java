@@ -443,16 +443,21 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       throws ResourceInvalidException {
     ImmutableList.Builder<CidrRange> prefixRanges = ImmutableList.builder();
     ImmutableList.Builder<CidrRange> sourcePrefixRanges = ImmutableList.builder();
-    for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
-      prefixRanges.add(
-          CidrRange.create(InetAddresses.forString(range.getAddressPrefix()),
-              range.getPrefixLen().getValue()));
+    try {
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
+        prefixRanges.add(
+            CidrRange.create(InetAddresses.forString(range.getAddressPrefix()),
+                range.getPrefixLen().getValue()));
+      }
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range
+          : proto.getSourcePrefixRangesList()) {
+        sourcePrefixRanges.add(CidrRange.create(
+            InetAddresses.forString(range.getAddressPrefix()), range.getPrefixLen().getValue()));
+      }
+    } catch (IllegalArgumentException ex) {
+      throw new ResourceInvalidException("Failed to create CidrRange", ex);
     }
-    for (io.envoyproxy.envoy.config.core.v3.CidrRange range
-        : proto.getSourcePrefixRangesList()) {
-      sourcePrefixRanges.add(CidrRange.create(
-          InetAddresses.forString(range.getAddressPrefix()), range.getPrefixLen().getValue()));
-    }
+
     ConnectionSourceType sourceType;
     switch (proto.getSourceType()) {
       case ANY:

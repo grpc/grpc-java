@@ -825,7 +825,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   @Test
-  public void sourcePrefixRange_2Matchers_expectException() {
+  public void sourcePrefixRange_2Matchers_expectException() throws IllegalArgumentException {
     ChannelHandler next = new ChannelInboundHandlerAdapter() {
       @Override
       public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
