@@ -527,14 +527,18 @@ final class XdsNameResolver extends NameResolver {
 
     private void releaseCluster(final String cluster) {
       int count = clusterRefs.get(cluster).refCount.decrementAndGet();
+      if (count < 0) {
+        throw new AssertionError();
+      }
       if (count == 0) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (clusterRefs.get(cluster).refCount.get() == 0) {
-              clusterRefs.remove(cluster);
-              updateResolutionResult();
+            if (clusterRefs.get(cluster).refCount.get() != 0) {
+              throw new AssertionError();
             }
+            clusterRefs.remove(cluster);
+            updateResolutionResult();
           }
         });
       }
