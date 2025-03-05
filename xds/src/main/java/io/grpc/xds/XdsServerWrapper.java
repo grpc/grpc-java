@@ -113,7 +113,7 @@ final class XdsServerWrapper extends Server {
   private DiscoveryState discoveryState;
   private volatile Server delegate;
 
-  // Must be updated in the sync context.
+  // Must be accessed in syncContext.
   // Filter instances are unique per Server, per FilterChain, and per filter's name+typeUrl.
   // FilterChain.name -> <NamedFilterConfig.filterStateKey -> filter_instance>.
   private final HashMap<String, HashMap<String, Filter>> activeFilters = new HashMap<>();

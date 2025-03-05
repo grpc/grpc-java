@@ -127,6 +127,7 @@ final class XdsNameResolver extends NameResolver {
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
   private final MetricRecorder metricRecorder;
+  // Must be accessed in syncContext.
   // Filter instances are unique per channel, and per filter (name+typeUrl).
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFilters = new HashMap<>();

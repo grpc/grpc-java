@@ -120,9 +120,6 @@ interface Filter extends Closeable {
   /**
    * Releases filter resources like shared resources and remote connections.
    *
-   * <p>Stateful filters should implement this method to perform cleanup, f.e. release shared
-   * resources, close remote connections, etc.
-   *
    * <p>See {@link Provider#newInstance()} for details on filter instance creation.
    */
   @Override
