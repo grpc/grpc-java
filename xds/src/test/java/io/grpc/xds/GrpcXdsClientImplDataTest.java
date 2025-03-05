@@ -2577,7 +2577,6 @@ public class GrpcXdsClientImplDataTest {
   @Test
   public void parseNonAggregateCluster_withHttp11ProxyTransportSocket()
       throws ResourceInvalidException, InvalidProtocolBufferException {
-    MetadataRegistry.getInstance();
     XdsClusterResource.isEnabledXdsHttpConnect = true;
 
     Http11ProxyUpstreamTransport http11ProxyUpstreamTransport =

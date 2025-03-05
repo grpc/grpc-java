@@ -414,7 +414,6 @@ public class ClusterResolverLoadBalancerTest {
     // Get the rewritten address
     SocketAddress rewrittenAddress =
         childBalancer.addresses.get(0).getAddresses().get(0);
-    System.out.println(rewrittenAddress);
     assertThat(rewrittenAddress).isInstanceOf(HttpConnectProxiedSocketAddress.class);
     HttpConnectProxiedSocketAddress proxiedSocket =
         (HttpConnectProxiedSocketAddress) rewrittenAddress;
@@ -461,7 +460,6 @@ public class ClusterResolverLoadBalancerTest {
 
     // Get the rewritten address
     SocketAddress rewrittenAddress = childBalancer.addresses.get(0).getAddresses().get(0);
-    System.out.println(rewrittenAddress);
 
     // Assert that the address was rewritten
     assertThat(rewrittenAddress).isInstanceOf(HttpConnectProxiedSocketAddress.class);

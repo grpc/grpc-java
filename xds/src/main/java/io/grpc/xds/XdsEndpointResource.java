@@ -202,8 +202,8 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
     }
 
     ImmutableMap<String, Object> localityMetadata;
+    MetadataRegistry registry = MetadataRegistry.getInstance();
     try {
-      MetadataRegistry registry = MetadataRegistry.getInstance();
       localityMetadata = registry.parseMetadata(proto.getMetadata());
     } catch (ResourceInvalidException e) {
       throw new ResourceInvalidException("Failed to parse Locality Endpoint metadata: "
@@ -218,7 +218,6 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
       }
       ImmutableMap<String, Object> endpointMetadata;
       try {
-        MetadataRegistry registry = MetadataRegistry.getInstance();
         endpointMetadata = registry.parseMetadata(endpoint.getMetadata());
       } catch (ResourceInvalidException e) {
         throw new ResourceInvalidException("Failed to parse Endpoint metadata: "

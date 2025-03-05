@@ -442,8 +442,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                           addr, endpoint.endpointMetadata(), localityLbInfo.localityMetadata()));
                     }
                     eag = new EquivalentAddressGroup(rewrittenAddresses, attr);
-                  }
-                  else {
+                  } else {
                     eag = new EquivalentAddressGroup(endpoint.eag().getAddresses(), attr);
                   }
                   eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
@@ -483,8 +482,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         new EndpointsUpdated().run();
       }
 
-      private SocketAddress rewriteAddress(SocketAddress addr, ImmutableMap<String,
-          Object> endpointMetadata, ImmutableMap<String, Object> localityMetadata) {
+      private SocketAddress rewriteAddress(SocketAddress addr,
+          ImmutableMap<String, Object> endpointMetadata,
+          ImmutableMap<String, Object> localityMetadata) {
         if (!(addr instanceof InetSocketAddress)) {
           return addr;
         }

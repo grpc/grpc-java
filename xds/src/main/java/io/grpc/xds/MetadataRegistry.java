@@ -81,7 +81,7 @@ final class MetadataRegistry {
     for (Map.Entry<String, Any> entry : metadata.getTypedFilterMetadataMap().entrySet()) {
       String key = entry.getKey();
       Any value = entry.getValue();
-      MetadataValueParser parser = INSTANCE.findParser(value.getTypeUrl());
+      MetadataValueParser parser = findParser(value.getTypeUrl());
       if (parser != null) {
         try {
           Object parsedValue = parser.parse(value);
