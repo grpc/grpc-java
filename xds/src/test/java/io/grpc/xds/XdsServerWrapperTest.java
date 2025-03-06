@@ -35,6 +35,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InsecureChannelCredentials;
@@ -74,7 +75,7 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
-import java.net.UnknownHostException;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1824,19 +1825,13 @@ public class XdsServerWrapperTest {
 
   private static FilterChainMatch createMatchSrcIp(String srcCidr) {
     String[] srcParts = srcCidr.split("/", 2);
-    CidrRange srcIpRange = null;
-    try {
-      srcIpRange = CidrRange.create(srcParts[0], Integer.valueOf(srcParts[1], 10));
-    } catch (UnknownHostException e) {
-      // see https://github.com/grpc/grpc-java/issues/11926
-      throw new IllegalArgumentException("This just seems wrong", e);
-    }
-
+    InetAddress ip = InetAddresses.forString(srcParts[0]);
+    Integer subnetMask = Integer.valueOf(srcParts[1], 10);
     return FilterChainMatch.create(
         0,
         ImmutableList.of(),
         ImmutableList.of(),
-        ImmutableList.of(srcIpRange),
+        ImmutableList.of(CidrRange.create(ip, subnetMask)),
         EnvoyServerProtoData.ConnectionSourceType.ANY,
         ImmutableList.of(),
         ImmutableList.of(),
