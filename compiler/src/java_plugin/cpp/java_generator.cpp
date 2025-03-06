@@ -1201,7 +1201,7 @@ static void PrintService(const ServiceDescriptor* service,
     p->Print(
         *vars,
         "@javax.annotation.Generated(\n"
-        "    value = \"by gRPC proto compiler$grpc_version$\",\n"
+        "    value = \"by gRPC proto  compiler$grpc_version$\",\n"
         "    comments = \"Source: $file_name$\")\n"
         "@$GrpcGenerated$\n");
   } else { // GeneratedAnnotation::OMIT
