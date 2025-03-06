@@ -25,6 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.net.HostAndPort;
+import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
@@ -59,6 +60,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -435,22 +437,16 @@ final class XdsServerWrapper extends Server {
     }
 
     private boolean ipAddressesMatch(String ldsAddress) {
-      String listenerAddressHost = getHost(listenerAddress);
-      String ldsAddressHost = getHost(ldsAddress);
+      HostAndPort ldsAddressHnP = HostAndPort.fromString(ldsAddress);
+      HostAndPort listenerAddressHnP = HostAndPort.fromString(listenerAddress);
 
-      if (isWildcard(listenerAddressHost)) {
+      InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
+      InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
+
+      if (listenerIp.isAnyLocalAddress()) {
         return true;
       }
-      return listenerAddressHost.equals(ldsAddressHost);
-    }
-
-    private String getHost(String address) {
-      return HostAndPort.fromString(address).getHost();
-    }
-
-    private boolean isWildcard(String host) {
-      return host.equals("0.0.0.0") || host.equals("::0") || host.equals("0:0:0:0:0:0:0:0")
-          || host.equals("::") || host.equals("::/128");
+      return listenerIp.equals(ldsIp) && ldsAddressHnP.getPort() == listenerAddressHnP.getPort();
     }
 
     @Override

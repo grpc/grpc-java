@@ -51,6 +51,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
@@ -58,6 +59,7 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
@@ -559,7 +561,10 @@ public class XdsServerWrapperTest {
         "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
         mock(TlsContextManager.class));
 
-    xdsClient.deliverLdsUpdate2(Collections.singletonList(filterChain), null);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(
+        Listener.create("listener", "20.3.4.5:1",
+            ImmutableList.copyOf(Collections.singletonList(filterChain)), null));
+    xdsClient.deliverLdsUpdate(listenerUpdate);
     verify(listener, timeout(10000)).onNotServing(any());
   }
 
