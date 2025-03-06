@@ -27,7 +27,6 @@ import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -150,9 +149,9 @@ public final class EnvoyServerProtoData {
 
     abstract int prefixLen();
 
-    static CidrRange create(String addressPrefix, int prefixLen) throws UnknownHostException {
+    static CidrRange create(InetAddress addressPrefix, int prefixLen) {
       return new AutoValue_EnvoyServerProtoData_CidrRange(
-          InetAddress.getByName(addressPrefix), prefixLen);
+          addressPrefix, prefixLen);
     }
   }
 
@@ -207,7 +206,7 @@ public final class EnvoyServerProtoData {
   @AutoValue
   abstract static class FilterChain {
 
-    // possibly empty
+    // Must be unique per server instance (except the default chain).
     abstract String name();
 
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.

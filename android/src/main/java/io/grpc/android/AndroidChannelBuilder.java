@@ -28,6 +28,7 @@ import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.InlineMe;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
@@ -41,7 +42,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.internal.GrpcUtil;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Builds a {@link ManagedChannel} that, when provided with a {@link Context}, will automatically

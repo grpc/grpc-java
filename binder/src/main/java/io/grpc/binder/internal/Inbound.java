@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import android.os.Parcel;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -34,7 +35,6 @@ import io.grpc.internal.StreamListener;
 import java.io.InputStream;
 import java.util.ArrayList;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Handles incoming binder transactions for a single stream, turning those transactions into calls

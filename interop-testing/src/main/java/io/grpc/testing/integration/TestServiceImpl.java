@@ -18,6 +18,7 @@ package io.grpc.testing.integration;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.ByteString;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
@@ -54,7 +55,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Implementation of the business logic for the TestService. Uses an executor to schedule chunks

@@ -23,6 +23,8 @@ import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Server that manages startup/shutdown of a {@code Greeter} server.
@@ -31,11 +33,20 @@ public class HelloWorldServer {
   private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
 
   private Server server;
-
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
+    /*
+     * By default gRPC uses a global, shared Executor.newCachedThreadPool() for gRPC callbacks into
+     * your application. This is convenient, but can cause an excessive number of threads to be
+     * created if there are many RPCs. It is often better to limit the number of threads your
+     * application uses for processing and let RPCs queue when the CPU is saturated.
+     * The appropriate number of threads varies heavily between applications.
+     * Async application code generally does not need more threads than CPU cores.
+     */
+    ExecutorService executor = Executors.newFixedThreadPool(2);
     server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
+        .executor(executor)
         .addService(new GreeterImpl())
         .build()
         .start();
@@ -48,7 +59,12 @@ public class HelloWorldServer {
         try {
           HelloWorldServer.this.stop();
         } catch (InterruptedException e) {
+          if (server != null) {
+            server.shutdownNow();
+          }
           e.printStackTrace(System.err);
+        } finally {
+          executor.shutdown();
         }
         System.err.println("*** server shut down");
       }

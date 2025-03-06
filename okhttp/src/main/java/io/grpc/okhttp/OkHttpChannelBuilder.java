@@ -81,8 +81,6 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.security.auth.x500.X500Principal;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
@@ -705,30 +703,10 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
     InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
     try {
-      return createTrustManager(rootCertsStream);
+      return io.grpc.internal.CertificateUtils.createTrustManager(rootCertsStream);
     } finally {
       GrpcUtil.closeQuietly(rootCertsStream);
     }
-  }
-
-  static TrustManager[] createTrustManager(InputStream rootCerts) throws GeneralSecurityException {
-    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-    try {
-      ks.load(null, null);
-    } catch (IOException ex) {
-      // Shouldn't really happen, as we're not loading any data.
-      throw new GeneralSecurityException(ex);
-    }
-    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
-    for (X509Certificate cert : certs) {
-      X500Principal principal = cert.getSubjectX500Principal();
-      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
-    }
-
-    TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init(ks);
-    return trustManagerFactory.getTrustManagers();
   }
 
   static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {

@@ -22,6 +22,9 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.testing.NullPointerTester;
 import com.google.common.testing.NullPointerTester.Visibility;
+import com.google.s2a.proto.v2.S2AServiceGrpc;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
 import io.grpc.Channel;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Server;

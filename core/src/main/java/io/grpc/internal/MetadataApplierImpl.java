@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallCredentials.MetadataApplier;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -28,7 +29,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 final class MetadataApplierImpl extends MetadataApplier {
   private final ClientTransport transport;
