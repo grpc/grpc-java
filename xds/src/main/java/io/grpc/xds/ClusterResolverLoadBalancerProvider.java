@@ -74,10 +74,17 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
     final List<DiscoveryMechanism> discoveryMechanisms;
     // GracefulSwitch configuration
     final Object lbConfig;
+    private final boolean isHttp11ProxyAvailable;
 
-    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, Object lbConfig) {
+    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, Object lbConfig,
+        boolean isHttp11ProxyAvailable) {
       this.discoveryMechanisms = checkNotNull(discoveryMechanisms, "discoveryMechanisms");
       this.lbConfig = checkNotNull(lbConfig, "lbConfig");
+      this.isHttp11ProxyAvailable = isHttp11ProxyAvailable;
+    }
+
+    boolean isHttp11ProxyAvailable() {
+      return isHttp11ProxyAvailable;
     }
 
     @Override
