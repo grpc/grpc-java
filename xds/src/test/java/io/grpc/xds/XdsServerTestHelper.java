@@ -272,32 +272,53 @@ public class XdsServerTestHelper {
       //
       // Note that this doesn't guarantee that any of the RDS watchers are created.
       // Tests should use setExpectedRdsCount(int) and awaitRds() for that.
+      awaitLdsResource(DEFAULT_TIMEOUT);
+      serverExecutor.execute(action);
+    }
+
+    private String awaitLdsResource(Duration timeout) {
       if (ldsResource == null) {
         throw new IllegalStateException("xDS resource update after watcher cancel");
       }
       try {
-        ldsResource.get(DEFAULT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        return ldsResource.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
       } catch (ExecutionException | TimeoutException e) {
-        throw new RuntimeException("Can't resolve LDS resource name in " + DEFAULT_TIMEOUT, e);
+        throw new RuntimeException("Can't resolve LDS resource name in " + timeout, e);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new RuntimeException(e);
       }
-      serverExecutor.execute(action);
-    }
-
-    void deliverLdsUpdate(List<FilterChain> filterChains,
-                          FilterChain defaultFilterChain) {
-      deliverLdsUpdate(LdsUpdate.forTcpListener(Listener.create(
-          "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
       execute(() -> ldsWatcher.onChanged(ldsUpdate));
     }
 
+    void deliverLdsUpdate(
+        List<FilterChain> filterChains,
+        @Nullable FilterChain defaultFilterChain) {
+      deliverLdsUpdate(LdsUpdate.forTcpListener(Listener.create(
+          "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+    }
+
+    void deliverLdsUpdate(FilterChain filterChain, @Nullable FilterChain defaultFilterChain) {
+      deliverLdsUpdate(ImmutableList.of(filterChain), defaultFilterChain);
+    }
+
+    void deliverLdsResourceNotFound() {
+      execute(() -> ldsWatcher.onResourceDoesNotExist(awaitLdsResource(DEFAULT_TIMEOUT)));
+    }
+
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
       execute(() -> rdsWatchers.get(resourceName).onChanged(new RdsUpdate(virtualHosts)));
+    }
+
+    void deliverRdsUpdate(String resourceName, VirtualHost virtualHost) {
+      deliverRdsUpdate(resourceName, ImmutableList.of(virtualHost));
+    }
+
+    void deliverRdsResourceNotFound(String resourceName) {
+      execute(() -> rdsWatchers.get(resourceName).onResourceDoesNotExist(resourceName));
     }
   }
 }
