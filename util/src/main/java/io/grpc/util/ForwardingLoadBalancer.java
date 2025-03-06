@@ -36,6 +36,7 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
    *     use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
    */
   @Deprecated
+  @SuppressWarnings("all")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     acceptResolvedAddresses(resolvedAddresses);
   }
