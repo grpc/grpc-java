@@ -25,6 +25,7 @@ import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -43,7 +44,6 @@ import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.XdsResourceType;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -451,16 +451,18 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     try {
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
         prefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+            CidrRange.create(InetAddresses.forString(range.getAddressPrefix()),
+                range.getPrefixLen().getValue()));
       }
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range
           : proto.getSourcePrefixRangesList()) {
-        sourcePrefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+        sourcePrefixRanges.add(CidrRange.create(
+            InetAddresses.forString(range.getAddressPrefix()), range.getPrefixLen().getValue()));
       }
-    } catch (UnknownHostException e) {
-      throw new ResourceInvalidException("Failed to create CidrRange", e);
+    } catch (IllegalArgumentException ex) {
+      throw new ResourceInvalidException("Failed to create CidrRange", ex);
     }
+
     ConnectionSourceType sourceType;
     switch (proto.getSourceType()) {
       case ANY:
