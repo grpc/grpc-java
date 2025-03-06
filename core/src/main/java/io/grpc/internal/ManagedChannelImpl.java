@@ -32,6 +32,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
@@ -117,7 +118,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /** A communication channel for making outgoing RPCs. */
@@ -1388,24 +1388,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
-      final class UpdateBalancingState implements Runnable {
-        @Override
-        public void run() {
-          if (LbHelperImpl.this != lbHelper || panicMode) {
-            return;
-          }
-          updateSubchannelPicker(newPicker);
-          // It's not appropriate to report SHUTDOWN state from lb.
-          // Ignore the case of newState == SHUTDOWN for now.
-          if (newState != SHUTDOWN) {
-            channelLogger.log(
-                ChannelLogLevel.INFO, "Entering {0} state with picker: {1}", newState, newPicker);
-            channelStateManager.gotoState(newState);
-          }
-        }
-      }
 
-      syncContext.execute(new UpdateBalancingState());
+      if (LbHelperImpl.this != lbHelper || panicMode) {
+        return;
+      }
+      updateSubchannelPicker(newPicker);
+      // It's not appropriate to report SHUTDOWN state from lb.
+      // Ignore the case of newState == SHUTDOWN for now.
+      if (newState != SHUTDOWN) {
+        channelLogger.log(
+            ChannelLogLevel.INFO, "Entering {0} state with picker: {1}", newState, newPicker);
+        channelStateManager.gotoState(newState);
+      }
     }
 
     @Override

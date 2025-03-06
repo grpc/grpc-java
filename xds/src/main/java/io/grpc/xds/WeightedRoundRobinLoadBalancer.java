@@ -170,31 +170,17 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    AcceptResolvedAddrRetVal acceptRetVal;
-    try {
-      resolvingAddresses = true;
-      acceptRetVal = acceptResolvedAddressesInternal(resolvedAddresses);
-      if (!acceptRetVal.status.isOk()) {
-        return acceptRetVal.status;
-      }
 
-      if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
-        weightUpdateTimer.cancel();
-      }
-      updateWeightTask.run();
-
-      createAndApplyOrcaListeners();
-
-      // Must update channel picker before return so that new RPCs will not be routed to deleted
-      // clusters and resolver can remove them in service config.
-      updateOverallBalancingState();
-
-      shutdownRemoved(acceptRetVal.removedChildren);
-    } finally {
-      resolvingAddresses = false;
+    if (weightUpdateTimer != null && weightUpdateTimer.isPending()) {
+      weightUpdateTimer.cancel();
     }
+    updateWeightTask.run();
 
-    return acceptRetVal.status;
+    Status status = super.acceptResolvedAddresses(resolvedAddresses);
+
+    createAndApplyOrcaListeners();
+
+    return status;
   }
 
   /**

@@ -21,12 +21,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A registry for globally registered metric instruments.

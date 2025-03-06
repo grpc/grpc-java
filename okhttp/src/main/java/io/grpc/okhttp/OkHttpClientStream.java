@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 
 import com.google.common.io.BaseEncoding;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -37,7 +38,6 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.util.List;
-import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 
 /**

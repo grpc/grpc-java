@@ -303,7 +303,7 @@ public class RetryTest {
     serverCall.close(
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         new Metadata());
-    elapseBackoff(10, SECONDS);
+    elapseBackoff(12, SECONDS);
     // 2nd attempt received
     serverCall = serverCalls.poll(5, SECONDS);
     serverCall.request(2);
@@ -348,7 +348,7 @@ public class RetryTest {
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         new Metadata());
     assertRpcStatusRecorded(Status.Code.UNAVAILABLE, 1000, 1);
-    elapseBackoff(10, SECONDS);
+    elapseBackoff(12, SECONDS);
     assertRpcStartedRecorded();
     assertOutboundMessageRecorded();
     serverCall = serverCalls.poll(5, SECONDS);
@@ -366,7 +366,7 @@ public class RetryTest {
     call.request(1);
     assertInboundMessageRecorded();
     assertInboundWireSizeRecorded(1);
-    assertRpcStatusRecorded(Status.Code.OK, 12000, 2);
+    assertRpcStatusRecorded(Status.Code.OK, 14000, 2);
     assertRetryStatsRecorded(1, 0, 0);
   }
 
@@ -418,7 +418,7 @@ public class RetryTest {
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         new Metadata());
     assertRpcStatusRecorded(Code.UNAVAILABLE, 5000, 1);
-    elapseBackoff(10, SECONDS);
+    elapseBackoff(12, SECONDS);
     assertRpcStartedRecorded();
     assertOutboundMessageRecorded();
     serverCall = serverCalls.poll(5, SECONDS);
@@ -431,7 +431,7 @@ public class RetryTest {
     streamClosedLatch.countDown();
     // The call listener is closed.
     verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
-    assertRpcStatusRecorded(Code.CANCELLED, 17_000, 1);
+    assertRpcStatusRecorded(Code.CANCELLED, 19_000, 1);
     assertRetryStatsRecorded(1, 0, 0);
   }
 

@@ -168,7 +168,7 @@ public class AdvancedTlsX509TrustManagerTest {
     fakeClock.forwardTime(1, TimeUnit.MINUTES);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
 
-    serverCert0File.setLastModified(serverCert0File.lastModified() - 10);
+    serverCert0File.setLastModified(serverCert0File.lastModified() - 2000);
 
     fakeClock.forwardTime(1, TimeUnit.MINUTES);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
@@ -181,7 +181,7 @@ public class AdvancedTlsX509TrustManagerTest {
     fakeClock.forwardTime(1, TimeUnit.MINUTES);
     assertArrayEquals(serverCert0, trustManager.getAcceptedIssuers());
 
-    serverCert0File.setLastModified(beforeModify + 10);
+    serverCert0File.setLastModified(beforeModify + 2000);
 
     // file modification time changed
     fakeClock.forwardTime(1, TimeUnit.MINUTES);

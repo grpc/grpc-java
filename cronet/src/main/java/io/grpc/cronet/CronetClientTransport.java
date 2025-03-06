@@ -19,6 +19,7 @@ package io.grpc.cronet;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -42,7 +43,6 @@ import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A cronet-based {@link ConnectionClientTransport} implementation.

@@ -28,6 +28,7 @@ import com.google.common.base.Ticker;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz;
+import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -83,6 +84,8 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.nio.channels.ClosedChannelException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -94,6 +97,8 @@ import javax.annotation.Nullable;
  */
 class NettyClientHandler extends AbstractNettyHandler {
   private static final Logger logger = Logger.getLogger(NettyClientHandler.class.getName());
+  static boolean enablePerRpcAuthorityCheck =
+      GrpcUtil.getFlag("GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK", false);
 
   /**
    * A message that simply passes through the channel without any real processing. It is useful to
@@ -126,6 +131,13 @@ class NettyClientHandler extends AbstractNettyHandler {
         @Override
         protected void handleNotInUse() {
           lifecycleManager.notifyInUse(false);
+        }
+      };
+  private final Map<String, Status> peerVerificationResults =
+      new LinkedHashMap<String, Status>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Status> eldest) {
+          return size() > 100;
         }
       };
 
@@ -591,6 +603,56 @@ class NettyClientHandler extends AbstractNettyHandler {
       return;
     }
 
+    CharSequence authorityHeader = command.headers().authority();
+    if (authorityHeader == null) {
+      Status authorityVerificationStatus = Status.UNAVAILABLE.withDescription(
+              "Missing authority header");
+      command.stream().setNonExistent();
+      command.stream().transportReportStatus(
+              Status.UNAVAILABLE, RpcProgress.PROCESSED, true, new Metadata());
+      promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+              authorityVerificationStatus, null));
+      return;
+    }
+    // No need to verify authority for the rpc outgoing header if it is same as the authority
+    // for the transport
+    if (!authority.contentEquals(authorityHeader)) {
+      Status authorityVerificationStatus = peerVerificationResults.get(
+              authorityHeader.toString());
+      if (authorityVerificationStatus == null) {
+        if (attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER) == null) {
+          authorityVerificationStatus = Status.UNAVAILABLE.withDescription(
+                  "Authority verifier not found to verify authority");
+          command.stream().setNonExistent();
+          command.stream().transportReportStatus(
+                  authorityVerificationStatus, RpcProgress.PROCESSED, true, new Metadata());
+          promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+                  authorityVerificationStatus, null));
+          return;
+        }
+        authorityVerificationStatus = attributes.get(GrpcAttributes.ATTR_AUTHORITY_VERIFIER)
+                .verifyAuthority(authorityHeader.toString());
+        peerVerificationResults.put(authorityHeader.toString(), authorityVerificationStatus);
+        if (!authorityVerificationStatus.isOk() && !enablePerRpcAuthorityCheck) {
+          logger.log(Level.WARNING, String.format("%s.%s",
+                          authorityVerificationStatus.getDescription(),
+                          enablePerRpcAuthorityCheck
+                                  ? "" : " This will be an error in the future."),
+                  InternalStatus.asRuntimeExceptionWithoutStacktrace(
+                          authorityVerificationStatus, null));
+        }
+      }
+      if (!authorityVerificationStatus.isOk()) {
+        if (enablePerRpcAuthorityCheck) {
+          command.stream().setNonExistent();
+          command.stream().transportReportStatus(
+                  authorityVerificationStatus, RpcProgress.PROCESSED, true, new Metadata());
+          promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+                  authorityVerificationStatus, null));
+          return;
+        }
+      }
+    }
     // Get the stream ID for the new stream.
     int streamId;
     try {
