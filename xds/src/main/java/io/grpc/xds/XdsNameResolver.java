@@ -395,8 +395,8 @@ final class XdsNameResolver extends NameResolver {
       String path = "/" + args.getMethodDescriptor().getFullMethodName();
       do {
         routingCfg = routingConfig;
-        if (routingCfg.status != null) {
-          return Result.forError(routingCfg.status);
+        if (routingCfg.errorStatus != null) {
+          return Result.forError(routingCfg.errorStatus);
         }
         selectedRoute = null;
         for (RouteData route : routingCfg.routes) {
@@ -971,19 +971,19 @@ final class XdsNameResolver extends NameResolver {
   private static class RoutingConfig {
     private final long fallbackTimeoutNano;
     final ImmutableList<RouteData> routes;
-    final Status status;
+    final Status errorStatus;
 
     private RoutingConfig(long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = checkNotNull(routes, "routes");
-      this.status = null;
+      this.errorStatus = null;
     }
 
-    private RoutingConfig(Status status) {
+    private RoutingConfig(Status errorStatus) {
       this.fallbackTimeoutNano = 0;
       this.routes = null;
-      this.status = checkNotNull(status, "status");
-      checkArgument(!status.isOk(), "status should not be okay");
+      this.errorStatus = checkNotNull(errorStatus, "errorStatus");
+      checkArgument(!errorStatus.isOk(), "errorStatus should not be okay");
     }
   }
 
