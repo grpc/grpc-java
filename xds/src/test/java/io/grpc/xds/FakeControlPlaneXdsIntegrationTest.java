@@ -98,8 +98,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     ManagedChannel channel = dataPlane.getManagedChannel();
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
         channel);
-    SimpleRequest request = SimpleRequest.newBuilder()
-        .build();
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
     SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setResponseMessage("Hi, xDS! Authority= test-server")
         .build();
@@ -113,8 +112,7 @@ public class FakeControlPlaneXdsIntegrationTest {
       ManagedChannel channel = dataPlane.getManagedChannel();
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
           channel);
-      SimpleRequest request = SimpleRequest.newBuilder()
-          .build();
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
       SimpleResponse goldenResponse = SimpleResponse.newBuilder()
           .setResponseMessage("Hi, xDS! Authority= " + ENDPOINT_HOST_NAME)
           .build();
@@ -154,8 +152,7 @@ public class FakeControlPlaneXdsIntegrationTest {
       // We add an interceptor to catch the response headers from the server.
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
           dataPlane.getManagedChannel()).withInterceptors(responseHeaderInterceptor);
-      SimpleRequest request = SimpleRequest.newBuilder()
-          .build();
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
       SimpleResponse goldenResponse = SimpleResponse.newBuilder()
           .setResponseMessage("Hi, xDS! Authority= test-server")
           .build();
@@ -235,8 +232,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc
         .newBlockingStub(dataPlane.getManagedChannel())
         .withInterceptors(tracerInterceptor);
-    SimpleRequest request = SimpleRequest.newBuilder()
-        .build();
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
     SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setResponseMessage("Hi, xDS! Authority= test-server")
         .build();
@@ -303,8 +299,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     ManagedChannel channel = dataPlane.getManagedChannel();
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
         channel);
-    SimpleRequest request = SimpleRequest.newBuilder()
-        .build();
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
     SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setResponseMessage("Hi, xDS! Authority= test-server")
         .build();
@@ -335,8 +330,7 @@ public class FakeControlPlaneXdsIntegrationTest {
       ManagedChannel channel = dataPlane.getManagedChannel();
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
           channel);
-      SimpleRequest request = SimpleRequest.newBuilder()
-          .build();
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
       SimpleResponse goldenResponse = SimpleResponse.newBuilder()
           .setResponseMessage("Hi, xDS! Authority= localhost:" + serverAddress.getPort())
           .build();
