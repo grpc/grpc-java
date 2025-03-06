@@ -1388,24 +1388,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
-      final class UpdateBalancingState implements Runnable {
-        @Override
-        public void run() {
-          if (LbHelperImpl.this != lbHelper || panicMode) {
-            return;
-          }
-          updateSubchannelPicker(newPicker);
-          // It's not appropriate to report SHUTDOWN state from lb.
-          // Ignore the case of newState == SHUTDOWN for now.
-          if (newState != SHUTDOWN) {
-            channelLogger.log(
-                ChannelLogLevel.INFO, "Entering {0} state with picker: {1}", newState, newPicker);
-            channelStateManager.gotoState(newState);
-          }
-        }
-      }
 
-      syncContext.execute(new UpdateBalancingState());
+      if (LbHelperImpl.this != lbHelper || panicMode) {
+        return;
+      }
+      updateSubchannelPicker(newPicker);
+      // It's not appropriate to report SHUTDOWN state from lb.
+      // Ignore the case of newState == SHUTDOWN for now.
+      if (newState != SHUTDOWN) {
+        channelLogger.log(
+            ChannelLogLevel.INFO, "Entering {0} state with picker: {1}", newState, newPicker);
+        channelStateManager.gotoState(newState);
+      }
     }
 
     @Override
