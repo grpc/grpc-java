@@ -586,6 +586,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         // clientStreamListener.closed can trigger clientStream.cancel (see code in
         // ClientCalls.blockingUnaryCall), which may race with clientStream.serverClosed as both are
         // calling internalCancel().
+        closeCalled = true;
         clientStream.serverClosed(Status.OK, status);
 
         if (clientMaxInboundMetadataSize != Integer.MAX_VALUE) {
