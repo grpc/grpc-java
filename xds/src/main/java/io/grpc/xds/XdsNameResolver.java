@@ -127,6 +127,10 @@ final class XdsNameResolver extends NameResolver {
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
   private final MetricRecorder metricRecorder;
+  // Must be accessed in syncContext.
+  // Filter instances are unique per channel, and per filter (name+typeUrl).
+  // NamedFilterConfig.filterStateKey -> filter_instance.
+  private final HashMap<String, Filter> activeFilters = new HashMap<>();
 
   private volatile RoutingConfig routingConfig = RoutingConfig.EMPTY;
   private Listener2 listener;
@@ -658,18 +662,23 @@ final class XdsNameResolver extends NameResolver {
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
       List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
       String rdsName = httpConnectionManager.rdsName();
+      ImmutableList<NamedFilterConfig> filterConfigs = httpConnectionManager.httpFilterConfigs();
+      long streamDurationNano = httpConnectionManager.httpMaxStreamDurationNano();
+
+      // Create/update HCM-bound state.
       cleanUpRouteDiscoveryState();
+      updateActiveFilters(filterConfigs);
+
+      // Routes specified directly in LDS.
       if (virtualHosts != null) {
-        updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
-            httpConnectionManager.httpFilterConfigs());
-      } else {
-        routeDiscoveryState = new RouteDiscoveryState(
-            rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
-            httpConnectionManager.httpFilterConfigs());
-        logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-        xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
-            rdsName, routeDiscoveryState, syncContext);
+        updateRoutes(virtualHosts, streamDurationNano, filterConfigs);
+        return;
       }
+      // Routes provided by RDS.
+      routeDiscoveryState = new RouteDiscoveryState(rdsName, streamDurationNano, filterConfigs);
+      logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
+      xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
+          rdsName, routeDiscoveryState, syncContext);
     }
 
     @Override
@@ -690,6 +699,7 @@ final class XdsNameResolver extends NameResolver {
       String error = "LDS resource does not exist: " + resourceName;
       logger.log(XdsLogLevel.INFO, error);
       cleanUpRouteDiscoveryState();
+      updateActiveFilters(null);
       cleanUpRoutes(error);
     }
 
@@ -703,7 +713,33 @@ final class XdsNameResolver extends NameResolver {
       logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", ldsResourceName);
       stopped = true;
       cleanUpRouteDiscoveryState();
+      updateActiveFilters(null);
       xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName, this);
+    }
+
+    // called in syncContext
+    private void updateActiveFilters(@Nullable List<NamedFilterConfig> filterConfigs) {
+      if (filterConfigs == null) {
+        filterConfigs = ImmutableList.of();
+      }
+      Set<String> filtersToShutdown = new HashSet<>(activeFilters.keySet());
+      for (NamedFilterConfig namedFilter : filterConfigs) {
+        String typeUrl = namedFilter.filterConfig.typeUrl();
+        String filterKey = namedFilter.filterStateKey();
+
+        Filter.Provider provider = filterRegistry.get(typeUrl);
+        checkNotNull(provider, "provider %s", typeUrl);
+        Filter filter = activeFilters.computeIfAbsent(filterKey, k -> provider.newInstance());
+        checkNotNull(filter, "filter %s", filterKey);
+        filtersToShutdown.remove(filterKey);
+      }
+
+      // Shutdown filters not present in current HCM.
+      for (String filterKey : filtersToShutdown) {
+        Filter filterToShutdown = activeFilters.remove(filterKey);
+        checkNotNull(filterToShutdown, "filterToShutdown %s", filterKey);
+        filterToShutdown.close();
+      }
     }
 
     // called in syncContext
@@ -836,19 +872,16 @@ final class XdsNameResolver extends NameResolver {
 
       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
       for (NamedFilterConfig namedFilter : filterConfigs) {
-        FilterConfig config = namedFilter.filterConfig;
         String name = namedFilter.name;
-        String typeUrl = config.typeUrl();
+        FilterConfig config = namedFilter.filterConfig;
+        FilterConfig overrideConfig = selectedOverrideConfigs.get(name);
+        String filterKey = namedFilter.filterStateKey();
 
-        Filter.Provider provider = filterRegistry.get(typeUrl);
-        if (provider == null || !provider.isClientFilter()) {
-          continue;
-        }
-
-        Filter filter = provider.newInstance();
-
+        Filter filter = activeFilters.get(filterKey);
+        checkNotNull(filter, "activeFilters.get(%s)", filterKey);
         ClientInterceptor interceptor =
-            filter.buildClientInterceptor(config, selectedOverrideConfigs.get(name), scheduler);
+            filter.buildClientInterceptor(config, overrideConfig, scheduler);
+
         if (interceptor != null) {
           filterInterceptors.add(interceptor);
         }
