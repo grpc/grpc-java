@@ -454,11 +454,12 @@ final class XdsServerWrapper extends Server {
 
       InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
       InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
-
-      if (listenerIp.isAnyLocalAddress()) {
-        return true;
+      if (ldsAddressHnP.hasPort() && listenerAddressHnP.hasPort()
+          && ldsAddressHnP.getPort() != listenerAddressHnP.getPort()) {
+        return false;
       }
-      return listenerIp.equals(ldsIp) && ldsAddressHnP.getPort() == listenerAddressHnP.getPort();
+
+      return listenerIp.equals(ldsIp);
     }
 
     @Override
@@ -467,7 +468,7 @@ final class XdsServerWrapper extends Server {
         return;
       }
       StatusException statusException = Status.UNAVAILABLE.withDescription(
-          String.format("%s listener unavailable, xDS node ID: %s", resourceName,
+          String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
               xdsClient.getBootstrapInfo().node().getId())).asException();
       handleConfigNotFoundOrMismatch(statusException);
     }

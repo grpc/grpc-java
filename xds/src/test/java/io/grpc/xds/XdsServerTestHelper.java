@@ -74,7 +74,7 @@ public class XdsServerTestHelper {
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
                                      TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "0.0.0.0:0",
         ImmutableList.of(), tlsContext, null, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
@@ -85,7 +85,8 @@ public class XdsServerTestHelper {
       EnvoyServerProtoData.DownstreamTlsContext tlsContext,
       EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
       TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
+    EnvoyServerProtoData.Listener listener = buildTestListener(
+        "listener1", "0.0.0.0:7000", sourcePorts,
         tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
