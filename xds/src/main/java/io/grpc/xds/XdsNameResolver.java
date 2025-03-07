@@ -132,7 +132,7 @@ final class XdsNameResolver extends NameResolver {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFilters = new HashMap<>();
 
-  private volatile RoutingConfig routingConfig = RoutingConfig.EMPTY;
+  private volatile RoutingConfig routingConfig;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -306,7 +306,7 @@ final class XdsNameResolver extends NameResolver {
 
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
-          XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
+          XdsLogLevel.INFO, "Generated service config: {0}", new Gson().toJson(rawServiceConfig));
     }
     ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
     Attributes attrs =
@@ -320,7 +320,7 @@ final class XdsNameResolver extends NameResolver {
             .setAttributes(attrs)
             .setServiceConfig(parsedServiceConfig)
             .build();
-    listener.onResult(result);
+    listener.onResult2(result);
     receivedConfig = true;
   }
 
@@ -395,6 +395,9 @@ final class XdsNameResolver extends NameResolver {
       String path = "/" + args.getMethodDescriptor().getFullMethodName();
       do {
         routingCfg = routingConfig;
+        if (routingCfg.errorStatus != null) {
+          return Result.forError(routingCfg.errorStatus);
+        }
         selectedRoute = null;
         for (RouteData route : routingCfg.routes) {
           if (RoutingUtils.matchRoute(route.routeMatch, path, headers, random)) {
@@ -626,19 +629,6 @@ final class XdsNameResolver extends NameResolver {
     return "cluster_specifier_plugin:" + pluginName;
   }
 
-  private static final class FailingConfigSelector extends InternalConfigSelector {
-    private final Result result;
-
-    public FailingConfigSelector(Status error) {
-      this.result = Result.forError(error);
-    }
-
-    @Override
-    public Result selectConfig(PickSubchannelArgs args) {
-      return result;
-    }
-  }
-
   private class ResolveState implements ResourceWatcher<XdsListenerResource.LdsUpdate> {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
@@ -835,13 +825,13 @@ final class XdsNameResolver extends NameResolver {
         }
       }
       // Update service config to include newly added clusters.
-      if (shouldUpdateResult) {
+      if (shouldUpdateResult && routingConfig != null) {
         updateResolutionResult();
+        shouldUpdateResult = false;
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
       routingConfig = new RoutingConfig(httpMaxStreamDurationNano, routesData.build());
-      shouldUpdateResult = false;
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
@@ -893,6 +883,9 @@ final class XdsNameResolver extends NameResolver {
     }
 
     private void cleanUpRoutes(String error) {
+      String errorWithNodeId =
+          error + ", xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
+      routingConfig = new RoutingConfig(Status.UNAVAILABLE.withDescription(errorWithNodeId));
       if (existingClusters != null) {
         for (String cluster : existingClusters) {
           int count = clusterRefs.get(cluster).refCount.decrementAndGet();
@@ -902,17 +895,12 @@ final class XdsNameResolver extends NameResolver {
         }
         existingClusters = null;
       }
-      routingConfig = RoutingConfig.EMPTY;
+
       // Without addresses the default LB (normally pick_first) should become TRANSIENT_FAILURE, and
-      // the config selector handles the error message itself. Once the LB API allows providing
-      // failure information for addresses yet still providing a service config, the config seector
-      // could be avoided.
-      String errorWithNodeId =
-          error + ", xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
-      listener.onResult(ResolutionResult.newBuilder()
+      // the config selector handles the error message itself.
+      listener.onResult2(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
-            .set(InternalConfigSelector.KEY,
-              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(errorWithNodeId)))
+            .set(InternalConfigSelector.KEY, configSelector)
             .build())
           .setServiceConfig(emptyServiceConfig)
           .build());
@@ -983,12 +971,19 @@ final class XdsNameResolver extends NameResolver {
   private static class RoutingConfig {
     private final long fallbackTimeoutNano;
     final ImmutableList<RouteData> routes;
-
-    private static final RoutingConfig EMPTY = new RoutingConfig(0, ImmutableList.of());
+    final Status errorStatus;
 
     private RoutingConfig(long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = checkNotNull(routes, "routes");
+      this.errorStatus = null;
+    }
+
+    private RoutingConfig(Status errorStatus) {
+      this.fallbackTimeoutNano = 0;
+      this.routes = null;
+      this.errorStatus = checkNotNull(errorStatus, "errorStatus");
+      checkArgument(!errorStatus.isOk(), "errorStatus should not be okay");
     }
   }
 

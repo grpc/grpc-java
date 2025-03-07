@@ -19,9 +19,12 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.DataPlaneRule.ENDPOINT_HOST_NAME;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static org.junit.Assert.assertEquals;
 
 import com.github.xds.type.v3.TypedStruct;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -36,11 +39,17 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
+import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteAction;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
 import io.grpc.LoadBalancerRegistry;
@@ -89,8 +98,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     ManagedChannel channel = dataPlane.getManagedChannel();
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
         channel);
-    SimpleRequest request = SimpleRequest.newBuilder()
-        .build();
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
     SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setResponseMessage("Hi, xDS! Authority= test-server")
         .build();
@@ -104,8 +112,7 @@ public class FakeControlPlaneXdsIntegrationTest {
       ManagedChannel channel = dataPlane.getManagedChannel();
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
           channel);
-      SimpleRequest request = SimpleRequest.newBuilder()
-          .build();
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
       SimpleResponse goldenResponse = SimpleResponse.newBuilder()
           .setResponseMessage("Hi, xDS! Authority= " + ENDPOINT_HOST_NAME)
           .build();
@@ -145,8 +152,7 @@ public class FakeControlPlaneXdsIntegrationTest {
       // We add an interceptor to catch the response headers from the server.
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
           dataPlane.getManagedChannel()).withInterceptors(responseHeaderInterceptor);
-      SimpleRequest request = SimpleRequest.newBuilder()
-          .build();
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
       SimpleResponse goldenResponse = SimpleResponse.newBuilder()
           .setResponseMessage("Hi, xDS! Authority= test-server")
           .build();
@@ -158,6 +164,100 @@ public class FakeControlPlaneXdsIntegrationTest {
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(metadataLbProvider);
     }
+  }
+
+  // Try to trigger "UNAVAILABLE: CDS encountered error: unable to find available subchannel for
+  // cluster cluster:cluster1" race, if XdsNameResolver updates its ConfigSelector before
+  // cluster_manager config.
+  @Test
+  public void changeClusterForRoute() throws Exception {
+    // Start with route to cluster0
+    InetSocketAddress edsInetSocketAddress
+        = (InetSocketAddress) dataPlane.getServer().getListenSockets().get(0);
+    controlPlane.getService().setXdsConfig(
+        ADS_TYPE_URL_EDS,
+        ImmutableMap.of(
+          "eds-service-0",
+          ControlPlaneRule.buildClusterLoadAssignment(
+              edsInetSocketAddress.getHostName(), "", edsInetSocketAddress.getPort(),
+              "eds-service-0"),
+          "eds-service-1",
+          ControlPlaneRule.buildClusterLoadAssignment(
+              edsInetSocketAddress.getHostName(), "", edsInetSocketAddress.getPort(),
+              "eds-service-1")));
+    controlPlane.getService().setXdsConfig(
+        ADS_TYPE_URL_CDS,
+        ImmutableMap.of(
+            "cluster0",
+            ControlPlaneRule.buildCluster("cluster0", "eds-service-0"),
+            "cluster1",
+            ControlPlaneRule.buildCluster("cluster1", "eds-service-1")));
+    controlPlane.setRdsConfig(RouteConfiguration.newBuilder()
+        .setName("route-config.googleapis.com")
+        .addVirtualHosts(VirtualHost.newBuilder()
+          .addDomains("test-server")
+          .addRoutes(Route.newBuilder()
+            .setMatch(RouteMatch.newBuilder().setPrefix("/").build())
+            .setRoute(RouteAction.newBuilder().setCluster("cluster0").build())
+            .build())
+          .build())
+        .build());
+
+    class ClusterClientStreamTracer extends ClientStreamTracer {
+      boolean usedCluster1;
+
+      @Override
+      public void addOptionalLabel(String key, String value) {
+        if ("grpc.lb.backend_service".equals(key)) {
+          usedCluster1 = "cluster1".equals(value);
+        }
+      }
+    }
+
+    ClusterClientStreamTracer tracer = new ClusterClientStreamTracer();
+    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(
+          ClientStreamTracer.StreamInfo info, Metadata headers) {
+        return tracer;
+      }
+    };
+    ClientInterceptor tracerInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
+      }
+    };
+    SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc
+        .newBlockingStub(dataPlane.getManagedChannel())
+        .withInterceptors(tracerInterceptor);
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
+    SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setResponseMessage("Hi, xDS! Authority= test-server")
+        .build();
+    assertThat(stub.unaryRpc(request)).isEqualTo(goldenResponse);
+    assertThat(tracer.usedCluster1).isFalse();
+
+    // Check for errors when swapping route to cluster1
+    controlPlane.setRdsConfig(RouteConfiguration.newBuilder()
+        .setName("route-config.googleapis.com")
+        .addVirtualHosts(VirtualHost.newBuilder()
+          .addDomains("test-server")
+          .addRoutes(Route.newBuilder()
+            .setMatch(RouteMatch.newBuilder().setPrefix("/").build())
+            .setRoute(RouteAction.newBuilder().setCluster("cluster1").build())
+            .build())
+          .build())
+        .build());
+
+    for (int j = 0; j < 10; j++) {
+      stub.unaryRpc(request);
+      if (tracer.usedCluster1) {
+        break;
+      }
+    }
+    assertThat(tracer.usedCluster1).isTrue();
   }
 
   // Captures response headers from the server.
@@ -199,8 +299,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     ManagedChannel channel = dataPlane.getManagedChannel();
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
         channel);
-    SimpleRequest request = SimpleRequest.newBuilder()
-        .build();
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
     SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setResponseMessage("Hi, xDS! Authority= test-server")
         .build();
@@ -231,8 +330,7 @@ public class FakeControlPlaneXdsIntegrationTest {
       ManagedChannel channel = dataPlane.getManagedChannel();
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
           channel);
-      SimpleRequest request = SimpleRequest.newBuilder()
-          .build();
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
       SimpleResponse goldenResponse = SimpleResponse.newBuilder()
           .setResponseMessage("Hi, xDS! Authority= localhost:" + serverAddress.getPort())
           .build();
