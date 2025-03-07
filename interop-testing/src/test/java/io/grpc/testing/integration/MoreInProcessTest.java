@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -131,7 +132,7 @@ public class MoreInProcessTest {
 
     assertTrue(finishLatch.await(900, TimeUnit.MILLISECONDS));
     assertEquals(fakeResponse, responseRef.get());
-    assertNull(throwableRef.get());
+    assertNotNull(throwableRef.get());
   }
 
   @Test

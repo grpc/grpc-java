@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
@@ -1598,8 +1599,10 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     // Ensure that for a closed ServerStream, interactions are noops
-    server.stream.writeHeaders(new Metadata(), true);
-    server.stream.writeMessage(methodDescriptor.streamResponse("response"));
+    assertThrows(Exception.class, () ->
+            server.stream.writeHeaders(new Metadata(), true));
+    assertThrows(Exception.class, () ->
+            server.stream.writeMessage(methodDescriptor.streamResponse("response")));
     server.stream.close(Status.INTERNAL, new Metadata());
 
     // Make sure new streams still work properly
