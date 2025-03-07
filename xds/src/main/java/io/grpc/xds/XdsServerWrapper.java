@@ -24,6 +24,8 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.HostAndPort;
+import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
@@ -57,6 +59,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -383,7 +386,20 @@ final class XdsServerWrapper extends Server {
         return;
       }
       logger.log(Level.FINEST, "Received Lds update {0}", update);
-      checkNotNull(update.listener(), "update");
+      if (update.listener() == null) {
+        onResourceDoesNotExist("Non-API");
+        return;
+      }
+
+      String ldsAddress = update.listener().address();
+      if (ldsAddress != null && !ipAddressesMatch(ldsAddress)) {
+        handleConfigNotFoundOrMismatch(
+            Status.UNKNOWN.withDescription(
+                String.format(
+                    "Listener address mismatch: expected %s, but got %s.",
+                    listenerAddress, ldsAddress)).asException());
+        return;
+      }
       if (!pendingRds.isEmpty()) {
         // filter chain state has not yet been applied to filterChainSelectorManager and there
         // are two sets of sslContextProviderSuppliers, so we release the old ones.
@@ -432,6 +448,20 @@ final class XdsServerWrapper extends Server {
       }
     }
 
+    private boolean ipAddressesMatch(String ldsAddress) {
+      HostAndPort ldsAddressHnP = HostAndPort.fromString(ldsAddress);
+      HostAndPort listenerAddressHnP = HostAndPort.fromString(listenerAddress);
+
+      InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
+      InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
+      if (ldsAddressHnP.hasPort() && listenerAddressHnP.hasPort()
+          && ldsAddressHnP.getPort() != listenerAddressHnP.getPort()) {
+        return false;
+      }
+
+      return listenerIp.equals(ldsIp);
+    }
+
     @Override
     public void onResourceDoesNotExist(final String resourceName) {
       if (stopped) {
@@ -440,7 +470,7 @@ final class XdsServerWrapper extends Server {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
           String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
               xdsClient.getBootstrapInfo().node().getId())).asException();
-      handleConfigNotFound(statusException);
+      handleConfigNotFoundOrMismatch(statusException);
     }
 
     @Override
@@ -673,7 +703,7 @@ final class XdsServerWrapper extends Server {
       };
     }
 
-    private void handleConfigNotFound(StatusException exception) {
+    private void handleConfigNotFoundOrMismatch(StatusException exception) {
       cleanUpRouteDiscoveryStates();
       shutdownActiveFilters();
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
