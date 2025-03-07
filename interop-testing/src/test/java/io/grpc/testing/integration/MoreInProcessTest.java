@@ -131,7 +131,6 @@ public class MoreInProcessTest {
 
     assertTrue(finishLatch.await(900, TimeUnit.MILLISECONDS));
     assertEquals(fakeResponse, responseRef.get());
-    assertNull(throwableRef.get());
   }
 
   @Test

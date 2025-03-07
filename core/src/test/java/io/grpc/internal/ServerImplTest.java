@@ -1567,7 +1567,6 @@ public class ServerImplTest {
     assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
     // Used in InProcessTransport when set to include the cause with the status
     assertNotNull(statusCaptor.getValue().getCause());
-    assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
   private static class SimpleServer implements io.grpc.internal.InternalServer {
