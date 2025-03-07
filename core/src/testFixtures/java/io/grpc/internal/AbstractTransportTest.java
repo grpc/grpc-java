@@ -1599,10 +1599,12 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     // Ensure that for a closed ServerStream, interactions are noops
-    assertThrows(Exception.class, () ->
+    Exception headerException = assertThrows(Exception.class, () ->
             server.stream.writeHeaders(new Metadata(), true));
-    assertThrows(Exception.class, () ->
+    assertTrue(headerException.getMessage().contains("call already closed"));
+    Exception messageException = assertThrows(Exception.class, () ->
             server.stream.writeMessage(methodDescriptor.streamResponse("response")));
+    assertTrue(messageException.getMessage().contains("call already closed"));
     server.stream.close(Status.INTERNAL, new Metadata());
 
     // Make sure new streams still work properly
