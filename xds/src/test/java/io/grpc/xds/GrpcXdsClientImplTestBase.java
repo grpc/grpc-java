@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -324,29 +323,32 @@ public abstract class GrpcXdsClientImplTestBase {
         .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
-    XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
-      @Override
-      public XdsTransport create(ServerInfo serverInfo) {
-        if (serverInfo.target().equals(SERVER_URI)) {
-          return new GrpcXdsTransport(channel);
-        }
-        if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
-          if (channelForCustomAuthority == null) {
-            channelForCustomAuthority = cleanupRule.register(
-                InProcessChannelBuilder.forName(serverName).directExecutor().build());
+    XdsTransportFactory xdsTransportFactory =
+        new XdsTransportFactory() {
+          @Override
+          public XdsTransport create(ServerInfo serverInfo) {
+            if (serverInfo.target().equals(SERVER_URI)) {
+              return new GrpcXdsTransport(channel);
+            }
+            if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
+              if (channelForCustomAuthority == null) {
+                channelForCustomAuthority =
+                    cleanupRule.register(
+                        InProcessChannelBuilder.forName(serverName).directExecutor().build());
+              }
+              return new GrpcXdsTransport(channelForCustomAuthority);
+            }
+            if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
+              if (channelForEmptyAuthority == null) {
+                channelForEmptyAuthority =
+                    cleanupRule.register(
+                        InProcessChannelBuilder.forName(serverName).directExecutor().build());
+              }
+              return new GrpcXdsTransport(channelForEmptyAuthority);
+            }
+            throw new IllegalArgumentException("Can not create channel for " + serverInfo);
           }
-          return new GrpcXdsTransport(channelForCustomAuthority);
-        }
-        if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
-          if (channelForEmptyAuthority == null) {
-            channelForEmptyAuthority = cleanupRule.register(
-                InProcessChannelBuilder.forName(serverName).directExecutor().build());
-          }
-          return new GrpcXdsTransport(channelForEmptyAuthority);
-        }
-        throw new IllegalArgumentException("Can not create channel for " + serverInfo);
-      }
-    };
+        };
 
     xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
         true);
@@ -4193,7 +4195,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
-        DEFAULT_XDS_TRANSPORT_FACTORY,
+        new GrpcXdsTransportFactory(null),
         bootstrapInfo,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,
