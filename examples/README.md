@@ -153,9 +153,9 @@ Example bugs not caught by mocked stub tests include:
 
 For testing a gRPC client, create the client with a real stub
 using an
-[InProcessChannel](../core/src/main/java/io/grpc/inprocess/InProcessChannelBuilder.java),
+[InProcessChannel](../inprocess/src/main/java/io/grpc/inprocess/InProcessChannelBuilder.java),
 and test it against an
-[InProcessServer](../core/src/main/java/io/grpc/inprocess/InProcessServerBuilder.java)
+[InProcessServer](../inprocess/src/main/java/io/grpc/inprocess/InProcessServerBuilder.java)
 with a mock/fake service implementation.
 
 For testing a gRPC server, create the server as an InProcessServer,
