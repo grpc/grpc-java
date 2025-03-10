@@ -17,6 +17,7 @@
 package io.grpc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 
 import io.grpc.Status.Code;
@@ -52,14 +53,24 @@ public class StatusTest {
   }
 
   @Test
+  public void equalsStatus() {
+    IllegalStateException ex = new IllegalStateException("The operation was aborted");
+    assertEquals(Status.ABORTED.withDescription("The operation was aborted")
+                    .withCause(ex),
+            Status.ABORTED.withDescription("The operation was aborted")
+                    .withCause(ex));
+    assertNotEquals(Status.ABORTED.withDescription("The operation was aborted"), null);
+  }
+
+  @Test
   public void sameDescriptionReturnsSelf() {
     assertSame(Status.CANCELLED, Status.CANCELLED.withDescription(null));
     assertSame(Status.CANCELLED, Status.CANCELLED.augmentDescription(null));
   }
 
   @Test
-  public void useObjectHashCode() {
-    assertEquals(Status.CANCELLED.hashCode(), System.identityHashCode(Status.CANCELLED));
+  public void notUseObjectHashCode() {
+    assertNotEquals(Status.CANCELLED.hashCode(), System.identityHashCode(Status.CANCELLED));
   }
 
   @Test
