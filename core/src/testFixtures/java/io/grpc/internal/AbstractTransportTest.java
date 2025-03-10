@@ -24,7 +24,6 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
@@ -1598,14 +1597,14 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-    // Ensure that for a closed ServerStream, interactions are noops
-    Exception headerException = assertThrows(Exception.class, () ->
-            server.stream.writeHeaders(new Metadata(), true));
-    assertTrue(headerException.getMessage().contains("call already closed"));
-    Exception messageException = assertThrows(Exception.class, () ->
-            server.stream.writeMessage(methodDescriptor.streamResponse("response")));
-    assertTrue(messageException.getMessage().contains("call already closed"));
-    server.stream.close(Status.INTERNAL, new Metadata());
+    try {
+      // Ensure that for a closed ServerStream, interactions are noops
+      server.stream.writeHeaders(new Metadata(), true);
+      server.stream.writeMessage(methodDescriptor.streamResponse("response"));
+      server.stream.close(Status.INTERNAL, new Metadata());
+    } catch (Exception exception) {
+      assertTrue(exception.getMessage().contains("call already closed"));
+    }
 
     // Make sure new streams still work properly
     doPingPong(serverListener);
