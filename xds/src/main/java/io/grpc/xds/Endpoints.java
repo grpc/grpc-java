@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -41,11 +42,13 @@ final class Endpoints {
     // Locality's priority level.
     abstract int priority();
 
+    abstract ImmutableMap<String, Object> localityMetadata();
+
     static LocalityLbEndpoints create(List<LbEndpoint> endpoints, int localityWeight,
-        int priority) {
+        int priority, ImmutableMap<String, Object> localityMetadata) {
       checkArgument(localityWeight > 0, "localityWeight must be greater than 0");
       return new AutoValue_Endpoints_LocalityLbEndpoints(
-          ImmutableList.copyOf(endpoints), localityWeight, priority);
+          ImmutableList.copyOf(endpoints), localityWeight, priority, localityMetadata);
     }
   }
 
@@ -63,17 +66,20 @@ final class Endpoints {
 
     abstract String hostname();
 
+    abstract ImmutableMap<String, Object> endpointMetadata();
+
     static LbEndpoint create(EquivalentAddressGroup eag, int loadBalancingWeight,
-        boolean isHealthy, String hostname) {
-      return new AutoValue_Endpoints_LbEndpoint(eag, loadBalancingWeight, isHealthy, hostname);
+        boolean isHealthy, String hostname, ImmutableMap<String, Object> endpointMetadata) {
+      return new AutoValue_Endpoints_LbEndpoint(
+          eag, loadBalancingWeight, isHealthy, hostname, endpointMetadata);
     }
 
     // Only for testing.
     @VisibleForTesting
-    static LbEndpoint create(
-        String address, int port, int loadBalancingWeight, boolean isHealthy, String hostname) {
+    static LbEndpoint create(String address, int port, int loadBalancingWeight, boolean isHealthy,
+        String hostname, ImmutableMap<String, Object> endpointMetadata) {
       return LbEndpoint.create(new EquivalentAddressGroup(new InetSocketAddress(address, port)),
-          loadBalancingWeight, isHealthy, hostname);
+          loadBalancingWeight, isHealthy, hostname, endpointMetadata);
     }
   }
 

@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -59,6 +60,8 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -430,8 +433,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                           .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
                           .set(XdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                           .build();
-                  EquivalentAddressGroup eag = new EquivalentAddressGroup(
-                      endpoint.eag().getAddresses(), attr);
+
+                  EquivalentAddressGroup eag;
+                  if (config.isHttp11ProxyAvailable()) {
+                    List<SocketAddress> rewrittenAddresses = new ArrayList<>();
+                    for (SocketAddress addr : endpoint.eag().getAddresses()) {
+                      rewrittenAddresses.add(rewriteAddress(
+                          addr, endpoint.endpointMetadata(), localityLbInfo.localityMetadata()));
+                    }
+                    eag = new EquivalentAddressGroup(rewrittenAddresses, attr);
+                  } else {
+                    eag = new EquivalentAddressGroup(endpoint.eag().getAddresses(), attr);
+                  }
                   eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
                   addresses.add(eag);
                 }
@@ -467,6 +480,35 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         }
 
         new EndpointsUpdated().run();
+      }
+
+      private SocketAddress rewriteAddress(SocketAddress addr,
+          ImmutableMap<String, Object> endpointMetadata,
+          ImmutableMap<String, Object> localityMetadata) {
+        if (!(addr instanceof InetSocketAddress)) {
+          return addr;
+        }
+
+        SocketAddress proxyAddress;
+        try {
+          proxyAddress = (SocketAddress) endpointMetadata.get(
+              "envoy.http11_proxy_transport_socket.proxy_address");
+          if (proxyAddress == null) {
+            proxyAddress = (SocketAddress) localityMetadata.get(
+                "envoy.http11_proxy_transport_socket.proxy_address");
+          }
+        } catch (ClassCastException e) {
+          return addr;
+        }
+
+        if (proxyAddress == null) {
+          return addr;
+        }
+
+        return HttpConnectProxiedSocketAddress.newBuilder()
+            .setTargetAddress((InetSocketAddress) addr)
+            .setProxyAddress(proxyAddress)
+            .build();
       }
 
       private List<String> generatePriorityNames(String name,

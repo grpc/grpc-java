@@ -25,6 +25,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ServerInterceptor;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
@@ -58,7 +59,6 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Settings;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -318,7 +318,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatchWithMatch =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 24)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.1.2.0"), 24)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -360,7 +361,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatchWithMismatch =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.2.2.0", 24)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.2.2.0"), 24)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -403,7 +405,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch0Length =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.2.2.0", 0)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.2.2.0"), 0)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -444,7 +447,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 24)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.1.2.0"), 24)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -461,7 +465,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecific =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.2", 31)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.1.2.2"), 31)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -519,7 +524,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecific =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("8.0.0.0", 5)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("8.0.0.0"), 5)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -559,7 +565,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("FE80:0:0:0:0:0:0:0", 60)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("FE80:0:0:0:0:0:0:0"), 60)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -577,7 +584,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("FE80:0000:0000:0000:0202:0:0:0", 80)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("FE80:0000:0000:0000:0202:0:0:0"), 80)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -620,8 +628,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 24),
-                EnvoyServerProtoData.CidrRange.create(LOCAL_IP, 32)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.1.2.0"), 24),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString(LOCAL_IP), 32)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -638,7 +648,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.2", 31)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.1.2.2"), 31)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -763,8 +774,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             ImmutableList.of(),
             ImmutableList.of(),
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
-                EnvoyServerProtoData.CidrRange.create(REMOTE_IP, 32)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.4.2.0"), 24),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString(REMOTE_IP), 32)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(),
             ImmutableList.of(),
@@ -781,7 +794,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             0,
             ImmutableList.of(),
             ImmutableList.of(),
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.2", 31)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.4.2.2"), 31)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(),
             ImmutableList.of(),
@@ -811,8 +825,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   @Test
-  public void sourcePrefixRange_2Matchers_expectException()
-          throws UnknownHostException {
+  public void sourcePrefixRange_2Matchers_expectException() {
     ChannelHandler next = new ChannelInboundHandlerAdapter() {
       @Override
       public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
@@ -831,8 +844,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             ImmutableList.of(),
             ImmutableList.of(),
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
-                EnvoyServerProtoData.CidrRange.create("192.168.10.2", 32)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.4.2.0"), 24),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("192.168.10.2"), 32)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(),
             ImmutableList.of(),
@@ -848,7 +863,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             0,
             ImmutableList.of(),
             ImmutableList.of(),
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.4.2.0"), 24)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(),
             ImmutableList.of(),
@@ -890,8 +906,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             ImmutableList.of(),
             ImmutableList.of(),
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
-                EnvoyServerProtoData.CidrRange.create("10.4.2.2", 31)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.4.2.0"), 24),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.4.2.2"), 31)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(),
             ImmutableList.of(),
@@ -908,7 +926,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             0,
             ImmutableList.of(),
             ImmutableList.of(),
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.2", 31)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.4.2.2"), 31)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(7000, 15000),
             ImmutableList.of(),
@@ -966,7 +985,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             PORT,
             ImmutableList.of(),
             ImmutableList.of(),
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(REMOTE_IP, 32)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString(REMOTE_IP), 32)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(),
             ImmutableList.of(),
@@ -981,9 +1001,11 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.1.2.0"), 30)),
             ImmutableList.of(),
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.0.0", 16)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.4.0.0"), 16)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(),
             ImmutableList.of(),
@@ -997,8 +1019,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("192.168.2.0", 24),
-                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("192.168.2.0"), 24),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.1.2.0"), 30)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
@@ -1015,10 +1039,13 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("10.1.0.0", 16),
-                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.1.0.0"), 16),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.1.2.0"), 30)),
             ImmutableList.of(),
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.4.2.0"), 24)),
             EnvoyServerProtoData.ConnectionSourceType.EXTERNAL,
             ImmutableList.of(16000, 9000),
             ImmutableList.of(),
@@ -1034,12 +1061,16 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("10.1.0.0", 16),
-                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.1.0.0"), 16),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.1.2.0"), 30)),
             ImmutableList.of(),
             ImmutableList.of(
-                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
-                EnvoyServerProtoData.CidrRange.create("192.168.2.0", 24)),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("10.4.2.0"), 24),
+                EnvoyServerProtoData.CidrRange.create(
+                    InetAddresses.forString("192.168.2.0"), 24)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
             ImmutableList.of(15000, 8000),
             ImmutableList.of(),
@@ -1053,7 +1084,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch6 =
         EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 29)),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.1.2.0"), 29)),
             ImmutableList.of(),
             ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -1105,8 +1137,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
         EnvoyServerProtoData.FilterChainMatch.create(
             0 /* destinationPort */,
-            ImmutableList.of(
-                    EnvoyServerProtoData.CidrRange.create("10.1.0.0", 16)) /* prefixRange */,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.1.0.0"), 16)) /* prefixRange */,
             ImmutableList.of("managed-mtls", "h2") /* applicationProtocol */,
             ImmutableList.of() /* sourcePrefixRanges */,
             EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
@@ -1117,8 +1149,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
         EnvoyServerProtoData.FilterChainMatch.create(
             0 /* destinationPort */,
-            ImmutableList.of(
-                    EnvoyServerProtoData.CidrRange.create("10.0.0.0", 8)) /* prefixRange */,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(
+                InetAddresses.forString("10.0.0.0"), 8)) /* prefixRange */,
             ImmutableList.of() /* applicationProtocol */,
             ImmutableList.of() /* sourcePrefixRanges */,
             EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,

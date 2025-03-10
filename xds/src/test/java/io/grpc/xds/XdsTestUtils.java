@@ -257,17 +257,17 @@ public class XdsTestUtils {
 
     // Need to create endpoints to create locality endpoints map to create edsUpdate
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
-    LbEndpoint lbEndpoint =
-        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
+    LbEndpoint lbEndpoint = LbEndpoint.create(
+        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
-        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
 
     // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
-        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null)
+        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null, false)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));

@@ -81,6 +81,9 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
 
     ClusterManagerConfig config = (ClusterManagerConfig)
         resolvedAddresses.getLoadBalancingPolicyConfig();
+    logger.log(
+        XdsLogLevel.INFO,
+        "Received cluster_manager lb config: child names={0}", config.childPolicies.keySet());
     Map<Object, ResolvedAddresses> childAddresses = new HashMap<>();
 
     // Reactivate children with config; deactivate children without config
@@ -108,9 +111,6 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
           .build();
       childAddresses.put(childPolicy.getKey(), addresses);
     }
-    logger.log(
-        XdsLogLevel.INFO,
-        "Received cluster_manager lb config: child names={0}", config.childPolicies.keySet());
     return childAddresses;
   }
 
