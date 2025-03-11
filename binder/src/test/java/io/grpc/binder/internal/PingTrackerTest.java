@@ -136,7 +136,7 @@ public final class PingTrackerTest {
     public void assertFailure(Status.Code statusCode) {
       assertThat(numCallbacks).isEqualTo(1);
       assertThat(failure).isTrue();
-      assertThat(failureStatus.getCode().isEqualTo(statusCode));
+      assertThat(failureStatus.getCode()).isEqualTo(statusCode);
     }
   }
 }
