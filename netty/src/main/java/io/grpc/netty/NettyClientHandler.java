@@ -78,7 +78,7 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
-import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
+import io.netty.handler.codec.http2.UniformStreamByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
@@ -169,8 +169,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
-    WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);
-    dist.allocationQuantum(16 * 1024); // Make benchmarks fast again.
+    UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
+    dist.minAllocationChunk(MIN_ALLOCATED_CHUNK);
     DefaultHttp2RemoteFlowController controller =
         new DefaultHttp2RemoteFlowController(connection, dist);
     connection.remote().flowController(controller);
