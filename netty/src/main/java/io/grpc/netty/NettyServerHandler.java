@@ -244,7 +244,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     final Http2Connection connection = new DefaultHttp2Connection(true);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
-    dist.minAllocationChunk(MIN_ALLOCATED_CHUNK);
+    dist.minAllocationChunk(MIN_ALLOCATED_CHUNK); // Increased for benchmarks performance.
     DefaultHttp2RemoteFlowController controller =
         new DefaultHttp2RemoteFlowController(connection, dist);
     connection.remote().flowController(controller);

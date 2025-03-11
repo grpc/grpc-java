@@ -170,7 +170,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
-    dist.minAllocationChunk(MIN_ALLOCATED_CHUNK);
+    dist.minAllocationChunk(MIN_ALLOCATED_CHUNK); // Increased for benchmarks performance.
     DefaultHttp2RemoteFlowController controller =
         new DefaultHttp2RemoteFlowController(connection, dist);
     connection.remote().flowController(controller);
