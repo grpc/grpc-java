@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.times;
@@ -244,12 +245,13 @@ public class OkHttpClientStreamTest {
     // GET streams send headers after halfClose is called.
     verify(mockedFrameWriter, times(0)).synStream(
         eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
-    verify(transport, times(0)).streamReadyToStart(isA(OkHttpClientStream.class));
+    verify(transport, times(0)).streamReadyToStart(isA(OkHttpClientStream.class),
+            isA(String.class));
 
     byte[] msg = "request".getBytes(Charset.forName("UTF-8"));
     stream.writeMessage(new ByteArrayInputStream(msg));
     stream.halfClose();
-    verify(transport).streamReadyToStart(eq(stream));
+    verify(transport).streamReadyToStart(eq(stream), any(String.class));
     stream.transportState().start(3);
 
     verify(mockedFrameWriter)
