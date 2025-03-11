@@ -599,7 +599,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       // just terminate the stream now.
       command.stream().transportReportStatus(
           lifecycleManager.getShutdownStatus(), RpcProgress.MISCARRIED, true, new Metadata());
-      promise.setFailure(lifecycleManager.getShutdownStatus().asException());
+      promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+              lifecycleManager.getShutdownStatus(), null));
       return;
     }
 
@@ -852,18 +853,20 @@ class NettyClientHandler extends AbstractNettyHandler {
       public void operationComplete(ChannelFuture future) throws Exception {
         if (future.isSuccess()) {
           transportTracer.reportKeepAliveSent();
+          return;
+        }
+        Throwable cause = future.cause();
+        Status status = lifecycleManager.getShutdownStatus();
+        if (cause instanceof ClosedChannelException && status == null) {
+            status = Status.UNKNOWN.withDescription("Ping failed but for unknown reason.")
+                .withCause(future.cause());
+            finalPing.failed(status);
         } else {
-          Throwable cause = future.cause();
-          Status status = lifecycleManager.getShutdownStatus();
-          if (cause instanceof ClosedChannelException && status == null) {
-              status = Status.UNKNOWN.withDescription("Ping failed but for unknown reason.")
-                  .withCause(future.cause());
-              finalPing.failed(status);
-          }
-          // else finalPing.failed(cause); ??
-          if (ping == finalPing) {
-            ping = null;
-          }
+          status = Utils.statusFromThrowable(cause);
+        }
+        finalPing.failed(status);
+        if (ping == finalPing) {
+          ping = null;
         }
       }
     });
