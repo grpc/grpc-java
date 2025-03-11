@@ -1573,6 +1573,7 @@ public abstract class AbstractTransportTest {
     verifyMessageCountAndClose(serverStreamCreation.listener.messageQueue, 1);
   }
 
+  @SuppressWarnings("MissingFail")
   @Test
   public void interactionsAfterServerStreamCloseAreNoops() throws Exception {
     server.start(serverListener);
