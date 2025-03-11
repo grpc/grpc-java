@@ -40,11 +40,10 @@ public class GrpcServlet extends HttpServlet {
   public static final String REMOVE_CONTEXT_PATH = "REMOVE_CONTEXT_PATH";
 
   private final ServletAdapter servletAdapter;
-  private boolean removeContextPath;
+  private boolean removeContextPath = false; // default value;
 
   GrpcServlet(ServletAdapter servletAdapter) {
     this.servletAdapter = servletAdapter;
-    removeContextPath = false; // default value
   }
 
   @Override
