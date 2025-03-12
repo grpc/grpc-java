@@ -592,7 +592,7 @@ public class XdsSecurityClientServerTest {
     tlsContextManagerForServer = new TlsContextManagerImpl(bootstrapInfoForServer);
     XdsServerWrapper xdsServer = (XdsServerWrapper) builder.build();
     SettableFuture<Throwable> startFuture = startServerAsync(xdsServer);
-    EnvoyServerProtoData.Listener listener = buildListener("listener1", "10.1.2.3",
+    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0:0",
             downstreamTlsContext, tlsContextManagerForServer);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);

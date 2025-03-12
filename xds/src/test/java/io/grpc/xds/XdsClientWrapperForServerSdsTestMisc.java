@@ -165,7 +165,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     EnvoyServerProtoData.Listener tcpListener =
         EnvoyServerProtoData.Listener.create(
             "listener1",
-            "10.1.2.3",
+            "0.0.0.0:7000",
             ImmutableList.of(),
             null);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(tcpListener);
