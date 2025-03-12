@@ -29,6 +29,11 @@ import javax.servlet.http.HttpServletResponse;
  * A simple servlet backed by a gRPC server. Must set {@code asyncSupported} to true. The {@code
  * /contextRoot/urlPattern} must match the gRPC services' path, which is
  * "/full-service-name/short-method-name".
+ * If you use application server and want get access to grpc from path
+ * "/deployment-name/full-service-name/short-method-name"
+ * you must use {@link GrpcServlet#REMOVE_CONTEXT_PATH} for remove
+ * context path("deployment-name") from method name.
+ * <a href=https://github.com/grpc/grpc-java/pull/11825>More info</a>.
  *
  * <p>The API is experimental. The authors would like to know more about the real usecases. Users
  * are welcome to provide feedback by commenting on
