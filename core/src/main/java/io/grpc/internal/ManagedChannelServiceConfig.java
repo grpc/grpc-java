@@ -402,7 +402,7 @@ final class ManagedChannelServiceConfig {
     final ManagedChannelServiceConfig config;
 
     /** Converts the service config to config selector. */
-    private ServiceConfigConvertedSelector(ManagedChannelServiceConfig config) {
+    ServiceConfigConvertedSelector(ManagedChannelServiceConfig config) {
       this.config = config;
     }
 
@@ -411,6 +411,14 @@ final class ManagedChannelServiceConfig {
       return Result.newBuilder()
           .setConfig(config)
           .build();
+    }
+
+    @Override
+    public String toString() {
+      return "ServiceConfigConvertedSelector{"
+          + "config="
+          + config
+          + '}';
     }
   }
 }
