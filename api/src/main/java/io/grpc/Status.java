@@ -656,8 +656,14 @@ public final class Status {
    * additional fields may be added to Status in the future.
    */
   @Override
-  public boolean equals(Object obj) {
-    return super.equals(obj);
+  public boolean equals(Object o) {
+    if (!(o instanceof Status)) {
+      return false;
+    }
+    Status status = (Status) o;
+    return code == status.code
+            && Objects.equal(description, status.description)
+            && Objects.equal(cause, status.cause);
   }
 
   /**
@@ -667,6 +673,6 @@ public final class Status {
    */
   @Override
   public int hashCode() {
-    return super.hashCode();
+    return Objects.hashCode(code, description, cause);
   }
 }
