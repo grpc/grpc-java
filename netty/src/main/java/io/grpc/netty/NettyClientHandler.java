@@ -857,9 +857,11 @@ class NettyClientHandler extends AbstractNettyHandler {
         }
         Throwable cause = future.cause();
         Status status = lifecycleManager.getShutdownStatus();
-        if (cause instanceof ClosedChannelException && status == null) {
+        if (cause instanceof ClosedChannelException) {
+          if (status == null) {
             status = Status.UNKNOWN.withDescription("Ping failed but for unknown reason.")
-                .withCause(future.cause());
+                    .withCause(future.cause());
+          }
         } else {
           status = Utils.statusFromThrowable(cause);
         }
