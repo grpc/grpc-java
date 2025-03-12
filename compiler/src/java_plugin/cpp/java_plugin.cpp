@@ -23,6 +23,9 @@
 
 #include "java_generator.h"
 #include <google/protobuf/compiler/code_generator.h>
+#if GOOGLE_PROTOBUF_VERSION >= 5027000
+#include <google/protobuf/compiler/java/java_features.pb.h>
+#endif
 #include <google/protobuf/compiler/plugin.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/zero_copy_stream.h>
@@ -56,6 +59,10 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
   }
   protobuf::Edition GetMaximumEdition() const override {
     return protobuf::Edition::EDITION_2023;
+  }
+  std::vector<const protobuf::FieldDescriptor*> GetFeatureExtensions()
+      const override {
+    return {GetExtensionReflection(pb::java)};
   }
 #else
   uint64_t GetSupportedFeatures() const override {
