@@ -275,7 +275,7 @@ public class KeepAliveManager {
         public void onSuccess(long roundTripTimeNanos) {}
 
         @Override
-        public void onFailure(Throwable cause) {
+        public void onFailure(Status cause) {
           transport.shutdownNow(Status.UNAVAILABLE.withDescription(
               "Keepalive failed. The connection is likely gone"));
         }

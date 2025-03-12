@@ -59,7 +59,6 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.StatusException;
 import io.grpc.internal.AbstractStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -812,9 +811,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     handler().channelInactive(ctx());
     // ping failed on channel going inactive
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertEquals(Status.Code.UNAVAILABLE, callback.failureCause.getCode());
     // A failed ping is still counted
     assertEquals(1, transportTracer.getStats().keepAlivesSent);
   }
@@ -1169,7 +1166,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private static class PingCallbackImpl implements ClientTransport.PingCallback {
     int invocationCount;
     long roundTripTime;
-    Throwable failureCause;
+    Status failureCause;
 
     @Override
     public void onSuccess(long roundTripTimeNanos) {
@@ -1178,7 +1175,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     }
 
     @Override
-    public void onFailure(Throwable cause) {
+    public void onFailure(Status cause) {
       invocationCount++;
       this.failureCause = cause;
     }

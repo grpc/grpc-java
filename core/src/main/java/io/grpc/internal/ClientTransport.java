@@ -22,6 +22,7 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status;
 import java.util.concurrent.Executor;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -90,6 +91,6 @@ public interface ClientTransport extends InternalInstrumented<SocketStats> {
      *
      * @param cause the cause of the ping failure
      */
-    void onFailure(Throwable cause);
+    void onFailure(Status cause);
   }
 }

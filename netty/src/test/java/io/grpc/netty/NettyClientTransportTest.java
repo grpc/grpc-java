@@ -548,8 +548,8 @@ public class NettyClientTransportTest {
       }
 
       @Override
-      public void onFailure(Throwable cause) {
-        pingResult.setException(cause);
+      public void onFailure(Status cause) {
+        pingResult.setException(cause.asException());
       }
     };
     transport.ping(pingCallback, clock.getScheduledExecutorService());

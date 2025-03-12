@@ -96,7 +96,7 @@ public final class PingTrackerTest {
     private int numCallbacks;
     private boolean success;
     private boolean failure;
-    private Throwable failureException;
+    private Status failureStatus;
     private long roundtripTimeNanos;
 
     @Override
@@ -107,10 +107,10 @@ public final class PingTrackerTest {
     }
 
     @Override
-    public synchronized void onFailure(Throwable failureException) {
+    public synchronized void onFailure(Status failureStatus) {
       numCallbacks += 1;
       failure = true;
-      this.failureException = failureException;
+      this.failureStatus = failureStatus;
     }
 
     public void assertNotCalled() {
@@ -130,13 +130,13 @@ public final class PingTrackerTest {
     public void assertFailure(Status status) {
       assertThat(numCallbacks).isEqualTo(1);
       assertThat(failure).isTrue();
-      assertThat(((StatusException) failureException).getStatus()).isSameInstanceAs(status);
+      assertThat(failureStatus).isSameInstanceAs(status);
     }
 
     public void assertFailure(Status.Code statusCode) {
       assertThat(numCallbacks).isEqualTo(1);
       assertThat(failure).isTrue();
-      assertThat(((StatusException) failureException).getStatus().getCode()).isEqualTo(statusCode);
+      assertThat(failureStatus.getCode()).isEqualTo(statusCode);
     }
   }
 }
