@@ -281,6 +281,16 @@ public class XdsTestUtils {
     return builder.build();
   }
 
+  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
+    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
+    LbEndpoint lbEndpoint = LbEndpoint.create(
+        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+    lbEndpointsMap.put(
+        Locality.create("", "", ""),
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
+    return lbEndpointsMap;
+  }
+
   @SuppressWarnings("unchecked")
   private static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
     String lbConfigStr = "{\"wrr_locality_experimental\" : "
@@ -353,7 +363,6 @@ public class XdsTestUtils {
     return Listener.newBuilder()
         .setName(serverName)
         .setApiListener(clientListenerBuilder.build()).build();
-
   }
 
   /**

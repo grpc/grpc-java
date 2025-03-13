@@ -26,9 +26,9 @@ import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.io.Closeable;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Represents the xDS configuration tree for a specified Listener.
@@ -178,13 +178,22 @@ final class XdsConfig {
       public StatusOr<EdsUpdate> getEndpoint() {
         return endpoint;
       }
+
+      @Override
+      public String toString() {
+        if (endpoint.hasValue()) {
+          return "EndpointConfig{endpoint=" + endpoint.getValue() + "}";
+        } else {
+          return "EndpointConfig{error=" + endpoint.getStatus() + "}";
+        }
+      }
     }
 
     // The list of leaf clusters for an aggregate cluster.
     static final class AggregateConfig implements ClusterChild {
-      private final List<String> leafNames;
+      private final Set<String> leafNames;
 
-      public AggregateConfig(List<String> leafNames) {
+      public AggregateConfig(Set<String> leafNames) {
         this.leafNames = checkNotNull(leafNames, "leafNames");
       }
 
@@ -234,6 +243,7 @@ final class XdsConfig {
     XdsConfig build() {
       checkNotNull(listener, "listener");
       checkNotNull(route, "route");
+      checkNotNull(virtualHost, "virtualHost");
       return new XdsConfig(listener, route, clusters, virtualHost);
     }
   }
