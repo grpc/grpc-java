@@ -54,6 +54,7 @@ export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 export LDFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --libs protobuf)"
 export CXXFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --cflags protobuf)"
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
+export LIBRARY_PATH=/tmp/protobuf/lib
 
 ./gradlew grpc-compiler:clean $GRADLE_FLAGS
 
