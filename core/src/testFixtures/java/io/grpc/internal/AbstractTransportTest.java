@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
@@ -76,9 +77,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -208,10 +207,6 @@ public abstract class AbstractTransportTest {
             return new TestServerStreamTracer();
           }
         }));
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
 
   @Before
   public void setUp() {
@@ -396,8 +391,7 @@ public abstract class AbstractTransportTest {
       port = ((InetSocketAddress) addr).getPort();
     }
     InternalServer server2 = newServer(port, Arrays.asList(serverStreamTracerFactory));
-    thrown.expect(IOException.class);
-    server2.start(new MockServerListener());
+    assertThrows(IOException.class, () -> server2.start(new MockServerListener()));
   }
 
   @Test
