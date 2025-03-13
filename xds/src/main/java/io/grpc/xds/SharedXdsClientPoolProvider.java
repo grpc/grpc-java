@@ -17,11 +17,11 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
+import io.grpc.CallCredentials;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -87,6 +87,12 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @Override
   public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
       throws XdsInitializationException {
+    return getOrCreate(target, metricRecorder, null);
+  }
+
+  public ObjectPool<XdsClient> getOrCreate(
+      String target, MetricRecorder metricRecorder, CallCredentials transportCallCredentials)
+      throws XdsInitializationException {
     ObjectPool<XdsClient> ref = targetToXdsClientMap.get(target);
     if (ref == null) {
       synchronized (lock) {
@@ -102,7 +108,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           if (bootstrapInfo.servers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
-          ref = new RefCountedXdsClientObjectPool(bootstrapInfo, target, metricRecorder);
+          ref =
+              new RefCountedXdsClientObjectPool(
+                  bootstrapInfo, target, metricRecorder, transportCallCredentials);
           targetToXdsClientMap.put(target, ref);
         }
       }
@@ -126,6 +134,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private final BootstrapInfo bootstrapInfo;
     private final String target; // The target associated with the xDS client.
     private final MetricRecorder metricRecorder;
+    private final CallCredentials transportCallCredentials;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -137,11 +146,21 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private XdsClientMetricReporterImpl metricReporter;
 
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo, String target,
-        MetricRecorder metricRecorder) {
+    RefCountedXdsClientObjectPool(
+        BootstrapInfo bootstrapInfo, String target, MetricRecorder metricRecorder) {
+      this(bootstrapInfo, target, metricRecorder, null);
+    }
+
+    @VisibleForTesting
+    RefCountedXdsClientObjectPool(
+        BootstrapInfo bootstrapInfo,
+        String target,
+        MetricRecorder metricRecorder,
+        CallCredentials transportCallCredentials) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo);
       this.target = target;
       this.metricRecorder = metricRecorder;
+      this.transportCallCredentials = transportCallCredentials;
     }
 
     @Override
@@ -153,16 +172,19 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           }
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           metricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
-          xdsClient = new XdsClientImpl(
-              DEFAULT_XDS_TRANSPORT_FACTORY,
-              bootstrapInfo,
-              scheduler,
-              BACKOFF_POLICY_PROVIDER,
-              GrpcUtil.STOPWATCH_SUPPLIER,
-              TimeProvider.SYSTEM_TIME_PROVIDER,
-              MessagePrinter.INSTANCE,
-              new TlsContextManagerImpl(bootstrapInfo),
-              metricReporter);
+          GrpcXdsTransportFactory xdsTransportFactory =
+              new GrpcXdsTransportFactory(transportCallCredentials);
+          xdsClient =
+              new XdsClientImpl(
+                  xdsTransportFactory,
+                  bootstrapInfo,
+                  scheduler,
+                  BACKOFF_POLICY_PROVIDER,
+                  GrpcUtil.STOPWATCH_SUPPLIER,
+                  TimeProvider.SYSTEM_TIME_PROVIDER,
+                  MessagePrinter.INSTANCE,
+                  new TlsContextManagerImpl(bootstrapInfo),
+                  metricReporter);
           metricReporter.setXdsClient(xdsClient);
         }
         refCount++;
