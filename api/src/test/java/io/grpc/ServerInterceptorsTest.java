@@ -19,6 +19,7 @@ package io.grpc;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.same;
@@ -40,7 +41,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentMatchers;
@@ -54,10 +54,6 @@ import org.mockito.junit.MockitoRule;
 public class ServerInterceptorsTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Mock
   private Marshaller<String> requestMarshaller;
@@ -111,21 +107,21 @@ public class ServerInterceptorsTest {
   public void npeForNullServiceDefinition() {
     ServerServiceDefinition serviceDef = null;
     List<ServerInterceptor> interceptors = Arrays.asList();
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDef, interceptors);
+    assertThrows(NullPointerException.class,
+        () -> ServerInterceptors.intercept(serviceDef, interceptors));
   }
 
   @Test
   public void npeForNullInterceptorList() {
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDefinition, (List<ServerInterceptor>) null);
+    assertThrows(NullPointerException.class,
+        () -> ServerInterceptors.intercept(serviceDefinition, (List<ServerInterceptor>) null));
   }
 
   @Test
   public void npeForNullInterceptor() {
     List<ServerInterceptor> interceptors = Arrays.asList((ServerInterceptor) null);
-    thrown.expect(NullPointerException.class);
-    ServerInterceptors.intercept(serviceDefinition, interceptors);
+    assertThrows(NullPointerException.class,
+        () -> ServerInterceptors.intercept(serviceDefinition, interceptors));
   }
 
   @Test
