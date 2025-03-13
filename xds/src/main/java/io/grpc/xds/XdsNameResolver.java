@@ -45,6 +45,7 @@ import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -655,14 +656,22 @@ final class XdsNameResolver extends NameResolver {
     }
 
     @Override
-    public void onUpdate(XdsConfig update) {
+    public void onUpdate(StatusOr<XdsConfig> updateOrStatus) {
       if (stopped) {
         return;
       }
-      logger.log(XdsLogLevel.INFO, "Receive XDS resource update: {0}", update);
-      lastConfig = update;
+      logger.log(XdsLogLevel.INFO, "Receive XDS resource update: {0}", updateOrStatus);
+
+      if (!updateOrStatus.hasValue()) {
+        updateActiveFilters(null);
+        cleanUpRoutes(updateOrStatus.getStatus());
+        return;
+      }
+      // FIXME: used even after we receive an error
+      lastConfig = updateOrStatus.getValue();
 
       // Process Route
+      XdsConfig update = updateOrStatus.getValue();
       HttpConnectionManager httpConnectionManager = update.getListener().httpConnectionManager();
       VirtualHost virtualHost = update.getVirtualHost();
       ImmutableList<NamedFilterConfig> filterConfigs = httpConnectionManager.httpFilterConfigs();
@@ -670,28 +679,6 @@ final class XdsNameResolver extends NameResolver {
 
       updateActiveFilters(filterConfigs);
       updateRoutes(virtualHost, streamDurationNano, filterConfigs);
-    }
-
-    @Override
-    public void onError(String resourceContext, Status error) {
-      if (stopped) {
-        return;
-      }
-      String errorMsg = String.format("Error for %s: %s: %s",
-          resourceContext, error.getCode(), error.getDescription());
-      logger.log(XdsLogLevel.INFO, errorMsg);
-      cleanUpRoutes(errorMsg);
-    }
-
-    @Override
-    public void onResourceDoesNotExist(String resourceContext) {
-      if (stopped) {
-        return;
-      }
-      String error = "Resource does not exist: " + resourceContext;
-      logger.log(XdsLogLevel.INFO, error);
-      updateActiveFilters(null);
-      cleanUpRoutes(error);
     }
 
     // called in syncContext
@@ -859,10 +846,8 @@ final class XdsNameResolver extends NameResolver {
       return combineInterceptors(filterInterceptors.build());
     }
 
-    private void cleanUpRoutes(String error) {
-      String errorWithNodeId =
-          error + ", xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
-      routingConfig = new RoutingConfig(Status.UNAVAILABLE.withDescription(errorWithNodeId));
+    private void cleanUpRoutes(Status error) {
+      routingConfig = new RoutingConfig(error);
       if (existingClusters != null) {
         for (String cluster : existingClusters) {
           int count = clusterRefs.get(cluster).refCount.decrementAndGet();

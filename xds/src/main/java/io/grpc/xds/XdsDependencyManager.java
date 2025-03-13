@@ -67,7 +67,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private XdsConfig lastXdsConfig = null;
+  private StatusOr<XdsConfig> lastUpdate = null;
   private final Map<XdsResourceType<?>, TypeWatchers<?>> resourceWatchers = new HashMap<>();
 
   XdsDependencyManager(XdsClient xdsClient, XdsConfigWatcher xdsConfigWatcher,
@@ -88,7 +88,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   public static String toContextStr(String typeName, String resourceName) {
-    return typeName + " resource: " + resourceName;
+    return typeName + " resource " + resourceName;
   }
 
   @Override
@@ -263,18 +263,19 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       return;
     }
 
-    XdsConfig newConfig = buildConfig();
-    if (Objects.equals(newConfig, lastXdsConfig)) {
+    StatusOr<XdsConfig> newUpdate = buildUpdate();
+    if (Objects.equals(newUpdate, lastUpdate)) {
       return;
     }
-    lastXdsConfig = newConfig;
-    if (newConfig != null) {
-      xdsConfigWatcher.onUpdate(lastXdsConfig);
-    }
+    assert newUpdate.hasValue()
+        || (newUpdate.getStatus().getCode() == Status.Code.UNAVAILABLE
+            || newUpdate.getStatus().getCode() == Status.Code.INTERNAL);
+    lastUpdate = newUpdate;
+    xdsConfigWatcher.onUpdate(lastUpdate);
   }
 
   @VisibleForTesting
-  XdsConfig buildConfig() {
+  StatusOr<XdsConfig> buildUpdate() {
     XdsConfig.XdsConfigBuilder builder = new XdsConfig.XdsConfigBuilder();
 
     // Iterate watchers and build the XdsConfig
@@ -284,8 +285,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     for (XdsWatcherBase<XdsListenerResource.LdsUpdate> ldsWatcher :
         getWatchers(XdsListenerResource.getInstance()).values()) {
       if (!ldsWatcher.getData().hasValue()) {
-        xdsConfigWatcher.onError(ldsWatcher.toContextString(), ldsWatcher.getData().getStatus());
-        return null;
+        return StatusOr.fromStatus(ldsWatcher.getData().getStatus());
       }
       XdsListenerResource.LdsUpdate ldsUpdate = ldsWatcher.getData().getValue();
       builder.setListener(ldsUpdate);
@@ -294,8 +294,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     StatusOr<RdsUpdate> statusOrRdsUpdate = routeSource.getRdsUpdate();
     if (!statusOrRdsUpdate.hasValue()) {
-      xdsConfigWatcher.onError(routeSource.toContextString(), statusOrRdsUpdate.getStatus());
-      return null;
+      return StatusOr.fromStatus(statusOrRdsUpdate.getStatus());
     }
     RdsUpdate rdsUpdate = statusOrRdsUpdate.getValue();
     builder.setRoute(rdsUpdate);
@@ -304,9 +303,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         RoutingUtils.findVirtualHostForHostName(rdsUpdate.virtualHosts, dataPlaneAuthority);
     if (activeVirtualHost == null) {
       String error = "Failed to find virtual host matching hostname: " + dataPlaneAuthority;
-      xdsConfigWatcher.onError(
-          routeSource.toContextString(), Status.UNAVAILABLE.withDescription(error));
-      return null;
+      return StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(error));
     }
     builder.setVirtualHost(activeVirtualHost);
 
@@ -329,7 +326,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     addLeavesToBuilder(builder, edsWatchers, leafNames);
 
-    return builder.build();
+    return StatusOr.fromValue(builder.build());
   }
 
   private <T extends ResourceUpdate> Map<String, XdsWatcherBase<T>> getWatchers(
@@ -505,6 +502,10 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
   }
 
+  private String nodeInfo() {
+    return " nodeID: " + xdsClient.getBootstrapInfo().node().getId();
+  }
+
   private static Set<String> getClusterNamesFromVirtualHost(VirtualHost virtualHost) {
     if (virtualHost == null) {
       return Collections.emptySet();
@@ -548,16 +549,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   }
 
   public interface XdsConfigWatcher {
-
-    void onUpdate(XdsConfig config);
-
-    // These 2 methods are invoked when there is an error or
-    // does-not-exist on LDS or RDS only.  The context will be a
-    // human-readable string indicating the scope in which the error
-    // occurred (e.g., the resource type and name).
-    void onError(String resourceContext, Status status);
-
-    void onResourceDoesNotExist(String resourceContext);
+    /**
+     * An updated XdsConfig or RPC-safe Status. The status code will be either UNAVAILABLE or
+     * INTERNAL.
+     */
+    void onUpdate(StatusOr<XdsConfig> config);
   }
 
   private class ClusterSubscription implements Closeable {
@@ -597,14 +593,23 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       checkNotNull(error, "error");
       // Don't update configuration on error, if we've already received configuration
       if (!hasDataValue()) {
-        setDataAsStatus(error);
+        setDataAsStatus(Status.UNAVAILABLE.withDescription(
+            String.format("Error retrieving %s: %s: %s",
+              toContextString(), error.getCode(), error.getDescription())));
         maybePublishConfig();
       }
     }
 
-    protected void handleDoesNotExist(String resourceName) {
+    @Override
+    public void onResourceDoesNotExist(String resourceName) {
+      if (cancelled) {
+        return;
+      }
+
       checkArgument(this.resourceName.equals(resourceName), "Resource name does not match");
-      setDataAsStatus(Status.UNAVAILABLE.withDescription("No " + toContextString()));
+      setDataAsStatus(Status.UNAVAILABLE.withDescription(
+          toContextString() + " does not exist" + nodeInfo()));
+      maybePublishConfig();
     }
 
     boolean missingResult() {
@@ -698,11 +703,12 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         return;
       }
 
-      handleDoesNotExist(resourceName);
+      checkArgument(resourceName().equals(resourceName), "Resource name does not match");
+      setDataAsStatus(Status.UNAVAILABLE.withDescription(
+          toContextString() + " does not exist" + nodeInfo()));
       cleanUpRdsWatcher();
       rdsName = null;
-      lastXdsConfig = null; // Publishing an empty result
-      xdsConfigWatcher.onResourceDoesNotExist(toContextString());
+      maybePublishConfig();
     }
 
     private void cleanUpRdsWatcher() {
@@ -761,7 +767,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       HttpConnectionManager hcm = getData().getValue().httpConnectionManager();
       if (hcm == null) {
         return StatusOr.fromStatus(
-            Status.UNAVAILABLE.withDescription("Not an API listener"));
+            Status.UNAVAILABLE.withDescription("Not an API listener" + nodeInfo()));
       }
       List<VirtualHost> virtualHosts = hcm.virtualHosts();
       if (virtualHosts == null) {
@@ -789,17 +795,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       setData(update);
       updateRoutes(update.virtualHosts, this, oldVirtualHosts, true);
       maybePublishConfig();
-    }
-
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      if (cancelled) {
-        return;
-      }
-
-      handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
-      xdsConfigWatcher.onResourceDoesNotExist(toContextString());
-      lastXdsConfig = null; // Published an empty result
     }
 
     @Override
@@ -841,7 +836,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
             logger.log(XdsLogger.XdsLogLevel.WARNING,
                 "Cluster recursion depth limit exceeded for cluster {0}", resourceName());
             Status error = Status.UNAVAILABLE.withDescription(
-                "aggregate cluster graph exceeds max depth");
+                "aggregate cluster graph exceeds max depth at " + resourceName() + nodeInfo());
             setDataAsStatus(error);
           }
           if (hasDataValue()) {
@@ -875,7 +870,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
           break;
         default:
           Status error = Status.UNAVAILABLE.withDescription(
-              "aggregate cluster graph exceeds max depth");
+              "aggregate cluster graph exceeds max depth at " + resourceName() + nodeInfo());
           setDataAsStatus(error);
           maybePublishConfig();
       }
@@ -890,15 +885,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
       return edsServiceName;
     }
-
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      if (cancelled) {
-        return;
-      }
-      handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
-      maybePublishConfig();
-    }
   }
 
   private class EdsWatcher extends XdsWatcherBase<XdsEndpointResource.EdsUpdate> {
@@ -912,15 +898,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     @Override
     public void onChanged(XdsEndpointResource.EdsUpdate update) {
       setData(checkNotNull(update, "update"));
-      maybePublishConfig();
-    }
-
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      if (cancelled) {
-        return;
-      }
-      handleDoesNotExist(checkNotNull(resourceName, "resourceName"));
       maybePublishConfig();
     }
 
