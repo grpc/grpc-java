@@ -39,23 +39,23 @@ public class ServiceDescriptorTest {
   @Test
   public void failsOnNullName() {
     List<MethodDescriptor<?, ?>> methods = Collections.emptyList();
-    NullPointerException e = assertThrows(NullPointerException.class, () ->
-        new ServiceDescriptor(null, methods));
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> new ServiceDescriptor(null, methods));
     assertThat(e.getMessage()).contains("name");
   }
 
   @Test
   public void failsOnNullMethods() {
-    NullPointerException e = assertThrows(NullPointerException.class, () ->
-        new ServiceDescriptor("name", (Collection<MethodDescriptor<?, ?>>) null));
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> new ServiceDescriptor("name", (Collection<MethodDescriptor<?, ?>>) null));
     assertThat(e.getMessage()).contains("methods");
   }
 
   @Test
   public void failsOnNullMethod() {
     List<MethodDescriptor<?, ?>> methods = Collections.singletonList(null);
-    NullPointerException e = assertThrows(NullPointerException.class, () ->
-        new ServiceDescriptor("name", methods));
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> new ServiceDescriptor("name", methods));
     assertThat(e.getMessage()).contains("method");
   }
 
@@ -69,8 +69,8 @@ public class ServiceDescriptorTest {
           .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
           .build());
 
-    IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () ->
-        new ServiceDescriptor("name", descriptors));
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new ServiceDescriptor("name", descriptors));
     assertThat(e.getMessage()).contains("service names");
   }
 
@@ -90,8 +90,8 @@ public class ServiceDescriptorTest {
           .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
           .build());
 
-    IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () ->
-        new ServiceDescriptor("name", descriptors));
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new ServiceDescriptor("name", descriptors));
     assertThat(e.getMessage()).contains("duplicate");
   }
 
