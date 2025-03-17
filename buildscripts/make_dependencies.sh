@@ -5,6 +5,7 @@ set -evux -o pipefail
 
 PROTOBUF_VERSION=22.5
 ABSL_VERSION=20230125.4
+CMAKE_VERSION=3.13.4
 
 # ARCH is x86_64 bit unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
@@ -29,6 +30,16 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
   echo "Not building protobuf. Already built"
 # TODO(ejona): swap to `brew install --devel protobuf` once it is up-to-date
 else
+  if [[ ! -d "cmake-${CMAKE_VERSION}" ]]; then
+    curl -Ls "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz" | tar xz
+  fi
+  # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first 
+  rm -rf "$DOWNLOAD_DIR/cmake-${CMAKE_VERSION}/bin"
+  cd "$DOWNLOAD_DIR/cmake-${CMAKE_VERSION}"
+  ./bootstrap
+  make
+  make install
+  ln -s /usr/local/bin/cmake /usr/bin/cmake
   if [[ ! -d "protobuf-${PROTOBUF_VERSION}" ]]; then
     curl -Ls "https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz" | tar xz
     curl -Ls "https://github.com/abseil/abseil-cpp/archive/refs/tags/${ABSL_VERSION}.tar.gz" | tar xz
@@ -60,7 +71,8 @@ else
     cmake .. \
       -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -Dcrosscompile_ARCH="$GCC_ARCH" \
-      -DCMAKE_TOOLCHAIN_FILE=$BUILDSCRIPTS_DIR/toolchain.cmake
+      -DCMAKE_TOOLCHAIN_FILE=$BUILDSCRIPTS_DIR/toolchain.cmake \
+      -B.
   fi
   export CMAKE_BUILD_PARALLEL_LEVEL="$NUM_CPU"
   cmake --build .
