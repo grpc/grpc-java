@@ -40,6 +40,7 @@ else
   make
   make install
   ln -s /usr/local/bin/cmake /usr/bin/cmake
+  cd "$DOWNLOAD_DIR"
   if [[ ! -d "protobuf-${PROTOBUF_VERSION}" ]]; then
     curl -Ls "https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz" | tar xz
     curl -Ls "https://github.com/abseil/abseil-cpp/archive/refs/tags/${ABSL_VERSION}.tar.gz" | tar xz
