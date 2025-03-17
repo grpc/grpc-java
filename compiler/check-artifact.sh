@@ -114,7 +114,7 @@ checkDependencies ()
     white_list="KERNEL32\.dll\|msvcrt\.dll\|USER32\.dll"
   elif [[ "$OS" == linux ]]; then
     dump_cmd='objdump -x '"$1"' | grep "NEEDED"'
-    white_list="libpthread\.so\.0\|libstdc++\.so\.6\|libc\.so\.6|librt\.so\.1"
+    white_list="libpthread\.so\.0\|libstdc++\.so\.6\|libc\.so\.6\|librt\.so\.1\|libm\.so\.6"
     if [[ "$ARCH" == x86_32 ]]; then
       white_list="${white_list}\|libm\.so\.6"
     elif [[ "$ARCH" == x86_64 ]]; then
