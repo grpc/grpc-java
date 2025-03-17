@@ -62,7 +62,8 @@ else
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -Dcrosscompile_ARCH="$GCC_ARCH" \
       -DCMAKE_TOOLCHAIN_FILE=$BUILDSCRIPTS_DIR/toolchain.cmake
   fi
-  cmake --build . -j "$NUM_CPU"
+  export CMAKE_BUILD_PARALLEL_LEVEL="$NUM_CPU"
+  cmake --build .
   cmake --install .
   [ -d "$INSTALL_DIR/lib64" ] && mv "$INSTALL_DIR/lib64" "$INSTALL_DIR/lib"
   popd
