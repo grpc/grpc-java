@@ -288,7 +288,7 @@ final class XdsNameResolver extends NameResolver {
   }
 
   // called in syncContext
-  private void updateResolutionResult() {
+  private void updateResolutionResult(XdsConfig xdsConfig) {
     syncContext.throwIfNotInThisSynchronizationContext();
 
     ImmutableMap.Builder<String, Object> childPolicy = new ImmutableMap.Builder<>();
@@ -310,7 +310,7 @@ final class XdsNameResolver extends NameResolver {
     Attributes attrs =
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .set(XdsAttributes.XDS_CONFIG, resolveState.lastConfig)
+            .set(XdsAttributes.XDS_CONFIG, xdsConfig)
             .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, resolveState.xdsDependencyManager)
             .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
@@ -539,7 +539,11 @@ final class XdsNameResolver extends NameResolver {
           public void run() {
             if (clusterRefs.get(cluster).refCount.get() == 0) {
               clusterRefs.remove(cluster);
-              updateResolutionResult();
+              if (resolveState.lastConfigOrStatus.hasValue()) {
+                updateResolutionResult(resolveState.lastConfigOrStatus.getValue());
+              } else {
+                resolveState.cleanUpRoutes(resolveState.lastConfigOrStatus.getStatus());
+              }
             }
           }
         });
@@ -636,7 +640,7 @@ final class XdsNameResolver extends NameResolver {
     private boolean stopped;
     @Nullable
     private Set<String> existingClusters;  // clusters to which new requests can be routed
-    private XdsConfig lastConfig;
+    private StatusOr<XdsConfig> lastConfigOrStatus;
 
     private ResolveState(String ldsResourceName) {
       authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
@@ -662,13 +666,12 @@ final class XdsNameResolver extends NameResolver {
       }
       logger.log(XdsLogLevel.INFO, "Receive XDS resource update: {0}", updateOrStatus);
 
+      lastConfigOrStatus = updateOrStatus;
       if (!updateOrStatus.hasValue()) {
         updateActiveFilters(null);
         cleanUpRoutes(updateOrStatus.getStatus());
         return;
       }
-      // FIXME: used even after we receive an error
-      lastConfig = updateOrStatus.getValue();
 
       // Process Route
       XdsConfig update = updateOrStatus.getValue();
@@ -678,7 +681,7 @@ final class XdsNameResolver extends NameResolver {
       long streamDurationNano = httpConnectionManager.httpMaxStreamDurationNano();
 
       updateActiveFilters(filterConfigs);
-      updateRoutes(virtualHost, streamDurationNano, filterConfigs);
+      updateRoutes(update, virtualHost, streamDurationNano, filterConfigs);
     }
 
     // called in syncContext
@@ -706,8 +709,11 @@ final class XdsNameResolver extends NameResolver {
       }
     }
 
-    private void updateRoutes(@Nullable VirtualHost virtualHost, long httpMaxStreamDurationNano,
-                              @Nullable List<NamedFilterConfig> filterConfigs) {
+    private void updateRoutes(
+        XdsConfig xdsConfig,
+        @Nullable VirtualHost virtualHost,
+        long httpMaxStreamDurationNano,
+        @Nullable List<NamedFilterConfig> filterConfigs) {
       List<Route> routes = virtualHost.routes();
       ImmutableList.Builder<RouteData> routesData = ImmutableList.builder();
 
@@ -790,7 +796,7 @@ final class XdsNameResolver extends NameResolver {
       }
       // Update service config to include newly added clusters.
       if (shouldUpdateResult && routingConfig != null) {
-        updateResolutionResult();
+        updateResolutionResult(xdsConfig);
         shouldUpdateResult = false;
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
@@ -804,7 +810,7 @@ final class XdsNameResolver extends NameResolver {
         }
       }
       if (shouldUpdateResult) {
-        updateResolutionResult();
+        updateResolutionResult(xdsConfig);
       }
     }
 
