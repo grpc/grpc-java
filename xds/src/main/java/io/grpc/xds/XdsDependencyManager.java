@@ -646,8 +646,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private interface RdsUpdateSupplier {
     StatusOr<RdsUpdate> getRdsUpdate();
-
-    String toContextString();
   }
 
   private class LdsWatcher extends XdsWatcherBase<XdsListenerResource.LdsUpdate>
