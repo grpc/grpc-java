@@ -1862,7 +1862,7 @@ public class XdsServerWrapperTest {
         EnvoyServerProtoData.ConnectionSourceType.ANY,
         ImmutableList.of(),
         ImmutableList.of(),
-        "");
+        "raw_buffer");
   }
 
   private static FilterChainMatch createMatchSrcIp(String srcCidr) {

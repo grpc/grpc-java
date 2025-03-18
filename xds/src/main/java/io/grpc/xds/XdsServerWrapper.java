@@ -391,8 +391,17 @@ final class XdsServerWrapper extends Server {
         return;
       }
 
+      boolean isUdpListener = false;
+      for (FilterChain filterChain : update.listener().filterChains()) {
+        String transportProtocol = filterChain.filterChainMatch().transportProtocol();
+        if (transportProtocol != null && !"raw_buffer".equals(transportProtocol)) {
+          isUdpListener = true;
+          break;
+        }
+      }
+
       String ldsAddress = update.listener().address();
-      if (ldsAddress != null && !ipAddressesMatch(ldsAddress)) {
+      if (!isUdpListener && ldsAddress != null && !ipAddressesMatch(ldsAddress)) {
         handleConfigNotFoundOrMismatch(
             Status.UNKNOWN.withDescription(
                 String.format(
@@ -454,8 +463,8 @@ final class XdsServerWrapper extends Server {
 
       InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
       InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
-      if (ldsAddressHnP.hasPort() && listenerAddressHnP.hasPort()
-          && ldsAddressHnP.getPort() != listenerAddressHnP.getPort()) {
+      if (!ldsAddressHnP.hasPort() || !listenerAddressHnP.hasPort()
+          || ldsAddressHnP.getPort() != listenerAddressHnP.getPort()) {
         return false;
       }
 

@@ -165,6 +165,12 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     if (proto.getAddress().hasSocketAddress()) {
       SocketAddress socketAddress = proto.getAddress().getSocketAddress();
       address = socketAddress.getAddress();
+      if (address.trim().isEmpty()) {
+        throw new ResourceInvalidException("Invalid address: Empty address is not allowed.");
+      }
+      if (socketAddress.hasNamedPort()) {
+        throw new ResourceInvalidException("NAMED_PORT is not supported in gRPC.");
+      }
       switch (socketAddress.getPortSpecifierCase()) {
         case NAMED_PORT:
           address = address + ":" + socketAddress.getNamedPort();
