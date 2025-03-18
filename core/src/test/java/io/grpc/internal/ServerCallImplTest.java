@@ -177,7 +177,7 @@ public class ServerCallImplTest {
     Metadata headers = new Metadata();
     IllegalStateException e = assertThrows(IllegalStateException.class,
         () -> call.sendHeaders(headers));
-    assertThat(e).hasMessageThat().contains("sendHeaders has already been called");
+    assertThat(e).hasMessageThat().isEqualTo("sendHeaders has already been called");
   }
 
   @Test
@@ -187,7 +187,7 @@ public class ServerCallImplTest {
     Metadata headers = new Metadata();
     IllegalStateException e = assertThrows(IllegalStateException.class,
         () -> call.sendHeaders(headers));
-    assertThat(e).hasMessageThat().contains("call is closed");
+    assertThat(e).hasMessageThat().isEqualTo("call is closed");
   }
 
   @Test
@@ -205,14 +205,14 @@ public class ServerCallImplTest {
 
     IllegalStateException e = assertThrows(IllegalStateException.class,
         () -> call.sendMessage(1234L));
-    assertThat(e).hasMessageThat().contains("call is closed");
+    assertThat(e).hasMessageThat().isEqualTo("call is closed");
   }
 
   @Test
   public void sendMessage_failsIfheadersUnsent() {
     IllegalStateException e = assertThrows(IllegalStateException.class,
         () -> call.sendMessage(1234L));
-    assertThat(e).hasMessageThat().contains("sendHeaders has not been called");
+    assertThat(e).hasMessageThat().isEqualTo("sendHeaders has not been called");
   }
 
   @Test
@@ -490,7 +490,7 @@ public class ServerCallImplTest {
     SingleMessageProducer producer = new SingleMessageProducer(inputStream);
     RuntimeException e = assertThrows(RuntimeException.class,
         () -> streamListener.messagesAvailable(producer));
-    assertThat(e).hasMessageThat().contains("unexpected exception");
+    assertThat(e).hasMessageThat().isEqualTo("unexpected exception");
   }
 
   private static class LongMarshaller implements Marshaller<Long> {
