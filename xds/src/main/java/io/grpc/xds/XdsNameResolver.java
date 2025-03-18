@@ -94,6 +94,8 @@ final class XdsNameResolver extends NameResolver {
 
   static final CallOptions.Key<String> CLUSTER_SELECTION_KEY =
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
+  static final CallOptions.Key<XdsConfig> XDS_CONFIG_CALL_OPTION_KEY =
+      CallOptions.Key.create("io.grpc.xds.XDS_CONFIG_CALL_OPTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
   static final CallOptions.Key<Boolean> AUTO_HOST_REWRITE_KEY =
@@ -467,6 +469,7 @@ final class XdsNameResolver extends NameResolver {
                 "Failed to parse service config (method config)"));
       }
       final String finalCluster = cluster;
+      final XdsConfig xdsConfig = routingCfg.xdsConfig;
       final long hash = generateHash(routeAction.hashPolicies(), headers);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
@@ -475,6 +478,7 @@ final class XdsNameResolver extends NameResolver {
             final Channel next) {
           CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
+                  .withOption(XDS_CONFIG_CALL_OPTION_KEY, xdsConfig)
                   .withOption(RPC_HASH_KEY, hash);
           if (routeAction.autoHostRewrite()) {
             callOptionsForCluster = callOptionsForCluster.withOption(AUTO_HOST_REWRITE_KEY, true);
@@ -801,7 +805,7 @@ final class XdsNameResolver extends NameResolver {
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
-      routingConfig = new RoutingConfig(httpMaxStreamDurationNano, routesData.build());
+      routingConfig = new RoutingConfig(xdsConfig, httpMaxStreamDurationNano, routesData.build());
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
@@ -879,17 +883,21 @@ final class XdsNameResolver extends NameResolver {
    * VirtualHost-level configuration for request routing.
    */
   private static class RoutingConfig {
-    private final long fallbackTimeoutNano;
+    final XdsConfig xdsConfig;
+    final long fallbackTimeoutNano;
     final ImmutableList<RouteData> routes;
     final Status errorStatus;
 
-    private RoutingConfig(long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
+    private RoutingConfig(
+        XdsConfig xdsConfig, long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
+      this.xdsConfig = checkNotNull(xdsConfig, "xdsConfig");
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = checkNotNull(routes, "routes");
       this.errorStatus = null;
     }
 
     private RoutingConfig(Status errorStatus) {
+      this.xdsConfig = null;
       this.fallbackTimeoutNano = 0;
       this.routes = null;
       this.errorStatus = checkNotNull(errorStatus, "errorStatus");
