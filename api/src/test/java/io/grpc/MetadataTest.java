@@ -120,7 +120,7 @@ public class MetadataTest {
   public void noPseudoHeaders() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> Metadata.Key.of(":test-bin", FISH_MARSHALLER));
-    assertThat(e.getMessage()).contains("Invalid character");
+    assertThat(e).hasMessageThat().isEqualTo("Invalid character");
   }
 
   @Test
@@ -273,7 +273,7 @@ public class MetadataTest {
   public void invalidSuffixBinaryKeyName() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> Metadata.Key.of("nonbinary", FISH_MARSHALLER));
-    assertThat(e.getMessage()).contains("Binary header is named");
+    assertThat(e).hasMessageThat().isEqualTo("Binary header is named nonbinary. It must end with -bin");
   }
 
   @Test

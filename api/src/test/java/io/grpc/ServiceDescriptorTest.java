@@ -41,14 +41,14 @@ public class ServiceDescriptorTest {
     List<MethodDescriptor<?, ?>> methods = Collections.emptyList();
     NullPointerException e = assertThrows(NullPointerException.class,
         () -> new ServiceDescriptor(null, methods));
-    assertThat(e.getMessage()).contains("name");
+    assertThat(e).hasMessageThat().isEqualTo("name");
   }
 
   @Test
   public void failsOnNullMethods() {
     NullPointerException e = assertThrows(NullPointerException.class,
         () -> new ServiceDescriptor("name", (Collection<MethodDescriptor<?, ?>>) null));
-    assertThat(e.getMessage()).contains("methods");
+    assertThat(e).hasMessageThat().isEqualTo("methods");
   }
 
   @Test
@@ -56,7 +56,7 @@ public class ServiceDescriptorTest {
     List<MethodDescriptor<?, ?>> methods = Collections.singletonList(null);
     NullPointerException e = assertThrows(NullPointerException.class,
         () -> new ServiceDescriptor("name", methods));
-    assertThat(e.getMessage()).contains("method");
+    assertThat(e).hasMessageThat().isEqualTo("method");
   }
 
   @Test
@@ -71,7 +71,7 @@ public class ServiceDescriptorTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> new ServiceDescriptor("name", descriptors));
-    assertThat(e.getMessage()).contains("service names");
+    assertThat(e).hasMessageThat().isEqualTo("service names wrongservice != name");
   }
 
   @Test
@@ -92,7 +92,7 @@ public class ServiceDescriptorTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> new ServiceDescriptor("name", descriptors));
-    assertThat(e.getMessage()).contains("duplicate");
+    assertThat(e).hasMessageThat().isEqualTo("duplicate name name/method");
   }
 
   @Test
