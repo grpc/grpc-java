@@ -382,7 +382,7 @@ public class MessageDeframerTest {
           }
         });
         assertThat(e).hasMessageThat()
-            .contains("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
+            .isEqualTo("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 2");
       } finally {
         stream.close();
       }
@@ -427,7 +427,7 @@ public class MessageDeframerTest {
         StatusRuntimeException e = assertThrows(StatusRuntimeException.class,
             () -> stream.read(buf, 0, buf.length));
         assertThat(e).hasMessageThat()
-            .contains("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
+            .isEqualTo("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 2");
       } finally {
         stream.close();
       }
@@ -469,7 +469,7 @@ public class MessageDeframerTest {
       try {
         StatusRuntimeException e = assertThrows(StatusRuntimeException.class, () -> stream.skip(4));
         assertThat(e).hasMessageThat()
-            .contains("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
+            .isEqualTo("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 2");
       } finally {
         stream.close();
       }
