@@ -916,7 +916,7 @@ public class DnsNameResolverTest {
     Random random = new Random();
     VerifyException e = assertThrows(VerifyException.class,
         () -> DnsNameResolver.maybeChooseServiceConfig(bad, random, "host"));
-    assertThat(e).hasMessageThat().contains("Bad key");
+    assertThat(e).hasMessageThat().isEqualTo("Bad key: parcentage=1.0");
   }
 
   @Test
@@ -1162,7 +1162,7 @@ public class DnsNameResolverTest {
 
     ClassCastException e = assertThrows(ClassCastException.class,
         () -> DnsNameResolver.parseTxtResults(txtRecords));
-    assertThat(e).hasMessageThat().contains("wrong type");
+    assertThat(e).hasMessageThat().isEqualTo("wrong type {}");
   }
 
   @Test
@@ -1173,7 +1173,7 @@ public class DnsNameResolverTest {
 
     ClassCastException e = assertThrows(ClassCastException.class,
         () -> DnsNameResolver.parseTxtResults(txtRecords));
-    assertThat(e).hasMessageThat().contains("not object");
+    assertThat(e).hasMessageThat().isEqualTo("value bogus for idx 0 in [bogus] is not object");
   }
 
   @Test

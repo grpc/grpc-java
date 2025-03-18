@@ -227,7 +227,7 @@ public class GrpcUtilTest {
   public void checkAuthority_failsOnInvalidAuthority() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> GrpcUtil.checkAuthority("[ : : 1]"));
-    assertThat(e).hasMessageThat().contains("Invalid authority");
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
 
@@ -235,7 +235,8 @@ public class GrpcUtilTest {
   public void checkAuthority_userInfoNotAllowed() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> GrpcUtil.checkAuthority("foo@valid"));
-    assertThat(e).hasMessageThat().contains("Userinfo");
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Userinfo must not be present on authority: 'foo@valid'");
   }
 
   @Test

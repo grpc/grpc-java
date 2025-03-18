@@ -424,7 +424,7 @@ public class ManagedChannelImplBuilderTest {
   public void checkAuthority_invalidAuthorityFailed() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
-    assertThat(e).hasMessageThat().contains("Invalid authority");
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
   @Test
@@ -450,7 +450,7 @@ public class ManagedChannelImplBuilderTest {
     builder.disableCheckAuthority().enableCheckAuthority();
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
-    assertThat(e).hasMessageThat().contains("Invalid authority");
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
   @Test

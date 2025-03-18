@@ -466,6 +466,7 @@ public class MessageFramerTest {
 
     @Override
     public WritableBuffer allocate(int capacityHint) {
+      System.out.println("allocate " + capacityHint);
       allocCount++;
       return new ByteWritableBuffer(Math.min(maxSize, Math.max(capacityHint, minSize)));
     }
