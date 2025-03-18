@@ -332,7 +332,6 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
-  // TODO fix - clusters with bad status are being suppressed instead of returned
   public void testMissingCdsAndEds() {
     // update config so that agg cluster references 2 existing & 1 non-existing cluster
     List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
@@ -471,7 +470,6 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testChangeRdsName_fromLds() {
-    // TODO implement
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
         serverName, serverName, nameResolverArgs, scheduler);

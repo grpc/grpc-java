@@ -636,7 +636,6 @@ public class XdsNameResolverTest {
         metricRecorder, nameResolverArgs);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    // TODO Why does the test expect to have listener.onResult2() called when this produces an error
     xdsClient.deliverLdsUpdateOnly(0L, Arrays.asList(virtualHost));
     fakeClock.forwardTime(15, TimeUnit.SECONDS);
     assertEmptyResolutionResult("random");
