@@ -76,7 +76,7 @@ public class ManagedChannelServiceConfigTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
-    assertThat(e).hasMessageThat().contains("Duplicate method");
+    assertThat(e).hasMessageThat().isEqualTo("Duplicate method name service/method");
   }
 
   @Test
@@ -88,7 +88,7 @@ public class ManagedChannelServiceConfigTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
-    assertThat(e).hasMessageThat().contains("Duplicate service");
+    assertThat(e).hasMessageThat().isEqualTo("Duplicate service service");
   }
 
   @Test
@@ -102,7 +102,7 @@ public class ManagedChannelServiceConfigTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
-    assertThat(e).hasMessageThat().contains("Duplicate service");
+    assertThat(e).hasMessageThat().isEqualTo("Duplicate service service");
   }
 
   @Test
@@ -113,7 +113,7 @@ public class ManagedChannelServiceConfigTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
-    assertThat(e).hasMessageThat().contains("missing service name for method method1");
+    assertThat(e).hasMessageThat().isEqualTo("missing service name for method method1");
   }
 
   @Test
@@ -124,7 +124,7 @@ public class ManagedChannelServiceConfigTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
-    assertThat(e).hasMessageThat().contains("missing service name for method method1");
+    assertThat(e).hasMessageThat().isEqualTo("missing service name for method method1");
   }
 
   @Test
@@ -135,7 +135,7 @@ public class ManagedChannelServiceConfigTest {
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
-    assertThat(e).hasMessageThat().contains("missing service");
+    assertThat(e).hasMessageThat().isEqualTo("missing service name for method method");
   }
 
   @Test
