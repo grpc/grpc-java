@@ -1259,7 +1259,7 @@ public class ServerImplTest {
     transportServer = new SimpleServer();
     createServer();
     IllegalStateException e = assertThrows(IllegalStateException.class, () -> server.getPort());
-    assertThat(e).hasMessageThat().contains("started");
+    assertThat(e).hasMessageThat().isEqualTo("Not started");
   }
 
   @Test
@@ -1269,7 +1269,7 @@ public class ServerImplTest {
     server.shutdown();
     server.awaitTermination();
     IllegalStateException e = assertThrows(IllegalStateException.class, () -> server.getPort());
-    assertThat(e).hasMessageThat().contains("terminated");
+    assertThat(e).hasMessageThat().isEqualTo("Already terminated");
   }
 
   @Test
