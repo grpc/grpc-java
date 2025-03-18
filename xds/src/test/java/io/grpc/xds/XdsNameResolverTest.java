@@ -1672,6 +1672,10 @@ public class XdsNameResolverTest {
     clientCall.start(new NoopClientCallListener<>(), new Metadata());
     assertThat(testCall.callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
         .isEqualTo("cluster:" + expectedCluster);
+    XdsConfig xdsConfig =
+        testCall.callOptions.getOption(XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY);
+    assertThat(xdsConfig).isNotNull();
+    assertThat(xdsConfig.getClusters()).containsKey(expectedCluster); // Without "cluster:" prefix
     @SuppressWarnings("unchecked")
     Map<String, ?> config = (Map<String, ?>) result.getConfig();
     if (expectedTimeoutSec != null) {
