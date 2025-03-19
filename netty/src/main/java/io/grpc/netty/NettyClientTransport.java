@@ -165,7 +165,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       executor.execute(new Runnable() {
         @Override
         public void run() {
-          callback.onFailure(statusExplainingWhyTheChannelIsNull.asException());
+          callback.onFailure(statusExplainingWhyTheChannelIsNull);
         }
       });
       return;
@@ -177,7 +177,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
           Status s = statusFromFailedFuture(future);
-          Http2Ping.notifyFailed(callback, executor, s.asException());
+          Http2Ping.notifyFailed(callback, executor, s);
         }
       }
     };
