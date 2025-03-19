@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import com.google.common.truth.StringSubject;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Arrays;
@@ -64,14 +65,17 @@ public class ServiceDescriptorTest {
     List<MethodDescriptor<?, ?>> descriptors = Collections.<MethodDescriptor<?, ?>>singletonList(
         MethodDescriptor.<Void, Void>newBuilder()
           .setType(MethodType.UNARY)
-          .setFullMethodName(MethodDescriptor.generateFullMethodName("wrongservice", "method"))
+          .setFullMethodName(MethodDescriptor.generateFullMethodName("wrongService", "method"))
           .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
           .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
           .build());
 
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new ServiceDescriptor("name", descriptors));
-    assertThat(e).hasMessageThat().isEqualTo("service names wrongservice != name");
+        () -> new ServiceDescriptor("fooService", descriptors));
+    StringSubject error = assertThat(e).hasMessageThat();
+    error.contains("service names");
+    error.contains("fooService");
+    error.contains("wrongService");
   }
 
   @Test
