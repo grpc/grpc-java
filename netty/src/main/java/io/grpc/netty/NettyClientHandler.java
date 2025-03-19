@@ -78,7 +78,7 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
 import io.netty.handler.codec.http2.StreamBufferingEncoder;
-import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
+import io.netty.handler.codec.http2.UniformStreamByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
@@ -169,8 +169,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
-    WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);
-    dist.allocationQuantum(16 * 1024); // Make benchmarks fast again.
+    UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
+    dist.minAllocationChunk(MIN_ALLOCATED_CHUNK); // Increased for benchmarks performance.
     DefaultHttp2RemoteFlowController controller =
         new DefaultHttp2RemoteFlowController(connection, dist);
     connection.remote().flowController(controller);
@@ -499,7 +499,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         streamStatus = lifecycleManager.getShutdownStatus();
       }
       try {
-        cancelPing(lifecycleManager.getShutdownThrowable());
+        cancelPing(lifecycleManager.getShutdownStatus());
         // Report status to the application layer for any open streams
         connection().forEachActiveStream(new Http2StreamVisitor() {
           @Override
@@ -593,13 +593,14 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   private void createStream(CreateStreamCommand command, ChannelPromise promise)
           throws Exception {
-    if (lifecycleManager.getShutdownThrowable() != null) {
+    if (lifecycleManager.getShutdownStatus() != null) {
       command.stream().setNonExistent();
       // The connection is going away (it is really the GOAWAY case),
       // just terminate the stream now.
       command.stream().transportReportStatus(
           lifecycleManager.getShutdownStatus(), RpcProgress.MISCARRIED, true, new Metadata());
-      promise.setFailure(lifecycleManager.getShutdownThrowable());
+      promise.setFailure(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+              lifecycleManager.getShutdownStatus(), null));
       return;
     }
 
@@ -852,19 +853,21 @@ class NettyClientHandler extends AbstractNettyHandler {
       public void operationComplete(ChannelFuture future) throws Exception {
         if (future.isSuccess()) {
           transportTracer.reportKeepAliveSent();
+          return;
+        }
+        Throwable cause = future.cause();
+        Status status = lifecycleManager.getShutdownStatus();
+        if (cause instanceof ClosedChannelException) {
+          if (status == null) {
+            status = Status.UNKNOWN.withDescription("Ping failed but for unknown reason.")
+                    .withCause(future.cause());
+          }
         } else {
-          Throwable cause = future.cause();
-          if (cause instanceof ClosedChannelException) {
-            cause = lifecycleManager.getShutdownThrowable();
-            if (cause == null) {
-              cause = Status.UNKNOWN.withDescription("Ping failed but for unknown reason.")
-                  .withCause(future.cause()).asException();
-            }
-          }
-          finalPing.failed(cause);
-          if (ping == finalPing) {
-            ping = null;
-          }
+          status = Utils.statusFromThrowable(cause);
+        }
+        finalPing.failed(status);
+        if (ping == finalPing) {
+          ping = null;
         }
       }
     });
@@ -963,9 +966,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-  private void cancelPing(Throwable t) {
+  private void cancelPing(Status s) {
     if (ping != null) {
-      ping.failed(t);
+      ping.failed(s);
       ping = null;
     }
   }
