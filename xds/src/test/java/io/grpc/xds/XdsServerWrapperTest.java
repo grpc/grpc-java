@@ -37,6 +37,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
@@ -575,7 +576,7 @@ public class XdsServerWrapperTest {
 
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(
         Listener.create("listener", "20.3.4.5:1",
-            ImmutableList.copyOf(Collections.singletonList(filterChain)), null));
+            ImmutableList.copyOf(Collections.singletonList(filterChain)), null, Protocol.TCP));
     xdsClient.deliverLdsUpdate(listenerUpdate);
     verify(listener, timeout(10000)).onNotServing(any());
   }
@@ -1862,7 +1863,7 @@ public class XdsServerWrapperTest {
         EnvoyServerProtoData.ConnectionSourceType.ANY,
         ImmutableList.of(),
         ImmutableList.of(),
-        "raw_buffer");
+        "");
   }
 
   private static FilterChainMatch createMatchSrcIp(String srcCidr) {

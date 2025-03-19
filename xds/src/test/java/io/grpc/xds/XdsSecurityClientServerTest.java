@@ -35,6 +35,7 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -488,7 +489,7 @@ public class XdsSecurityClientServerTest {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(
             "cert-instance-name2", true, true);
-    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0",
+    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0:0",
             downstreamTlsContext,
             tlsContextManagerForServer);
     xdsClient.deliverLdsUpdate(LdsUpdate.forTcpListener(listener));
@@ -633,7 +634,7 @@ public class XdsSecurityClientServerTest {
         "filter-chain-foo", filterChainMatch, httpConnectionManager, tlsContext,
         tlsContextManager);
     EnvoyServerProtoData.Listener listener = EnvoyServerProtoData.Listener.create(
-        name, address, ImmutableList.of(defaultFilterChain), null);
+        name, address, ImmutableList.of(defaultFilterChain), null, Protocol.TCP);
     return listener;
   }
 

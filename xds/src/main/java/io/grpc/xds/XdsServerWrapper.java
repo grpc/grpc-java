@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.net.HostAndPort;
 import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
@@ -391,17 +392,9 @@ final class XdsServerWrapper extends Server {
         return;
       }
 
-      boolean isUdpListener = false;
-      for (FilterChain filterChain : update.listener().filterChains()) {
-        String transportProtocol = filterChain.filterChainMatch().transportProtocol();
-        if (transportProtocol != null && !"raw_buffer".equals(transportProtocol)) {
-          isUdpListener = true;
-          break;
-        }
-      }
-
       String ldsAddress = update.listener().address();
-      if (!isUdpListener && ldsAddress != null && !ipAddressesMatch(ldsAddress)) {
+      if (ldsAddress != null && update.listener().protocol() == Protocol.TCP
+          && !ipAddressesMatch(ldsAddress)) {
         handleConfigNotFoundOrMismatch(
             Status.UNKNOWN.withDescription(
                 String.format(
