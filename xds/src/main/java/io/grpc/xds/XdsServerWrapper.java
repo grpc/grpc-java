@@ -393,7 +393,6 @@ final class XdsServerWrapper extends Server {
       }
 
       String ldsAddress = update.listener().address();
-      int x = update.listener().protocol().getNumber();
       if (ldsAddress == null || update.listener().protocol() != Protocol.TCP
           || !ipAddressesMatch(ldsAddress)) {
         handleConfigNotFoundOrMismatch(
