@@ -55,7 +55,7 @@ class FailingClientTransport implements ClientTransport {
   public void ping(final PingCallback callback, Executor executor) {
     executor.execute(new Runnable() {
         @Override public void run() {
-          callback.onFailure(error.asException());
+          callback.onFailure(error);
         }
       });
   }

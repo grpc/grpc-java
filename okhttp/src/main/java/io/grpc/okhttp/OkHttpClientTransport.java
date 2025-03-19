@@ -1062,12 +1062,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
   }
 
-  private Throwable getPingFailure() {
+  private Status getPingFailure() {
     synchronized (lock) {
       if (goAwayStatus != null) {
-        return goAwayStatus.asException();
+        return goAwayStatus;
       } else {
-        return Status.UNAVAILABLE.withDescription("Connection closed").asException();
+        return Status.UNAVAILABLE.withDescription("Connection closed");
       }
     }
   }
