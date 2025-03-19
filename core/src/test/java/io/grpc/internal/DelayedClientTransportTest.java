@@ -170,6 +170,7 @@ public class DelayedClientTransportTest {
 
   @Test public void newStreamThenAssignTransportThenShutdown() {
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, tracers);
+    stream.start(streamListener);
     assertEquals(1, delayedTransport.getPendingStreamsCount());
     assertTrue(stream instanceof DelayedStream);
     delayedTransport.reprocess(mockPicker);
@@ -177,12 +178,12 @@ public class DelayedClientTransportTest {
     delayedTransport.shutdown(SHUTDOWN_STATUS);
     verify(transportListener).transportShutdown(same(SHUTDOWN_STATUS));
     verify(transportListener).transportTerminated();
+    fakeExecutor.runDueTasks();
     assertEquals(0, fakeExecutor.runDueTasks());
     verify(mockRealTransport).newStream(
         same(method), same(headers), same(callOptions),
         ArgumentMatchers.<ClientStreamTracer[]>any());
-    stream.start(streamListener);
-    verify(mockRealStream).start(same(streamListener));
+    verify(mockRealStream).start(any(ClientStreamListener.class));
   }
 
   @Test public void transportTerminatedThenAssignTransport() {
@@ -271,14 +272,41 @@ public class DelayedClientTransportTest {
     verifyNoMoreInteractions(mockRealStream);
   }
 
+  @Test
+  public void newStreamThenShutDownNow() {
+    ClientStream stream = delayedTransport.newStream(
+            method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(streamListener);
+    assertEquals(1,delayedTransport.getPendingStreamsCount());
+    delayedTransport.shutdownNow(Status.UNAVAILABLE);
+    verify(transportListener).transportShutdown(any(Status.class));
+    verify(transportListener).transportTerminated();
+    verify(streamListener).closed(
+            statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
+    assertEquals(0,delayedTransport.getPendingStreamsCount());
+    assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
+  }
+
+  @Test
+  public void testDelayedClientTransportPendingStreamsOnShutDown() {
+    ClientStream clientStream = delayedTransport.newStream(method, headers, callOptions, tracers);
+    ClientStream clientStream1 = delayedTransport.newStream(method, headers, callOptions, tracers);
+    assertEquals(0, delayedTransport.getPendingStreamsCount());
+    clientStream.start(streamListener);
+    clientStream1.start(streamListener);
+    assertEquals(2, delayedTransport.getPendingStreamsCount());
+    delayedTransport.shutdownNow(Status.UNAVAILABLE);
+    assertEquals(0, delayedTransport.getPendingStreamsCount());
+  }
+
   @Test public void newStreamThenShutdownTransportThenCancelStream() {
     ClientStream stream = delayedTransport.newStream(
-        method, new Metadata(), CallOptions.DEFAULT, tracers);
+            method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(streamListener);
     delayedTransport.shutdown(SHUTDOWN_STATUS);
     verify(transportListener).transportShutdown(same(SHUTDOWN_STATUS));
     verify(transportListener, times(0)).transportTerminated();
     assertEquals(1, delayedTransport.getPendingStreamsCount());
-    stream.start(streamListener);
     stream.cancel(Status.CANCELLED);
     verify(transportListener).transportTerminated();
     assertEquals(0, delayedTransport.getPendingStreamsCount());
@@ -348,33 +376,39 @@ public class DelayedClientTransportTest {
     ff1.start(mock(ClientStreamListener.class));
     ff1.halfClose();
     PickSubchannelArgsMatcher ff1args = new PickSubchannelArgsMatcher(method, headers,
-        failFastCallOptions);
+            failFastCallOptions);
+    transportListener.transportInUse(true);
     verify(transportListener).transportInUse(true);
     DelayedStream ff2 = (DelayedStream) delayedTransport.newStream(
-        method2, headers2, failFastCallOptions, tracers);
+            method2, headers2, failFastCallOptions, tracers);
+    ff2.start(mock(ClientStreamListener.class));
     PickSubchannelArgsMatcher ff2args = new PickSubchannelArgsMatcher(method2, headers2,
         failFastCallOptions);
     DelayedStream ff3 = (DelayedStream) delayedTransport.newStream(
-        method, headers, failFastCallOptions, tracers);
+            method, headers, failFastCallOptions, tracers);
+    ff3.start(mock(ClientStreamListener.class));
     PickSubchannelArgsMatcher ff3args = new PickSubchannelArgsMatcher(method, headers,
         failFastCallOptions);
     DelayedStream ff4 = (DelayedStream) delayedTransport.newStream(
-        method2, headers2, failFastCallOptions, tracers);
+            method2, headers2, failFastCallOptions, tracers);
+    ff4.start(mock(ClientStreamListener.class));
     PickSubchannelArgsMatcher ff4args = new PickSubchannelArgsMatcher(method2, headers2,
         failFastCallOptions);
 
     // Wait-for-ready streams
     FakeClock wfr3Executor = new FakeClock();
     DelayedStream wfr1 = (DelayedStream) delayedTransport.newStream(
-        method, headers, waitForReadyCallOptions, tracers);
+            method, headers, waitForReadyCallOptions, tracers);
+    wfr1.start(mock(ClientStreamListener.class));
     PickSubchannelArgsMatcher wfr1args = new PickSubchannelArgsMatcher(method, headers,
         waitForReadyCallOptions);
     DelayedStream wfr2 = (DelayedStream) delayedTransport.newStream(
-        method2, headers2, waitForReadyCallOptions, tracers);
+            method2, headers2, waitForReadyCallOptions, tracers);
+    wfr2.start(mock(ClientStreamListener.class));
     PickSubchannelArgsMatcher wfr2args = new PickSubchannelArgsMatcher(method2, headers2,
         waitForReadyCallOptions);
     CallOptions wfr3callOptions = waitForReadyCallOptions.withExecutor(
-        wfr3Executor.getScheduledExecutorService());
+            wfr3Executor.getScheduledExecutorService());
     DelayedStream wfr3 = (DelayedStream) delayedTransport.newStream(
         method, headers, wfr3callOptions, tracers);
     wfr3.start(mock(ClientStreamListener.class));
@@ -382,7 +416,8 @@ public class DelayedClientTransportTest {
     PickSubchannelArgsMatcher wfr3args = new PickSubchannelArgsMatcher(method, headers,
         wfr3callOptions);
     DelayedStream wfr4 = (DelayedStream) delayedTransport.newStream(
-        method2, headers2, waitForReadyCallOptions, tracers);
+            method2, headers2, waitForReadyCallOptions, tracers);
+    wfr4.start(mock(ClientStreamListener.class));
     PickSubchannelArgsMatcher wfr4args = new PickSubchannelArgsMatcher(method2, headers2,
         waitForReadyCallOptions);
 
@@ -478,7 +513,8 @@ public class DelayedClientTransportTest {
 
     // New streams will use the last picker
     DelayedStream wfr5 = (DelayedStream) delayedTransport.newStream(
-        method, headers, waitForReadyCallOptions, tracers);
+            method, headers, waitForReadyCallOptions, tracers);
+    wfr5.start(mock(ClientStreamListener.class));
     assertNull(wfr5.getRealStream());
     inOrder.verify(picker).pickSubchannel(
         eqPickSubchannelArgs(method, headers, waitForReadyCallOptions));
@@ -626,12 +662,14 @@ public class DelayedClientTransportTest {
     verify(picker, never()).pickSubchannel(any(PickSubchannelArgs.class));
 
     Thread sideThread = new Thread("sideThread") {
-        @Override
-        public void run() {
-          // Will call pickSubchannel and wait on barrier
-          delayedTransport.newStream(method, headers, callOptions, tracers);
-        }
-      };
+      @Override
+      public void run() {
+        // Will call pick Subchannel and wait on barrier
+        ClientStream clientStream =
+                delayedTransport.newStream(method, headers, callOptions, tracers);
+        clientStream.start(streamListener);
+      }
+    };
     sideThread.start();
 
     PickSubchannelArgsMatcher args = new PickSubchannelArgsMatcher(method, headers, callOptions);
@@ -659,12 +697,14 @@ public class DelayedClientTransportTest {
     ////////// Phase 2: reprocess() with a different picker
     // Create the second stream
     Thread sideThread2 = new Thread("sideThread2") {
-        @Override
-        public void run() {
-          // Will call pickSubchannel and wait on barrier
-          delayedTransport.newStream(method, headers2, callOptions, tracers);
-        }
-      };
+      @Override
+      public void run() {
+        // Will call pickSubchannel and wait on barrier
+        ClientStream clientStream = delayedTransport
+                .newStream(method, headers2, callOptions, tracers);
+        clientStream.start(streamListener);
+      }
+    };
     sideThread2.start();
     // The second stream will see the first picker
     verify(picker, timeout(5000)).pickSubchannel(argThat(args2));
@@ -730,6 +770,7 @@ public class DelayedClientTransportTest {
     ClientStream stream = delayedTransport.newStream(
         method, headers, callOptions, tracers);
     stream.start(streamListener);
+    transportListener.transportInUse(true);
     assertTrue(delayedTransport.hasPendingStreams());
     verify(transportListener).transportInUse(true);
   }

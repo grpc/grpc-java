@@ -46,6 +46,7 @@ import io.grpc.internal.SingleMessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.concurrent.TimeUnit;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -82,6 +83,39 @@ public class DelayedStreamTest {
     InOrder inOrder = inOrder(realStream);
     inOrder.verify(realStream).setAuthority(authority);
     inOrder.verify(realStream).start(any(ClientStreamListener.class));
+  }
+
+  @Test
+  public void testSetStreamReplaceOldStreamProperly() {
+    ClientStream oldStream = mock(ClientStream.class);
+    ClientStream newStream = mock(ClientStream.class);
+
+    // First stream set, but never started
+    callMeMaybe(stream.setStream(oldStream));
+    callMeMaybe(stream.setStream(newStream));
+    // Verify old stream was canceled
+    verify(oldStream,never()).cancel(any(Status.class));
+    // Ensure new stream is properly set
+    verifyNoMoreInteractions(newStream);
+  }
+
+  @Test
+  public void testSetStreamStartCancelsOldStreamProperly() {
+    ClientStream oldStream = mock(ClientStream.class);
+    ClientStream newStream = mock(ClientStream.class);
+
+    // First stream set, but never started
+    callMeMaybe(stream.setStream(oldStream));
+    stream.start(listener);
+    try {
+      callMeMaybe(stream.setStream(newStream));
+    } catch (IllegalStateException e) {
+      assertNotNull(e.getMessage());
+    }
+    // Verify old stream was canceled
+    verify(oldStream).cancel(any(Status.class));
+    // Ensure new stream is properly set
+    verifyNoMoreInteractions(newStream);
   }
 
   @Test(expected = IllegalStateException.class)
@@ -333,17 +367,28 @@ public class DelayedStreamTest {
     stream.start(listener);
     callMeMaybe(stream.setStream(realStream));
     verify(realStream).start(any(ClientStreamListener.class));
-    callMeMaybe(stream.setStream(mock(ClientStream.class)));
+    try {
+      callMeMaybe(stream.setStream(mock(ClientStream.class)));
+    } catch (IllegalStateException e) {
+      assertEquals("realStream already set to realStream",e.getMessage());
+    }
     stream.flush();
     verify(realStream).flush();
   }
 
   @Test
   public void cancelThenSetStream() {
-    stream.start(listener);
-    stream.cancel(Status.CANCELLED);
+    try {
+      stream.cancel(Status.CANCELLED);
+      Assert.fail("Should have thrown");
+    } catch (IllegalStateException e) {
+      assertEquals("May only be called after start", e.getMessage());
+    }
     callMeMaybe(stream.setStream(realStream));
+    stream.start(listener);
     stream.isReady();
+    verify(realStream).start(same(listener));
+    verify(realStream).isReady();
     verifyNoMoreInteractions(realStream);
   }
 

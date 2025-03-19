@@ -2920,7 +2920,12 @@ public class ManagedChannelImplTest {
 
     // Move channel to idle
     timer.forwardNanos(TimeUnit.MILLISECONDS.toNanos(idleTimeoutMillis));
+    executor.runDueTasks();
     assertEquals(IDLE, channel.getState(false));
+
+    //Force transport re-creation explicitly
+    channel.getState(true);
+    executor.runDueTasks();
 
     // This call should be buffered, but will move the channel out of idle
     ClientCall<String, Integer> call2 = channel.newCall(method, CallOptions.DEFAULT);
@@ -2947,15 +2952,15 @@ public class ManagedChannelImplTest {
     transportListener.transportReady();
 
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withSubchannel(subchannel));
+            .thenReturn(PickResult.withSubchannel(subchannel));
     updateBalancingStateSafely(helper2, READY, mockPicker);
     assertEquals(READY, channel.getState(false));
     executor.runDueTasks();
 
     // Verify the buffered call was drained
     verify(mockTransport).newStream(
-        same(method), any(Metadata.class), any(CallOptions.class),
-        ArgumentMatchers.<ClientStreamTracer[]>any());
+            same(method), any(Metadata.class), any(CallOptions.class),
+            ArgumentMatchers.<ClientStreamTracer[]>any());
     verify(mockStream).start(any(ClientStreamListener.class));
   }
 
