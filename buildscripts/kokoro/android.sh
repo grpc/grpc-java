@@ -9,8 +9,8 @@ BASE_DIR="$(pwd)"
 
 cd "$BASE_DIR/github/grpc-java"
 
-export LDFLAGS=-L/tmp/protobuf/lib
-export CXXFLAGS=-I/tmp/protobuf/include
+export LDFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --libs protobuf)"
+export CXXFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --cflags protobuf)"
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
