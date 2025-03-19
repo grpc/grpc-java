@@ -125,11 +125,22 @@ class DelayedStream implements ClientStream {
   @CheckReturnValue
   final Runnable setStream(ClientStream stream) {
     ClientStreamListener savedListener;
+    ClientStream oldStream = null;
+    boolean cancelOldStream = false;
+
     synchronized (this) {
-      // If realStream != null, then either setStream() or cancel() has been called.
       if (realStream != null) {
+        oldStream = realStream;
+        cancelOldStream = listener != null;
+      }
+      if (oldStream != null && !cancelOldStream) {
         return null;
       }
+
+      if (cancelOldStream) {
+        oldStream.cancel(Status.CANCELLED.withDescription("Replaced by a new Stream"));
+      }
+
       setRealStream(checkNotNull(stream, "stream"));
       savedListener = listener;
       if (savedListener == null) {
