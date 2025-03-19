@@ -82,7 +82,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           args.getServiceConfigParser(), args.getSynchronizationContext(),
           args.getScheduledExecutorService(),
           bootstrapOverride,
-          args.getMetricRecorder());
+          args.getMetricRecorder(), args);
     }
     return null;
   }

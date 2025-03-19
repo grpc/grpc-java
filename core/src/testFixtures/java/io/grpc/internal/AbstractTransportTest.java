@@ -180,7 +180,7 @@ public abstract class AbstractTransportTest {
   protected ManagedClientTransport.Listener mockClientTransportListener
       = mock(ManagedClientTransport.Listener.class);
   protected MockServerListener serverListener = new MockServerListener();
-  private ArgumentCaptor<Throwable> throwableCaptor = ArgumentCaptor.forClass(Throwable.class);
+  private ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
   protected final TestClientStreamTracer clientStreamTracer1 = new TestHeaderClientStreamTracer();
   private final TestClientStreamTracer clientStreamTracer2 = new TestHeaderClientStreamTracer();
   protected final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
@@ -620,8 +620,8 @@ public abstract class AbstractTransportTest {
       // Transport doesn't support ping, so this neither passes nor fails.
       assumeTrue(false);
     }
-    verify(mockPingCallback, timeout(TIMEOUT_MS)).onFailure(throwableCaptor.capture());
-    Status status = Status.fromThrowable(throwableCaptor.getValue());
+    verify(mockPingCallback, timeout(TIMEOUT_MS)).onFailure(statusCaptor.capture());
+    Status status = statusCaptor.getValue();
     assertSame(shutdownReason, status);
   }
 

@@ -99,7 +99,7 @@ final class PingTracker {
     private synchronized void fail(Status status) {
       if (!done) {
         done = true;
-        executor.execute(() -> callback.onFailure(status.asException()));
+        executor.execute(() -> callback.onFailure(status));
       }
     }
 
