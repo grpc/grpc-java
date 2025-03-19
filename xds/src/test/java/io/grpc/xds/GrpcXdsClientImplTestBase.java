@@ -323,32 +323,29 @@ public abstract class GrpcXdsClientImplTestBase {
         .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
-    XdsTransportFactory xdsTransportFactory =
-        new XdsTransportFactory() {
-          @Override
-          public XdsTransport create(ServerInfo serverInfo) {
-            if (serverInfo.target().equals(SERVER_URI)) {
-              return new GrpcXdsTransport(channel);
-            }
-            if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
-              if (channelForCustomAuthority == null) {
-                channelForCustomAuthority =
-                    cleanupRule.register(
-                        InProcessChannelBuilder.forName(serverName).directExecutor().build());
-              }
-              return new GrpcXdsTransport(channelForCustomAuthority);
-            }
-            if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
-              if (channelForEmptyAuthority == null) {
-                channelForEmptyAuthority =
-                    cleanupRule.register(
-                        InProcessChannelBuilder.forName(serverName).directExecutor().build());
-              }
-              return new GrpcXdsTransport(channelForEmptyAuthority);
-            }
-            throw new IllegalArgumentException("Can not create channel for " + serverInfo);
+    XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
+      @Override
+      public XdsTransport create(ServerInfo serverInfo) {
+        if (serverInfo.target().equals(SERVER_URI)) {
+          return new GrpcXdsTransport(channel);
+        }
+        if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
+          if (channelForCustomAuthority == null) {
+            channelForCustomAuthority = cleanupRule.register(
+                InProcessChannelBuilder.forName(serverName).directExecutor().build());
           }
-        };
+          return new GrpcXdsTransport(channelForCustomAuthority);
+        }
+        if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
+          if (channelForEmptyAuthority == null) {
+            channelForEmptyAuthority = cleanupRule.register(
+                InProcessChannelBuilder.forName(serverName).directExecutor().build());
+          }
+          return new GrpcXdsTransport(channelForEmptyAuthority);
+        }
+        throw new IllegalArgumentException("Can not create channel for " + serverInfo);
+      }
+    };
 
     xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
         true);
