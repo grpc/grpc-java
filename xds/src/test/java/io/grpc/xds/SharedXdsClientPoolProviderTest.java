@@ -159,28 +159,19 @@ public class SharedXdsClientPoolProviderTest {
   }
 
   private class CallCredsServerInterceptor implements ServerInterceptor {
-    private String token;
-    private SettableFuture<Void> requestDone = SettableFuture.create();
+    private SettableFuture<String> tokenFuture = SettableFuture.create();
 
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> serverCall,
         Metadata metadata,
         ServerCallHandler<ReqT, RespT> next) {
-      String callCreds = metadata.get(AUTHORIZATION_METADATA_KEY);
-      if (callCreds != null) {
-        token = callCreds.substring("Bearer".length()).trim();
-      }
-      requestDone.set(null);
+      tokenFuture.set(metadata.get(AUTHORIZATION_METADATA_KEY));
       return next.startCall(serverCall, metadata);
     }
 
-    public String getToken() {
-      return token;
-    }
-
-    public Void waitForRequestDone(long timeout, TimeUnit unit) throws Exception {
-      return requestDone.get(timeout, unit);
+    public String getTokenWithTimeout(long timeout, TimeUnit unit) throws Exception {
+      return tokenFuture.get(timeout, unit);
     }
   }
 
@@ -217,8 +208,8 @@ public class SharedXdsClientPoolProviderTest {
         XdsListenerResource.getInstance(), "someLDSresource", ldsResourceWatcher);
 
     // Wait for xDS server to get the request and verify that it received the CallCredentials
-    assertThat(callCredentialsInterceptor.waitForRequestDone(5, TimeUnit.SECONDS)).isNull();
-    assertThat(callCredentialsInterceptor.getToken()).isEqualTo("token");
+    assertThat(callCredentialsInterceptor.getTokenWithTimeout(5, TimeUnit.SECONDS))
+        .isEqualTo("Bearer token");
 
     // Clean up
     xdsClientPool.returnObject(xdsClient);
