@@ -47,11 +47,6 @@ public final class InternalSharedXdsClientPoolProvider {
   }
 
   public static ObjectPool<XdsClient> getOrCreate(
-      String target, CallCredentials transportCallCredentials) throws XdsInitializationException {
-    return getOrCreate(target, new MetricRecorder() {}, transportCallCredentials);
-  }
-
-  public static ObjectPool<XdsClient> getOrCreate(
       String target, MetricRecorder metricRecorder, CallCredentials transportCallCredentials)
       throws XdsInitializationException {
     return SharedXdsClientPoolProvider.getDefaultProvider()
