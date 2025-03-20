@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -107,11 +108,8 @@ public class DelayedStreamTest {
     // First stream set, but never started
     callMeMaybe(stream.setStream(oldStream));
     stream.start(listener);
-    try {
-      callMeMaybe(stream.setStream(newStream));
-    } catch (IllegalStateException e) {
-      assertNotNull(e.getMessage());
-    }
+    assertThrows(IllegalStateException.class,
+            () -> callMeMaybe(stream.setStream(mock(ClientStream.class))));
     // Verify old stream was canceled
     verify(oldStream).cancel(any(Status.class));
     // Ensure new stream is properly set
@@ -363,15 +361,14 @@ public class DelayedStreamTest {
   }
 
   @Test
-  public void setStreamTwice() {
+  public void testSetStreamTwice() {
     stream.start(listener);
     callMeMaybe(stream.setStream(realStream));
     verify(realStream).start(any(ClientStreamListener.class));
-    try {
-      callMeMaybe(stream.setStream(mock(ClientStream.class)));
-    } catch (IllegalStateException e) {
-      assertEquals("realStream already set to realStream",e.getMessage());
-    }
+    IllegalStateException e = assertThrows(IllegalStateException.class, () ->
+            callMeMaybe(stream.setStream(mock(ClientStream.class)))
+    );
+    assertEquals("realStream already set to realStream", e.getMessage());
     stream.flush();
     verify(realStream).flush();
   }

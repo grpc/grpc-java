@@ -226,8 +226,10 @@ public class DelayedClientTransportTest {
     ClientStream stream = delayedTransport.newStream(
         method, new Metadata(), CallOptions.DEFAULT, tracers);
     stream.start(streamListener);
+
     assertEquals(1, delayedTransport.getPendingStreamsCount());
     stream.cancel(Status.CANCELLED);
+
     assertEquals(0, delayedTransport.getPendingStreamsCount());
     verify(streamListener).closed(
         same(Status.CANCELLED), same(RpcProgress.PROCESSED), any(Metadata.class));
@@ -273,7 +275,7 @@ public class DelayedClientTransportTest {
   }
 
   @Test
-  public void newStreamThenShutDownNow() {
+  public void testNewStreamThenShutDownNow() {
     ClientStream stream = delayedTransport.newStream(
             method, new Metadata(), CallOptions.DEFAULT, tracers);
     stream.start(streamListener);
@@ -283,6 +285,7 @@ public class DelayedClientTransportTest {
     verify(transportListener).transportTerminated();
     verify(streamListener).closed(
             statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
+
     assertEquals(0,delayedTransport.getPendingStreamsCount());
     assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
   }
@@ -291,11 +294,14 @@ public class DelayedClientTransportTest {
   public void testDelayedClientTransportPendingStreamsOnShutDown() {
     ClientStream clientStream = delayedTransport.newStream(method, headers, callOptions, tracers);
     ClientStream clientStream1 = delayedTransport.newStream(method, headers, callOptions, tracers);
+
     assertEquals(0, delayedTransport.getPendingStreamsCount());
     clientStream.start(streamListener);
     clientStream1.start(streamListener);
+
     assertEquals(2, delayedTransport.getPendingStreamsCount());
     delayedTransport.shutdownNow(Status.UNAVAILABLE);
+
     assertEquals(0, delayedTransport.getPendingStreamsCount());
   }
 
@@ -350,7 +356,9 @@ public class DelayedClientTransportTest {
     assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
   }
 
-  @Test public void reprocessSemantics() {
+  @Test
+  @SuppressWarnings("DirectInvocationOnMock")
+  public void reprocessSemantics() {
     CallOptions failFastCallOptions = CallOptions.DEFAULT.withOption(SHARD_ID, 1);
     CallOptions waitForReadyCallOptions = CallOptions.DEFAULT.withOption(SHARD_ID, 2)
         .withWaitForReady();
@@ -754,6 +762,7 @@ public class DelayedClientTransportTest {
   }
 
   @Test
+  @SuppressWarnings("DirectInvocationOnMock")
   public void newStream_racesWithReprocessIdleMode() throws Exception {
     SubchannelPicker picker = new SubchannelPicker() {
       @Override public PickResult pickSubchannel(PickSubchannelArgs args) {
