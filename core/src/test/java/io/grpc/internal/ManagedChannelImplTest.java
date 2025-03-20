@@ -85,6 +85,7 @@ import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
+import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
@@ -1206,6 +1207,14 @@ public class ManagedChannelImplTest {
           getStats(channel).channelTrace.events,
           event -> event.description.equals("Service config changed")))
         .isEmpty();
+  }
+
+  @Test
+  public void testToStringForInternalConfigSelector() {
+    String expected = "Resolution is pending";
+    String actual = ManagedChannelImpl.INITIAL_PENDING_SELECTOR.toString();
+    // Assert that the actual string equals the expected string
+    assertEquals("toString() should return 'Resolution is pending'", expected, actual);
   }
 
   @Test
@@ -3273,7 +3282,7 @@ public class ManagedChannelImplTest {
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
     nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
@@ -3290,7 +3299,7 @@ public class ManagedChannelImplTest {
               Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
   }
 
   @Test
@@ -3314,7 +3323,7 @@ public class ManagedChannelImplTest {
 
     channel.syncContext.execute(
         () -> nameResolverFactory.resolvers.get(0).listener.onResult2(resolutionResult1));
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
     channel.syncContext.execute(() ->
@@ -3340,7 +3349,7 @@ public class ManagedChannelImplTest {
         .build();
     channel.syncContext.execute(
         () -> nameResolverFactory.resolvers.get(0).listener.onResult2(resolutionResult2));
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
   }
 
   @Test
@@ -3366,8 +3375,13 @@ public class ManagedChannelImplTest {
         .setServiceConfig(ConfigOrError.fromConfig(mcsc1))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
+
+    Event configEvent = getStats(channel).channelTrace.events.get(prevSize);
+
+    assertThat(configEvent.description)
+        .contains("Current config is replaced with new config. prevConfig=");
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
             .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -3382,7 +3396,7 @@ public class ManagedChannelImplTest {
         .setServiceConfig(ConfigOrError.fromConfig(mcsc1))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
     timer.forwardNanos(1234);
@@ -3393,8 +3407,8 @@ public class ManagedChannelImplTest {
         .setServiceConfig(ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()))
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
             .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -3427,8 +3441,8 @@ public class ManagedChannelImplTest {
 
     channel.syncContext.execute(() ->
         nameResolverFactory.resolvers.get(0).listener.onResult2(resolutionResult1));
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
             .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -3444,7 +3458,7 @@ public class ManagedChannelImplTest {
         .build();
     channel.syncContext.execute(() ->
         nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2));
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
     timer.forwardNanos(1234);
@@ -3456,8 +3470,8 @@ public class ManagedChannelImplTest {
         .build();
     channel.syncContext.execute(() ->
         nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3));
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
-    assertThat(getStats(channel).channelTrace.events.get(prevSize))
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
+    assertThat(getStats(channel).channelTrace.events.get(prevSize + 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
             .setDescription("Service config changed")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)

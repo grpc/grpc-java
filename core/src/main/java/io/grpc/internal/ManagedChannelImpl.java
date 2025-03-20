@@ -145,11 +145,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private static final ManagedChannelServiceConfig EMPTY_SERVICE_CONFIG =
       ManagedChannelServiceConfig.empty();
-  private static final InternalConfigSelector INITIAL_PENDING_SELECTOR =
+  static final InternalConfigSelector INITIAL_PENDING_SELECTOR =
       new InternalConfigSelector() {
         @Override
         public Result selectConfig(PickSubchannelArgs args) {
           throw new IllegalStateException("Resolution is pending");
+        }
+
+        @Override
+        public String toString() {
+          return "Resolution is pending";
         }
       };
   private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
@@ -931,9 +936,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     // Must run in SynchronizationContext.
-    void updateConfigSelector(@Nullable InternalConfigSelector config) {
+    void updateConfigSelector(@Nullable InternalConfigSelector newConfig) {
       InternalConfigSelector prevConfig = configSelector.get();
-      configSelector.set(config);
+      configSelector.set(newConfig);
+      channelLogger.log(ChannelLogLevel.INFO,
+          "Current config is replaced with new config. prevConfig={0}, newConfig={1}",
+          prevConfig, newConfig);
       if (prevConfig == INITIAL_PENDING_SELECTOR && pendingCalls != null) {
         for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
           pendingCall.reprocess();

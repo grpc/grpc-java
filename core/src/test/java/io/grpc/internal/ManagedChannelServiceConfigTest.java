@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.MethodDescriptor.MethodType.UNARY;
 import static io.grpc.Status.Code.UNAVAILABLE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
@@ -31,6 +32,7 @@ import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
+import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Collections;
 import java.util.Map;
@@ -294,6 +296,26 @@ public class ManagedChannelServiceConfigTest {
         ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
     assertThat(ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 5, 5, null))
         .isNotNull();
+  }
+
+  @Test
+  public void testToStringForServiceConfigConvertedSelector() {
+    Map<String, ?> name = ImmutableMap.of("service", "service1", "method", "method1");
+    Map<String, ?> methodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(name), "timeout", "1.234s");
+    Map<String, ?> rawServiceConfig =
+        ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
+    ManagedChannelServiceConfig serviceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, false, 0, 0, null);
+    ServiceConfigConvertedSelector selector = new ServiceConfigConvertedSelector(serviceConfig);
+    // Assert the toString method contains the config/structure and other details with data
+    assertTrue(selector.toString().contains("ServiceConfigConvertedSelector{"));
+    assertTrue(selector.toString().contains("config"));
+    assertTrue(selector.toString().contains("ManagedChannelServiceConfig{"));
+    assertTrue(selector.toString().contains("defaultMethodConfig"));
+    assertTrue(selector.toString().contains("serviceMethodMap"));
+    assertTrue(selector.toString().contains("service1/method1"));
+    assertTrue(selector.toString().contains("serviceMap"));
   }
 
   private static MethodDescriptor<?, ?> methodForName(String service, String method) {
