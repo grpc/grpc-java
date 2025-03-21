@@ -47,6 +47,7 @@ dependencies {
     testImplementation project(':grpc-core')
     testImplementation project(':grpc-testing')
     testImplementation libraries.guava.testlib
+    testImplementation libraries.truth
 
     signature (libraries.signature.java) {
         artifact {
