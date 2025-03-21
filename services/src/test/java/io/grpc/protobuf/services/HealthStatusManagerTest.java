@@ -18,6 +18,11 @@ package io.grpc.protobuf.services;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.BindableService;
 import io.grpc.Context;
@@ -28,10 +33,10 @@ import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcServerRule;
 import java.util.ArrayDeque;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
@@ -111,43 +116,15 @@ public class HealthStatusManagerTest {
   }
 
   @Test
-  public void watchNotifyException() throws Exception {
+  @SuppressWarnings("unchecked")
+  public void serverCallStreamObserver_watch() throws Exception {
     manager.setStatus(SERVICE1, ServingStatus.SERVING);
-    CancellableRespObserver cobs1 = new CancellableRespObserver();
-    service.watch(HealthCheckRequest.newBuilder().setService(SERVICE1).build(), cobs1);
-    assertThat(cobs1.responses).hasSize(1);
-    HealthCheckResponse resp = (HealthCheckResponse) cobs1.responses.poll();
-    assertThat(resp.getStatus()).isEqualTo(ServingStatus.SERVING);
-    cobs1.responses.clear();
+    ServerCallStreamObserver<HealthCheckResponse> observer = mock(ServerCallStreamObserver.class);
+    service.watch(HealthCheckRequest.newBuilder().setService(SERVICE1).build(), observer);
 
-    CancellableRespObserver cobs2 = new CancellableRespObserver();
-    service.watch(HealthCheckRequest.newBuilder().setService(SERVICE1).build(), cobs2);
-    assertThat(cobs2.responses).hasSize(1);
-    resp = (HealthCheckResponse) cobs2.responses.poll();
-    assertThat(resp.getStatus()).isEqualTo(ServingStatus.SERVING);
-    cobs2.responses.clear();
-
-    // assert that both observers are in watchers
-    Set<StreamObserver<HealthCheckResponse>> observers = service.watchersForTest(SERVICE1);
-    assertThat(observers).hasSize(2);
-
-    // cancel first Observer
-    cobs1 = (CancellableRespObserver) observers.stream().findFirst().get();
-    cobs1.setCancelled(true);
-
-    cobs2 = (CancellableRespObserver) observers.stream().skip(1).findFirst().get();
-
-    manager.setStatus(SERVICE1, ServingStatus.NOT_SERVING);
-
-    // first observer should notify exception
-    assertThat(cobs1.responses).isEmpty();
-
-    // second observer should be notified
-    assertThat(cobs2.responses).hasSize(1);
-    resp = (HealthCheckResponse) cobs2.responses.poll();
-    assertThat(resp.getStatus()).isEqualTo(ServingStatus.NOT_SERVING);
-    cobs2.responses.clear();
-
+    verify(observer, times(1))
+            .onNext(eq(HealthCheckResponse.newBuilder().setStatus(ServingStatus.SERVING).build()));
+    verify(observer, times(1)).setOnCancelHandler(any(Runnable.class));
   }
 
   @Test
@@ -350,25 +327,6 @@ public class HealthStatusManagerTest {
     @Override
     public void onCompleted() {
       responses.add("onCompleted");
-    }
-  }
-
-  private static class CancellableRespObserver extends RespObserver {
-
-    boolean cancelled = false;
-
-    public void setCancelled(boolean cancelled) {
-      this.cancelled = cancelled;
-    }
-
-    @Override
-    public void onNext(HealthCheckResponse value) {
-      if (cancelled) {
-        throw Status.CANCELLED
-                .withDescription("call already cancelled.")
-                .asRuntimeException();
-      }
-      super.onNext(value);
     }
   }
 }
