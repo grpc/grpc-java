@@ -1267,7 +1267,7 @@ public class GrpcXdsClientImplDataTest {
       }
 
       @Override
-      public TestFilter newInstance() {
+      public TestFilter newInstance(String name) {
         return new TestFilter();
       }
 

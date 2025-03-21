@@ -89,7 +89,7 @@ final class RbacFilter implements Filter {
     }
 
     @Override
-    public RbacFilter newInstance() {
+    public RbacFilter newInstance(String name) {
       return INSTANCE;
     }
 
