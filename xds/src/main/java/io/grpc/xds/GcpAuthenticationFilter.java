@@ -16,6 +16,9 @@
 
 package io.grpc.xds;
 
+import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
+import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
+
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
 import com.google.common.primitives.UnsignedLongs;
@@ -34,8 +37,11 @@ import io.grpc.CompositeCallCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -52,6 +58,8 @@ final class GcpAuthenticationFilter implements Filter {
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
 
+  static String filterInstanceName;
+
   static final class Provider implements Filter.Provider {
     @Override
     public String[] typeUrls() {
@@ -65,6 +73,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public GcpAuthenticationFilter newInstance(String name) {
+      filterInstanceName = name;
       return new GcpAuthenticationFilter();
     }
 
@@ -119,17 +128,23 @@ final class GcpAuthenticationFilter implements Filter {
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
 
-        /*String clusterName = callOptions.getOption(XdsAttributes.ATTR_CLUSTER_NAME);
-        if (clusterName == null) {
+        String clusterName = callOptions.getOption(CLUSTER_SELECTION_KEY);
+        if (clusterName.startsWith("cluster_specifier_plugin:")) {
           return next.newCall(method, callOptions);
-        }*/
+        }
 
-        // TODO: Fetch the CDS resource for the cluster.
-        // If the CDS resource is not available, fail the RPC with Status.UNAVAILABLE.
+        XdsConfig xdsConfig = callOptions.getOption(XDS_CONFIG_CALL_OPTION_KEY);
+        StatusOr<XdsClusterConfig> xdsCluster = xdsConfig.getClusters().get(clusterName);
+        CdsUpdate cdsUpdate = xdsCluster.getValue().getClusterResource();
+        if (cdsUpdate == null) {
+          // fail the RPC with Status.UNAVAILABLE.
+          return new FailingClientCall<>(Status.UNAVAILABLE.withDescription("CDS resource unavailable"));
+        }
 
-        // TODO: Extract the audience from the CDS resource metadata.
-        // If the audience is not found or is in the wrong format, fail the RPC.
-        String audience = "TEST_AUDIENCE";
+        if (!cdsUpdate.filterMetadata().containsKey(filterInstanceName)) {
+          return next.newCall(method, callOptions);
+        }
+        String audience = String.valueOf(cdsUpdate.filterMetadata().get(filterInstanceName));
 
         try {
           CallCredentials existingCallCredentials = callOptions.getCredentials();
