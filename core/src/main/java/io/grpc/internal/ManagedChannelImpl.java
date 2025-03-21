@@ -189,9 +189,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
               e);
           try {
             panic(e);
-          } catch (Throwable t) {
+          } catch (Throwable anotherT) {
             logger.log(
-                Level.SEVERE, "[" + getLogId() + "] Uncaught exception while panic()ing", e);
+                Level.SEVERE, "[" + getLogId() + "] Uncaught exception while panicking", anotherT);
           }
         }
       });
