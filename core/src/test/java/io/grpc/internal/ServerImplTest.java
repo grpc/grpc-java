@@ -26,6 +26,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -104,7 +105,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -140,8 +140,6 @@ public class ServerImplTest {
       };
   private static final String AUTHORITY = "some_authority";
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @BeforeClass
@@ -1228,7 +1226,7 @@ public class ServerImplTest {
     assertFalse(context.get().isCancelled());
 
     assertEquals(1, timer.forwardNanos(1));
-    
+
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
     assertThat(context.get().cancellationCause()).isNotNull();
@@ -1260,9 +1258,8 @@ public class ServerImplTest {
   public void getPortBeforeStartedFails() {
     transportServer = new SimpleServer();
     createServer();
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("started");
-    server.getPort();
+    IllegalStateException e = assertThrows(IllegalStateException.class, () -> server.getPort());
+    assertThat(e).hasMessageThat().isEqualTo("Not started");
   }
 
   @Test
@@ -1271,9 +1268,8 @@ public class ServerImplTest {
     createAndStartServer();
     server.shutdown();
     server.awaitTermination();
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("terminated");
-    server.getPort();
+    IllegalStateException e = assertThrows(IllegalStateException.class, () -> server.getPort());
+    assertThat(e).hasMessageThat().isEqualTo("Already terminated");
   }
 
   @Test
