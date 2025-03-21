@@ -64,7 +64,7 @@ final class GcpAuthenticationFilter implements Filter {
     }
 
     @Override
-    public GcpAuthenticationFilter newInstance() {
+    public GcpAuthenticationFilter newInstance(String name) {
       return new GcpAuthenticationFilter();
     }
 
