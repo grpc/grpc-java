@@ -446,7 +446,7 @@ final class OpenTelemetryTracingModule {
     if (optionalWireSize != -1 && optionalWireSize != optionalUncompressedSize) {
       attributesBuilder.put("message-size-compressed", optionalWireSize);
     }
-    span.addEvent("Outbound message sent", attributesBuilder.build());
+    span.addEvent("Outbound message", attributesBuilder.build());
   }
 
   private void recordInboundCompressedMessage(Span span, int seqNo, long optionalWireSize) {
@@ -460,7 +460,7 @@ final class OpenTelemetryTracingModule {
     AttributesBuilder attributesBuilder = io.opentelemetry.api.common.Attributes.builder();
     attributesBuilder.put("sequence-number", seqNo);
     attributesBuilder.put("message-size", bytes);
-    span.addEvent("Inbound message received", attributesBuilder.build());
+    span.addEvent("Inbound message", attributesBuilder.build());
   }
 
   private String generateErrorStatusDescription(io.grpc.Status status) {
