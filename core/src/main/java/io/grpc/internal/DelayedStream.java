@@ -136,11 +136,9 @@ class DelayedStream implements ClientStream {
       if (oldStream != null && !cancelOldStream) {
         return null;
       }
-
       if (cancelOldStream) {
         oldStream.cancel(Status.CANCELLED.withDescription("Replaced by a new Stream"));
       }
-
       setRealStream(checkNotNull(stream, "stream"));
       savedListener = listener;
       if (savedListener == null) {
