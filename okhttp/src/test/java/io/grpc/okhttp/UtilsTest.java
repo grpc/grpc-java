@@ -16,7 +16,9 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import io.grpc.InternalChannelz.SocketOptions;
@@ -26,9 +28,7 @@ import io.grpc.okhttp.internal.TlsVersion;
 import java.net.Socket;
 import java.util.List;
 import java.util.Locale;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -38,16 +38,12 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class UtilsTest {
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
-
   @Test
   public void convertSpecRejectsPlaintext() {
     com.squareup.okhttp.ConnectionSpec plaintext = com.squareup.okhttp.ConnectionSpec.CLEARTEXT;
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("plaintext ConnectionSpec is not accepted");
-    Utils.convertSpec(plaintext);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> Utils.convertSpec(plaintext));
+    assertThat(e).hasMessageThat().isEqualTo("plaintext ConnectionSpec is not accepted");
   }
 
   @Test
