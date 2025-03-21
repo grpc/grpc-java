@@ -1135,7 +1135,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance()).thenReturn(filter);
+    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);
@@ -1208,7 +1208,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance()).thenReturn(filter);
+    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);

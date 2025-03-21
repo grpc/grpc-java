@@ -704,7 +704,8 @@ final class XdsNameResolver extends NameResolver {
 
         Filter.Provider provider = filterRegistry.get(typeUrl);
         checkNotNull(provider, "provider %s", typeUrl);
-        Filter filter = activeFilters.computeIfAbsent(filterKey, k -> provider.newInstance());
+        Filter filter = activeFilters.computeIfAbsent(
+            filterKey, k -> provider.newInstance(namedFilter.name));
         checkNotNull(filter, "filter %s", filterKey);
         filtersToShutdown.remove(filterKey);
       }
