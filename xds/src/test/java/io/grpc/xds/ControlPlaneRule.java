@@ -366,10 +366,14 @@ public class ControlPlaneRule extends TestWatcher {
         .setFilterChainMatch(filterChainMatch)
         .addFilters(filter)
         .build();
+    Address address = Address.newBuilder()
+        .setSocketAddress(SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(0))
+        .build();
     return Listener.newBuilder()
         .setName(SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT)
         .setTrafficDirection(TrafficDirection.INBOUND)
         .addFilterChains(filterChain)
+        .setAddress(address)
         .build();
   }
 }
