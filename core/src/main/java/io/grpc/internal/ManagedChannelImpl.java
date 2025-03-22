@@ -187,7 +187,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
               Level.SEVERE,
               "[" + getLogId() + "] Uncaught exception in the SynchronizationContext. Panic!",
               e);
-          panic(e);
+          try {
+            panic(e);
+          } catch (Throwable anotherT) {
+            logger.log(
+                Level.SEVERE, "[" + getLogId() + "] Uncaught exception while panicking", anotherT);
+          }
         }
       });
 
