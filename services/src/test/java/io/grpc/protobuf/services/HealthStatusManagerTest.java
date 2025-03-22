@@ -18,6 +18,11 @@ package io.grpc.protobuf.services;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.BindableService;
 import io.grpc.Context;
@@ -28,6 +33,7 @@ import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcServerRule;
 import java.util.ArrayDeque;
@@ -107,6 +113,18 @@ public class HealthStatusManagerTest {
 
     manager.setStatus(SERVICE1, ServingStatus.SERVING);
     assertThat(obs.responses).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void serverCallStreamObserver_watch() throws Exception {
+    manager.setStatus(SERVICE1, ServingStatus.SERVING);
+    ServerCallStreamObserver<HealthCheckResponse> observer = mock(ServerCallStreamObserver.class);
+    service.watch(HealthCheckRequest.newBuilder().setService(SERVICE1).build(), observer);
+
+    verify(observer, times(1))
+            .onNext(eq(HealthCheckResponse.newBuilder().setStatus(ServingStatus.SERVING).build()));
+    verify(observer, times(1)).setOnCancelHandler(any(Runnable.class));
   }
 
   @Test
