@@ -545,7 +545,6 @@ public class XdsServerWrapperTest {
   public void onChanged_listenerAddressMismatch()
       throws ExecutionException, InterruptedException, TimeoutException {
 
-    when(mockBuilder.build()).thenReturn(mockServer);
     xdsServerWrapper = new XdsServerWrapper("10.1.2.3:1", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient),
         filterRegistry, executor.getScheduledExecutorService());
