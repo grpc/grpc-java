@@ -796,6 +796,13 @@ public class XdsSecurityClientServerTest {
 
       @Override
       public void shutdown() {
+        for (EquivalentAddressGroup s : servers) {
+          SslContextProviderSupplier sslContextProviderSupplier = s.getAttributes()
+                  .get(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+          if (sslContextProviderSupplier != null) {
+            sslContextProviderSupplier.close();
+          }
+        }
       }
 
       @Override
