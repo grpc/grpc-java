@@ -18,37 +18,19 @@ package io.grpc.internal;
 
 import static com.google.common.math.LongMath.saturatedAdd;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * {@link InstantTimeProvider} resolves InstantTimeProvider which implements {@link TimeProvider}.
  */
 final class InstantTimeProvider implements TimeProvider {
-  private Method now;
-  private Method getNano;
-  private Method getEpochSecond;
-
-  public InstantTimeProvider(Class<?> instantClass) {
-    try {
-      this.now = instantClass.getMethod("now");
-      this.getNano = instantClass.getMethod("getNano");
-      this.getEpochSecond = instantClass.getMethod("getEpochSecond");
-    } catch (NoSuchMethodException ex) {
-      throw new AssertionError(ex);
-    }
-  }
-
   @Override
+  @IgnoreJRERequirement
   public long currentTimeNanos() {
-    try {
-      Object instant = now.invoke(null);
-      int nanos = (int) getNano.invoke(instant);
-      long epochSeconds = (long) getEpochSecond.invoke(instant);
-      return saturatedAdd(TimeUnit.SECONDS.toNanos(epochSeconds), nanos);
-    } catch (IllegalAccessException | InvocationTargetException ex) {
-      throw new RuntimeException(ex);
-    }
+    Instant now = Instant.now();
+    long epochSeconds = now.getEpochSecond();
+    return saturatedAdd(TimeUnit.SECONDS.toNanos(epochSeconds), now.getNano());
   }
 }
