@@ -82,8 +82,9 @@ public abstract class ManagedChannelProvider {
   }
 
   /**
-   * Creates a channel builder with a target string, credentials, NameResolverRegistry adn NameResolverProvider.
-   * Returns an error-string result if unable to understand the credentials.
+   * Creates a channel builder with a target string, credentials, NameResolverRegistry
+   * and NameResolverProvider. Returns an error-string result if unable to
+   * understand the credentials.
    */
   protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
                                                       NameResolverRegistry nameResolverRegistry,
