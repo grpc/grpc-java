@@ -20,6 +20,7 @@ import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import java.io.IOException;
 import java.util.List;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -28,6 +29,11 @@ import javax.servlet.http.HttpServletResponse;
  * A simple servlet backed by a gRPC server. Must set {@code asyncSupported} to true. The {@code
  * /contextRoot/urlPattern} must match the gRPC services' path, which is
  * "/full-service-name/short-method-name".
+ * If you use application server and want to get access to grpc from path
+ * {@code /deployment-name/full-service-name/short-method-name}
+ * you must use {@link GrpcServlet#REMOVE_CONTEXT_PATH} for remove
+ * context path({@code deployment-name}) from method name.
+ * <a href=https://github.com/grpc/grpc-java/pull/11825>More info</a>.
  *
  * <p>The API is experimental. The authors would like to know more about the real usecases. Users
  * are welcome to provide feedback by commenting on
@@ -36,11 +42,19 @@ import javax.servlet.http.HttpServletResponse;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public class GrpcServlet extends HttpServlet {
   private static final long serialVersionUID = 1L;
+  public static final String REMOVE_CONTEXT_PATH = "REMOVE_CONTEXT_PATH";
 
   private final ServletAdapter servletAdapter;
+  private boolean removeContextPath = false; // default value;
 
   GrpcServlet(ServletAdapter servletAdapter) {
     this.servletAdapter = servletAdapter;
+  }
+
+  @Override
+  public void init() throws ServletException {
+    super.init();
+    removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
   }
 
   /**
@@ -58,6 +72,15 @@ public class GrpcServlet extends HttpServlet {
     return serverBuilder.buildServletAdapter();
   }
 
+  protected String getMethod(HttpServletRequest req) {
+    String method = req.getRequestURI();
+    if (removeContextPath) {
+      // remove context path used in application server
+      method = method.substring(req.getContextPath().length());
+    }
+    return method.substring(1); // remove the leading "/"
+  }
+
   @Override
   protected final void doGet(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
@@ -67,7 +90,7 @@ public class GrpcServlet extends HttpServlet {
   @Override
   protected final void doPost(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
-    servletAdapter.doPost(request, response);
+    servletAdapter.doPost(getMethod(request), request, response);
   }
 
   @Override
