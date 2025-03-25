@@ -322,11 +322,11 @@ public class XdsTestUtils {
     parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("TEST_AUDIENCE"));
 
     CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-            CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null, false)
+            CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
         .lbPolicyConfig(getWrrLbConfigAsMap());
     cdsUpdate.parsedMetadata(parsedMetadata.build());
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
-        "cluster:" + CLUSTER_NAME,
+        CLUSTER_NAME,
         cdsUpdate.build(),
         new EndpointConfig(StatusOr.fromValue(edsUpdate)));
 
@@ -334,7 +334,7 @@ public class XdsTestUtils {
         .setListener(ldsUpdate)
         .setRoute(rdsUpdate)
         .setVirtualHost(virtualHost)
-        .addCluster("cluster:" + CLUSTER_NAME, StatusOr.fromValue(clusterConfig));
+        .addCluster(CLUSTER_NAME, StatusOr.fromValue(clusterConfig));
 
     return builder.build();
   }

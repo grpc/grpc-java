@@ -16,11 +16,13 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
 import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -41,7 +43,6 @@ import io.grpc.StatusOr;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
-import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.util.LinkedHashMap;
@@ -59,10 +60,10 @@ final class GcpAuthenticationFilter implements Filter {
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
 
-  String filterInstanceName;
+  final String filterInstanceName;
 
   GcpAuthenticationFilter(String name) {
-    filterInstanceName = name;
+    filterInstanceName = checkNotNull(name, "name");
   }
 
 
@@ -134,31 +135,59 @@ final class GcpAuthenticationFilter implements Filter {
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
 
         String clusterName = callOptions.getOption(CLUSTER_SELECTION_KEY);
+        if (clusterName == null) {
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription(
+                  String.format(
+                      "GCP Authn for %s does not contain cluster resource", filterInstanceName)));
+        }
+
         if (!clusterName.startsWith("cluster:")) {
           return next.newCall(method, callOptions);
         }
         XdsConfig xdsConfig = callOptions.getOption(XDS_CONFIG_CALL_OPTION_KEY);
+        if (xdsConfig == null) {
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription(
+                  String.format(
+                      "GCP Authn for %s with %s does not contain xds configuration",
+                      filterInstanceName, clusterName)));
+        }
+
         StatusOr<XdsClusterConfig> xdsCluster =
-            xdsConfig.getClusters().get(clusterName);
+            xdsConfig.getClusters().get(clusterName.substring(8)); // get rid of prefix "cluster:"
+        if (xdsCluster == null) {
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription(
+                  String.format(
+                      "GCP Authn for %s with %s does not contain xds cluster",
+                      filterInstanceName, clusterName)));
+        }
+
         if (!xdsCluster.hasValue()) {
           return next.newCall(method, callOptions);
         }
-        CdsUpdate cdsUpdate = xdsCluster.getValue().getClusterResource();
-        if (cdsUpdate == null) {
-          return new FailingClientCall<>(
-              Status.UNAVAILABLE.withDescription("CDS resource unavailable"));
-        }
+        ImmutableMap<String, Object> parsedMetadata = xdsCluster.getValue().getClusterResource()
+            .parsedMetadata();
 
-        if (!cdsUpdate.parsedMetadata().containsKey("FILTER_INSTANCE_NAME")) {
+        if (parsedMetadata == null || !parsedMetadata.containsKey(filterInstanceName)) {
           return next.newCall(method, callOptions);
         }
 
         AudienceWrapper audience;
-        try {
-          audience = (AudienceWrapper) cdsUpdate.parsedMetadata().get(filterInstanceName);
-        } catch (ClassCastException e) {
+        if (parsedMetadata.get(filterInstanceName) instanceof AudienceWrapper) {
+          audience = (AudienceWrapper) parsedMetadata.get(filterInstanceName);
+          if (audience.audience == null) {
+            return next.newCall(method, callOptions);
+          }
+        }
+        else {
           return new FailingClientCall<>(
-              Status.UNAVAILABLE.withDescription("Invalid CDS Resource"));
+              Status.UNAVAILABLE.withDescription(
+                  String.format("GCP Authn found wrong type in %s metadata: %s=%s",
+                      clusterName, filterInstanceName,
+                      parsedMetadata.get(filterInstanceName) == null
+                          ? null : parsedMetadata.get(filterInstanceName))));
         }
 
         try {
