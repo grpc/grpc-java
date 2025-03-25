@@ -99,7 +99,7 @@ def grpc_java_repositories(bzlmod = False):
                 "https://github.com/google/cel-spec/archive/refs/tags/v0.15.0.tar.gz",
             ],
         )
-    if not native.existing_rule("com_github_cncf_xds"):
+    if not bzlmod and not native.existing_rule("com_github_cncf_xds"):
         http_archive(
             name = "com_github_cncf_xds",
             strip_prefix = "xds-024c85f92f20cab567a83acc50934c7f9711d124",

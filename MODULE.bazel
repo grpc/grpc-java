@@ -49,9 +49,6 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
-
-# CEL Spec may be removed when cncf/xds MODULE is no longer using protobuf 27.x
-bazel_dep(name = "cel-spec", repo_name = "dev_cel", version = "0.15.0")
 bazel_dep(name = "grpc", repo_name = "com_github_grpc_grpc", version = "1.56.3.bcr.1")
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
 bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
@@ -61,11 +58,21 @@ bazel_dep(name = "rules_go", repo_name = "io_bazel_rules_go", version = "0.46.0"
 bazel_dep(name = "rules_jvm_external", version = "6.0")
 bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
 
+bazel_dep(name = "xds", repo_name="com_github_cncf_xds")
+archive_override(
+    module_name = "xds",
+    integrity = "sha256-X0A6poFxFQDKjmI4e+PjfZcZd9tuiGFvwhhipAZDBkk=",
+    strip_prefix = "xds-024c85f92f20cab567a83acc50934c7f9711d124",
+    urls = [
+        "https://github.com/cncf/xds/archive/024c85f92f20cab567a83acc50934c7f9711d124.tar.gz",
+    ],
+)
+
+
 non_module_deps = use_extension("//:repositories.bzl", "grpc_java_repositories_extension")
 
 use_repo(
     non_module_deps,
-    "com_github_cncf_xds",
     "envoy_api",
 )
 
