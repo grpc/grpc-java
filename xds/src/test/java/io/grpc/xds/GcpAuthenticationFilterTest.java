@@ -17,12 +17,15 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
+import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.Empty;
@@ -34,6 +37,7 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientInterceptor;
 import io.grpc.MethodDescriptor;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.GcpAuthenticationFilter.GcpAuthenticationConfig;
 import org.junit.Test;
@@ -92,21 +96,29 @@ public class GcpAuthenticationFilterTest {
   }
 
   @Test
-  public void testClientInterceptor_createsAndReusesCachedCredentials() {
+  public void testClientInterceptor_createsAndReusesCachedCredentials() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    XdsConfig defaultXdsConfig = XdsTestUtils.getDefaultXdsConfigWithCdsUpdate(serverName);
+
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
 
     // Create interceptor
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
 
     // Mock channel and capture CallOptions
-    Channel mockChannel = Mockito.mock(Channel.class);
+    Channel mockChannel = mock(Channel.class);
     ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
 
+    // Set CallOptions with required keys
+    CallOptions callOptionsWithXds = CallOptions.DEFAULT
+        .withOption(CLUSTER_SELECTION_KEY, "cluster:cluster0")
+        .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
+
     // Execute interception twice to check caching
-    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT, mockChannel);
-    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT, mockChannel);
+    interceptor.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
+    interceptor.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
 
     // Capture and verify CallOptions for CallCredentials presence
     Mockito.verify(mockChannel, Mockito.times(2))

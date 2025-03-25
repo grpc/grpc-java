@@ -39,6 +39,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.auth.MoreCallCredentials;
+import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
@@ -58,7 +59,12 @@ final class GcpAuthenticationFilter implements Filter {
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
 
-  static String filterInstanceName;
+  String filterInstanceName;
+
+  GcpAuthenticationFilter(String name) {
+    filterInstanceName = name;
+  }
+
 
   static final class Provider implements Filter.Provider {
     @Override
@@ -73,8 +79,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public GcpAuthenticationFilter newInstance(String name) {
-      filterInstanceName = name;
-      return new GcpAuthenticationFilter();
+      return new GcpAuthenticationFilter(name);
     }
 
     @Override
@@ -129,27 +134,37 @@ final class GcpAuthenticationFilter implements Filter {
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
 
         String clusterName = callOptions.getOption(CLUSTER_SELECTION_KEY);
-        if (clusterName.startsWith("cluster_specifier_plugin:")) {
+        if (!clusterName.startsWith("cluster:")) {
           return next.newCall(method, callOptions);
         }
-
         XdsConfig xdsConfig = callOptions.getOption(XDS_CONFIG_CALL_OPTION_KEY);
-        StatusOr<XdsClusterConfig> xdsCluster = xdsConfig.getClusters().get(clusterName);
+        StatusOr<XdsClusterConfig> xdsCluster =
+            xdsConfig.getClusters().get(clusterName);
+        if (!xdsCluster.hasValue()) {
+          return next.newCall(method, callOptions);
+        }
         CdsUpdate cdsUpdate = xdsCluster.getValue().getClusterResource();
         if (cdsUpdate == null) {
-          // fail the RPC with Status.UNAVAILABLE.
-          return new FailingClientCall<>(Status.UNAVAILABLE.withDescription("CDS resource unavailable"));
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription("CDS resource unavailable"));
         }
 
-        if (!cdsUpdate.filterMetadata().containsKey(filterInstanceName)) {
+        if (!cdsUpdate.parsedMetadata().containsKey("FILTER_INSTANCE_NAME")) {
           return next.newCall(method, callOptions);
         }
-        String audience = String.valueOf(cdsUpdate.filterMetadata().get(filterInstanceName));
+
+        AudienceWrapper audience;
+        try {
+          audience = (AudienceWrapper) cdsUpdate.parsedMetadata().get(filterInstanceName);
+        } catch (ClassCastException e) {
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription("Invalid CDS Resource"));
+        }
 
         try {
           CallCredentials existingCallCredentials = callOptions.getCredentials();
           CallCredentials newCallCredentials =
-              getCallCredentials(callCredentialsCache, audience, credentials);
+              getCallCredentials(callCredentialsCache, audience.audience, credentials);
           if (existingCallCredentials != null) {
             callOptions = callOptions.withCallCredentials(
                 new CompositeCallCredentials(existingCallCredentials, newCallCredentials));
@@ -250,13 +265,21 @@ final class GcpAuthenticationFilter implements Filter {
 
   static class AudienceMetadataParser implements MetadataValueParser {
 
+    static final class AudienceWrapper {
+      final String audience;
+
+      AudienceWrapper(String audience) {
+        this.audience = audience;
+      }
+    }
+
     @Override
     public String getTypeUrl() {
       return "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.Audience";
     }
 
     @Override
-    public String parse(Any any) throws ResourceInvalidException {
+    public AudienceWrapper parse(Any any) throws ResourceInvalidException {
       Audience audience;
       try {
         audience = any.unpack(Audience.class);
@@ -268,7 +291,7 @@ final class GcpAuthenticationFilter implements Filter {
         throw new ResourceInvalidException(
             "Audience URL is empty. Metadata value must contain a valid URL.");
       }
-      return url;
+      return new AudienceWrapper(url);
     }
   }
 }
