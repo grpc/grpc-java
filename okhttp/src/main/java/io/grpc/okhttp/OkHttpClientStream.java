@@ -147,7 +147,7 @@ class OkHttpClientStream extends AbstractClientStream {
           useGet = true;
           defaultPath += "?" + BaseEncoding.base64().encode(payload);
         }
-        synchronized (state.lock) {
+        synchronized (OkHttpClientStream.this.state.lock) {
           state.streamReady(metadata, defaultPath);
         }
       }
@@ -178,7 +178,7 @@ class OkHttpClientStream extends AbstractClientStream {
     @Override
     public void cancel(Status reason) {
       try (TaskCloseable ignore = PerfMark.traceTask("OkHttpClientStream$Sink.cancel")) {
-        synchronized (state.lock) {
+        synchronized (OkHttpClientStream.this.state.lock) {
           state.cancel(reason, true, null);
         }
       }
@@ -188,7 +188,7 @@ class OkHttpClientStream extends AbstractClientStream {
   class TransportState extends Http2ClientStreamTransportState
       implements OutboundFlowController.Stream {
     private final int initialWindowSize;
-    private final Object lock;
+    final Object lock;
     @GuardedBy("lock")
     private List<Header> requestHeaders;
     @GuardedBy("lock")
@@ -236,16 +236,14 @@ class OkHttpClientStream extends AbstractClientStream {
       tag = PerfMark.createTag(methodName);
     }
 
-    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     public void start(int streamId) {
-      checkState(id == ABSENT_ID, "the stream has been started with id %s", streamId);
-      id = streamId;
-      outboundFlowState = outboundFlow.createState(this, streamId);
-      // TODO(b/145386688): This access should be guarded by 'OkHttpClientStream.this.state.lock';
-      // instead found: 'this.lock'
-      state.onStreamAllocated();
-
+      synchronized (OkHttpClientStream.this.state.lock) {
+        checkState(id == ABSENT_ID, "the stream has been started with id %s", streamId);
+        id = streamId;
+        outboundFlowState = outboundFlow.createState(this, streamId);
+        state.onStreamAllocated();
+      }
       if (canStart) {
         // Only happens when the stream has neither been started nor cancelled.
         frameWriter.synStream(useGet, false, id, 0, requestHeaders);
@@ -352,28 +350,27 @@ class OkHttpClientStream extends AbstractClientStream {
       }
     }
 
-    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void cancel(Status reason, boolean stopDelivery, Metadata trailers) {
-      if (cancelSent) {
-        return;
-      }
-      cancelSent = true;
-      if (canStart) {
-        // stream is pending.
-        // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
-        // 'this.lock'
-        transport.removePendingStream(OkHttpClientStream.this);
-        // release holding data, so they can be GCed or returned to pool earlier.
-        requestHeaders = null;
-        pendingData.clear();
-        canStart = false;
-        transportReportStatus(reason, true, trailers != null ? trailers : new Metadata());
-      } else {
-        // If pendingData is null, start must have already been called, which means synStream has
-        // been called as well.
-        transport.finishStream(
-            id(), reason, PROCESSED, stopDelivery, ErrorCode.CANCEL, trailers);
+      synchronized (OkHttpClientTransport.lock) {
+        if (cancelSent) {
+          return;
+        }
+        cancelSent = true;
+        if (canStart) {
+          // stream is pending.
+          transport.removePendingStream(OkHttpClientStream.this);
+          // release holding data, so they can be GCed or returned to pool earlier.
+          requestHeaders = null;
+          pendingData.clear();
+          canStart = false;
+          transportReportStatus(reason, true, trailers != null ? trailers : new Metadata());
+        } else {
+          // If pendingData is null, start must have already been called, which means synStream has
+          // been called as well.
+          transport.finishStream(
+              id(), reason, PROCESSED, stopDelivery, ErrorCode.CANCEL, trailers);
+        }
       }
     }
 
@@ -396,20 +393,19 @@ class OkHttpClientStream extends AbstractClientStream {
       }
     }
 
-    @SuppressWarnings("GuardedBy")
     @GuardedBy("lock")
     private void streamReady(Metadata metadata, String path) {
-      requestHeaders =
-          Headers.createRequestHeaders(
-              metadata,
-              path,
-              authority,
-              userAgent,
-              useGet,
-              transport.isUsingPlaintext());
-      // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
-      // 'this.lock'
-      transport.streamReadyToStart(OkHttpClientStream.this);
+      synchronized (OkHttpClientTransport.lock) {
+        requestHeaders =
+            Headers.createRequestHeaders(
+                metadata,
+                path,
+                authority,
+                userAgent,
+                useGet,
+                transport.isUsingPlaintext());
+        transport.streamReadyToStart(OkHttpClientStream.this);
+      }
     }
 
     Tag tag() {
