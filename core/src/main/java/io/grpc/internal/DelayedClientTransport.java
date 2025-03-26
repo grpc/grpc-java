@@ -178,13 +178,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
     if (args.getCallOptions().isWaitForReady() && pickResult != null && pickResult.hasResult()) {
       pendingStream.lastPickStatus = pickResult.getStatus();
     }
-    pendingStreams.add(pendingStream);
-    if (getPendingStreamsCount() == 1) {
-      syncContext.executeLater(reportTransportInUse);
-    }
-    for (ClientStreamTracer streamTracer : tracers) {
-      streamTracer.createPendingStream();
-    }
     return pendingStream;
   }
 
@@ -361,6 +354,20 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers) {
       this.args = args;
       this.tracers = tracers;
+    }
+
+    @Override
+    public void start(ClientStreamListener listener) {
+      super.start(listener);
+      synchronized (lock) {
+        pendingStreams.add(this);
+        if (getPendingStreamsCount() == 1) {
+          syncContext.executeLater(reportTransportInUse);
+        }
+        for (ClientStreamTracer streamTracer : tracers) {
+          streamTracer.createPendingStream();
+        }
+      }
     }
 
     /** Runnable may be null. */
