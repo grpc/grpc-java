@@ -22,6 +22,7 @@ import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -164,11 +165,7 @@ final class GcpAuthenticationFilter implements Filter {
         }
 
         if (!xdsCluster.hasValue()) {
-          return new FailingClientCall<>(
-              xdsCluster.getStatus().withDescription(
-                  String.format(
-                      "GCP Authn for %s with %s - xds cluster does not contain cluster resource",
-                      filterInstanceName, clusterName)));
+          return new FailingClientCall<>(xdsCluster.getStatus());
         }
 
         Object audienceObj =
@@ -241,9 +238,11 @@ final class GcpAuthenticationFilter implements Filter {
   }
 
   /** An implementation of {@link ClientCall} that fails when started. */
-  private static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+  @VisibleForTesting
+  static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
-    private final Status error;
+    @VisibleForTesting
+    final Status error;
 
     public FailingClientCall(Status error) {
       this.error = error;

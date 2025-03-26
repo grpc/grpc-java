@@ -56,8 +56,6 @@ import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
-import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Locality;
@@ -282,63 +280,6 @@ public class XdsTestUtils {
     return builder.build();
   }
 
-  static XdsConfig getDefaultXdsConfigWithCdsUpdate(String serverHostName)
-      throws XdsResourceType.ResourceInvalidException, IOException {
-    XdsConfig.XdsConfigBuilder builder = new XdsConfig.XdsConfigBuilder();
-
-    Filter.NamedFilterConfig routerFilterConfig = new Filter.NamedFilterConfig(
-        serverHostName, RouterFilter.ROUTER_CONFIG);
-
-    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
-        0L, RDS_NAME, Collections.singletonList(routerFilterConfig));
-    XdsListenerResource.LdsUpdate ldsUpdate =
-        XdsListenerResource.LdsUpdate.forApiListener(httpConnectionManager);
-
-    RouteConfiguration routeConfiguration =
-        buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
-    Bootstrapper.ServerInfo serverInfo = null;
-    XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, "0", "0", null, null, null);
-    XdsRouteConfigureResource.RdsUpdate rdsUpdate =
-        XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
-
-    // Take advantage of knowing that there is only 1 virtual host in the route configuration
-    assertThat(rdsUpdate.virtualHosts).hasSize(1);
-    VirtualHost virtualHost = rdsUpdate.virtualHosts.get(0);
-
-    // Need to create endpoints to create locality endpoints map to create edsUpdate
-    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
-    LbEndpoint lbEndpoint = LbEndpoint.create(
-        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
-    lbEndpointsMap.put(
-        Locality.create("", "", ""),
-        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
-
-    // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
-    XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
-        EDS_NAME, lbEndpointsMap, Collections.emptyList());
-
-    // Use ImmutableMap.Builder to construct the map
-    ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
-    parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("TEST_AUDIENCE"));
-
-    CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-            CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
-        .lbPolicyConfig(getWrrLbConfigAsMap());
-    cdsUpdate.parsedMetadata(parsedMetadata.build());
-    XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
-        CLUSTER_NAME,
-        cdsUpdate.build(),
-        new EndpointConfig(StatusOr.fromValue(edsUpdate)));
-
-    builder
-        .setListener(ldsUpdate)
-        .setRoute(rdsUpdate)
-        .setVirtualHost(virtualHost)
-        .addCluster(CLUSTER_NAME, StatusOr.fromValue(clusterConfig));
-
-    return builder.build();
-  }
-
   static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint = LbEndpoint.create(
@@ -350,7 +291,7 @@ public class XdsTestUtils {
   }
 
   @SuppressWarnings("unchecked")
-  private static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
+  static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
     String lbConfigStr = "{\"wrr_locality_experimental\" : "
         + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
 
