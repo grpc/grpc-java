@@ -22,7 +22,6 @@ import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -155,40 +154,37 @@ final class GcpAuthenticationFilter implements Filter {
         }
 
         StatusOr<XdsClusterConfig> xdsCluster =
-            xdsConfig.getClusters().get(clusterName.substring(8)); // get rid of prefix "cluster:"
+            xdsConfig.getClusters().get(clusterName.substring("cluster:".length()));
         if (xdsCluster == null) {
           return new FailingClientCall<>(
               Status.UNAVAILABLE.withDescription(
                   String.format(
-                      "GCP Authn for %s with %s does not contain xds cluster",
+                      "GCP Authn for %s with %s - xds cluster config does not contain xds cluster",
                       filterInstanceName, clusterName)));
         }
 
         if (!xdsCluster.hasValue()) {
-          return next.newCall(method, callOptions);
-        }
-        ImmutableMap<String, Object> parsedMetadata = xdsCluster.getValue().getClusterResource()
-            .parsedMetadata();
-
-        if (parsedMetadata == null || !parsedMetadata.containsKey(filterInstanceName)) {
-          return next.newCall(method, callOptions);
+          return new FailingClientCall<>(
+              xdsCluster.getStatus().withDescription(
+                  String.format(
+                      "GCP Authn for %s with %s - xds cluster does not contain cluster resource",
+                      filterInstanceName, clusterName)));
         }
 
-        AudienceWrapper audience;
-        if (parsedMetadata.get(filterInstanceName) instanceof AudienceWrapper) {
-          audience = (AudienceWrapper) parsedMetadata.get(filterInstanceName);
-          if (audience.audience == null) {
-            return next.newCall(method, callOptions);
-          }
+        Object audienceObj =
+            xdsCluster.getValue().getClusterResource().parsedMetadata().get(filterInstanceName);
+        if (audienceObj == null) {
+          return next.newCall(method, callOptions);
         }
-        else {
+
+        if (!(audienceObj instanceof AudienceWrapper)) {
           return new FailingClientCall<>(
               Status.UNAVAILABLE.withDescription(
                   String.format("GCP Authn found wrong type in %s metadata: %s=%s",
                       clusterName, filterInstanceName,
-                      parsedMetadata.get(filterInstanceName) == null
-                          ? null : parsedMetadata.get(filterInstanceName))));
+                      audienceObj == null ? null : audienceObj.getClass())));
         }
+        AudienceWrapper audience = (AudienceWrapper) audienceObj;
 
         try {
           CallCredentials existingCallCredentials = callOptions.getCredentials();
@@ -298,7 +294,7 @@ final class GcpAuthenticationFilter implements Filter {
       final String audience;
 
       AudienceWrapper(String audience) {
-        this.audience = audience;
+        this.audience = checkNotNull(audience);
       }
     }
 
