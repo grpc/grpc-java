@@ -296,12 +296,17 @@ public class TlsTest {
                 .build();
       }
       Server server = grpcCleanupRule.register(server(serverCreds));
-      ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
+      ManagedChannel channel = grpcCleanupRule.register(
+              OkHttpChannelBuilder.forAddress("localhost", server.getPort(), channelCreds)
+                      .overrideAuthority(TestUtils.TEST_SERVER_HOST)
+                      .hostnameVerifier((hostname, session) -> true)
+                      .directExecutor()
+                      .build());
 
       try {
         fakeTrustManager.setFailCheckServerTrusted();
         ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
-                CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+                CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
                 SimpleRequest.getDefaultInstance());
         fail("Expected exception for authority verification failure.");
       } catch (StatusRuntimeException ex) {
@@ -371,13 +376,13 @@ public class TlsTest {
 
       try {
         ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
-                CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+                CallOptions.DEFAULT.withAuthority("moo.test.google.fr"),
                 SimpleRequest.getDefaultInstance());
         fail("Expected exception for authority verification failure.");
       } catch (StatusRuntimeException ex) {
         assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
         assertThat(ex.getStatus().getDescription()).isEqualTo(
-                "Could not verify authority 'foo.test.google.fr' for the rpc with no "
+                "Could not verify authority 'moo.test.google.fr' for the rpc with no "
                         + "X509ExtendedTrustManager available");
       }
     } finally {
