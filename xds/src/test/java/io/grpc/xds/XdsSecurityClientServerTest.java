@@ -130,6 +130,7 @@ public class XdsSecurityClientServerTest {
   private FakeXdsClient xdsClient = new FakeXdsClient();
   private FakeXdsClientPoolFactory fakePoolFactory = new FakeXdsClientPoolFactory(xdsClient);
   private static final String OVERRIDE_AUTHORITY = "foo.test.google.fr";
+  private Attributes sslContextAttributes;
 
   @Parameters(name = "enableSpiffe={0}")
   public static Collection<Boolean> data() {
@@ -152,6 +153,14 @@ public class XdsSecurityClientServerTest {
       NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverFactory);
     }
     FileWatcherCertificateProviderProvider.enableSpiffe = originalEnableSpiffe;
+    if (sslContextAttributes != null) {
+      SslContextProviderSupplier sslContextProviderSupplier = sslContextAttributes.get(
+              SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      if (sslContextProviderSupplier != null) {
+        sslContextProviderSupplier.close();
+      }
+      sslContextAttributes = null;
+    }
   }
 
   @Test
@@ -651,7 +660,7 @@ public class XdsSecurityClientServerTest {
     InetSocketAddress socketAddress =
         new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
     tlsContextManagerForClient = new TlsContextManagerImpl(bootstrapInfoForClient);
-    Attributes attrs =
+    sslContextAttributes =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
                 .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
@@ -660,7 +669,7 @@ public class XdsSecurityClientServerTest {
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(
-        ImmutableList.of(new EquivalentAddressGroup(socketAddress, attrs)));
+        ImmutableList.of(new EquivalentAddressGroup(socketAddress, sslContextAttributes)));
     return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
   }
 
