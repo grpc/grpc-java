@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -505,7 +504,11 @@ public class GracefulSwitchLoadBalancerTest {
     helper0.updateBalancingState(CONNECTING, picker);
 
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
-    inOrder.verify(mockHelper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class)).hasResult())
+        .isFalse();
+
     inOrder.verify(lb0).shutdown(); // shutdown after update
 
     picker = mock(SubchannelPicker.class);
