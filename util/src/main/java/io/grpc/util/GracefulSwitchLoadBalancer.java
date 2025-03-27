@@ -38,7 +38,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
  * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
- * will keep using the old policy until the new policy reports READY or the old policy exits READY.
+ * will keep using the old policy until the new policy leaves CONNECTING or the old policy exits
+ * READY.
  *
  * <p>The child balancer and configuration is specified using service config. Config objects are
  * generally created by calling {@link #parseLoadBalancingPolicyConfig(List)} from a
@@ -147,7 +148,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
           checkState(currentLbIsReady, "there's pending lb while current lb has been out of READY");
           pendingState = newState;
           pendingPicker = newPicker;
-          if (newState == ConnectivityState.READY) {
+          if (newState != ConnectivityState.CONNECTING) {
             swap();
           }
         } else if (lb == currentLb) {
