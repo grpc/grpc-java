@@ -18,6 +18,7 @@ package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.testing.EqualsTester;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -363,7 +365,21 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
-  public void updateBalancingStateIsGraceful() {
+  public void updateBalancingStateIsGraceful_Ready() {
+    updateBalancingStateIsGraceful(READY);
+  }
+
+  @Test
+  public void updateBalancingStateIsGraceful_TransientFailure() {
+    updateBalancingStateIsGraceful(TRANSIENT_FAILURE);
+  }
+
+  @Test
+  public void updateBalancingStateIsGraceful_Idle() {
+    updateBalancingStateIsGraceful(IDLE);
+  }
+
+  public void updateBalancingStateIsGraceful(ConnectivityState swapsOnState) {
     assertIsOk(gracefulSwitchLb.acceptResolvedAddresses(addressesBuilder()
         .setLoadBalancingPolicyConfig(createConfig(lbPolicies[0], new Object()))
         .build()));
@@ -392,11 +408,11 @@ public class GracefulSwitchLoadBalancerTest {
     helper2.updateBalancingState(CONNECTING, picker);
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
 
-    // lb2 reports READY
+    // lb2 reports swapsOnState
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
-    helper2.updateBalancingState(READY, picker2);
+    helper2.updateBalancingState(swapsOnState, picker2);
     verify(lb0).shutdown();
-    verify(mockHelper).updateBalancingState(READY, picker2);
+    verify(mockHelper).updateBalancingState(swapsOnState, picker2);
 
     assertIsOk(gracefulSwitchLb.acceptResolvedAddresses(addressesBuilder()
         .setLoadBalancingPolicyConfig(createConfig(lbPolicies[3], new Object()))
@@ -407,7 +423,7 @@ public class GracefulSwitchLoadBalancerTest {
     helper3.updateBalancingState(CONNECTING, picker3);
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker3);
 
-    // lb2 out of READY
+    // lb2 out of swapsOnState
     picker2 = mock(SubchannelPicker.class);
     helper2.updateBalancingState(CONNECTING, picker2);
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker2);
