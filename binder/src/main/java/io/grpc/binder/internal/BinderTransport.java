@@ -484,8 +484,8 @@ public abstract class BinderTransport
         inbound.handleTransaction(parcel);
       }
       long nib = numIncomingBytes.addAndGet(size);
-      if ((nib - acknowledgedIncomingBytes) > TRANSACTION_BYTES_WINDOW_FORCE_ACK) {
-        synchronized (this) {
+      synchronized (this) {
+        if ((nib - acknowledgedIncomingBytes) > TRANSACTION_BYTES_WINDOW_FORCE_ACK) {
           sendAcknowledgeBytes(checkNotNull(outgoingBinder));
         }
       }
