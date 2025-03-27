@@ -3,6 +3,7 @@ FROM almalinux:8
 RUN yum install -y \
             autoconf \
             automake \
+            cmake \
             diffutils \
             gcc-c++ \
             glibc-devel \
