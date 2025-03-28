@@ -51,11 +51,9 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Optional;
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -128,11 +126,7 @@ public class TlsTest {
       ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
               .trustManager(getFakeX509ExtendedTrustManager())
               .build();
-      ManagedChannel channel = grpcCleanupRule.register(grpcCleanupRule.register(
-              OkHttpChannelBuilder.forAddress("localhost", server.getPort(), channelCreds)
-                      .overrideAuthority(TestUtils.TEST_SERVER_HOST)
-                      .directExecutor()
-                      .build()));
+      ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
       ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
               CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
@@ -155,33 +149,20 @@ public class TlsTest {
                 .build();
       }
       Server server = grpcCleanupRule.register(server(serverCreds));
-      SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
-              Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
-      ManagedChannel channel = grpcCleanupRule.register(grpcCleanupRule.register(
-              OkHttpChannelBuilder.forAddress("localhost", server.getPort())
-                      .directExecutor()
-                      .sslSocketFactory(sslSocketFactory)
-                      .hostnameVerifier(new HostnameVerifier() {
-                        private int callCount;
-                        @Override
-                        public boolean verify(String hostname, SSLSession session) {
-                          if (++callCount == 1) {
-                            return true;
-                          }
-                          return hostname.equals("foo.test.google.fr");
-                        }
-                      })
-                      .build()));
+      ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+              .trustManager(getFakeX509ExtendedTrustManager())
+              .build();
+      ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
       try {
         ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
-              CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+              CallOptions.DEFAULT.withAuthority("disallowed.name.com"),
               SimpleRequest.getDefaultInstance());
         fail("Expected exception for hostname verifier failure.");
       } catch (StatusRuntimeException ex) {
         assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
         assertThat(ex.getStatus().getDescription()).isEqualTo(
-                "HostNameVerifier verification failed for authority 'foo.test.google.in'");
+                "HostNameVerifier verification failed for authority 'disallowed.name.com'");
       }
     } finally {
       OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
@@ -199,26 +180,13 @@ public class TlsTest {
               .build();
     }
     Server server = grpcCleanupRule.register(server(serverCreds));
-    SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
-            Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
-    ManagedChannel channel = grpcCleanupRule.register(grpcCleanupRule.register(
-            OkHttpChannelBuilder.forAddress("localhost", server.getPort())
-                    .directExecutor()
-                    .sslSocketFactory(sslSocketFactory)
-                    .hostnameVerifier(new HostnameVerifier() {
-                      private int callCount;
-                      @Override
-                      public boolean verify(String hostname, SSLSession session) {
-                        if (++callCount == 1) {
-                          return true;
-                        }
-                        return hostname.equals("foo.test.google.fr");
-                      }
-                    })
-                    .build()));
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+            .trustManager(getFakeX509ExtendedTrustManager())
+            .build();
+    ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
-            CallOptions.DEFAULT.withAuthority("foo.test.google.in"),
+            CallOptions.DEFAULT.withAuthority("disallowed.name.com"),
             SimpleRequest.getDefaultInstance());
   }
 
@@ -237,31 +205,22 @@ public class TlsTest {
       Server server = grpcCleanupRule.register(server(serverCreds));
       SSLSocketFactory sslSocketFactory = TestUtils.newSslSocketFactoryForCa(
               Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
-      ManagedChannel channel = grpcCleanupRule.register(grpcCleanupRule.register(
+      ManagedChannel channel = grpcCleanupRule.register(
               OkHttpChannelBuilder.forAddress("localhost", server.getPort())
+                      .overrideAuthority(TestUtils.TEST_SERVER_HOST)
                       .directExecutor()
                       .sslSocketFactory(sslSocketFactory)
-                      .hostnameVerifier(new HostnameVerifier() {
-                        private int callCount;
-                        @Override
-                        public boolean verify(String hostname, SSLSession session) {
-                          if (++callCount == 1) {
-                            return true;
-                          }
-                          return hostname.equals("foo.test.google.fr");
-                        }
-                      })
-                      .build()));
+                      .build());
 
       try {
         ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
-            CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+            CallOptions.DEFAULT.withAuthority("bar.test.google.fr"),
             SimpleRequest.getDefaultInstance());
         fail("Expected exception for authority verification failure.");
       } catch (StatusRuntimeException ex) {
         assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
         assertThat(ex.getStatus().getDescription()).isEqualTo(
-                "Could not verify authority 'foo.test.google.fr' for the rpc with no "
+                "Could not verify authority 'bar.test.google.fr' for the rpc with no "
                         + "X509TrustManager available");
       }
     } finally {
@@ -330,11 +289,7 @@ public class TlsTest {
                 .build();
       }
       Server server = grpcCleanupRule.register(server(serverCreds));
-      ManagedChannel channel = grpcCleanupRule.register(
-              OkHttpChannelBuilder.forAddress("localhost", server.getPort(), channelCreds)
-                      .overrideAuthority(TestUtils.TEST_SERVER_HOST)
-                      .directExecutor()
-                      .build());
+      ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
       try {
         fakeTrustManager.setFailCheckServerTrusted();
