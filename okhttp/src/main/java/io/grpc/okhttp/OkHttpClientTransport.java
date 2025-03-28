@@ -259,9 +259,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @GuardedBy("lock")
-  private final Map<String, Boolean> hostnameVerificationResults = new LruCache<>();
-  @GuardedBy("lock")
-  private final Map<String, Status> peerVerificationResults = new LruCache<>();
+  private final Map<String, Status> authorityVerificationResults = new LruCache<>();
 
   @GuardedBy("lock")
   private final InUseStateAggregator<OkHttpClientStream> inUseState =
@@ -522,82 +520,77 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       setInUse(clientStream);
     } else {
       if (!authority.equals(defaultAuthority)) {
-        Boolean hostnameVerificationResult;
-        if (hostnameVerificationResults.containsKey(authority)) {
-          hostnameVerificationResult = hostnameVerificationResults.get(authority);
+        Status authorityVerificationResult;
+        if (authorityVerificationResults.containsKey(authority)) {
+          authorityVerificationResult = authorityVerificationResults.get(authority);
         } else {
-          hostnameVerificationResult = hostnameVerifier.verify(
-                  authority, ((SSLSocket) socket).getSession());
-          hostnameVerificationResults.put(authority, hostnameVerificationResult);
-          if (!hostnameVerificationResult && !enablePerRpcAuthorityCheck) {
-            log.log(Level.WARNING, String.format("HostNameVerifier verification failed for "
-                            + "authority '%s'. This will be an error in the future.",
-                    authority));
-          }
+          authorityVerificationResult = verifyAuthority(authority);
+          authorityVerificationResults.put(authority, authorityVerificationResult);
         }
-        if (!hostnameVerificationResult) {
+        if (!authorityVerificationResult.isOk()) {
           if (enablePerRpcAuthorityCheck) {
             clientStream.transportState().transportReportStatus(
-                    Status.UNAVAILABLE.withDescription(String.format(
-                            "HostNameVerifier verification failed for authority '%s'",
-                            authority)),
-                    RpcProgress.PROCESSED, true, new Metadata());
+                    authorityVerificationResult, RpcProgress.PROCESSED, true, new Metadata());
             return;
-          }
-        }
-        Status peerVerificationStatus = null;
-        if (peerVerificationResults.containsKey(authority)) {
-          peerVerificationStatus = peerVerificationResults.get(authority);
-        } else {
-          // The status is trivially assigned in this case, but we are still making use of the
-          // cache to keep track that a warning log had been logged for the authority when
-          // enablePerRpcAuthorityCheck is false. When we permanently enable the feature, the
-          // status won't need to be cached for case of x509TrustManager == null.
-          if (x509TrustManager == null) {
-            peerVerificationStatus = Status.UNAVAILABLE.withDescription(
-                    String.format("Could not verify authority '%s' for the rpc with no "
-                                    + "X509TrustManager available",
-                            authority));
-          } else if (x509ExtendedTrustManagerClass.isInstance(x509TrustManager)) {
-            try {
-              Certificate[] peerCertificates = sslSession.getPeerCertificates();
-              X509Certificate[] x509PeerCertificates =
-                      new X509Certificate[peerCertificates.length];
-              for (int i = 0; i < peerCertificates.length; i++) {
-                x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
-              }
-              checkServerTrustedMethod.invoke(x509TrustManager, x509PeerCertificates,
-                      "RSA", new SslSocketWrapper((SSLSocket) socket, authority));
-              peerVerificationStatus = Status.OK;
-            } catch (SSLPeerUnverifiedException | InvocationTargetException
-                     | IllegalAccessException e) {
-              peerVerificationStatus = Status.UNAVAILABLE.withCause(e).withDescription(
-                      "Peer verification failed");
-            }
-            if (peerVerificationStatus != null) {
-              peerVerificationResults.put(authority, peerVerificationStatus);
-            }
-          }
-        }
-        if (peerVerificationStatus != null && !peerVerificationStatus.isOk()) {
-          if (enablePerRpcAuthorityCheck) {
-            clientStream.transportState().transportReportStatus(
-                    peerVerificationStatus, RpcProgress.PROCESSED, true, new Metadata());
-            return;
-          } else {
-            if (peerVerificationStatus.getCause() != null) {
-              log.log(Level.WARNING, peerVerificationStatus.getDescription()
-                              + ". This will be an error in the future.",
-                      peerVerificationStatus.getCause());
-            } else {
-              log.log(Level.WARNING, peerVerificationStatus.getDescription()
-                      + ". This will be an error in the future.");
-            }
           }
         }
       }
       startStream(clientStream);
     }
+  }
+
+  private Status verifyAuthority(String authority) {
+    Status authorityVerificationResult;
+    if (hostnameVerifier.verify(
+            authority, ((SSLSocket) socket).getSession())) {
+      authorityVerificationResult = Status.OK;
+    } else {
+      authorityVerificationResult = Status.UNAVAILABLE.withDescription(String.format(
+              "HostNameVerifier verification failed for authority '%s'",
+              authority));
+    }
+    if (!authorityVerificationResult.isOk() && !enablePerRpcAuthorityCheck) {
+      log.log(Level.WARNING, String.format("HostNameVerifier verification failed for "
+                      + "authority '%s'. This will be an error in the future.",
+              authority));
+    }
+    if (authorityVerificationResult.isOk()) {
+      // The status is trivially assigned in this case, but we are still making use of the
+      // cache to keep track that a warning log had been logged for the authority when
+      // enablePerRpcAuthorityCheck is false. When we permanently enable the feature, the
+      // status won't need to be cached for case when x509TrustManager is null.
+      if (x509TrustManager == null) {
+        authorityVerificationResult = Status.UNAVAILABLE.withDescription(
+                String.format("Could not verify authority '%s' for the rpc with no "
+                                + "X509TrustManager available",
+                        authority));
+      } else if (x509ExtendedTrustManagerClass.isInstance(x509TrustManager)) {
+        try {
+          Certificate[] peerCertificates = sslSession.getPeerCertificates();
+          X509Certificate[] x509PeerCertificates =
+                  new X509Certificate[peerCertificates.length];
+          for (int i = 0; i < peerCertificates.length; i++) {
+            x509PeerCertificates[i] = (X509Certificate) peerCertificates[i];
+          }
+          checkServerTrustedMethod.invoke(x509TrustManager, x509PeerCertificates,
+                  "RSA", new SslSocketWrapper((SSLSocket) socket, authority));
+          authorityVerificationResult = Status.OK;
+        } catch (SSLPeerUnverifiedException | InvocationTargetException
+                 | IllegalAccessException e) {
+          authorityVerificationResult = Status.UNAVAILABLE.withCause(e).withDescription(
+                  "Peer verification failed");
+        }
+        if (authorityVerificationResult.getCause() != null) {
+          log.log(Level.WARNING, authorityVerificationResult.getDescription()
+                          + ". This will be an error in the future.",
+                  authorityVerificationResult.getCause());
+        } else {
+          log.log(Level.WARNING, authorityVerificationResult.getDescription()
+                  + ". This will be an error in the future.");
+        }
+      }
+    }
+    return authorityVerificationResult;
   }
 
   @SuppressWarnings("GuardedBy")
