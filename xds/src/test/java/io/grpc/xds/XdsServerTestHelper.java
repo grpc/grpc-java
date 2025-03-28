@@ -130,9 +130,8 @@ public class XdsServerTestHelper {
     EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
         "filter-chain-bar", defaultFilterChainMatch, httpConnectionManager,
         tlsContextForDefaultFilterChain, tlsContextManager);
-    EnvoyServerProtoData.Listener listener = EnvoyServerProtoData.Listener.create(
+    return Listener.create(
             name, address, ImmutableList.of(filterChain1), defaultFilterChain, Protocol.TCP);
-    return listener;
   }
 
   static final class FakeXdsClientPoolFactory
@@ -289,6 +288,14 @@ public class XdsServerTestHelper {
         Thread.currentThread().interrupt();
         throw new RuntimeException(e);
       }
+    }
+
+    void deliverLdsUpdateWithApiListener(long httpMaxStreamDurationNano,
+        List<VirtualHost> virtualHosts) {
+      execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null)));
+      });
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {

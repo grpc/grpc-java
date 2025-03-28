@@ -677,8 +677,7 @@ final class XdsNameResolver extends NameResolver {
       XdsConfig update = updateOrStatus.getValue();
       HttpConnectionManager httpConnectionManager = update.getListener().httpConnectionManager();
       if (httpConnectionManager == null) {
-        String error = "API Listener: httpConnectionManager does not exist.";
-        logger.log(XdsLogLevel.INFO, error);
+        logger.log(XdsLogLevel.INFO, "API Listener: httpConnectionManager does not exist.");
         updateActiveFilters(null);
         cleanUpRoutes(updateOrStatus.getStatus());
         return;
