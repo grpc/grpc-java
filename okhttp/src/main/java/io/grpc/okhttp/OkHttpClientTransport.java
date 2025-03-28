@@ -547,8 +547,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   private Status verifyAuthority(String authority) {
     Status authorityVerificationResult;
-    if (hostnameVerifier.verify(
-            authority, ((SSLSocket) socket).getSession())) {
+    if (hostnameVerifier.verify(authority, ((SSLSocket) socket).getSession())) {
       authorityVerificationResult = Status.OK;
     } else {
       authorityVerificationResult = Status.UNAVAILABLE.withDescription(String.format(
