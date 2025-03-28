@@ -80,6 +80,8 @@ public class RbacFilterTest {
           StringMatcher.newBuilder().setExact("/" + PATH).setIgnoreCase(true).build();
   private static final RbacFilter.Provider FILTER_PROVIDER = new RbacFilter.Provider();
 
+  private final String name = "theFilterName";
+
   @Test
   public void filterType_serverOnly() {
     assertThat(FILTER_PROVIDER.isClientFilter()).isFalse();
@@ -259,7 +261,7 @@ public class RbacFilterTest {
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
     AuthConfig authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.ALLOW);
-    FILTER_PROVIDER.newInstance().buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler, never()).startCall(eq(mockServerCall), any(Metadata.class));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
@@ -271,7 +273,7 @@ public class RbacFilterTest {
 
     authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.DENY);
-    FILTER_PROVIDER.newInstance().buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
   }
@@ -322,7 +324,7 @@ public class RbacFilterTest {
     RbacConfig override = FILTER_PROVIDER.parseFilterConfigOverride(Any.pack(rbacPerRoute)).config;
     assertThat(override).isEqualTo(RbacConfig.create(null));
     ServerInterceptor interceptor =
-        FILTER_PROVIDER.newInstance().buildServerInterceptor(original, override);
+        FILTER_PROVIDER.newInstance(name).buildServerInterceptor(original, override);
     assertThat(interceptor).isNull();
 
     policyMatcher = PolicyMatcher.create("policy-matcher-override",
@@ -332,7 +334,7 @@ public class RbacFilterTest {
             GrpcAuthorizationEngine.Action.ALLOW);
     override = RbacConfig.create(authconfig);
 
-    FILTER_PROVIDER.newInstance().buildServerInterceptor(original, override)
+    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(original, override)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
     verify(mockServerCall).getAttributes();

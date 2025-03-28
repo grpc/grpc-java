@@ -67,7 +67,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.StatusException;
 import io.grpc.internal.AbstractStream;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -1742,16 +1741,14 @@ public class OkHttpClientTransportTest {
     clientTransport.shutdown(SHUTDOWN_REASON);
     // ping failed on channel shutdown
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+    assertSame(SHUTDOWN_REASON, callback.failureCause);
 
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+    assertSame(SHUTDOWN_REASON, callback.failureCause);
     shutdownAndVerify();
   }
 
@@ -1766,18 +1763,14 @@ public class OkHttpClientTransportTest {
     clientTransport.onException(new IOException());
     // ping failed on error
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertEquals(Status.Code.UNAVAILABLE, callback.failureCause.getCode());
 
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertEquals(Status.Code.UNAVAILABLE, callback.failureCause.getCode());
     shutdownAndVerify();
   }
 
@@ -2588,7 +2581,7 @@ public class OkHttpClientTransportTest {
   static class PingCallbackImpl implements ClientTransport.PingCallback {
     int invocationCount;
     long roundTripTime;
-    Throwable failureCause;
+    Status failureCause;
 
     @Override
     public void onSuccess(long roundTripTimeNanos) {
@@ -2597,7 +2590,7 @@ public class OkHttpClientTransportTest {
     }
 
     @Override
-    public void onFailure(Throwable cause) {
+    public void onFailure(Status cause) {
       invocationCount++;
       this.failureCause = cause;
     }

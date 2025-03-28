@@ -178,11 +178,15 @@ public class LoadReportClientTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     addFakeStatsData();
-    lrsClient = new LoadReportClient(loadStatsManager,
-        GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY.createForTest(channel),
-        NODE,
-        syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
-        fakeClock.getStopwatchSupplier());
+    lrsClient =
+        new LoadReportClient(
+            loadStatsManager,
+            new GrpcXdsTransportFactory(null).createForTest(channel),
+            NODE,
+            syncContext,
+            fakeClock.getScheduledExecutorService(),
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
     syncContext.execute(new Runnable() {
       @Override
       public void run() {

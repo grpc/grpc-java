@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -607,9 +606,9 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region1", "zone1", "subzone1"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(LbEndpoint.create("192.168.0.1", 8080, 2, true,
-                    "endpoint-host-name")), 1, 0),
+                    "endpoint-host-name", ImmutableMap.of())), 1, 0, ImmutableMap.of()),
             Locality.create("region3", "zone3", "subzone3"),
-            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1, ImmutableMap.of()));
   }
 
   /**
@@ -3246,7 +3245,9 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3,
+                        true, "endpoint-host-name", ImmutableMap.of())),
+                2, 0, ImmutableMap.of()));
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
         TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -3416,7 +3417,9 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3,
+                        true, "endpoint-host-name", ImmutableMap.of())),
+                2, 0, ImmutableMap.of()));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResourceTwo);
@@ -3426,7 +3429,9 @@ public abstract class GrpcXdsClientImplTestBase {
             Locality.create("region2", "zone2", "subzone2"),
             LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    LbEndpoint.create("172.44.2.2", 8000, 3, true, "endpoint-host-name")), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3,
+                        true, "endpoint-host-name", ImmutableMap.of())),
+                2, 0, ImmutableMap.of()));
     verifyNoMoreInteractions(edsResourceWatcher);
     verifyResourceMetadataAcked(
         EDS, edsResourceTwo, clusterLoadAssignmentTwo, VERSION_2, TIME_INCREMENT * 2);
@@ -4187,7 +4192,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
-        DEFAULT_XDS_TRANSPORT_FACTORY,
+        new GrpcXdsTransportFactory(null),
         bootstrapInfo,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,

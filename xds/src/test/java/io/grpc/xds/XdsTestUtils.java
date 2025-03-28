@@ -51,7 +51,6 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
-import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
@@ -257,17 +256,17 @@ public class XdsTestUtils {
 
     // Need to create endpoints to create locality endpoints map to create edsUpdate
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
-    LbEndpoint lbEndpoint =
-        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
+    LbEndpoint lbEndpoint = LbEndpoint.create(
+        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
-        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
 
     // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
-        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null)
+        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null, false)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
@@ -279,6 +278,16 @@ public class XdsTestUtils {
         .addCluster(CLUSTER_NAME, StatusOr.fromValue(clusterConfig));
 
     return builder.build();
+  }
+
+  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
+    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
+    LbEndpoint lbEndpoint = LbEndpoint.create(
+        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+    lbEndpointsMap.put(
+        Locality.create("", "", ""),
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
+    return lbEndpointsMap;
   }
 
   @SuppressWarnings("unchecked")
@@ -353,7 +362,6 @@ public class XdsTestUtils {
     return Listener.newBuilder()
         .setName(serverName)
         .setApiListener(clientListenerBuilder.build()).build();
-
   }
 
   /**
@@ -405,20 +413,6 @@ public class XdsTestUtils {
               .setLoadReportingInterval(Durations.fromNanos(loadReportIntervalNano))
               .build();
       responseObserver.onNext(response);
-    }
-  }
-
-  static class StatusMatcher implements ArgumentMatcher<Status> {
-    private final Status expectedStatus;
-
-    StatusMatcher(Status expectedStatus) {
-      this.expectedStatus = expectedStatus;
-    }
-
-    @Override
-    public boolean matches(Status status) {
-      return status != null && expectedStatus.getCode().equals(status.getCode())
-          && expectedStatus.getDescription().equals(status.getDescription());
     }
   }
 }

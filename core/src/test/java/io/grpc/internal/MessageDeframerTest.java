@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -53,10 +54,8 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPOutputStream;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.junit.runners.Parameterized;
@@ -341,9 +340,6 @@ public class MessageDeframerTest {
 
   @RunWith(JUnit4.class)
   public static class SizeEnforcingInputStreamTests {
-    @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-    @Rule
-    public final ExpectedException thrown = ExpectedException.none();
 
     private TestBaseStreamTracer tracer = new TestBaseStreamTracer();
     private StatsTraceContext statsTraceCtx = new StatsTraceContext(new StreamTracer[]{tracer});
@@ -381,11 +377,12 @@ public class MessageDeframerTest {
               new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
       try {
-        thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
-
-        while (stream.read() != -1) {
-        }
+        StatusRuntimeException e = assertThrows(StatusRuntimeException.class, () -> {
+          while (stream.read() != -1) {
+          }
+        });
+        assertThat(e).hasMessageThat()
+            .isEqualTo("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 2");
       } finally {
         stream.close();
       }
@@ -427,10 +424,10 @@ public class MessageDeframerTest {
       byte[] buf = new byte[10];
 
       try {
-        thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
-
-        stream.read(buf, 0, buf.length);
+        StatusRuntimeException e = assertThrows(StatusRuntimeException.class,
+            () -> stream.read(buf, 0, buf.length));
+        assertThat(e).hasMessageThat()
+            .isEqualTo("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 2");
       } finally {
         stream.close();
       }
@@ -470,10 +467,9 @@ public class MessageDeframerTest {
               new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
       try {
-        thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
-
-        stream.skip(4);
+        StatusRuntimeException e = assertThrows(StatusRuntimeException.class, () -> stream.skip(4));
+        assertThat(e).hasMessageThat()
+            .isEqualTo("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 2");
       } finally {
         stream.close();
       }
