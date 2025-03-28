@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
@@ -74,7 +75,7 @@ public class XdsServerTestHelper {
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
                                      TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "0.0.0.0:0",
         ImmutableList.of(), tlsContext, null, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
@@ -85,7 +86,8 @@ public class XdsServerTestHelper {
       EnvoyServerProtoData.DownstreamTlsContext tlsContext,
       EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
       TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
+    EnvoyServerProtoData.Listener listener = buildTestListener(
+        "listener1", "0.0.0.0:7000", sourcePorts,
         tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
@@ -128,10 +130,8 @@ public class XdsServerTestHelper {
     EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
         "filter-chain-bar", defaultFilterChainMatch, httpConnectionManager,
         tlsContextForDefaultFilterChain, tlsContextManager);
-    EnvoyServerProtoData.Listener listener =
-        EnvoyServerProtoData.Listener.create(
-            name, address, ImmutableList.of(filterChain1), defaultFilterChain);
-    return listener;
+    return Listener.create(
+            name, address, ImmutableList.of(filterChain1), defaultFilterChain, Protocol.TCP);
   }
 
   static final class FakeXdsClientPoolFactory
@@ -290,6 +290,14 @@ public class XdsServerTestHelper {
       }
     }
 
+    void deliverLdsUpdateWithApiListener(long httpMaxStreamDurationNano,
+        List<VirtualHost> virtualHosts) {
+      execute(() -> {
+        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null)));
+      });
+    }
+
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
       execute(() -> ldsWatcher.onChanged(ldsUpdate));
     }
@@ -297,8 +305,8 @@ public class XdsServerTestHelper {
     void deliverLdsUpdate(
         List<FilterChain> filterChains,
         @Nullable FilterChain defaultFilterChain) {
-      deliverLdsUpdate(LdsUpdate.forTcpListener(Listener.create(
-          "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
+      deliverLdsUpdate(LdsUpdate.forTcpListener(Listener.create("listener", "0.0.0.0:1",
+          ImmutableList.copyOf(filterChains), defaultFilterChain, Protocol.TCP)));
     }
 
     void deliverLdsUpdate(FilterChain filterChain, @Nullable FilterChain defaultFilterChain) {

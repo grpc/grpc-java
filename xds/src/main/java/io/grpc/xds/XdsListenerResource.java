@@ -162,13 +162,16 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     String address = null;
+    SocketAddress socketAddress = null;
     if (proto.getAddress().hasSocketAddress()) {
-      SocketAddress socketAddress = proto.getAddress().getSocketAddress();
+      socketAddress = proto.getAddress().getSocketAddress();
       address = socketAddress.getAddress();
+      if (address.isEmpty()) {
+        throw new ResourceInvalidException("Invalid address: Empty address is not allowed.");
+      }
       switch (socketAddress.getPortSpecifierCase()) {
         case NAMED_PORT:
-          address = address + ":" + socketAddress.getNamedPort();
-          break;
+          throw new ResourceInvalidException("NAMED_PORT is not supported in gRPC.");
         case PORT_VALUE:
           address = address + ":" + socketAddress.getPortValue();
           break;
@@ -209,8 +212,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           null, certProviderInstances, args);
     }
 
-    return EnvoyServerProtoData.Listener.create(
-        proto.getName(), address, filterChains.build(), defaultFilterChain);
+    return EnvoyServerProtoData.Listener.create(proto.getName(), address, filterChains.build(),
+        defaultFilterChain, socketAddress == null ? null : socketAddress.getProtocol());
   }
 
   @VisibleForTesting
