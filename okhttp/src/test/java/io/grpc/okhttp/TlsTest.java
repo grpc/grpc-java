@@ -123,10 +123,13 @@ public class TlsTest {
                 .keyManager(serverCert, serverPrivateKey)
                 .build();
       }
+      ChannelCredentials channelCreds;
+      try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+        channelCreds = TlsChannelCredentials.newBuilder()
+            .trustManager(caCert)
+            .build();
+      }
       Server server = grpcCleanupRule.register(server(serverCreds));
-      ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
-              .trustManager(getFakeX509ExtendedTrustManager())
-              .build();
       ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
       ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
@@ -149,10 +152,13 @@ public class TlsTest {
                 .keyManager(serverCert, serverPrivateKey)
                 .build();
       }
+      ChannelCredentials channelCreds;
+      try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+        channelCreds = TlsChannelCredentials.newBuilder()
+            .trustManager(caCert)
+            .build();
+      }
       Server server = grpcCleanupRule.register(server(serverCreds));
-      ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
-              .trustManager(getFakeX509ExtendedTrustManager())
-              .build();
       ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
       try {
@@ -180,10 +186,13 @@ public class TlsTest {
               .keyManager(serverCert, serverPrivateKey)
               .build();
     }
+    ChannelCredentials channelCreds;
+    try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+      channelCreds = TlsChannelCredentials.newBuilder()
+          .trustManager(caCert)
+          .build();
+    }
     Server server = grpcCleanupRule.register(server(serverCreds));
-    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
-            .trustManager(getFakeX509ExtendedTrustManager())
-            .build();
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
     ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
