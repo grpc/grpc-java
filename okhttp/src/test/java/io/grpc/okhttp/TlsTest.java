@@ -257,6 +257,7 @@ public class TlsTest {
         ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
             SimpleRequest.getDefaultInstance());
+        fail("Expected exception for authority verification failure.");
       } catch (StatusRuntimeException ex) {
         assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
         assertThat(ex.getStatus().getDescription()).isEqualTo(
