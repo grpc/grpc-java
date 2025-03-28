@@ -19,7 +19,6 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.ConnectivityState;
@@ -64,19 +63,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
     @Override
     public void shutdown() {}
-  };
-
-  @VisibleForTesting
-  static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withNoResult();
-    }
-
-    @Override
-    public String toString() {
-      return "BUFFER_PICKER";
-    }
   };
 
   private final Helper helper;
@@ -128,7 +114,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
     pendingState = ConnectivityState.CONNECTING;
-    pendingPicker = BUFFER_PICKER;
+    pendingPicker = new FixedResultPicker(PickResult.withNoResult());
 
     if (newBalancerFactory.equals(currentBalancerFactory)) {
       return;
