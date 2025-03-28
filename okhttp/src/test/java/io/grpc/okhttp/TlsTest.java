@@ -54,6 +54,7 @@ import java.util.Optional;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -263,11 +264,10 @@ public class TlsTest {
   }
 
   /**
-   * Uses a fake Trust Manager to fail authority verification for rpc identified by the call count.
+   * Uses a fake Trust Manager to fail authority verification.
    */
   @Test
-  public void perRpcAuthorityOverride_peerVerificationFails_rpcFails()
-          throws Exception {
+  public void perRpcAuthorityOverride_peerVerificationFails_rpcFails() throws Exception {
     OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
     try {
       ServerCredentials serverCreds;
@@ -278,21 +278,21 @@ public class TlsTest {
                 .build();
       }
       ChannelCredentials channelCreds;
-      FakeX509ExtendedTrustManager fakeTrustManager;
       try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
-        X509ExtendedTrustManager x509ExtendedTrustManager =
+        X509ExtendedTrustManager regularTrustManager =
                 (X509ExtendedTrustManager) getX509ExtendedTrustManager(caCert).get();
-        fakeTrustManager = new FakeX509ExtendedTrustManager(x509ExtendedTrustManager);
-        fakeTrustManager.setFailCheckServerTrusted();
         channelCreds = TlsChannelCredentials.newBuilder()
-                .trustManager(fakeTrustManager)
+                .trustManager(new HostnameCheckingX509ExtendedTrustManager(regularTrustManager))
                 .build();
       }
       Server server = grpcCleanupRule.register(server(serverCreds));
       ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
+      // Regular RPC succeeds
+      ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
+          CallOptions.DEFAULT, SimpleRequest.getDefaultInstance());
       try {
-        fakeTrustManager.setFailCheckServerTrusted();
+        // But with an authority it fails
         ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
                 CallOptions.DEFAULT.withAuthority("moo.test.google.fr"),
                 SimpleRequest.getDefaultInstance());
@@ -317,19 +317,16 @@ public class TlsTest {
               .build();
     }
     ChannelCredentials channelCreds;
-    FakeX509ExtendedTrustManager fakeTrustManager;
     try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
-      X509ExtendedTrustManager x509ExtendedTrustManager =
+      X509ExtendedTrustManager regularTrustManager =
               (X509ExtendedTrustManager) getX509ExtendedTrustManager(caCert).get();
-      fakeTrustManager = new FakeX509ExtendedTrustManager(x509ExtendedTrustManager);
       channelCreds = TlsChannelCredentials.newBuilder()
-              .trustManager(fakeTrustManager)
+              .trustManager(new HostnameCheckingX509ExtendedTrustManager(regularTrustManager))
               .build();
     }
     Server server = grpcCleanupRule.register(server(serverCreds));
     ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
 
-    fakeTrustManager.setFailCheckServerTrusted();
     ClientCalls.blockingUnaryCall(channel, SimpleServiceGrpc.getUnaryRpcMethod(),
             CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
             SimpleRequest.getDefaultInstance());
@@ -623,28 +620,49 @@ public class TlsTest {
     }
   }
 
-  @IgnoreJRERequirement
-  private static class FakeX509ExtendedTrustManager extends X509ExtendedTrustManager {
-    private final X509ExtendedTrustManager delegate;
-    private boolean checkServerTrustedCalled;
-    private boolean shouldFailCheckServerTrustedForRpc;
-    private int numCalls;
-
-    private FakeX509ExtendedTrustManager(X509ExtendedTrustManager delegate) {
-      this.delegate = delegate;
+  private static class HostnameCheckingX509ExtendedTrustManager
+      extends ForwardingX509ExtendedTrustManager {
+    public HostnameCheckingX509ExtendedTrustManager(X509ExtendedTrustManager tm) {
+      super(tm);
     }
 
-    private void setFailCheckServerTrusted() {
-      shouldFailCheckServerTrustedForRpc = true;
+    @Override
+    public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
+        throws CertificateException {
+      String peer = ((SSLSocket) socket).getHandshakeSession().getPeerHost();
+      if (!TestUtils.TEST_SERVER_HOST.equals(peer)) {
+        throw new CertificateException("Peer verification failed.");
+      }
+      super.checkServerTrusted(chain, authType, socket);
+    }
+  }
+
+  private static class FakeX509ExtendedTrustManager extends ForwardingX509ExtendedTrustManager {
+    private boolean checkServerTrustedCalled;
+
+    private FakeX509ExtendedTrustManager(X509ExtendedTrustManager delegate) {
+      super(delegate);
     }
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
             throws CertificateException {
       this.checkServerTrustedCalled = true;
-      if (shouldFailCheckServerTrustedForRpc && ++numCalls > 1) {
-        throw new CertificateException("Peer verification failed.");
-      }
+      super.checkServerTrusted(chain, authType, socket);
+    }
+  }
+
+  @IgnoreJRERequirement
+  private static class ForwardingX509ExtendedTrustManager extends X509ExtendedTrustManager {
+    private final X509ExtendedTrustManager delegate;
+
+    private ForwardingX509ExtendedTrustManager(X509ExtendedTrustManager delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
+            throws CertificateException {
       delegate.checkServerTrusted(chain, authType, socket);
     }
 
@@ -661,20 +679,26 @@ public class TlsTest {
     }
 
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) {
+    public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+            throws CertificateException {
+      delegate.checkClientTrusted(chain, authType, engine);
     }
 
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType) {
+    public void checkClientTrusted(X509Certificate[] chain, String authType)
+            throws CertificateException {
+      delegate.checkClientTrusted(chain, authType);
     }
 
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) {
+    public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
+            throws CertificateException {
+      delegate.checkClientTrusted(chain, authType, socket);
     }
 
     @Override
     public X509Certificate[] getAcceptedIssuers() {
-      return new X509Certificate[0];
+      return delegate.getAcceptedIssuers();
     }
   }
 
