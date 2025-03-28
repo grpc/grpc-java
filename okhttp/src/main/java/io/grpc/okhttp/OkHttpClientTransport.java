@@ -116,6 +116,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -507,7 +508,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       tmf.init((KeyStore) null);
       tm = tmf.getTrustManagers();
     }
-    return tm[0];
+    for (TrustManager trustManager: tm) {
+      if (trustManager instanceof X509TrustManager) {
+        return trustManager;
+      }
+    }
+    return null;
   }
 
   @GuardedBy("lock")
@@ -519,7 +525,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       pendingStreams.add(clientStream);
       setInUse(clientStream);
     } else {
-      if (!authority.equals(defaultAuthority)) {
+      if (socket instanceof SSLSocket && !authority.equals(defaultAuthority)) {
         Status authorityVerificationResult;
         if (authorityVerificationResults.containsKey(authority)) {
           authorityVerificationResult = authorityVerificationResults.get(authority);
