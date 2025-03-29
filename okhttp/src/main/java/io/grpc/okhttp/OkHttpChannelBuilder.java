@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.internal.CertificateUtils.createTrustManager;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
@@ -89,6 +90,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
+  private final ChannelCredentials channelCredentials;
   private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
 
@@ -206,6 +208,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
     this.freezeSecurityConfiguration = false;
+    this.channelCredentials = null;
   }
 
   OkHttpChannelBuilder(
@@ -218,6 +221,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     this.sslSocketFactory = factory;
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
+    this.channelCredentials = channelCreds;
   }
 
   private final class OkHttpChannelTransportFactoryBuilder
@@ -534,7 +538,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         keepAliveWithoutCalls,
         maxInboundMetadataSize,
         transportTracerFactory,
-        useGetForSafeMethods);
+        useGetForSafeMethods,
+        channelCredentials);
   }
 
   OkHttpChannelBuilder disableCheckAuthority() {
@@ -777,6 +782,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     private final boolean keepAliveWithoutCalls;
     final int maxInboundMetadataSize;
     final boolean useGetForSafeMethods;
+    private final ChannelCredentials channelCredentials;
     private boolean closed;
 
     private OkHttpTransportFactory(
@@ -794,7 +800,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         boolean keepAliveWithoutCalls,
         int maxInboundMetadataSize,
         TransportTracer.Factory transportTracerFactory,
-        boolean useGetForSafeMethods) {
+        boolean useGetForSafeMethods,
+        ChannelCredentials channelCredentials) {
       this.executorPool = executorPool;
       this.executor = executorPool.getObject();
       this.scheduledExecutorServicePool = scheduledExecutorServicePool;
@@ -812,6 +819,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
       this.useGetForSafeMethods = useGetForSafeMethods;
+      this.channelCredentials = channelCredentials;
 
       this.transportTracerFactory =
           Preconditions.checkNotNull(transportTracerFactory, "transportTracerFactory");
@@ -839,7 +847,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
           options.getUserAgent(),
           options.getEagAttributes(),
           options.getHttpConnectProxiedSocketAddress(),
-          tooManyPingsRunnable);
+          tooManyPingsRunnable,
+          channelCredentials);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);
@@ -875,7 +884,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
           keepAliveWithoutCalls,
           maxInboundMetadataSize,
           transportTracerFactory,
-          useGetForSafeMethods);
+          useGetForSafeMethods,
+          channelCredentials);
       return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 
