@@ -291,7 +291,7 @@ public class XdsTestUtils {
   }
 
   @SuppressWarnings("unchecked")
-  private static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
+  static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
     String lbConfigStr = "{\"wrr_locality_experimental\" : "
         + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
 
