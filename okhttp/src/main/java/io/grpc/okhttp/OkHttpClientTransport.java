@@ -521,9 +521,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     if (goAwayStatus != null) {
       clientStream.transportState().transportReportStatus(
           goAwayStatus, RpcProgress.MISCARRIED, true, new Metadata());
-    } else if (streams.size() >= maxConcurrentStreams) {
-      pendingStreams.add(clientStream);
-      setInUse(clientStream);
     } else {
       if (socket instanceof SSLSocket && !authority.equals(defaultAuthority)) {
         Status authorityVerificationResult;
@@ -541,7 +538,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           }
         }
       }
-      startStream(clientStream);
+      if (streams.size() >= maxConcurrentStreams) {
+        pendingStreams.add(clientStream);
+        setInUse(clientStream);
+      } else {
+        startStream(clientStream);
+      }
     }
   }
 
