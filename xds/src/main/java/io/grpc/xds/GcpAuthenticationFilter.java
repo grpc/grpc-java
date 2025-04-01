@@ -178,8 +178,7 @@ final class GcpAuthenticationFilter implements Filter {
           return new FailingClientCall<>(
               Status.UNAVAILABLE.withDescription(
                   String.format("GCP Authn found wrong type in %s metadata: %s=%s",
-                      clusterName, filterInstanceName,
-                      audienceObj == null ? null : audienceObj.getClass())));
+                      clusterName, filterInstanceName, audienceObj.getClass())));
         }
         AudienceWrapper audience = (AudienceWrapper) audienceObj;
 
