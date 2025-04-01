@@ -400,7 +400,7 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.59.x             | 4.1.97.Final          | 2.0.61.Final
 1.60.x-1.66.x      | 4.1.100.Final         | 2.0.61.Final
 1.67.x-1.70.x      | 4.1.110.Final         | 2.0.65.Final
-1.71.x-            | 4.1.110.Final         | 2.0.70.Final
+1.72.0-SNAPSHOT-            | 4.1.110.Final         | 2.0.70.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 

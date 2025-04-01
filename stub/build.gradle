@@ -19,6 +19,8 @@ dependencies {
         libraries.animalsniffer.annotations,
         libraries.guava
     implementation libraries.errorprone.annotations
+    implementation project(path: ':grpc-api')
+    implementation project(path: ':grpc-api')
     testImplementation libraries.truth,
             project(':grpc-inprocess'),
             project(':grpc-testing'),

@@ -95,11 +95,11 @@ public class HelloWorldServer {
     server.blockUntilShutdown();
   }
 
-  static class GreeterImpl extends GreeterGrpc.GreeterImplBase {
+  static class GreeterImpl extends io.grpc.examples.helloworld.GreeterGrpc.GreeterImplBase {
 
     @Override
-    public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
+    public void sayHello(io.grpc.examples.helloworld.HelloRequest req, StreamObserver<io.grpc.examples.helloworld.HelloReply> responseObserver) {
+      io.grpc.examples.helloworld.HelloReply reply = io.grpc.examples.helloworld.HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
       responseObserver.onNext(reply);
       responseObserver.onCompleted();
     }
