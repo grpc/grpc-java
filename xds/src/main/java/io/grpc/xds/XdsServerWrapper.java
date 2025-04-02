@@ -453,14 +453,12 @@ final class XdsServerWrapper extends Server {
     private boolean ipAddressesMatch(String ldsAddress) {
       HostAndPort ldsAddressHnP = HostAndPort.fromString(ldsAddress);
       HostAndPort listenerAddressHnP = HostAndPort.fromString(listenerAddress);
-
-      InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
-      InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
       if (!ldsAddressHnP.hasPort() || !listenerAddressHnP.hasPort()
           || ldsAddressHnP.getPort() != listenerAddressHnP.getPort()) {
         return false;
       }
-
+      InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
+      InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
       return listenerIp.equals(ldsIp);
     }
 
