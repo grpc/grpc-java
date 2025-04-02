@@ -16,8 +16,13 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
+import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
+
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.UnsignedLongs;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -34,8 +39,11 @@ import io.grpc.CompositeCallCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.auth.MoreCallCredentials;
+import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
+import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -52,6 +60,13 @@ final class GcpAuthenticationFilter implements Filter {
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
 
+  final String filterInstanceName;
+
+  GcpAuthenticationFilter(String name) {
+    filterInstanceName = checkNotNull(name, "name");
+  }
+
+
   static final class Provider implements Filter.Provider {
     @Override
     public String[] typeUrls() {
@@ -64,8 +79,8 @@ final class GcpAuthenticationFilter implements Filter {
     }
 
     @Override
-    public GcpAuthenticationFilter newInstance() {
-      return new GcpAuthenticationFilter();
+    public GcpAuthenticationFilter newInstance(String name) {
+      return new GcpAuthenticationFilter(name);
     }
 
     @Override
@@ -119,34 +134,57 @@ final class GcpAuthenticationFilter implements Filter {
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
 
-        /*String clusterName = callOptions.getOption(XdsAttributes.ATTR_CLUSTER_NAME);
+        String clusterName = callOptions.getOption(CLUSTER_SELECTION_KEY);
         if (clusterName == null) {
-          return next.newCall(method, callOptions);
-        }*/
-
-        // TODO: Fetch the CDS resource for the cluster.
-        // If the CDS resource is not available, fail the RPC with Status.UNAVAILABLE.
-
-        // TODO: Extract the audience from the CDS resource metadata.
-        // If the audience is not found or is in the wrong format, fail the RPC.
-        String audience = "TEST_AUDIENCE";
-
-        try {
-          CallCredentials existingCallCredentials = callOptions.getCredentials();
-          CallCredentials newCallCredentials =
-              getCallCredentials(callCredentialsCache, audience, credentials);
-          if (existingCallCredentials != null) {
-            callOptions = callOptions.withCallCredentials(
-                new CompositeCallCredentials(existingCallCredentials, newCallCredentials));
-          } else {
-            callOptions = callOptions.withCallCredentials(newCallCredentials);
-          }
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription(
+                  String.format(
+                      "GCP Authn for %s does not contain cluster resource", filterInstanceName)));
         }
-        catch (Exception e) {
-          // If we fail to attach CallCredentials due to any reason, return a FailingClientCall
-          return new FailingClientCall<>(Status.UNAUTHENTICATED
-              .withDescription("Failed to attach CallCredentials.")
-              .withCause(e));
+
+        if (!clusterName.startsWith("cluster:")) {
+          return next.newCall(method, callOptions);
+        }
+        XdsConfig xdsConfig = callOptions.getOption(XDS_CONFIG_CALL_OPTION_KEY);
+        if (xdsConfig == null) {
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription(
+                  String.format(
+                      "GCP Authn for %s with %s does not contain xds configuration",
+                      filterInstanceName, clusterName)));
+        }
+        StatusOr<XdsClusterConfig> xdsCluster =
+            xdsConfig.getClusters().get(clusterName.substring("cluster:".length()));
+        if (xdsCluster == null) {
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription(
+                  String.format(
+                      "GCP Authn for %s with %s - xds cluster config does not contain xds cluster",
+                      filterInstanceName, clusterName)));
+        }
+        if (!xdsCluster.hasValue()) {
+          return new FailingClientCall<>(xdsCluster.getStatus());
+        }
+        Object audienceObj =
+            xdsCluster.getValue().getClusterResource().parsedMetadata().get(filterInstanceName);
+        if (audienceObj == null) {
+          return next.newCall(method, callOptions);
+        }
+        if (!(audienceObj instanceof AudienceWrapper)) {
+          return new FailingClientCall<>(
+              Status.UNAVAILABLE.withDescription(
+                  String.format("GCP Authn found wrong type in %s metadata: %s=%s",
+                      clusterName, filterInstanceName, audienceObj.getClass())));
+        }
+        AudienceWrapper audience = (AudienceWrapper) audienceObj;
+        CallCredentials existingCallCredentials = callOptions.getCredentials();
+        CallCredentials newCallCredentials =
+            getCallCredentials(callCredentialsCache, audience.audience, credentials);
+        if (existingCallCredentials != null) {
+          callOptions = callOptions.withCallCredentials(
+              new CompositeCallCredentials(existingCallCredentials, newCallCredentials));
+        } else {
+          callOptions = callOptions.withCallCredentials(newCallCredentials);
         }
         return next.newCall(method, callOptions);
       }
@@ -186,9 +224,11 @@ final class GcpAuthenticationFilter implements Filter {
   }
 
   /** An implementation of {@link ClientCall} that fails when started. */
-  private static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
+  @VisibleForTesting
+  static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
-    private final Status error;
+    @VisibleForTesting
+    final Status error;
 
     public FailingClientCall(Status error) {
       this.error = error;
@@ -235,13 +275,21 @@ final class GcpAuthenticationFilter implements Filter {
 
   static class AudienceMetadataParser implements MetadataValueParser {
 
+    static final class AudienceWrapper {
+      final String audience;
+
+      AudienceWrapper(String audience) {
+        this.audience = checkNotNull(audience);
+      }
+    }
+
     @Override
     public String getTypeUrl() {
       return "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.Audience";
     }
 
     @Override
-    public String parse(Any any) throws ResourceInvalidException {
+    public AudienceWrapper parse(Any any) throws ResourceInvalidException {
       Audience audience;
       try {
         audience = any.unpack(Audience.class);
@@ -253,7 +301,7 @@ final class GcpAuthenticationFilter implements Filter {
         throw new ResourceInvalidException(
             "Audience URL is empty. Metadata value must contain a valid URL.");
       }
-      return url;
+      return new AudienceWrapper(url);
     }
   }
 }

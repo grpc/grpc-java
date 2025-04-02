@@ -129,6 +129,7 @@ import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
@@ -2417,8 +2418,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void processCluster_parsesAudienceMetadata()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void processCluster_parsesAudienceMetadata() throws Exception {
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()
@@ -2462,7 +2462,10 @@ public class GrpcXdsClientImplDataTest {
         "FILTER_METADATA", ImmutableMap.of(
             "key1", "value1",
             "key2", 42.0));
-    assertThat(update.parsedMetadata()).isEqualTo(expectedParsedMetadata);
+    assertThat(update.parsedMetadata().get("FILTER_METADATA"))
+        .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
+    assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
+        .isInstanceOf(AudienceWrapper.class);
   }
 
   @Test
@@ -2519,8 +2522,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void processCluster_metadataKeyCollision_resolvesToTypedMetadata()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void processCluster_metadataKeyCollision_resolvesToTypedMetadata() throws Exception {
     MetadataRegistry metadataRegistry = MetadataRegistry.getInstance();
 
     MetadataValueParser testParser =
@@ -2575,8 +2577,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void parseNonAggregateCluster_withHttp11ProxyTransportSocket()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void parseNonAggregateCluster_withHttp11ProxyTransportSocket() throws Exception {
     XdsClusterResource.isEnabledXdsHttpConnect = true;
 
     Http11ProxyUpstreamTransport http11ProxyUpstreamTransport =
