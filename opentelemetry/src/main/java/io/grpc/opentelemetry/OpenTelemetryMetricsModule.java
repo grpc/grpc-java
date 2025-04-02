@@ -17,6 +17,7 @@
 package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
@@ -70,7 +71,6 @@ import javax.annotation.Nullable;
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
-  private static final String LOCALITY_LABEL_NAME = "grpc.lb.locality";
   public static final ImmutableSet<String> DEFAULT_PER_CALL_METRICS_SET =
       ImmutableSet.of(
           "grpc.client.attempt.started",
@@ -90,6 +90,7 @@ final class OpenTelemetryMetricsModule {
   private final OpenTelemetryMetricsResource resource;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final boolean localityEnabled;
+  private final boolean backendServiceEnabled;
   private final ImmutableList<OpenTelemetryPlugin> plugins;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
@@ -97,7 +98,8 @@ final class OpenTelemetryMetricsModule {
       List<OpenTelemetryPlugin> plugins) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    this.localityEnabled = optionalLabels.contains(LOCALITY_LABEL_NAME);
+    this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
+    this.backendServiceEnabled = optionalLabels.contains(BACKEND_SERVICE_KEY.getKey());
     this.plugins = ImmutableList.copyOf(plugins);
   }
 
@@ -162,6 +164,7 @@ final class OpenTelemetryMetricsModule {
     volatile long outboundWireSize;
     volatile long inboundWireSize;
     volatile String locality;
+    volatile String backendService;
     long attemptNanos;
     Code statusCode;
 
@@ -206,8 +209,11 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void addOptionalLabel(String key, String value) {
-      if (LOCALITY_LABEL_NAME.equals(key)) {
+      if ("grpc.lb.locality".equals(key)) {
         locality = value;
+      }
+      if ("grpc.lb.backend_service".equals(key)) {
+        backendService = value;
       }
     }
 
@@ -247,6 +253,13 @@ final class OpenTelemetryMetricsModule {
           savedLocality = "";
         }
         builder.put(LOCALITY_KEY, savedLocality);
+      }
+      if (module.backendServiceEnabled) {
+        String savedBackendService = backendService;
+        if (savedBackendService == null) {
+          savedBackendService = "";
+        }
+        builder.put(BACKEND_SERVICE_KEY, savedBackendService);
       }
       for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
         plugin.addLabels(builder);
