@@ -153,7 +153,6 @@ final class GcpAuthenticationFilter implements Filter {
                       "GCP Authn for %s with %s does not contain xds configuration",
                       filterInstanceName, clusterName)));
         }
-
         StatusOr<XdsClusterConfig> xdsCluster =
             xdsConfig.getClusters().get(clusterName.substring("cluster:".length()));
         if (xdsCluster == null) {
@@ -163,17 +162,14 @@ final class GcpAuthenticationFilter implements Filter {
                       "GCP Authn for %s with %s - xds cluster config does not contain xds cluster",
                       filterInstanceName, clusterName)));
         }
-
         if (!xdsCluster.hasValue()) {
           return new FailingClientCall<>(xdsCluster.getStatus());
         }
-
         Object audienceObj =
             xdsCluster.getValue().getClusterResource().parsedMetadata().get(filterInstanceName);
         if (audienceObj == null) {
           return next.newCall(method, callOptions);
         }
-
         if (!(audienceObj instanceof AudienceWrapper)) {
           return new FailingClientCall<>(
               Status.UNAVAILABLE.withDescription(
@@ -181,23 +177,14 @@ final class GcpAuthenticationFilter implements Filter {
                       clusterName, filterInstanceName, audienceObj.getClass())));
         }
         AudienceWrapper audience = (AudienceWrapper) audienceObj;
-
-        try {
-          CallCredentials existingCallCredentials = callOptions.getCredentials();
-          CallCredentials newCallCredentials =
-              getCallCredentials(callCredentialsCache, audience.audience, credentials);
-          if (existingCallCredentials != null) {
-            callOptions = callOptions.withCallCredentials(
-                new CompositeCallCredentials(existingCallCredentials, newCallCredentials));
-          } else {
-            callOptions = callOptions.withCallCredentials(newCallCredentials);
-          }
-        }
-        catch (Exception e) {
-          // If we fail to attach CallCredentials due to any reason, return a FailingClientCall
-          return new FailingClientCall<>(Status.UNAUTHENTICATED
-              .withDescription("Failed to attach CallCredentials.")
-              .withCause(e));
+        CallCredentials existingCallCredentials = callOptions.getCredentials();
+        CallCredentials newCallCredentials =
+            getCallCredentials(callCredentialsCache, audience.audience, credentials);
+        if (existingCallCredentials != null) {
+          callOptions = callOptions.withCallCredentials(
+              new CompositeCallCredentials(existingCallCredentials, newCallCredentials));
+        } else {
+          callOptions = callOptions.withCallCredentials(newCallCredentials);
         }
         return next.newCall(method, callOptions);
       }
