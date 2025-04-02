@@ -2672,6 +2672,7 @@ public class GrpcXdsClientImplDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Invalid address: Empty address is not allowed.");
+
     XdsListenerResource.parseServerSideListener(
         listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
   }
@@ -2689,6 +2690,7 @@ public class GrpcXdsClientImplDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("NAMED_PORT is not supported in gRPC.");
+
     XdsListenerResource.parseServerSideListener(
         listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
   }

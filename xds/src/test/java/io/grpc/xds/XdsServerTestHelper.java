@@ -130,8 +130,10 @@ public class XdsServerTestHelper {
     EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
         "filter-chain-bar", defaultFilterChainMatch, httpConnectionManager,
         tlsContextForDefaultFilterChain, tlsContextManager);
-    return Listener.create(
+    EnvoyServerProtoData.Listener listener =
+        EnvoyServerProtoData.Listener.create(
             name, address, ImmutableList.of(filterChain1), defaultFilterChain, Protocol.TCP);
+    return listener;
   }
 
   static final class FakeXdsClientPoolFactory
