@@ -529,6 +529,9 @@ public class ManagedChannelImplBuilderTest {
       List<ClientInterceptor> effectiveInterceptors =
           builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).hasSize(2);
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+      assertThat(InternalConfiguratorRegistry.getConfigurators()).isEmpty();
+      assertThat(InternalConfiguratorRegistry.getConfiguratorsCallCountBeforeSet()).isEqualTo(1);
     }
   }
 

@@ -35,7 +35,7 @@ final class ConfiguratorRegistry {
   @GuardedBy("this")
   private List<Configurator> configurators = Collections.emptyList();
   @GuardedBy("this")
-  private int getConfiguratorsCallCountBeforeSet = 0;
+  private int configuratorsCallCountBeforeSet = 0;
 
   ConfiguratorRegistry() {}
 
@@ -68,7 +68,7 @@ final class ConfiguratorRegistry {
    */
   public synchronized List<Configurator> getConfigurators() {
     if (!wasConfiguratorsSet) {
-      getConfiguratorsCallCountBeforeSet++;
+      configuratorsCallCountBeforeSet++;
     }
     return configurators;
   }
@@ -77,8 +77,8 @@ final class ConfiguratorRegistry {
    * Returns the number of times getConfigurators() was called before
    * setConfigurators() was successfully invoked.
    */
-  public synchronized int getGetConfiguratorsCallCountBeforeSet() {
-    return getConfiguratorsCallCountBeforeSet;
+  public synchronized int getConfiguratorsCallCountBeforeSet() {
+    return configuratorsCallCountBeforeSet;
   }
 
   public synchronized boolean wasSetConfiguratorsCalled() {

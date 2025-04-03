@@ -144,6 +144,9 @@ public class ServerImplBuilderTest {
               });
       assertThat(builder.getTracerFactories()).hasSize(2);
       assertThat(builder.interceptors).hasSize(0);
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+      assertThat(InternalConfiguratorRegistry.getConfigurators()).isEmpty();
+      assertThat(InternalConfiguratorRegistry.getConfiguratorsCallCountBeforeSet()).isEqualTo(1);
     }
   }
 
