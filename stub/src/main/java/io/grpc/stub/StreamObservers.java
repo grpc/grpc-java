@@ -25,14 +25,15 @@ import java.util.Iterator;
  * {@link CallStreamObserver}.
  */
 public final class StreamObservers {
+  // Prevent instantiation
+  private StreamObservers() { }
+
   /**
    * Utility method to call {@link StreamObserver#onNext(Object)} and
    * {@link StreamObserver#onCompleted()} on the specified responseObserver.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10957")
   public static <T> void nextAndComplete(StreamObserver<T> responseObserver, T response) {
-    Preconditions.checkNotNull(response, "response");
-
     responseObserver.onNext(response);
     responseObserver.onCompleted();
   }
