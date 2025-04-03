@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.MethodDescriptor.MethodType.UNARY;
 import static io.grpc.Status.Code.UNAVAILABLE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
@@ -34,18 +35,12 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.Collections;
 import java.util.Map;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ManagedChannelServiceConfigTest {
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void managedChannelServiceConfig_shouldParseHealthCheckingConfig() throws Exception {
@@ -79,10 +74,9 @@ public class ManagedChannelServiceConfigTest {
     Map<String, ?> methodConfig = ImmutableMap.of("name", ImmutableList.of(name1, name2));
     Map<String, ?> serviceConfig = ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate method");
-
-    ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
+    assertThat(e).hasMessageThat().isEqualTo("Duplicate method name service/method");
   }
 
   @Test
@@ -92,10 +86,9 @@ public class ManagedChannelServiceConfigTest {
     Map<String, ?> methodConfig = ImmutableMap.of("name", ImmutableList.of(name1, name2));
     Map<String, ?> serviceConfig = ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate service");
-
-    ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
+    assertThat(e).hasMessageThat().isEqualTo("Duplicate service service");
   }
 
   @Test
@@ -107,10 +100,9 @@ public class ManagedChannelServiceConfigTest {
     Map<String, ?> serviceConfig =
         ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig1, methodConfig2));
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Duplicate service");
-
-    ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
+    assertThat(e).hasMessageThat().isEqualTo("Duplicate service service");
   }
 
   @Test
@@ -119,10 +111,9 @@ public class ManagedChannelServiceConfigTest {
     Map<String, ?> methodConfig = ImmutableMap.of("name", ImmutableList.of(name));
     Map<String, ?> serviceConfig = ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("missing service name for method method1");
-
-    ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
+    assertThat(e).hasMessageThat().isEqualTo("missing service name for method method1");
   }
 
   @Test
@@ -131,10 +122,9 @@ public class ManagedChannelServiceConfigTest {
     Map<String, ?> methodConfig = ImmutableMap.of("name", ImmutableList.of(name));
     Map<String, ?> serviceConfig = ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("missing service name for method method1");
-
-    ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
+    assertThat(e).hasMessageThat().isEqualTo("missing service name for method method1");
   }
 
   @Test
@@ -143,10 +133,9 @@ public class ManagedChannelServiceConfigTest {
     Map<String, ?> methodConfig = ImmutableMap.of("name", ImmutableList.of(name));
     Map<String, ?> serviceConfig = ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("missing service");
-
-    ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> ManagedChannelServiceConfig.fromServiceConfig(serviceConfig, true, 3, 4, null));
+    assertThat(e).hasMessageThat().isEqualTo("missing service name for method method");
   }
 
   @Test

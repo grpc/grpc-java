@@ -22,6 +22,9 @@ import static com.google.common.base.Verify.verify;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.s2a.proto.v2.S2AServiceGrpc;
+import com.google.s2a.proto.v2.SessionReq;
+import com.google.s2a.proto.v2.SessionResp;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Optional;
@@ -44,7 +47,8 @@ public class S2AStub implements AutoCloseable {
   private boolean doneWriting = false;
   private boolean isClosed = false;
 
-  static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
+  @VisibleForTesting
+  public static S2AStub newInstance(S2AServiceGrpc.S2AServiceStub serviceStub) {
     checkNotNull(serviceStub);
     return new S2AStub(serviceStub);
   }

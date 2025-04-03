@@ -23,8 +23,8 @@ package io.grpc.internal;
 final class TimeProviderResolverFactory {
   static TimeProvider resolveTimeProvider() {
     try {
-      Class<?> instantClass = Class.forName("java.time.Instant");
-      return new InstantTimeProvider(instantClass);
+      Class.forName("java.time.Instant");
+      return new InstantTimeProvider();
     } catch (ClassNotFoundException ex) {
       return new ConcurrentTimeProvider();
     }

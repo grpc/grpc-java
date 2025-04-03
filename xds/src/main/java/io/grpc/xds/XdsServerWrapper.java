@@ -24,7 +24,10 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.HostAndPort;
+import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
@@ -47,7 +50,6 @@ import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
@@ -58,9 +60,9 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -114,6 +116,14 @@ final class XdsServerWrapper extends Server {
   private XdsClient xdsClient;
   private DiscoveryState discoveryState;
   private volatile Server delegate;
+
+  // Must be accessed in syncContext.
+  // Filter instances are unique per Server, per FilterChain, and per filter's name+typeUrl.
+  // FilterChain.name -> <NamedFilterConfig.filterStateKey -> filter_instance>.
+  private final HashMap<String, HashMap<String, Filter>> activeFilters = new HashMap<>();
+  // Default filter chain Filter instances are unique per Server, and per filter's name+typeUrl.
+  // NamedFilterConfig.filterStateKey -> filter_instance.
+  private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
   XdsServerWrapper(
       String listenerAddress,
@@ -377,20 +387,39 @@ final class XdsServerWrapper extends Server {
         return;
       }
       logger.log(Level.FINEST, "Received Lds update {0}", update);
-      checkNotNull(update.listener(), "update");
+      if (update.listener() == null) {
+        onResourceDoesNotExist("Non-API");
+        return;
+      }
+
+      String ldsAddress = update.listener().address();
+      if (ldsAddress == null || update.listener().protocol() != Protocol.TCP
+          || !ipAddressesMatch(ldsAddress)) {
+        handleConfigNotFoundOrMismatch(
+            Status.UNKNOWN.withDescription(
+                String.format(
+                    "Listener address mismatch: expected %s, but got %s.",
+                    listenerAddress, ldsAddress)).asException());
+        return;
+      }
       if (!pendingRds.isEmpty()) {
         // filter chain state has not yet been applied to filterChainSelectorManager and there
         // are two sets of sslContextProviderSuppliers, so we release the old ones.
         releaseSuppliersInFlight();
         pendingRds.clear();
       }
+
       filterChains = update.listener().filterChains();
       defaultFilterChain = update.listener().defaultFilterChain();
+      // Filters are loaded even if the server isn't serving yet.
+      updateActiveFilters();
+
       List<FilterChain> allFilterChains = filterChains;
       if (defaultFilterChain != null) {
         allFilterChains = new ArrayList<>(filterChains);
         allFilterChains.add(defaultFilterChain);
       }
+
       Set<String> allRds = new HashSet<>();
       for (FilterChain filterChain : allFilterChains) {
         HttpConnectionManager hcm = filterChain.httpConnectionManager();
@@ -408,6 +437,7 @@ final class XdsServerWrapper extends Server {
           allRds.add(hcm.rdsName());
         }
       }
+
       for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
         if (!allRds.contains(entry.getKey())) {
           xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(),
@@ -420,6 +450,18 @@ final class XdsServerWrapper extends Server {
       }
     }
 
+    private boolean ipAddressesMatch(String ldsAddress) {
+      HostAndPort ldsAddressHnP = HostAndPort.fromString(ldsAddress);
+      HostAndPort listenerAddressHnP = HostAndPort.fromString(listenerAddress);
+      if (!ldsAddressHnP.hasPort() || !listenerAddressHnP.hasPort()
+          || ldsAddressHnP.getPort() != listenerAddressHnP.getPort()) {
+        return false;
+      }
+      InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
+      InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
+      return listenerIp.equals(ldsIp);
+    }
+
     @Override
     public void onResourceDoesNotExist(final String resourceName) {
       if (stopped) {
@@ -428,7 +470,7 @@ final class XdsServerWrapper extends Server {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
           String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
               xdsClient.getBootstrapInfo().node().getId())).asException();
-      handleConfigNotFound(statusException);
+      handleConfigNotFoundOrMismatch(statusException);
     }
 
     @Override
@@ -450,6 +492,7 @@ final class XdsServerWrapper extends Server {
       cleanUpRouteDiscoveryStates();
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
       xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), resourceName, this);
+      shutdownActiveFilters();
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorManager.updateSelector(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
@@ -459,81 +502,184 @@ final class XdsServerWrapper extends Server {
     }
 
     private void updateSelector() {
-      Map<FilterChain, AtomicReference<ServerRoutingConfig>> filterChainRouting = new HashMap<>();
+      // This is regenerated in generateRoutingConfig() calls below.
       savedRdsRoutingConfigRef.clear();
+
+      // Prepare server routing config map.
+      ImmutableMap.Builder<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs =
+          ImmutableMap.builder();
       for (FilterChain filterChain: filterChains) {
-        filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
+        HashMap<String, Filter> chainFilters = activeFilters.get(filterChain.name());
+        routingConfigs.put(filterChain, generateRoutingConfig(filterChain, chainFilters));
       }
-      FilterChainSelector selector = new FilterChainSelector(
-          Collections.unmodifiableMap(filterChainRouting),
-          defaultFilterChain == null ? null : defaultFilterChain.sslContextProviderSupplier(),
-          defaultFilterChain == null ? new AtomicReference<ServerRoutingConfig>() :
-              generateRoutingConfig(defaultFilterChain));
-      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
+
+      // Prepare the new selector.
+      FilterChainSelector selector;
+      if (defaultFilterChain != null) {
+        selector = new FilterChainSelector(
+            routingConfigs.build(),
+            defaultFilterChain.sslContextProviderSupplier(),
+            generateRoutingConfig(defaultFilterChain, activeFiltersDefaultChain));
+      } else {
+        selector = new FilterChainSelector(routingConfigs.build());
+      }
+
+      // Prepare the list of current selector's resources to close later.
+      List<SslContextProviderSupplier> oldSslSuppliers = getSuppliersInUse();
+
+      // Swap the selectors, initiate a graceful shutdown of the old one.
       logger.log(Level.FINEST, "Updating selector {0}", selector);
       filterChainSelectorManager.updateSelector(selector);
-      for (SslContextProviderSupplier e: toRelease) {
-        e.close();
+
+      // Release old resources.
+      for (SslContextProviderSupplier supplier: oldSslSuppliers) {
+        supplier.close();
       }
+
+      // Now that we have valid Transport Socket config, we can start/restart listening on a port.
       startDelegateServer();
     }
 
-    private AtomicReference<ServerRoutingConfig> generateRoutingConfig(FilterChain filterChain) {
-      HttpConnectionManager hcm = filterChain.httpConnectionManager();
-      if (hcm.virtualHosts() != null) {
-        ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
-                hcm.httpFilterConfigs(), hcm.virtualHosts());
-        return new AtomicReference<>(ServerRoutingConfig.create(hcm.virtualHosts(),interceptors));
-      } else {
-        RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
-        checkNotNull(rds, "rds");
-        AtomicReference<ServerRoutingConfig> serverRoutingConfigRef = new AtomicReference<>();
-        if (rds.savedVirtualHosts != null) {
-          ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
-              hcm.httpFilterConfigs(), rds.savedVirtualHosts);
-          ServerRoutingConfig serverRoutingConfig =
-              ServerRoutingConfig.create(rds.savedVirtualHosts, interceptors);
-          serverRoutingConfigRef.set(serverRoutingConfig);
-        } else {
-          serverRoutingConfigRef.set(ServerRoutingConfig.FAILING_ROUTING_CONFIG);
-        }
-        savedRdsRoutingConfigRef.put(filterChain, serverRoutingConfigRef);
-        return serverRoutingConfigRef;
+    // called in syncContext
+    private void updateActiveFilters() {
+      Set<String> removedChains = new HashSet<>(activeFilters.keySet());
+      for (FilterChain filterChain: filterChains) {
+        removedChains.remove(filterChain.name());
+        updateActiveFiltersForChain(
+            activeFilters.computeIfAbsent(filterChain.name(), k -> new HashMap<>()),
+            filterChain.httpConnectionManager().httpFilterConfigs());
+      }
+
+      // Shutdown all filters of chains missing from the LDS.
+      for (String chainToShutdown : removedChains) {
+        HashMap<String, Filter> filtersToShutdown = activeFilters.get(chainToShutdown);
+        checkNotNull(filtersToShutdown, "filtersToShutdown of chain %s", chainToShutdown);
+        updateActiveFiltersForChain(filtersToShutdown, null);
+        activeFilters.remove(chainToShutdown);
+      }
+
+      // Default chain.
+      ImmutableList<NamedFilterConfig> defaultChainConfigs = null;
+      if (defaultFilterChain != null) {
+        defaultChainConfigs = defaultFilterChain.httpConnectionManager().httpFilterConfigs();
+      }
+      updateActiveFiltersForChain(activeFiltersDefaultChain, defaultChainConfigs);
+    }
+
+    // called in syncContext
+    private void shutdownActiveFilters() {
+      for (HashMap<String, Filter> chainFilters : activeFilters.values()) {
+        checkNotNull(chainFilters, "chainFilters");
+        updateActiveFiltersForChain(chainFilters, null);
+      }
+      activeFilters.clear();
+      updateActiveFiltersForChain(activeFiltersDefaultChain, null);
+    }
+
+    // called in syncContext
+    private void updateActiveFiltersForChain(
+        Map<String, Filter> chainFilters, @Nullable List<NamedFilterConfig> filterConfigs) {
+      if (filterConfigs == null) {
+        filterConfigs = ImmutableList.of();
+      }
+
+      Set<String> filtersToShutdown = new HashSet<>(chainFilters.keySet());
+      for (NamedFilterConfig namedFilter : filterConfigs) {
+        String typeUrl = namedFilter.filterConfig.typeUrl();
+        String filterKey = namedFilter.filterStateKey();
+
+        Filter.Provider provider = filterRegistry.get(typeUrl);
+        checkNotNull(provider, "provider %s", typeUrl);
+        Filter filter = chainFilters.computeIfAbsent(
+            filterKey, k -> provider.newInstance(namedFilter.name));
+        checkNotNull(filter, "filter %s", filterKey);
+        filtersToShutdown.remove(filterKey);
+      }
+
+      // Shutdown filters not present in current HCM.
+      for (String filterKey : filtersToShutdown) {
+        Filter filterToShutdown = chainFilters.remove(filterKey);
+        checkNotNull(filterToShutdown, "filterToShutdown %s", filterKey);
+        filterToShutdown.close();
       }
     }
 
+    private AtomicReference<ServerRoutingConfig> generateRoutingConfig(
+        FilterChain filterChain, Map<String, Filter> chainFilters) {
+      HttpConnectionManager hcm = filterChain.httpConnectionManager();
+      ServerRoutingConfig routingConfig;
+
+      // Inlined routes.
+      ImmutableList<VirtualHost> vhosts = hcm.virtualHosts();
+      if (vhosts != null) {
+        routingConfig = ServerRoutingConfig.create(vhosts,
+            generatePerRouteInterceptors(hcm.httpFilterConfigs(), vhosts, chainFilters));
+        return new AtomicReference<>(routingConfig);
+      }
+
+      // Routes from RDS.
+      RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
+      checkNotNull(rds, "rds");
+
+      ImmutableList<VirtualHost> savedVhosts = rds.savedVirtualHosts;
+      if (savedVhosts != null) {
+        routingConfig = ServerRoutingConfig.create(savedVhosts,
+            generatePerRouteInterceptors(hcm.httpFilterConfigs(), savedVhosts, chainFilters));
+      } else {
+        routingConfig = ServerRoutingConfig.FAILING_ROUTING_CONFIG;
+      }
+      AtomicReference<ServerRoutingConfig> routingConfigRef = new AtomicReference<>(routingConfig);
+      savedRdsRoutingConfigRef.put(filterChain, routingConfigRef);
+      return routingConfigRef;
+    }
+
     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
-        List<NamedFilterConfig> namedFilterConfigs, List<VirtualHost> virtualHosts) {
+        @Nullable List<NamedFilterConfig> filterConfigs,
+        List<VirtualHost> virtualHosts,
+        Map<String, Filter> chainFilters) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+
+      checkNotNull(chainFilters, "chainFilters");
       ImmutableMap.Builder<Route, ServerInterceptor> perRouteInterceptors =
           new ImmutableMap.Builder<>();
+
       for (VirtualHost virtualHost : virtualHosts) {
         for (Route route : virtualHost.routes()) {
-          List<ServerInterceptor> filterInterceptors = new ArrayList<>();
-          Map<String, FilterConfig> selectedOverrideConfigs =
-              new HashMap<>(virtualHost.filterConfigOverrides());
-          selectedOverrideConfigs.putAll(route.filterConfigOverrides());
-          if (namedFilterConfigs != null) {
-            for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
-              FilterConfig filterConfig = namedFilterConfig.filterConfig;
-              Filter filter = filterRegistry.get(filterConfig.typeUrl());
-              if (filter instanceof ServerInterceptorBuilder) {
-                ServerInterceptor interceptor =
-                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
-                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
-                if (interceptor != null) {
-                  filterInterceptors.add(interceptor);
-                }
-              } else {
-                logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
-                    + filterConfig.typeUrl() + ") is not supported on server-side. "
-                    + "Probably a bug at ClientXdsClient verification.");
-              }
+          // Short circuit.
+          if (filterConfigs == null) {
+            perRouteInterceptors.put(route, noopInterceptor);
+            continue;
+          }
+
+          // Override vhost filter configs with more specific per-route configs.
+          Map<String, FilterConfig> perRouteOverrides = ImmutableMap.<String, FilterConfig>builder()
+              .putAll(virtualHost.filterConfigOverrides())
+              .putAll(route.filterConfigOverrides())
+              .buildKeepingLast();
+
+          // Interceptors for this vhost/route combo.
+          List<ServerInterceptor> interceptors = new ArrayList<>(filterConfigs.size());
+          for (NamedFilterConfig namedFilter : filterConfigs) {
+            String name = namedFilter.name;
+            FilterConfig config = namedFilter.filterConfig;
+            FilterConfig overrideConfig = perRouteOverrides.get(name);
+            String filterKey = namedFilter.filterStateKey();
+
+            Filter filter = chainFilters.get(filterKey);
+            checkNotNull(filter, "chainFilters.get(%s)", filterKey);
+            ServerInterceptor interceptor = filter.buildServerInterceptor(config, overrideConfig);
+
+            if (interceptor != null) {
+              interceptors.add(interceptor);
             }
           }
-          ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
-          perRouteInterceptors.put(route, interceptor);
+
+          // Combine interceptors produced by different filters into a single one that executes
+          // them sequentially. The order is preserved.
+          perRouteInterceptors.put(route, combineInterceptors(interceptors));
         }
       }
+
       return perRouteInterceptors.buildOrThrow();
     }
 
@@ -558,8 +704,9 @@ final class XdsServerWrapper extends Server {
       };
     }
 
-    private void handleConfigNotFound(StatusException exception) {
+    private void handleConfigNotFoundOrMismatch(StatusException exception) {
       cleanUpRouteDiscoveryStates();
+      shutdownActiveFilters();
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorManager.updateSelector(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
@@ -681,22 +828,24 @@ final class XdsServerWrapper extends Server {
 
       private void updateRdsRoutingConfig() {
         for (FilterChain filterChain : savedRdsRoutingConfigRef.keySet()) {
-          if (resourceName.equals(filterChain.httpConnectionManager().rdsName())) {
-            ServerRoutingConfig updatedRoutingConfig;
-            if (savedVirtualHosts == null) {
-              updatedRoutingConfig = ServerRoutingConfig.FAILING_ROUTING_CONFIG;
-            } else {
-              ImmutableMap<Route, ServerInterceptor> updatedInterceptors =
-                  generatePerRouteInterceptors(
-                      filterChain.httpConnectionManager().httpFilterConfigs(),
-                      savedVirtualHosts);
-              updatedRoutingConfig = ServerRoutingConfig.create(savedVirtualHosts,
-                  updatedInterceptors);
-            }
-            logger.log(Level.FINEST, "Updating filter chain {0} rds routing config: {1}",
-                new Object[]{filterChain.name(), updatedRoutingConfig});
-            savedRdsRoutingConfigRef.get(filterChain).set(updatedRoutingConfig);
+          HttpConnectionManager hcm = filterChain.httpConnectionManager();
+          if (!resourceName.equals(hcm.rdsName())) {
+            continue;
           }
+
+          ServerRoutingConfig updatedRoutingConfig;
+          if (savedVirtualHosts == null) {
+            updatedRoutingConfig = ServerRoutingConfig.FAILING_ROUTING_CONFIG;
+          } else {
+            HashMap<String, Filter> chainFilters = activeFilters.get(filterChain.name());
+            ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
+                hcm.httpFilterConfigs(), savedVirtualHosts, chainFilters);
+            updatedRoutingConfig = ServerRoutingConfig.create(savedVirtualHosts, interceptors);
+          }
+
+          logger.log(Level.FINEST, "Updating filter chain {0} rds routing config: {1}",
+              new Object[]{filterChain.name(), updatedRoutingConfig});
+          savedRdsRoutingConfigRef.get(filterChain).set(updatedRoutingConfig);
         }
       }
 

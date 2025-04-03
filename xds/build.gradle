@@ -46,6 +46,7 @@ dependencies {
     thirdpartyImplementation project(':grpc-protobuf'),
             project(':grpc-stub')
     compileOnly sourceSets.thirdparty.output
+    testCompileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-util'),
@@ -59,6 +60,7 @@ dependencies {
             libraries.protobuf.java.util
     def nettyDependency = implementation project(':grpc-netty')
 
+    testImplementation project(':grpc-api')
     testImplementation project(':grpc-rls')
     testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core')),

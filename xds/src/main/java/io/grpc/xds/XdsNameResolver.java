@@ -45,11 +45,11 @@ import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
-import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
@@ -59,12 +59,11 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
+import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
-import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.URI;
@@ -95,6 +94,8 @@ final class XdsNameResolver extends NameResolver {
 
   static final CallOptions.Key<String> CLUSTER_SELECTION_KEY =
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
+  static final CallOptions.Key<XdsConfig> XDS_CONFIG_CALL_OPTION_KEY =
+      CallOptions.Key.create("io.grpc.xds.XDS_CONFIG_CALL_OPTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
   static final CallOptions.Key<Boolean> AUTO_HOST_REWRITE_KEY =
@@ -127,27 +128,29 @@ final class XdsNameResolver extends NameResolver {
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
   private final MetricRecorder metricRecorder;
+  private final Args nameResolverArgs;
+  // Must be accessed in syncContext.
+  // Filter instances are unique per channel, and per filter (name+typeUrl).
+  // NamedFilterConfig.filterStateKey -> filter_instance.
+  private final HashMap<String, Filter> activeFilters = new HashMap<>();
 
-  private volatile RoutingConfig routingConfig = RoutingConfig.empty;
+  private volatile RoutingConfig routingConfig;
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
-  // Workaround for https://github.com/grpc/grpc-java/issues/8886 . This should be handled in
-  // XdsClient instead of here.
-  private boolean receivedConfig;
 
   XdsNameResolver(
       URI targetUri, String name, @Nullable String overrideAuthority,
       ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride,
-      MetricRecorder metricRecorder) {
+      MetricRecorder metricRecorder, Args nameResolverArgs) {
     this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
         ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
-        metricRecorder);
+        metricRecorder, nameResolverArgs);
   }
 
   @VisibleForTesting
@@ -157,7 +160,7 @@ final class XdsNameResolver extends NameResolver {
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride,
-      MetricRecorder metricRecorder) {
+      MetricRecorder metricRecorder, Args nameResolverArgs) {
     this.targetAuthority = targetAuthority;
     target = targetUri.toString();
 
@@ -176,6 +179,8 @@ final class XdsNameResolver extends NameResolver {
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     this.metricRecorder = metricRecorder;
+    this.nameResolverArgs = checkNotNull(nameResolverArgs, "nameResolverArgs");
+
     randomChannelId = random.nextLong();
     logId = InternalLogId.allocate("xds-resolver", name);
     logger = XdsLogger.withLogId(logId);
@@ -224,9 +229,8 @@ final class XdsNameResolver extends NameResolver {
     }
     ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
-    resolveState = new ResolveState(ldsResourceName);
 
-    resolveState.start();
+    resolveState = new ResolveState(ldsResourceName); // auto starts
   }
 
   private static String expandPercentS(String template, String replacement) {
@@ -237,7 +241,7 @@ final class XdsNameResolver extends NameResolver {
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
     if (resolveState != null) {
-      resolveState.stop();
+      resolveState.shutdown();
     }
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
@@ -286,7 +290,7 @@ final class XdsNameResolver extends NameResolver {
   }
 
   // called in syncContext
-  private void updateResolutionResult() {
+  private void updateResolutionResult(XdsConfig xdsConfig) {
     syncContext.throwIfNotInThisSynchronizationContext();
 
     ImmutableMap.Builder<String, Object> childPolicy = new ImmutableMap.Builder<>();
@@ -302,12 +306,14 @@ final class XdsNameResolver extends NameResolver {
 
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
-          XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
+          XdsLogLevel.INFO, "Generated service config: {0}", new Gson().toJson(rawServiceConfig));
     }
     ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
     Attributes attrs =
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(XdsAttributes.XDS_CONFIG, xdsConfig)
+            .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, resolveState.xdsDependencyManager)
             .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
             .build();
@@ -316,8 +322,7 @@ final class XdsNameResolver extends NameResolver {
             .setAttributes(attrs)
             .setServiceConfig(parsedServiceConfig)
             .build();
-    listener.onResult(result);
-    receivedConfig = true;
+    listener.onResult2(result);
   }
 
   /**
@@ -383,21 +388,21 @@ final class XdsNameResolver extends NameResolver {
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
-      String cluster = null;
-      Route selectedRoute = null;
       RoutingConfig routingCfg;
-      Map<String, FilterConfig> selectedOverrideConfigs;
-      List<ClientInterceptor> filterInterceptors = new ArrayList<>();
+      RouteData selectedRoute;
+      String cluster;
+      ClientInterceptor filters;
       Metadata headers = args.getHeaders();
+      String path = "/" + args.getMethodDescriptor().getFullMethodName();
       do {
         routingCfg = routingConfig;
-        selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
-        for (Route route : routingCfg.routes) {
-          if (RoutingUtils.matchRoute(
-                  route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
-              headers, random)) {
+        if (routingCfg.errorStatus != null) {
+          return Result.forError(routingCfg.errorStatus);
+        }
+        selectedRoute = null;
+        for (RouteData route : routingCfg.routes) {
+          if (RoutingUtils.matchRoute(route.routeMatch, path, headers, random)) {
             selectedRoute = route;
-            selectedOverrideConfigs.putAll(route.filterConfigOverrides());
             break;
           }
         }
@@ -405,38 +410,45 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
-        if (selectedRoute.routeAction() == null) {
+        if (selectedRoute.routeAction == null) {
           return Result.forError(Status.UNAVAILABLE.withDescription(
               "Could not route RPC to Route with non-forwarding action"));
         }
-        RouteAction action = selectedRoute.routeAction();
+        RouteAction action = selectedRoute.routeAction;
         if (action.cluster() != null) {
           cluster = prefixedClusterName(action.cluster());
+          filters = selectedRoute.filterChoices.get(0);
         } else if (action.weightedClusters() != null) {
+          // XdsRouteConfigureResource verifies the total weight will not be 0 or exceed uint32
           long totalWeight = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             totalWeight += weightedCluster.weight();
           }
           long select = random.nextLong(totalWeight);
           long accumulator = 0;
-          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+          for (int i = 0; ; i++) {
+            ClusterWeight weightedCluster = action.weightedClusters().get(i);
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
               cluster = prefixedClusterName(weightedCluster.name());
-              selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
+              filters = selectedRoute.filterChoices.get(i);
               break;
             }
           }
         } else if (action.namedClusterSpecifierPluginConfig() != null) {
           cluster =
               prefixedClusterSpecifierPluginName(action.namedClusterSpecifierPluginConfig().name());
+          filters = selectedRoute.filterChoices.get(0);
+        } else {
+          // updateRoutes() discards routes with unknown actions
+          throw new AssertionError();
         }
       } while (!retainCluster(cluster));
+
+      final RouteAction routeAction = selectedRoute.routeAction;
       Long timeoutNanos = null;
       if (enableTimeout) {
-        if (selectedRoute != null) {
-          timeoutNanos = selectedRoute.routeAction().timeoutNano();
-        }
+        timeoutNanos = routeAction.timeoutNano();
         if (timeoutNanos == null) {
           timeoutNanos = routingCfg.fallbackTimeoutNano;
         }
@@ -444,8 +456,7 @@ final class XdsNameResolver extends NameResolver {
           timeoutNanos = null;
         }
       }
-      RetryPolicy retryPolicy =
-          selectedRoute == null ? null : selectedRoute.routeAction().retryPolicy();
+      RetryPolicy retryPolicy = routeAction.retryPolicy();
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodConfig(timeoutNanos, retryPolicy);
@@ -457,24 +468,9 @@ final class XdsNameResolver extends NameResolver {
             parsedServiceConfig.getError().augmentDescription(
                 "Failed to parse service config (method config)"));
       }
-      if (routingCfg.filterChain != null) {
-        for (NamedFilterConfig namedFilter : routingCfg.filterChain) {
-          FilterConfig filterConfig = namedFilter.filterConfig;
-          Filter filter = filterRegistry.get(filterConfig.typeUrl());
-          if (filter instanceof ClientInterceptorBuilder) {
-            ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
-                .buildClientInterceptor(
-                    filterConfig, selectedOverrideConfigs.get(namedFilter.name),
-                    args, scheduler);
-            if (interceptor != null) {
-              filterInterceptors.add(interceptor);
-            }
-          }
-        }
-      }
       final String finalCluster = cluster;
-      final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), headers);
-      Route finalSelectedRoute = selectedRoute;
+      final XdsConfig xdsConfig = routingCfg.xdsConfig;
+      final long hash = generateHash(routeAction.hashPolicies(), headers);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -482,8 +478,9 @@ final class XdsNameResolver extends NameResolver {
             final Channel next) {
           CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
+                  .withOption(XDS_CONFIG_CALL_OPTION_KEY, xdsConfig)
                   .withOption(RPC_HASH_KEY, hash);
-          if (finalSelectedRoute.routeAction().autoHostRewrite()) {
+          if (routeAction.autoHostRewrite()) {
             callOptionsForCluster = callOptionsForCluster.withOption(AUTO_HOST_REWRITE_KEY, true);
           }
           return new SimpleForwardingClientCall<ReqT, RespT>(
@@ -514,11 +511,11 @@ final class XdsNameResolver extends NameResolver {
         }
       }
 
-      filterInterceptors.add(new ClusterSelectionInterceptor());
       return
           Result.newBuilder()
               .setConfig(config)
-              .setInterceptor(combineInterceptors(filterInterceptors))
+              .setInterceptor(combineInterceptors(
+                  ImmutableList.of(filters, new ClusterSelectionInterceptor())))
               .build();
     }
 
@@ -540,13 +537,21 @@ final class XdsNameResolver extends NameResolver {
 
     private void releaseCluster(final String cluster) {
       int count = clusterRefs.get(cluster).refCount.decrementAndGet();
+      if (count < 0) {
+        throw new AssertionError();
+      }
       if (count == 0) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (clusterRefs.get(cluster).refCount.get() == 0) {
-              clusterRefs.remove(cluster);
-              updateResolutionResult();
+            if (clusterRefs.get(cluster).refCount.get() != 0) {
+              throw new AssertionError();
+            }
+            clusterRefs.remove(cluster);
+            if (resolveState.lastConfigOrStatus.hasValue()) {
+              updateResolutionResult(resolveState.lastConfigOrStatus.getValue());
+            } else {
+              resolveState.cleanUpRoutes(resolveState.lastConfigOrStatus.getStatus());
             }
           }
         });
@@ -584,8 +589,18 @@ final class XdsNameResolver extends NameResolver {
     }
   }
 
+  static final class PassthroughClientInterceptor implements ClientInterceptor {
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      return next.newCall(method, callOptions);
+    }
+  }
+
   private static ClientInterceptor combineInterceptors(final List<ClientInterceptor> interceptors) {
-    checkArgument(!interceptors.isEmpty(), "empty interceptors");
+    if (interceptors.size() == 0) {
+      return new PassthroughClientInterceptor();
+    }
     if (interceptors.size() == 1) {
       return interceptors.get(0);
     }
@@ -625,103 +640,98 @@ final class XdsNameResolver extends NameResolver {
     return "cluster_specifier_plugin:" + pluginName;
   }
 
-  private static final class FailingConfigSelector extends InternalConfigSelector {
-    private final Result result;
-
-    public FailingConfigSelector(Status error) {
-      this.result = Result.forError(error);
-    }
-
-    @Override
-    public Result selectConfig(PickSubchannelArgs args) {
-      return result;
-    }
-  }
-
-  private class ResolveState implements ResourceWatcher<XdsListenerResource.LdsUpdate> {
+  class ResolveState implements XdsDependencyManager.XdsConfigWatcher {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
-    private final String ldsResourceName;
+    private final String authority;
+    private final XdsDependencyManager xdsDependencyManager;
     private boolean stopped;
     @Nullable
     private Set<String> existingClusters;  // clusters to which new requests can be routed
-    @Nullable
-    private RouteDiscoveryState routeDiscoveryState;
+    private StatusOr<XdsConfig> lastConfigOrStatus;
 
-    ResolveState(String ldsResourceName) {
-      this.ldsResourceName = ldsResourceName;
+    private ResolveState(String ldsResourceName) {
+      authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
+      xdsDependencyManager =
+          new XdsDependencyManager(xdsClient, this, syncContext, authority, ldsResourceName,
+              nameResolverArgs, scheduler);
     }
 
-    @Override
-    public void onChanged(final XdsListenerResource.LdsUpdate update) {
+    private void shutdown() {
       if (stopped) {
         return;
       }
-      logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-      HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
-      List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
-      String rdsName = httpConnectionManager.rdsName();
-      cleanUpRouteDiscoveryState();
-      if (virtualHosts != null) {
-        updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
-            httpConnectionManager.httpFilterConfigs());
-      } else {
-        routeDiscoveryState = new RouteDiscoveryState(
-            rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
-            httpConnectionManager.httpFilterConfigs());
-        logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-        xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
-            rdsName, routeDiscoveryState, syncContext);
-      }
-    }
 
-    @Override
-    public void onError(final Status error) {
-      if (stopped || receivedConfig) {
-        return;
-      }
-      listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
-          String.format("Unable to load LDS %s. xDS server returned: %s: %s",
-          ldsResourceName, error.getCode(), error.getDescription())));
-    }
-
-    @Override
-    public void onResourceDoesNotExist(final String resourceName) {
-      if (stopped) {
-        return;
-      }
-      String error = "LDS resource does not exist: " + resourceName;
-      logger.log(XdsLogLevel.INFO, error);
-      cleanUpRouteDiscoveryState();
-      cleanUpRoutes(error);
-    }
-
-    private void start() {
-      logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
-      xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
-          ldsResourceName, this, syncContext);
-    }
-
-    private void stop() {
-      logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", ldsResourceName);
       stopped = true;
-      cleanUpRouteDiscoveryState();
-      xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName, this);
+      xdsDependencyManager.shutdown();
+      updateActiveFilters(null);
+    }
+
+    @Override
+    public void onUpdate(StatusOr<XdsConfig> updateOrStatus) {
+      if (stopped) {
+        return;
+      }
+      logger.log(XdsLogLevel.INFO, "Receive XDS resource update: {0}", updateOrStatus);
+
+      lastConfigOrStatus = updateOrStatus;
+      if (!updateOrStatus.hasValue()) {
+        updateActiveFilters(null);
+        cleanUpRoutes(updateOrStatus.getStatus());
+        return;
+      }
+
+      // Process Route
+      XdsConfig update = updateOrStatus.getValue();
+      HttpConnectionManager httpConnectionManager = update.getListener().httpConnectionManager();
+      if (httpConnectionManager == null) {
+        logger.log(XdsLogLevel.INFO, "API Listener: httpConnectionManager does not exist.");
+        updateActiveFilters(null);
+        cleanUpRoutes(updateOrStatus.getStatus());
+        return;
+      }
+
+      VirtualHost virtualHost = update.getVirtualHost();
+      ImmutableList<NamedFilterConfig> filterConfigs = httpConnectionManager.httpFilterConfigs();
+      long streamDurationNano = httpConnectionManager.httpMaxStreamDurationNano();
+
+      updateActiveFilters(filterConfigs);
+      updateRoutes(update, virtualHost, streamDurationNano, filterConfigs);
     }
 
     // called in syncContext
-    private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
-        @Nullable List<NamedFilterConfig> filterConfigs) {
-      String authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
-      VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(virtualHosts, authority);
-      if (virtualHost == null) {
-        String error = "Failed to find virtual host matching hostname: " + authority;
-        logger.log(XdsLogLevel.WARNING, error);
-        cleanUpRoutes(error);
-        return;
+    private void updateActiveFilters(@Nullable List<NamedFilterConfig> filterConfigs) {
+      if (filterConfigs == null) {
+        filterConfigs = ImmutableList.of();
+      }
+      Set<String> filtersToShutdown = new HashSet<>(activeFilters.keySet());
+      for (NamedFilterConfig namedFilter : filterConfigs) {
+        String typeUrl = namedFilter.filterConfig.typeUrl();
+        String filterKey = namedFilter.filterStateKey();
+
+        Filter.Provider provider = filterRegistry.get(typeUrl);
+        checkNotNull(provider, "provider %s", typeUrl);
+        Filter filter = activeFilters.computeIfAbsent(
+            filterKey, k -> provider.newInstance(namedFilter.name));
+        checkNotNull(filter, "filter %s", filterKey);
+        filtersToShutdown.remove(filterKey);
       }
 
+      // Shutdown filters not present in current HCM.
+      for (String filterKey : filtersToShutdown) {
+        Filter filterToShutdown = activeFilters.remove(filterKey);
+        checkNotNull(filterToShutdown, "filterToShutdown %s", filterKey);
+        filterToShutdown.close();
+      }
+    }
+
+    private void updateRoutes(
+        XdsConfig xdsConfig,
+        @Nullable VirtualHost virtualHost,
+        long httpMaxStreamDurationNano,
+        @Nullable List<NamedFilterConfig> filterConfigs) {
       List<Route> routes = virtualHost.routes();
+      ImmutableList.Builder<RouteData> routesData = ImmutableList.builder();
 
       // Populate all clusters to which requests can be routed to through the virtual host.
       Set<String> clusters = new HashSet<>();
@@ -732,26 +742,36 @@ final class XdsNameResolver extends NameResolver {
       for (Route route : routes) {
         RouteAction action = route.routeAction();
         String prefixedName;
-        if (action != null) {
-          if (action.cluster() != null) {
-            prefixedName = prefixedClusterName(action.cluster());
+        if (action == null) {
+          routesData.add(new RouteData(route.routeMatch(), null, ImmutableList.of()));
+        } else if (action.cluster() != null) {
+          prefixedName = prefixedClusterName(action.cluster());
+          clusters.add(prefixedName);
+          clusterNameMap.put(prefixedName, action.cluster());
+          ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
+          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+        } else if (action.weightedClusters() != null) {
+          ImmutableList.Builder<ClientInterceptor> filterList = ImmutableList.builder();
+          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+            prefixedName = prefixedClusterName(weightedCluster.name());
             clusters.add(prefixedName);
-            clusterNameMap.put(prefixedName, action.cluster());
-          } else if (action.weightedClusters() != null) {
-            for (ClusterWeight weighedCluster : action.weightedClusters()) {
-              prefixedName = prefixedClusterName(weighedCluster.name());
-              clusters.add(prefixedName);
-              clusterNameMap.put(prefixedName, weighedCluster.name());
-            }
-          } else if (action.namedClusterSpecifierPluginConfig() != null) {
-            PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
-            if (pluginConfig instanceof RlsPluginConfig) {
-              prefixedName = prefixedClusterSpecifierPluginName(
-                  action.namedClusterSpecifierPluginConfig().name());
-              clusters.add(prefixedName);
-              rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
-            }
+            clusterNameMap.put(prefixedName, weightedCluster.name());
+            filterList.add(createFilters(filterConfigs, virtualHost, route, weightedCluster));
           }
+          routesData.add(
+              new RouteData(route.routeMatch(), route.routeAction(), filterList.build()));
+        } else if (action.namedClusterSpecifierPluginConfig() != null) {
+          PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
+          if (pluginConfig instanceof RlsPluginConfig) {
+            prefixedName = prefixedClusterSpecifierPluginName(
+                action.namedClusterSpecifierPluginConfig().name());
+            clusters.add(prefixedName);
+            rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
+          }
+          ClientInterceptor filters = createFilters(filterConfigs, virtualHost, route, null);
+          routesData.add(new RouteData(route.routeMatch(), route.routeAction(), filters));
+        } else {
+          // Discard route
         }
       }
 
@@ -791,16 +811,13 @@ final class XdsNameResolver extends NameResolver {
         }
       }
       // Update service config to include newly added clusters.
-      if (shouldUpdateResult) {
-        updateResolutionResult();
+      if (shouldUpdateResult && routingConfig != null) {
+        updateResolutionResult(xdsConfig);
+        shouldUpdateResult = false;
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
-      routingConfig =
-          new RoutingConfig(
-              httpMaxStreamDurationNano, routes, filterConfigs,
-              virtualHost.filterConfigOverrides());
-      shouldUpdateResult = false;
+      routingConfig = new RoutingConfig(xdsConfig, httpMaxStreamDurationNano, routesData.build());
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
@@ -809,11 +826,50 @@ final class XdsNameResolver extends NameResolver {
         }
       }
       if (shouldUpdateResult) {
-        updateResolutionResult();
+        updateResolutionResult(xdsConfig);
       }
     }
 
-    private void cleanUpRoutes(String error) {
+    private ClientInterceptor createFilters(
+        @Nullable List<NamedFilterConfig> filterConfigs,
+        VirtualHost virtualHost,
+        Route route,
+        @Nullable ClusterWeight weightedCluster) {
+      if (filterConfigs == null) {
+        return new PassthroughClientInterceptor();
+      }
+
+      Map<String, FilterConfig> selectedOverrideConfigs =
+          new HashMap<>(virtualHost.filterConfigOverrides());
+      selectedOverrideConfigs.putAll(route.filterConfigOverrides());
+      if (weightedCluster != null) {
+        selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
+      }
+
+      ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
+      for (NamedFilterConfig namedFilter : filterConfigs) {
+        String name = namedFilter.name;
+        FilterConfig config = namedFilter.filterConfig;
+        FilterConfig overrideConfig = selectedOverrideConfigs.get(name);
+        String filterKey = namedFilter.filterStateKey();
+
+        Filter filter = activeFilters.get(filterKey);
+        checkNotNull(filter, "activeFilters.get(%s)", filterKey);
+        ClientInterceptor interceptor =
+            filter.buildClientInterceptor(config, overrideConfig, scheduler);
+
+        if (interceptor != null) {
+          filterInterceptors.add(interceptor);
+        }
+      }
+
+      // Combine interceptors produced by different filters into a single one that executes
+      // them sequentially. The order is preserved.
+      return combineInterceptors(filterInterceptors.build());
+    }
+
+    private void cleanUpRoutes(Status error) {
+      routingConfig = new RoutingConfig(error);
       if (existingClusters != null) {
         for (String cluster : existingClusters) {
           int count = clusterRefs.get(cluster).refCount.decrementAndGet();
@@ -823,78 +879,15 @@ final class XdsNameResolver extends NameResolver {
         }
         existingClusters = null;
       }
-      routingConfig = RoutingConfig.empty;
+
       // Without addresses the default LB (normally pick_first) should become TRANSIENT_FAILURE, and
-      // the config selector handles the error message itself. Once the LB API allows providing
-      // failure information for addresses yet still providing a service config, the config seector
-      // could be avoided.
-      String errorWithNodeId =
-          error + ", xDS node ID: " + xdsClient.getBootstrapInfo().node().getId();
-      listener.onResult(ResolutionResult.newBuilder()
+      // the config selector handles the error message itself.
+      listener.onResult2(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
-            .set(InternalConfigSelector.KEY,
-              new FailingConfigSelector(Status.UNAVAILABLE.withDescription(errorWithNodeId)))
+            .set(InternalConfigSelector.KEY, configSelector)
             .build())
           .setServiceConfig(emptyServiceConfig)
           .build());
-      receivedConfig = true;
-    }
-
-    private void cleanUpRouteDiscoveryState() {
-      if (routeDiscoveryState != null) {
-        String rdsName = routeDiscoveryState.resourceName;
-        logger.log(XdsLogLevel.INFO, "Stop watching RDS resource {0}", rdsName);
-        xdsClient.cancelXdsResourceWatch(XdsRouteConfigureResource.getInstance(), rdsName,
-            routeDiscoveryState);
-        routeDiscoveryState = null;
-      }
-    }
-
-    /**
-     * Discovery state for RouteConfiguration resource. One instance for each Listener resource
-     * update.
-     */
-    private class RouteDiscoveryState implements ResourceWatcher<RdsUpdate> {
-      private final String resourceName;
-      private final long httpMaxStreamDurationNano;
-      @Nullable
-      private final List<NamedFilterConfig> filterConfigs;
-
-      private RouteDiscoveryState(String resourceName, long httpMaxStreamDurationNano,
-          @Nullable List<NamedFilterConfig> filterConfigs) {
-        this.resourceName = resourceName;
-        this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
-        this.filterConfigs = filterConfigs;
-      }
-
-      @Override
-      public void onChanged(final RdsUpdate update) {
-        if (RouteDiscoveryState.this != routeDiscoveryState) {
-          return;
-        }
-        logger.log(XdsLogLevel.INFO, "Received RDS resource update: {0}", update);
-        updateRoutes(update.virtualHosts, httpMaxStreamDurationNano, filterConfigs);
-      }
-
-      @Override
-      public void onError(final Status error) {
-        if (RouteDiscoveryState.this != routeDiscoveryState || receivedConfig) {
-          return;
-        }
-        listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
-            String.format("Unable to load RDS %s. xDS server returned: %s: %s",
-            resourceName, error.getCode(), error.getDescription())));
-      }
-
-      @Override
-      public void onResourceDoesNotExist(final String resourceName) {
-        if (RouteDiscoveryState.this != routeDiscoveryState) {
-          return;
-        }
-        String error = "RDS resource does not exist: " + resourceName;
-        logger.log(XdsLogLevel.INFO, error);
-        cleanUpRoutes(error);
-      }
     }
   }
 
@@ -902,23 +895,62 @@ final class XdsNameResolver extends NameResolver {
    * VirtualHost-level configuration for request routing.
    */
   private static class RoutingConfig {
-    private final long fallbackTimeoutNano;
-    final List<Route> routes;
-    // Null if HttpFilter is not supported.
-    @Nullable final List<NamedFilterConfig> filterChain;
-    final Map<String, FilterConfig> virtualHostOverrideConfig;
-
-    private static RoutingConfig empty = new RoutingConfig(
-        0, Collections.emptyList(), null, Collections.emptyMap());
+    final XdsConfig xdsConfig;
+    final long fallbackTimeoutNano;
+    final ImmutableList<RouteData> routes;
+    final Status errorStatus;
 
     private RoutingConfig(
-        long fallbackTimeoutNano, List<Route> routes, @Nullable List<NamedFilterConfig> filterChain,
-        Map<String, FilterConfig> virtualHostOverrideConfig) {
+        XdsConfig xdsConfig, long fallbackTimeoutNano, ImmutableList<RouteData> routes) {
+      this.xdsConfig = checkNotNull(xdsConfig, "xdsConfig");
       this.fallbackTimeoutNano = fallbackTimeoutNano;
-      this.routes = routes;
-      checkArgument(filterChain == null || !filterChain.isEmpty(), "filterChain is empty");
-      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
-      this.virtualHostOverrideConfig = Collections.unmodifiableMap(virtualHostOverrideConfig);
+      this.routes = checkNotNull(routes, "routes");
+      this.errorStatus = null;
+    }
+
+    private RoutingConfig(Status errorStatus) {
+      this.xdsConfig = null;
+      this.fallbackTimeoutNano = 0;
+      this.routes = null;
+      this.errorStatus = checkNotNull(errorStatus, "errorStatus");
+      checkArgument(!errorStatus.isOk(), "errorStatus should not be okay");
+    }
+  }
+
+  static final class RouteData {
+    final RouteMatch routeMatch;
+    /** null implies non-forwarding action. */
+    @Nullable
+    final RouteAction routeAction;
+    /**
+     * Only one of these interceptors should be used per-RPC. There are only multiple values in the
+     * list for weighted clusters, in which case the order of the list mirrors the weighted
+     * clusters.
+     */
+    final ImmutableList<ClientInterceptor> filterChoices;
+
+    RouteData(RouteMatch routeMatch, @Nullable RouteAction routeAction, ClientInterceptor filter) {
+      this(routeMatch, routeAction, ImmutableList.of(filter));
+    }
+
+    RouteData(
+        RouteMatch routeMatch,
+        @Nullable RouteAction routeAction,
+        ImmutableList<ClientInterceptor> filterChoices) {
+      this.routeMatch = checkNotNull(routeMatch, "routeMatch");
+      checkArgument(
+          routeAction == null || !filterChoices.isEmpty(),
+          "filter may be empty only for non-forwarding action");
+      this.routeAction = routeAction;
+      if (routeAction != null && routeAction.weightedClusters() != null) {
+        checkArgument(
+            routeAction.weightedClusters().size() == filterChoices.size(),
+            "filter choices must match size of weighted clusters");
+      }
+      for (ClientInterceptor filter : filterChoices) {
+        checkNotNull(filter, "entry in filterChoices is null");
+      }
+      this.filterChoices = checkNotNull(filterChoices, "filterChoices");
     }
   }
 

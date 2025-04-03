@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -41,7 +42,6 @@ import io.grpc.testing.TestMethodDescriptors;
 import java.util.ArrayList;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -57,8 +57,6 @@ public class GrpcUtilTest {
       new ClientStreamTracer() {}
   };
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Captor
@@ -201,9 +199,7 @@ public class GrpcUtilTest {
 
   @Test
   public void checkAuthority_failsOnNull() {
-    thrown.expect(NullPointerException.class);
-
-    GrpcUtil.checkAuthority(null);
+    assertThrows(NullPointerException.class, () -> GrpcUtil.checkAuthority(null));
   }
 
   @Test
@@ -229,19 +225,18 @@ public class GrpcUtilTest {
 
   @Test
   public void checkAuthority_failsOnInvalidAuthority() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority");
-
-    GrpcUtil.checkAuthority("[ : : 1]");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> GrpcUtil.checkAuthority("[ : : 1]"));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
 
   @Test
   public void checkAuthority_userInfoNotAllowed() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Userinfo");
-
-    GrpcUtil.checkAuthority("foo@valid");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> GrpcUtil.checkAuthority("foo@valid"));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Userinfo must not be present on authority: 'foo@valid'");
   }
 
   @Test

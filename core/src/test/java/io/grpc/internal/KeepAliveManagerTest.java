@@ -127,7 +127,7 @@ public final class KeepAliveManagerTest {
     verify(transport).ping(pingCallbackCaptor.capture(), isA(Executor.class));
     ClientTransport.PingCallback pingCallback = pingCallbackCaptor.getValue();
 
-    pingCallback.onFailure(new Throwable());
+    pingCallback.onFailure(Status.UNAVAILABLE.withDescription("I must write descriptions"));
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(transport).shutdownNow(statusCaptor.capture());

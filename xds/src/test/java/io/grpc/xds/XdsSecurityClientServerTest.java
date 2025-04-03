@@ -35,6 +35,7 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -130,6 +131,7 @@ public class XdsSecurityClientServerTest {
   private FakeXdsClient xdsClient = new FakeXdsClient();
   private FakeXdsClientPoolFactory fakePoolFactory = new FakeXdsClientPoolFactory(xdsClient);
   private static final String OVERRIDE_AUTHORITY = "foo.test.google.fr";
+  private Attributes sslContextAttributes;
 
   @Parameters(name = "enableSpiffe={0}")
   public static Collection<Boolean> data() {
@@ -152,6 +154,14 @@ public class XdsSecurityClientServerTest {
       NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverFactory);
     }
     FileWatcherCertificateProviderProvider.enableSpiffe = originalEnableSpiffe;
+    if (sslContextAttributes != null) {
+      SslContextProviderSupplier sslContextProviderSupplier = sslContextAttributes.get(
+              SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      if (sslContextProviderSupplier != null) {
+        sslContextProviderSupplier.close();
+      }
+      sslContextAttributes = null;
+    }
   }
 
   @Test
@@ -488,7 +498,7 @@ public class XdsSecurityClientServerTest {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(
             "cert-instance-name2", true, true);
-    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0",
+    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0:0",
             downstreamTlsContext,
             tlsContextManagerForServer);
     xdsClient.deliverLdsUpdate(LdsUpdate.forTcpListener(listener));
@@ -592,7 +602,7 @@ public class XdsSecurityClientServerTest {
     tlsContextManagerForServer = new TlsContextManagerImpl(bootstrapInfoForServer);
     XdsServerWrapper xdsServer = (XdsServerWrapper) builder.build();
     SettableFuture<Throwable> startFuture = startServerAsync(xdsServer);
-    EnvoyServerProtoData.Listener listener = buildListener("listener1", "10.1.2.3",
+    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0:0",
             downstreamTlsContext, tlsContextManagerForServer);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
@@ -633,7 +643,7 @@ public class XdsSecurityClientServerTest {
         "filter-chain-foo", filterChainMatch, httpConnectionManager, tlsContext,
         tlsContextManager);
     EnvoyServerProtoData.Listener listener = EnvoyServerProtoData.Listener.create(
-        name, address, ImmutableList.of(defaultFilterChain), null);
+        name, address, ImmutableList.of(defaultFilterChain), null, Protocol.TCP);
     return listener;
   }
 
@@ -651,7 +661,7 @@ public class XdsSecurityClientServerTest {
     InetSocketAddress socketAddress =
         new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
     tlsContextManagerForClient = new TlsContextManagerImpl(bootstrapInfoForClient);
-    Attributes attrs =
+    sslContextAttributes =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
                 .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
@@ -660,7 +670,7 @@ public class XdsSecurityClientServerTest {
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(
-        ImmutableList.of(new EquivalentAddressGroup(socketAddress, attrs)));
+        ImmutableList.of(new EquivalentAddressGroup(socketAddress, sslContextAttributes)));
     return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
   }
 
