@@ -34,25 +34,16 @@ public final class CommonTlsContextUtil {
   }
 
   private static boolean hasCertProviderValidationContext(CommonTlsContext commonTlsContext) {
-    if (commonTlsContext.hasCombinedValidationContext()) {
-      CombinedCertificateValidationContext combinedCertificateValidationContext =
-          commonTlsContext.getCombinedValidationContext();
-      return combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance();
-    }
     return hasValidationProviderInstance(commonTlsContext);
   }
 
   private static boolean hasIdentityCertificateProviderInstance(CommonTlsContext commonTlsContext) {
-    return commonTlsContext.hasTlsCertificateProviderInstance()
-        || commonTlsContext.hasTlsCertificateCertificateProviderInstance();
+    return commonTlsContext.hasTlsCertificateProviderInstance();
   }
 
   private static boolean hasValidationProviderInstance(CommonTlsContext commonTlsContext) {
-    if (commonTlsContext.hasValidationContext() && commonTlsContext.getValidationContext()
-        .hasCaCertificateProviderInstance()) {
-      return true;
-    }
-    return commonTlsContext.hasValidationContextCertificateProviderInstance();
+    return commonTlsContext.hasValidationContext() && commonTlsContext.getValidationContext()
+        .hasCaCertificateProviderInstance();
   }
 
   /**
