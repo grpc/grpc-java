@@ -279,14 +279,14 @@ public class DelayedClientTransportTest {
     ClientStream stream = delayedTransport.newStream(
             method, new Metadata(), CallOptions.DEFAULT, tracers);
     stream.start(streamListener);
-    assertEquals(1, delayedTransport.getPendingStreamsCount());
+    assertEquals(1,delayedTransport.getPendingStreamsCount());
     delayedTransport.shutdownNow(Status.UNAVAILABLE);
     verify(transportListener).transportShutdown(any(Status.class));
     verify(transportListener).transportTerminated();
     verify(streamListener).closed(
             statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
 
-    assertEquals(0, delayedTransport.getPendingStreamsCount());
+    assertEquals(0,delayedTransport.getPendingStreamsCount());
     assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
   }
 

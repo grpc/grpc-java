@@ -129,7 +129,6 @@ class DelayedStream implements ClientStream {
     boolean cancelOldStream = false;
 
     synchronized (this) {
-      // If realStream != null, then either setStream() or cancel() has been called.
       if (realStream != null) {
         oldStream = realStream;
         cancelOldStream = listener != null;
