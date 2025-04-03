@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsServerTestHelper.buildTestListener;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
 import io.grpc.InsecureServerCredentials;
@@ -33,6 +35,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
@@ -221,10 +224,13 @@ public class XdsServerBuilderTest {
     buildServer(mockXdsServingStatusListener);
     Future<Throwable> future = startServerAsync();
     // create port conflict for start to fail
-    XdsServerTestHelper.generateListenerUpdate(
-        xdsClient,
+    EnvoyServerProtoData.Listener listener = buildTestListener(
+        "listener1", "0.0.0.0:" + port, ImmutableList.of(),
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-            tlsContextManager);
+        null, tlsContextManager);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
+    xdsClient.deliverLdsUpdate(listenerUpdate);
+
     Throwable exception = future.get(5, TimeUnit.SECONDS);
     assertThat(exception).isInstanceOf(IOException.class);
     assertThat(exception).hasMessageThat().contains("Failed to bind");
