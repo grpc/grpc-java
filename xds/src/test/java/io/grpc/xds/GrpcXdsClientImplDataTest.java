@@ -2662,6 +2662,41 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void parseServerSideListener_emptyAddress() throws ResourceInvalidException {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(
+                    SocketAddress.newBuilder()))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Invalid address: Empty address is not allowed.");
+
+    XdsListenerResource.parseServerSideListener(
+        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+  }
+
+  @Test
+  public void parseServerSideListener_namedPort() throws ResourceInvalidException {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(
+                    SocketAddress.newBuilder()
+                        .setAddress("172.14.14.5").setNamedPort("")))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("NAMED_PORT is not supported in gRPC.");
+
+    XdsListenerResource.parseServerSideListener(
+        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+  }
+
+  @Test
   public void parseServerSideListener_nonUniqueFilterChainMatch() throws ResourceInvalidException {
     Filter filter1 = buildHttpConnectionManagerFilter(
         HttpFilter.newBuilder().setName("http-filter-1").setTypedConfig(
