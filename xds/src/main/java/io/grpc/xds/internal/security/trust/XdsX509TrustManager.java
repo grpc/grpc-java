@@ -207,6 +207,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (certContext == null) {
       return;
     }
+    @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
     List<StringMatcher> verifyList = certContext.getMatchSubjectAltNamesList();
     if (verifyList.isEmpty()) {
       return;
