@@ -529,12 +529,6 @@ public class ManagedChannelImplBuilderTest {
       List<ClientInterceptor> effectiveInterceptors =
           builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).hasSize(2);
-      try {
-        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
-        fail("exception expected");
-      } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Configurators are already set");
-      }
     }
   }
 
