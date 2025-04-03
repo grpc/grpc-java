@@ -59,15 +59,17 @@ final class GcpAuthenticationFilter implements Filter {
 
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
-
+  private final LruCache<String, CallCredentials> callCredentialsCache;
   final String filterInstanceName;
 
-  GcpAuthenticationFilter(String name) {
+  GcpAuthenticationFilter(String name, int cacheSize) {
     filterInstanceName = checkNotNull(name, "name");
+    this.callCredentialsCache = new LruCache<>(cacheSize);
   }
 
-
   static final class Provider implements Filter.Provider {
+    long cacheSize = 10;
+
     @Override
     public String[] typeUrls() {
       return new String[]{TYPE_URL};
@@ -80,7 +82,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public GcpAuthenticationFilter newInstance(String name) {
-      return new GcpAuthenticationFilter(name);
+      return new GcpAuthenticationFilter(name, (int) cacheSize);
     }
 
     @Override
@@ -97,7 +99,6 @@ final class GcpAuthenticationFilter implements Filter {
         return ConfigOrError.fromError("Invalid proto: " + e);
       }
 
-      long cacheSize = 10;
       // Validate cache_config
       if (gcpAuthnProto.hasCacheConfig()) {
         TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
@@ -127,8 +128,6 @@ final class GcpAuthenticationFilter implements Filter {
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
-    LruCache<String, CallCredentials> callCredentialsCache =
-        new LruCache<>(((GcpAuthenticationConfig) config).getCacheSize());
     return new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(

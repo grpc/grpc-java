@@ -33,6 +33,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
@@ -89,8 +90,8 @@ public class GcpAuthenticationFilterTest {
 
   @Test
   public void testNewFilterInstancesPerFilterName() {
-    assertThat(new GcpAuthenticationFilter("FILTER_INSTANCE_NAME1"))
-        .isNotEqualTo(new GcpAuthenticationFilter("FILTER_INSTANCE_NAME1"));
+    assertThat(new GcpAuthenticationFilter("FILTER_INSTANCE_NAME1", 10))
+        .isNotEqualTo(new GcpAuthenticationFilter("FILTER_INSTANCE_NAME1", 10));
   }
 
   @Test
@@ -152,7 +153,7 @@ public class GcpAuthenticationFilterTest {
         .withOption(CLUSTER_SELECTION_KEY, "cluster:cluster0")
         .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = Mockito.mock(Channel.class);
@@ -181,7 +182,7 @@ public class GcpAuthenticationFilterTest {
         .withOption(CLUSTER_SELECTION_KEY, "cluster:cluster0")
         .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = Mockito.mock(Channel.class);
@@ -190,7 +191,7 @@ public class GcpAuthenticationFilterTest {
     interceptor.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
     interceptor.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
 
-    verify(mockChannel, Mockito.times(2))
+    verify(mockChannel, times(2))
         .newCall(eq(methodDescriptor), callOptionsCaptor.capture());
     CallOptions firstCapturedOptions = callOptionsCaptor.getAllValues().get(0);
     CallOptions secondCapturedOptions = callOptionsCaptor.getAllValues().get(1);
@@ -202,7 +203,7 @@ public class GcpAuthenticationFilterTest {
   @Test
   public void testClientInterceptor_withoutClusterSelectionKey() throws Exception {
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = mock(Channel.class);
@@ -233,7 +234,7 @@ public class GcpAuthenticationFilterTest {
     Channel mockChannel = mock(Channel.class);
 
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     interceptor.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
@@ -244,7 +245,7 @@ public class GcpAuthenticationFilterTest {
   @Test
   public void testClientInterceptor_xdsConfigDoesNotExist() throws Exception {
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = mock(Channel.class);
@@ -274,7 +275,7 @@ public class GcpAuthenticationFilterTest {
         .withOption(CLUSTER_SELECTION_KEY, "cluster:cluster")
         .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = mock(Channel.class);
@@ -300,7 +301,7 @@ public class GcpAuthenticationFilterTest {
         .withOption(CLUSTER_SELECTION_KEY, "cluster:cluster0")
         .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = mock(Channel.class);
@@ -329,7 +330,7 @@ public class GcpAuthenticationFilterTest {
         .withOption(CLUSTER_SELECTION_KEY, "cluster:cluster0")
         .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
     GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
-    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME");
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 10);
     ClientInterceptor interceptor = filter.buildClientInterceptor(config, null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = Mockito.mock(Channel.class);
@@ -340,6 +341,40 @@ public class GcpAuthenticationFilterTest {
     assertTrue(call instanceof FailingClientCall);
     FailingClientCall<Void, Void> clientCall = (FailingClientCall<Void, Void>) call;
     assertThat(clientCall.error.getDescription()).contains("GCP Authn found wrong type");
+  }
+
+  @Test
+  public void testLruCacheAcrossInterceptors() throws IOException, ResourceInvalidException {
+    XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
+        CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
+    XdsConfig defaultXdsConfig = new XdsConfig.XdsConfigBuilder()
+        .setListener(ldsUpdate)
+        .setRoute(rdsUpdate)
+        .setVirtualHost(rdsUpdate.virtualHosts.get(0))
+        .addCluster(CLUSTER_NAME, StatusOr.fromValue(clusterConfig)).build();
+    CallOptions callOptionsWithXds = CallOptions.DEFAULT
+        .withOption(CLUSTER_SELECTION_KEY, "cluster:cluster0")
+        .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 2);
+    ClientInterceptor interceptor1
+        = filter.buildClientInterceptor(new GcpAuthenticationConfig(2), null, null);
+    ClientInterceptor interceptor2
+        = filter.buildClientInterceptor(new GcpAuthenticationConfig(2), null, null);
+    MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
+    Channel mockChannel = Mockito.mock(Channel.class);
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
+
+    interceptor1.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
+    verify(mockChannel).newCall(eq(methodDescriptor), callOptionsCaptor.capture());
+    CallOptions capturedOptions1 = callOptionsCaptor.getAllValues().get(0);
+    assertNotNull(capturedOptions1.getCredentials());
+    interceptor2.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
+    verify(mockChannel, times(2))
+        .newCall(eq(methodDescriptor), callOptionsCaptor.capture());
+    CallOptions capturedOptions2 = callOptionsCaptor.getAllValues().get(1);
+    assertNotNull(capturedOptions2.getCredentials());
+
+    assertSame(capturedOptions1.getCredentials(), capturedOptions2.getCredentials());
   }
 
   private static LdsUpdate getLdsUpdate() {
