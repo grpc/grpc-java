@@ -24,6 +24,7 @@ public class StreamObserversTest {
 
   @Test
   public void nextAndComplete() {
+    @SuppressWarnings("unchecked")
     StreamObserver<String> observer = Mockito.mock(StreamObserver.class);
     InOrder inOrder = Mockito.inOrder(observer);
     StreamObservers.nextAndComplete(observer, "TEST");
