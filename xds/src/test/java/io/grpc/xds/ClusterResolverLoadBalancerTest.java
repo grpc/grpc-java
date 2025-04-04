@@ -200,6 +200,7 @@ public class ClusterResolverLoadBalancerTest {
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   private int xdsClientRefs;
   private ClusterResolverLoadBalancer loadBalancer;
+  private NameResolverProvider fakeNameResolverProvider;
 
   @Before
   public void setUp() throws URISyntaxException {
@@ -216,7 +217,8 @@ public class ClusterResolverLoadBalancerTest {
         .setServiceConfigParser(mock(ServiceConfigParser.class))
         .setChannelLogger(mock(ChannelLogger.class))
         .build();
-    nsRegistry.register(new FakeNameResolverProvider());
+    fakeNameResolverProvider = new FakeNameResolverProvider(false);
+    nsRegistry.register(fakeNameResolverProvider);
     when(helper.getNameResolverRegistry()).thenReturn(nsRegistry);
     when(helper.getNameResolverArgs()).thenReturn(args);
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
@@ -858,6 +860,41 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
+  public void oldListenerCallback_onlyLogicalDnsCluster_endpointsResolved() {
+    nsRegistry.deregister(fakeNameResolverProvider);
+    nsRegistry.register(new FakeNameResolverProvider(true));
+    ClusterResolverConfig config = new ClusterResolverConfig(
+            Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
+    deliverLbConfig(config);
+    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
+    assertThat(childBalancers).isEmpty();
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
+    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
+
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
+    String priority = Iterables.getOnlyElement(priorityLbConfig.priorities);
+    PriorityChildConfig priorityChildConfig = priorityLbConfig.childConfigs.get(priority);
+    assertThat(priorityChildConfig.ignoreReresolution).isFalse();
+    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
+            .getPolicyName())
+            .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
+            GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
+    assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_INFO, 300L, null,
+            Collections.<DropOverload>emptyList(), "pick_first");
+    assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
+    assertThat(childBalancer.addresses.get(0).getAttributes()
+            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
+    assertThat(childBalancer.addresses.get(1).getAttributes()
+            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
+
+  }
+
+  @Test
   public void onlyLogicalDnsCluster_handleRefreshNameResolution() {
     ClusterResolverConfig config = new ClusterResolverConfig(
         Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
@@ -915,6 +952,55 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancers).hasSize(1);
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2),
         Iterables.getOnlyElement(childBalancers).addresses);
+
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    inOrder.verifyNoMoreInteractions();
+  }
+
+  @Test
+  public void oldListenerCallback_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh() {
+    nsRegistry.deregister(fakeNameResolverProvider);
+    nsRegistry.register(new FakeNameResolverProvider(true));
+    InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
+            backoffPolicy1, backoffPolicy2);
+    ClusterResolverConfig config = new ClusterResolverConfig(
+            Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
+    deliverLbConfig(config);
+    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
+    assertThat(childBalancers).isEmpty();
+    Status error = Status.UNAVAILABLE.withDescription("cannot reach DNS server");
+    resolver.deliverError(error);
+    inOrder.verify(helper).updateBalancingState(
+            eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertPicker(pickerCaptor.getValue(), error, null);
+    assertThat(resolver.refreshCount).isEqualTo(0);
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
+            .isEqualTo(1L);
+    fakeClock.forwardTime(1L, TimeUnit.SECONDS);
+    assertThat(resolver.refreshCount).isEqualTo(1);
+
+    error = Status.UNKNOWN.withDescription("I am lost");
+    resolver.deliverError(error);
+    inOrder.verify(helper).updateBalancingState(
+            eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertPicker(pickerCaptor.getValue(), error, null);
+    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
+            .isEqualTo(10L);
+    fakeClock.forwardTime(10L, TimeUnit.SECONDS);
+    assertThat(resolver.refreshCount).isEqualTo(2);
+
+    // Succeed.
+    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
+    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
+    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
+    assertThat(childBalancers).hasSize(1);
+    assertAddressesEqual(Arrays.asList(endpoint1, endpoint2),
+            Iterables.getOnlyElement(childBalancers).addresses);
 
     assertThat(fakeClock.getPendingTasks()).isEmpty();
     inOrder.verifyNoMoreInteractions();
@@ -1319,10 +1405,18 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private class FakeNameResolverProvider extends NameResolverProvider {
+    private final boolean useOldListenerCallback;
+
+    private FakeNameResolverProvider(boolean useOldListenerCallback) {
+      this.useOldListenerCallback = useOldListenerCallback;
+    }
+
     @Override
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
       assertThat(targetUri.getScheme()).isEqualTo("dns");
-      FakeNameResolver resolver = new FakeNameResolver(targetUri);
+      FakeNameResolver resolver = useOldListenerCallback
+              ? new FakeNameResolverUsingOldListenerCallback(targetUri)
+              : new FakeNameResolver(targetUri);
       resolvers.add(resolver);
       return resolver;
     }
@@ -1343,9 +1437,10 @@ public class ClusterResolverLoadBalancerTest {
     }
   }
 
+
   private class FakeNameResolver extends NameResolver {
     private final URI targetUri;
-    private Listener2 listener;
+    protected Listener2 listener;
     private int refreshCount;
 
     private FakeNameResolver(URI targetUri) {
@@ -1372,19 +1467,37 @@ public class ClusterResolverLoadBalancerTest {
       resolvers.remove(this);
     }
 
-    private void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
-      listener.onResult(ResolutionResult.newBuilder()
-          .setAddressesOrError(StatusOr.fromValue(addresses)).build());
+    protected void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
+      syncContext.execute(() -> listener.onResult2(ResolutionResult.newBuilder()
+              .setAddressesOrError(StatusOr.fromValue(addresses)).build()) );
     }
 
-    private void deliverError(Status error) {
+    protected void deliverError(Status error) {
+      syncContext.execute(() -> listener.onResult2(ResolutionResult.newBuilder()
+                      .setAddressesOrError(StatusOr.fromStatus(error)).build()));
+    }
+  }
+
+  private class FakeNameResolverUsingOldListenerCallback extends FakeNameResolver {
+    private FakeNameResolverUsingOldListenerCallback(URI targetUri) {
+      super(targetUri);
+    }
+
+    @Override
+    protected void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
+      listener.onResult(ResolutionResult.newBuilder()
+              .setAddressesOrError(StatusOr.fromValue(addresses)).build());
+    }
+
+    @Override
+    protected void deliverError(Status error) {
       listener.onError(error);
     }
   }
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
-
+    
     FakeLoadBalancerProvider(String policyName) {
       this.policyName = policyName;
     }
