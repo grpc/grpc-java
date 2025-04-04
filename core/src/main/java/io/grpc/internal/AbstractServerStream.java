@@ -74,6 +74,7 @@ public abstract class AbstractServerStream extends AbstractStream
   private final StatsTraceContext statsTraceCtx;
   private boolean outboundClosed;
   private boolean headersSent;
+  private boolean closeCalled;
 
   protected AbstractServerStream(
       WritableBufferAllocator bufferAllocator, StatsTraceContext statsTraceCtx) {
@@ -120,6 +121,7 @@ public abstract class AbstractServerStream extends AbstractStream
 
   @Override
   public final void close(Status status, Metadata trailers) {
+    Preconditions.checkState(!closeCalled, "call already closed");
     Preconditions.checkNotNull(status, "status");
     Preconditions.checkNotNull(trailers, "trailers");
     if (!outboundClosed) {
@@ -130,6 +132,7 @@ public abstract class AbstractServerStream extends AbstractStream
       // closedStatus is only set from here, and is read from a place that has happen-after
       // guarantees with respect to here.
       transportState().setClosedStatus(status);
+      closeCalled = true;
       abstractServerStreamSink().writeTrailers(trailers, headersSent, status);
     }
   }
