@@ -82,6 +82,17 @@ public abstract class ManagedChannelProvider {
   }
 
   /**
+   * Creates a channel builder with a target string, credentials, NameResolverRegistry
+   * and NameResolverProvider. Returns an error-string result if unable to
+   * understand the credentials.
+   */
+  protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
+                                                      NameResolverRegistry nameResolverRegistry,
+                                                      NameResolverProvider nameResolverProvider) {
+    return newChannelBuilder(target, creds);
+  }
+
+  /**
    * Returns the {@link SocketAddress} types this ManagedChannelProvider supports.
    */
   protected abstract Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes();
