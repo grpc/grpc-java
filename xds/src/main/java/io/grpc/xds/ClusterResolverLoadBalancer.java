@@ -693,7 +693,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
             handleEndpointResourceUpdate();
-            return status;
+            return Status.OK;
           } else {
             handleErrorInSyncContext(addressesOrError.getStatus());
             return addressesOrError.getStatus();

@@ -828,19 +828,17 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void onlyLogicalDnsCluster_endpointsResolved() {
-    do_onlyLogicalDnsCluster_endpointsResolved(false);
+    do_onlyLogicalDnsCluster_endpointsResolved();
   }
 
   @Test
   public void oldListenerCallback_onlyLogicalDnsCluster_endpointsResolved() {
-    do_onlyLogicalDnsCluster_endpointsResolved(true);
+    nsRegistry.deregister(fakeNameResolverProvider);
+    nsRegistry.register(new FakeNameResolverProvider(true));
+    do_onlyLogicalDnsCluster_endpointsResolved();
   }
 
-  void do_onlyLogicalDnsCluster_endpointsResolved(boolean useOldListenerCallback) {
-    if (useOldListenerCallback) {
-      nsRegistry.deregister(fakeNameResolverProvider);
-      nsRegistry.register(new FakeNameResolverProvider(true));
-    }
+  void do_onlyLogicalDnsCluster_endpointsResolved() {
     ClusterResolverConfig config = new ClusterResolverConfig(
         Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
@@ -889,19 +887,17 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void resolutionError_backoffAndRefresh() {
-    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh(false);
+    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh();
   }
 
   @Test
   public void oldListenerCallback_resolutionError_backoffAndRefresh() {
-    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh(true);
+    nsRegistry.deregister(fakeNameResolverProvider);
+    nsRegistry.register(new FakeNameResolverProvider(true));
+    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh();
   }
 
-  void do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh(boolean useOldListenerCallback) {
-    if (useOldListenerCallback) {
-      nsRegistry.deregister(fakeNameResolverProvider);
-      nsRegistry.register(new FakeNameResolverProvider(true));
-    }
+  void do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh() {
     InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
             backoffPolicy1, backoffPolicy2);
     ClusterResolverConfig config = new ClusterResolverConfig(
@@ -1409,8 +1405,11 @@ public class ClusterResolverLoadBalancerTest {
     }
 
     protected void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
-      syncContext.execute(() -> listener.onResult2(ResolutionResult.newBuilder()
-              .setAddressesOrError(StatusOr.fromValue(addresses)).build()) );
+      syncContext.execute(() -> {
+        Status ret = listener.onResult2(ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromValue(addresses)).build());
+        assertThat(ret.getCode()).isEqualTo(Status.Code.OK);
+      });
     }
 
     protected void deliverError(Status error) {
