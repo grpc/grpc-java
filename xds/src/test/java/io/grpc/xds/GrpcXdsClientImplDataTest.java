@@ -129,6 +129,7 @@ import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
@@ -2417,8 +2418,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void processCluster_parsesAudienceMetadata()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void processCluster_parsesAudienceMetadata() throws Exception {
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()
@@ -2462,7 +2462,10 @@ public class GrpcXdsClientImplDataTest {
         "FILTER_METADATA", ImmutableMap.of(
             "key1", "value1",
             "key2", 42.0));
-    assertThat(update.parsedMetadata()).isEqualTo(expectedParsedMetadata);
+    assertThat(update.parsedMetadata().get("FILTER_METADATA"))
+        .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
+    assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
+        .isInstanceOf(AudienceWrapper.class);
   }
 
   @Test
@@ -2519,8 +2522,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void processCluster_metadataKeyCollision_resolvesToTypedMetadata()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void processCluster_metadataKeyCollision_resolvesToTypedMetadata() throws Exception {
     MetadataRegistry metadataRegistry = MetadataRegistry.getInstance();
 
     MetadataValueParser testParser =
@@ -2575,8 +2577,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void parseNonAggregateCluster_withHttp11ProxyTransportSocket()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void parseNonAggregateCluster_withHttp11ProxyTransportSocket() throws Exception {
     XdsClusterResource.isEnabledXdsHttpConnect = true;
 
     Http11ProxyUpstreamTransport http11ProxyUpstreamTransport =
@@ -2656,6 +2657,41 @@ public class GrpcXdsClientImplDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 cannot have use_original_dst set to true");
+    XdsListenerResource.parseServerSideListener(
+        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+  }
+
+  @Test
+  public void parseServerSideListener_emptyAddress() throws ResourceInvalidException {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(
+                    SocketAddress.newBuilder()))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Invalid address: Empty address is not allowed.");
+
+    XdsListenerResource.parseServerSideListener(
+        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+  }
+
+  @Test
+  public void parseServerSideListener_namedPort() throws ResourceInvalidException {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(
+                    SocketAddress.newBuilder()
+                        .setAddress("172.14.14.5").setNamedPort("")))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("NAMED_PORT is not supported in gRPC.");
+
     XdsListenerResource.parseServerSideListener(
         listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
   }

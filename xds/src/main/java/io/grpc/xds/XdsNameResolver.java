@@ -684,6 +684,13 @@ final class XdsNameResolver extends NameResolver {
       // Process Route
       XdsConfig update = updateOrStatus.getValue();
       HttpConnectionManager httpConnectionManager = update.getListener().httpConnectionManager();
+      if (httpConnectionManager == null) {
+        logger.log(XdsLogLevel.INFO, "API Listener: httpConnectionManager does not exist.");
+        updateActiveFilters(null);
+        cleanUpRoutes(updateOrStatus.getStatus());
+        return;
+      }
+
       VirtualHost virtualHost = update.getVirtualHost();
       ImmutableList<NamedFilterConfig> filterConfigs = httpConnectionManager.httpFilterConfigs();
       long streamDurationNano = httpConnectionManager.httpMaxStreamDurationNano();

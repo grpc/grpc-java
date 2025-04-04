@@ -92,9 +92,10 @@ public class GrpcXdsTransportFactoryTest {
   @Test
   public void callApis() throws Exception {
     XdsTransportFactory.XdsTransport xdsTransport =
-        GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY.create(
-        Bootstrapper.ServerInfo.create("localhost:" + server.getPort(),
-            InsecureChannelCredentials.create()));
+        new GrpcXdsTransportFactory(null)
+            .create(
+                Bootstrapper.ServerInfo.create(
+                    "localhost:" + server.getPort(), InsecureChannelCredentials.create()));
     MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
         AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod();
     XdsTransportFactory.StreamingCall<DiscoveryRequest, DiscoveryResponse> streamingCall =

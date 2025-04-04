@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.GeneralSecurityException;
@@ -36,8 +37,21 @@ public final class CertificateUtils {
   /**
    * Creates X509TrustManagers using the provided CA certs.
    */
-  public static TrustManager[] createTrustManager(InputStream rootCerts)
+  public static TrustManager[] createTrustManager(byte[] rootCerts)
       throws GeneralSecurityException {
+    InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
+    try {
+      return CertificateUtils.createTrustManager(rootCertsStream);
+    } finally {
+      GrpcUtil.closeQuietly(rootCertsStream);
+    }
+  }
+
+  /**
+   * Creates X509TrustManagers using the provided input stream of CA certs.
+   */
+  public static TrustManager[] createTrustManager(InputStream rootCerts)
+          throws GeneralSecurityException {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     try {
       ks.load(null, null);
@@ -52,13 +66,13 @@ public final class CertificateUtils {
     }
 
     TrustManagerFactory trustManagerFactory =
-        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     trustManagerFactory.init(ks);
     return trustManagerFactory.getTrustManagers();
   }
 
   private static X509Certificate[] getX509Certificates(InputStream inputStream)
-      throws CertificateException {
+          throws CertificateException {
     CertificateFactory factory = CertificateFactory.getInstance("X.509");
     Collection<? extends Certificate> certs = factory.generateCertificates(inputStream);
     return certs.toArray(new X509Certificate[0]);

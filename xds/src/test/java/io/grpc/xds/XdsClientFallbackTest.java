@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -442,9 +441,14 @@ public class XdsClientFallbackTest {
     String garbageUri = "some. garbage";
 
     String validUri = "localhost:" + mainXdsServer.getServer().getPort();
-    XdsClientImpl client = CommonBootstrapperTestUtils.createXdsClient(
-        Arrays.asList(garbageUri, validUri), DEFAULT_XDS_TRANSPORT_FACTORY, fakeClock,
-        new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
+    XdsClientImpl client =
+        CommonBootstrapperTestUtils.createXdsClient(
+            Arrays.asList(garbageUri, validUri),
+            new GrpcXdsTransportFactory(null),
+            fakeClock,
+            new ExponentialBackoffPolicy.Provider(),
+            MessagePrinter.INSTANCE,
+            xdsClientMetricReporter);
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
@@ -462,9 +466,14 @@ public class XdsClientFallbackTest {
     String garbageUri = "some. garbage";
     String validUri = "localhost:" + mainXdsServer.getServer().getPort();
 
-    XdsClientImpl client = CommonBootstrapperTestUtils.createXdsClient(
-        Arrays.asList(validUri, garbageUri), DEFAULT_XDS_TRANSPORT_FACTORY, fakeClock,
-        new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
+    XdsClientImpl client =
+        CommonBootstrapperTestUtils.createXdsClient(
+            Arrays.asList(validUri, garbageUri),
+            new GrpcXdsTransportFactory(null),
+            fakeClock,
+            new ExponentialBackoffPolicy.Provider(),
+            MessagePrinter.INSTANCE,
+            xdsClientMetricReporter);
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
     verify(ldsWatcher, timeout(5000)).onChanged(
@@ -481,9 +490,14 @@ public class XdsClientFallbackTest {
     String garbageUri1 = "some. garbage";
     String garbageUri2 = "other garbage";
 
-    XdsClientImpl client = CommonBootstrapperTestUtils.createXdsClient(
-        Arrays.asList(garbageUri1, garbageUri2), DEFAULT_XDS_TRANSPORT_FACTORY, fakeClock,
-        new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
+    XdsClientImpl client =
+        CommonBootstrapperTestUtils.createXdsClient(
+            Arrays.asList(garbageUri1, garbageUri2),
+            new GrpcXdsTransportFactory(null),
+            fakeClock,
+            new ExponentialBackoffPolicy.Provider(),
+            MessagePrinter.INSTANCE,
+            xdsClientMetricReporter);
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);

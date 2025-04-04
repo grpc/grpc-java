@@ -231,7 +231,7 @@ public class OpenTelemetryTracingModuleTest {
     List<String> events = eventNameCaptor.getAllValues();
     List<io.opentelemetry.api.common.Attributes> attributes = attributesCaptor.getAllValues();
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(0));
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -241,7 +241,7 @@ public class OpenTelemetryTracingModuleTest {
         attributes.get(0));
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(1));
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -313,7 +313,7 @@ public class OpenTelemetryTracingModuleTest {
     assertTrue(clientSpanEvents.get(0).getAttributes().isEmpty());
 
     assertEquals(
-        "Inbound message received" ,
+        "Inbound message" ,
         clientSpanEvents.get(1).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -323,7 +323,7 @@ public class OpenTelemetryTracingModuleTest {
         clientSpanEvents.get(1).getAttributes());
 
     assertEquals(
-        "Inbound message received" ,
+        "Inbound message" ,
         clientSpanEvents.get(2).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -342,7 +342,7 @@ public class OpenTelemetryTracingModuleTest {
     assertTrue(clientSpanEvents.get(0).getAttributes().isEmpty());
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         attemptSpanEvents.get(1).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -352,7 +352,7 @@ public class OpenTelemetryTracingModuleTest {
         attemptSpanEvents.get(1).getAttributes());
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         attemptSpanEvents.get(2).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -518,7 +518,7 @@ public class OpenTelemetryTracingModuleTest {
     List<EventData> events = spans.get(0).getEvents();
     assertEquals(events.size(), 4);
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(0).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -529,7 +529,7 @@ public class OpenTelemetryTracingModuleTest {
         events.get(0).getAttributes());
 
     assertEquals(
-        "Outbound message sent" ,
+        "Outbound message" ,
         events.get(1).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
@@ -549,7 +549,7 @@ public class OpenTelemetryTracingModuleTest {
         events.get(2).getAttributes());
 
     assertEquals(
-        "Inbound message received" ,
+        "Inbound message" ,
         events.get(3).getName());
     assertEquals(
         io.opentelemetry.api.common.Attributes.builder()
