@@ -133,8 +133,6 @@ tasks.named("checkstyleThirdparty").configure {
 
 tasks.named("compileJava").configure {
     it.options.compilerArgs += [
-        // TODO: remove
-        "-Xlint:-deprecation",
         // only has AutoValue annotation processor
         "-Xlint:-processing",
     ]

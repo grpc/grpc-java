@@ -451,8 +451,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
               config.getHeader();
           Pattern regEx = null;
           String regExSubstitute = null;
-          if (headerCfg.hasRegexRewrite() && headerCfg.getRegexRewrite().hasPattern()
-              && headerCfg.getRegexRewrite().getPattern().hasGoogleRe2()) {
+          if (headerCfg.hasRegexRewrite() && headerCfg.getRegexRewrite().hasPattern()) {
             regEx = Pattern.compile(headerCfg.getRegexRewrite().getPattern().getRegex());
             regExSubstitute = headerCfg.getRegexRewrite().getSubstitution();
           }
