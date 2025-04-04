@@ -102,32 +102,44 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private final long infTime;
   private final Ticker ticker;
   private String locality = "";
+  private String backendService = "";
   private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
   // The metric instruments are only registered once and shared by all instances of this LB.
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
         = MetricInstrumentRegistry.getDefaultRegistry();
-    RR_FALLBACK_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.wrr.rr_fallback",
+    RR_FALLBACK_COUNTER = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.wrr.rr_fallback",
         "EXPERIMENTAL. Number of scheduler updates in which there were not enough endpoints "
             + "with valid weight, which caused the WRR policy to fall back to RR behavior",
-        "{update}", Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"),
+        "{update}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
         false);
     ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER = metricInstrumentRegistry.registerLongCounter(
-        "grpc.lb.wrr.endpoint_weight_not_yet_usable", "EXPERIMENTAL. Number of endpoints "
-            + "from each scheduler update that don't yet have usable weight information",
-        "{endpoint}", Lists.newArrayList("grpc.target"), Lists.newArrayList("grpc.lb.locality"),
+        "grpc.lb.wrr.endpoint_weight_not_yet_usable",
+        "EXPERIMENTAL. Number of endpoints from each scheduler update that don't yet have usable "
+            + "weight information",
+        "{endpoint}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
         false);
     ENDPOINT_WEIGHT_STALE_COUNTER = metricInstrumentRegistry.registerLongCounter(
         "grpc.lb.wrr.endpoint_weight_stale",
         "EXPERIMENTAL. Number of endpoints from each scheduler update whose latest weight is "
-            + "older than the expiration period", "{endpoint}", Lists.newArrayList("grpc.target"),
-        Lists.newArrayList("grpc.lb.locality"), false);
+            + "older than the expiration period",
+        "{endpoint}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
+        false);
     ENDPOINT_WEIGHTS_HISTOGRAM = metricInstrumentRegistry.registerDoubleHistogram(
         "grpc.lb.wrr.endpoint_weights",
         "EXPERIMENTAL. The histogram buckets will be endpoint weight ranges.",
-        "{weight}", Lists.newArrayList(), Lists.newArrayList("grpc.target"),
-        Lists.newArrayList("grpc.lb.locality"),
+        "{weight}",
+        Lists.newArrayList(),
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
         false);
   }
 
@@ -167,6 +179,13 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       this.locality = locality;
     } else {
       this.locality = "";
+    }
+    String backendService
+        = resolvedAddresses.getAttributes().get(NameResolver.ATTR_BACKEND_SERVICE);
+    if (backendService != null) {
+      this.backendService = backendService;
+    } else {
+      this.backendService = "";
     }
     config =
             (WeightedRoundRobinLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
@@ -232,7 +251,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       helper.getMetricRecorder()
           .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight,
               ImmutableList.of(helper.getChannelTarget()),
-              ImmutableList.of(locality));
+              ImmutableList.of(locality, backendService));
       newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
     }
 
@@ -240,18 +259,19 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       helper.getMetricRecorder()
           .addLongCounter(ENDPOINT_WEIGHT_STALE_COUNTER, staleEndpoints.get(),
               ImmutableList.of(helper.getChannelTarget()),
-              ImmutableList.of(locality));
+              ImmutableList.of(locality, backendService));
     }
     if (notYetUsableEndpoints.get() > 0) {
       helper.getMetricRecorder()
           .addLongCounter(ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER, notYetUsableEndpoints.get(),
-              ImmutableList.of(helper.getChannelTarget()), ImmutableList.of(locality));
+              ImmutableList.of(helper.getChannelTarget()),
+              ImmutableList.of(locality, backendService));
     }
     boolean weightsEffective = picker.updateWeight(newWeights);
     if (!weightsEffective) {
       helper.getMetricRecorder()
           .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(helper.getChannelTarget()),
-              ImmutableList.of(locality));
+              ImmutableList.of(locality, backendService));
     }
   }
 

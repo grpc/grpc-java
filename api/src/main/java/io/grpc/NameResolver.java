@@ -275,6 +275,11 @@ public abstract class NameResolver {
   @Documented
   public @interface ResolutionResultAttr {}
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11989")
+  @ResolutionResultAttr
+  public static final Attributes.Key<String> ATTR_BACKEND_SERVICE =
+      Attributes.Key.create("io.grpc.NameResolver.ATTR_BACKEND_SERVICE");
+
   /**
    * Information that a {@link Factory} uses to create a {@link NameResolver}.
    *

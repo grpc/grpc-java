@@ -58,6 +58,7 @@ import io.grpc.LongCounterMetricInstrument;
 import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricSink;
+import io.grpc.NameResolver;
 import io.grpc.NoopMetricSink;
 import io.grpc.ServerCall;
 import io.grpc.ServerServiceDefinition;
@@ -161,6 +162,7 @@ public class WeightedRoundRobinLoadBalancerTest {
 
   private String channelTarget = "channel-target";
   private String locality = "locality";
+  private String backendService = "the-backend-service";
 
   public WeightedRoundRobinLoadBalancerTest() {
     testHelperInstance = new TestHelper();
@@ -1119,7 +1121,9 @@ public class WeightedRoundRobinLoadBalancerTest {
   public void metrics() {
     // Give WRR some valid addresses to work with.
     Attributes attributesWithLocality = Attributes.newBuilder()
-        .set(WeightedTargetLoadBalancer.CHILD_NAME, locality).build();
+        .set(WeightedTargetLoadBalancer.CHILD_NAME, locality)
+        .set(NameResolver.ATTR_BACKEND_SERVICE, backendService)
+        .build();
     syncContext.execute(() -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(servers).setLoadBalancingPolicyConfig(weightedConfig)
         .setAttributes(attributesWithLocality).build()));
@@ -1269,7 +1273,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         argThat((instr) -> instr.getName().equals("grpc.lb.wrr.rr_fallback")),
         eq(1L),
         eq(Arrays.asList("directaddress:///wrr-metrics")),
-        eq(Arrays.asList("")));
+        eq(Arrays.asList("", "")));
   }
 
   // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
@@ -1281,7 +1285,10 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(LongCounterMetricInstrument longCounterInstrument) {
             return longCounterInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
+        }),
+        eq(value),
+        eq(Lists.newArrayList(channelTarget)),
+        eq(Lists.newArrayList(locality, backendService)));
   }
 
   // Verifies that the MetricRecorder has been called to record a given double histogram value the
@@ -1293,7 +1300,10 @@ public class WeightedRoundRobinLoadBalancerTest {
           public boolean matches(DoubleHistogramMetricInstrument doubleHistogramInstrument) {
             return doubleHistogramInstrument.getName().equals(name);
           }
-        }), eq(value), eq(Lists.newArrayList(channelTarget)), eq(Lists.newArrayList(locality)));
+        }),
+        eq(value),
+        eq(Lists.newArrayList(channelTarget)),
+        eq(Lists.newArrayList(locality, backendService)));
   }
 
   private int getNumFilteredPendingTasks() {
