@@ -325,7 +325,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
       if (!hasPendingStreams()) {
         return;
       }
-      pendingStreams.removeAll(toRemove);
+      // Avoid pendingStreams.removeAll() as it can degrade to calling toRemove.contains() for each
+      // element in pendingStreams.
+      for (PendingStream stream : toRemove) {
+        pendingStreams.remove(stream);
+      }
       // Because delayed transport is long-lived, we take this opportunity to down-size the
       // hashmap.
       if (pendingStreams.isEmpty()) {
