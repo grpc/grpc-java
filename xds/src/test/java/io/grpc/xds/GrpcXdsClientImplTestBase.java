@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -4193,7 +4192,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
-        DEFAULT_XDS_TRANSPORT_FACTORY,
+        new GrpcXdsTransportFactory(null),
         bootstrapInfo,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,

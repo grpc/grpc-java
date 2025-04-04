@@ -19,7 +19,6 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.ConnectivityState;
@@ -38,7 +37,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
  * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
- * will keep using the old policy until the new policy reports READY or the old policy exits READY.
+ * will keep using the old policy until the new policy leaves CONNECTING or the old policy exits
+ * READY.
  *
  * <p>The child balancer and configuration is specified using service config. Config objects are
  * generally created by calling {@link #parseLoadBalancingPolicyConfig(List)} from a
@@ -63,19 +63,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
     @Override
     public void shutdown() {}
-  };
-
-  @VisibleForTesting
-  static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withNoResult();
-    }
-
-    @Override
-    public String toString() {
-      return "BUFFER_PICKER";
-    }
   };
 
   private final Helper helper;
@@ -127,7 +114,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
     pendingState = ConnectivityState.CONNECTING;
-    pendingPicker = BUFFER_PICKER;
+    pendingPicker = new FixedResultPicker(PickResult.withNoResult());
 
     if (newBalancerFactory.equals(currentBalancerFactory)) {
       return;
@@ -147,7 +134,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
           checkState(currentLbIsReady, "there's pending lb while current lb has been out of READY");
           pendingState = newState;
           pendingPicker = newPicker;
-          if (newState == ConnectivityState.READY) {
+          if (newState != ConnectivityState.CONNECTING) {
             swap();
           }
         } else if (lb == currentLb) {

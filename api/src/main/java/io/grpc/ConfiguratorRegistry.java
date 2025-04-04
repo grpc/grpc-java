@@ -33,9 +33,9 @@ final class ConfiguratorRegistry {
   @GuardedBy("this")
   private boolean wasConfiguratorsSet;
   @GuardedBy("this")
-  private boolean configFrozen;
-  @GuardedBy("this")
   private List<Configurator> configurators = Collections.emptyList();
+  @GuardedBy("this")
+  private int configuratorsCallCountBeforeSet = 0;
 
   ConfiguratorRegistry() {}
 
@@ -56,11 +56,10 @@ final class ConfiguratorRegistry {
    * @throws IllegalStateException if this method is called more than once
    */
   public synchronized void setConfigurators(List<? extends Configurator> configurators) {
-    if (configFrozen) {
+    if (wasConfiguratorsSet) {
       throw new IllegalStateException("Configurators are already set");
     }
     this.configurators = Collections.unmodifiableList(new ArrayList<>(configurators));
-    configFrozen = true;
     wasConfiguratorsSet = true;
   }
 
@@ -68,8 +67,18 @@ final class ConfiguratorRegistry {
    * Returns a list of the configurators in this registry.
    */
   public synchronized List<Configurator> getConfigurators() {
-    configFrozen = true;
+    if (!wasConfiguratorsSet) {
+      configuratorsCallCountBeforeSet++;
+    }
     return configurators;
+  }
+
+  /**
+   * Returns the number of times getConfigurators() was called before
+   * setConfigurators() was successfully invoked.
+   */
+  public synchronized int getConfiguratorsCallCountBeforeSet() {
+    return configuratorsCallCountBeforeSet;
   }
 
   public synchronized boolean wasSetConfiguratorsCalled() {

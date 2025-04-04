@@ -147,18 +147,9 @@ class ProxyDetectorImpl implements ProxyDetector {
         }
       };
 
-  /**
-   * Experimental environment variable name for enabling proxy support.
-   *
-   * @deprecated Use the standard Java proxy configuration instead with flags such as:
-   *     -Dhttps.proxyHost=HOST -Dhttps.proxyPort=PORT
-   */
-  @Deprecated
-  private static final String GRPC_PROXY_ENV_VAR = "GRPC_PROXY_EXP";
   // Do not hard code a ProxySelector because the global default ProxySelector can change
   private final Supplier<ProxySelector> proxySelector;
   private final AuthenticationProvider authenticationProvider;
-  private final InetSocketAddress overrideProxyAddress;
 
   // We want an HTTPS proxy, which operates on the entire data stream (See IETF rfc2817).
   static final String PROXY_SCHEME = "https";
@@ -168,21 +159,15 @@ class ProxyDetectorImpl implements ProxyDetector {
    * {@link ProxyDetectorImpl.AuthenticationProvider} to detect proxy parameters.
    */
   public ProxyDetectorImpl() {
-    this(DEFAULT_PROXY_SELECTOR, DEFAULT_AUTHENTICATOR, System.getenv(GRPC_PROXY_ENV_VAR));
+    this(DEFAULT_PROXY_SELECTOR, DEFAULT_AUTHENTICATOR);
   }
 
   @VisibleForTesting
   ProxyDetectorImpl(
       Supplier<ProxySelector> proxySelector,
-      AuthenticationProvider authenticationProvider,
-      @Nullable String proxyEnvString) {
+      AuthenticationProvider authenticationProvider) {
     this.proxySelector = checkNotNull(proxySelector);
     this.authenticationProvider = checkNotNull(authenticationProvider);
-    if (proxyEnvString != null) {
-      overrideProxyAddress = overrideProxy(proxyEnvString);
-    } else {
-      overrideProxyAddress = null;
-    }
   }
 
   @Nullable
@@ -190,12 +175,6 @@ class ProxyDetectorImpl implements ProxyDetector {
   public ProxiedSocketAddress proxyFor(SocketAddress targetServerAddress) throws IOException {
     if (!(targetServerAddress instanceof InetSocketAddress)) {
       return null;
-    }
-    if (overrideProxyAddress != null) {
-      return HttpConnectProxiedSocketAddress.newBuilder()
-          .setProxyAddress(overrideProxyAddress)
-          .setTargetAddress((InetSocketAddress) targetServerAddress)
-          .build();
     }
     return detectProxy((InetSocketAddress) targetServerAddress);
   }
@@ -270,27 +249,6 @@ class ProxyDetectorImpl implements ProxyDetector {
         .setUsername(auth.getUserName())
         .setPassword(auth.getPassword() == null ? null : new String(auth.getPassword()))
         .build();
-  }
-
-  /**
-   * GRPC_PROXY_EXP is deprecated but let's maintain compatibility for now.
-   */
-  private static InetSocketAddress overrideProxy(String proxyHostPort) {
-    if (proxyHostPort == null) {
-      return null;
-    }
-
-    String[] parts = proxyHostPort.split(":", 2);
-    int port = 80;
-    if (parts.length > 1) {
-      port = Integer.parseInt(parts[1]);
-    }
-    log.warning(
-        "Detected GRPC_PROXY_EXP and will honor it, but this feature will "
-            + "be removed in a future release. Use the JVM flags "
-            + "\"-Dhttps.proxyHost=HOST -Dhttps.proxyPort=PORT\" to set the https proxy for "
-            + "this JVM.");
-    return new InetSocketAddress(parts[0], port);
   }
 
   /**

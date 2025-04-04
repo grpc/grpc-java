@@ -73,52 +73,13 @@ public class ProxyDetectorImplTest {
         return proxySelector;
       }
     };
-    proxyDetector = new ProxyDetectorImpl(proxySelectorSupplier, authenticator, null);
+    proxyDetector = new ProxyDetectorImpl(proxySelectorSupplier, authenticator);
     unresolvedProxy = InetSocketAddress.createUnresolved("10.0.0.1", proxyPort);
     proxySocketAddress = HttpConnectProxiedSocketAddress.newBuilder()
         .setTargetAddress(destination)
         .setProxyAddress(
           new InetSocketAddress(InetAddress.getByName(unresolvedProxy.getHostName()), proxyPort))
         .build();
-  }
-
-  @Test
-  public void override_hostPort() throws Exception {
-    final String overrideHost = "10.99.99.99";
-    final int overridePort = 1234;
-    final String overrideHostWithPort = overrideHost + ":" + overridePort;
-    ProxyDetectorImpl proxyDetector = new ProxyDetectorImpl(
-        proxySelectorSupplier,
-        authenticator,
-        overrideHostWithPort);
-    ProxiedSocketAddress detected = proxyDetector.proxyFor(destination);
-    assertNotNull(detected);
-    assertEquals(
-        HttpConnectProxiedSocketAddress.newBuilder()
-            .setTargetAddress(destination)
-            .setProxyAddress(
-                new InetSocketAddress(InetAddress.getByName(overrideHost), overridePort))
-            .build(),
-        detected);
-  }
-
-  @Test
-  public void override_hostOnly() throws Exception {
-    final String overrideHostWithoutPort = "10.99.99.99";
-    final int defaultPort = 80;
-    ProxyDetectorImpl proxyDetector = new ProxyDetectorImpl(
-        proxySelectorSupplier,
-        authenticator,
-        overrideHostWithoutPort);
-    ProxiedSocketAddress detected = proxyDetector.proxyFor(destination);
-    assertNotNull(detected);
-    assertEquals(
-        HttpConnectProxiedSocketAddress.newBuilder()
-            .setTargetAddress(destination)
-            .setProxyAddress(
-                new InetSocketAddress(InetAddress.getByName(overrideHostWithoutPort), defaultPort))
-            .build(),
-        detected);
   }
 
   @Test
@@ -227,8 +188,7 @@ public class ProxyDetectorImplTest {
             return null;
           }
         },
-        authenticator,
-        null);
+        authenticator);
     assertNull(proxyDetector.proxyFor(destination));
   }
 }
