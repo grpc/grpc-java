@@ -828,6 +828,19 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void onlyLogicalDnsCluster_endpointsResolved() {
+    do_onlyLogicalDnsCluster_endpointsResolved(false);
+  }
+
+  @Test
+  public void oldListenerCallback_onlyLogicalDnsCluster_endpointsResolved() {
+    do_onlyLogicalDnsCluster_endpointsResolved(true);
+  }
+
+  void do_onlyLogicalDnsCluster_endpointsResolved(boolean useOldListenerCallback) {
+    if (useOldListenerCallback) {
+      nsRegistry.deregister(fakeNameResolverProvider);
+      nsRegistry.register(new FakeNameResolverProvider(true));
+    }
     ClusterResolverConfig config = new ClusterResolverConfig(
         Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
     deliverLbConfig(config);
@@ -856,42 +869,6 @@ public class ClusterResolverLoadBalancerTest {
         .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
     assertThat(childBalancer.addresses.get(1).getAttributes()
         .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
-
-  }
-
-  @Test
-  public void oldListenerCallback_onlyLogicalDnsCluster_endpointsResolved() {
-    nsRegistry.deregister(fakeNameResolverProvider);
-    nsRegistry.register(new FakeNameResolverProvider(true));
-    ClusterResolverConfig config = new ClusterResolverConfig(
-            Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
-    deliverLbConfig(config);
-    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
-    assertThat(childBalancers).isEmpty();
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
-
-    assertThat(childBalancers).hasSize(1);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
-    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
-    String priority = Iterables.getOnlyElement(priorityLbConfig.priorities);
-    PriorityChildConfig priorityChildConfig = priorityLbConfig.childConfigs.get(priority);
-    assertThat(priorityChildConfig.ignoreReresolution).isFalse();
-    assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
-            .getPolicyName())
-            .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
-    ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
-            GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
-    assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_INFO, 300L, null,
-            Collections.<DropOverload>emptyList(), "pick_first");
-    assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
-    assertThat(childBalancer.addresses.get(0).getAttributes()
-            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
-    assertThat(childBalancer.addresses.get(1).getAttributes()
-            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
-
   }
 
   @Test
@@ -911,56 +888,20 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void onlyLogicalDnsCluster_resolutionError_backoffAndRefresh() {
-    InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
-        backoffPolicy1, backoffPolicy2);
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
-    deliverLbConfig(config);
-    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
-    assertThat(childBalancers).isEmpty();
-    Status error = Status.UNAVAILABLE.withDescription("cannot reach DNS server");
-    resolver.deliverError(error);
-    inOrder.verify(helper).updateBalancingState(
-        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(pickerCaptor.getValue(), error, null);
-    assertThat(resolver.refreshCount).isEqualTo(0);
-    inOrder.verify(backoffPolicyProvider).get();
-    inOrder.verify(backoffPolicy1).nextBackoffNanos();
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
-    assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
-        .isEqualTo(1L);
-    fakeClock.forwardTime(1L, TimeUnit.SECONDS);
-    assertThat(resolver.refreshCount).isEqualTo(1);
-
-    error = Status.UNKNOWN.withDescription("I am lost");
-    resolver.deliverError(error);
-    inOrder.verify(helper).updateBalancingState(
-        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    inOrder.verify(backoffPolicy1).nextBackoffNanos();
-    assertPicker(pickerCaptor.getValue(), error, null);
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
-    assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
-        .isEqualTo(10L);
-    fakeClock.forwardTime(10L, TimeUnit.SECONDS);
-    assertThat(resolver.refreshCount).isEqualTo(2);
-
-    // Succeed.
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
-    assertThat(childBalancers).hasSize(1);
-    assertAddressesEqual(Arrays.asList(endpoint1, endpoint2),
-        Iterables.getOnlyElement(childBalancers).addresses);
-
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
-    inOrder.verifyNoMoreInteractions();
+  public void resolutionError_backoffAndRefresh() {
+    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh(false);
   }
 
   @Test
-  public void oldListenerCallback_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh() {
-    nsRegistry.deregister(fakeNameResolverProvider);
-    nsRegistry.register(new FakeNameResolverProvider(true));
+  public void oldListenerCallback_resolutionError_backoffAndRefresh() {
+    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh(true);
+  }
+
+  void do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh(boolean useOldListenerCallback) {
+    if (useOldListenerCallback) {
+      nsRegistry.deregister(fakeNameResolverProvider);
+      nsRegistry.register(new FakeNameResolverProvider(true));
+    }
     InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
             backoffPolicy1, backoffPolicy2);
     ClusterResolverConfig config = new ClusterResolverConfig(
@@ -1497,7 +1438,7 @@ public class ClusterResolverLoadBalancerTest {
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
-    
+
     FakeLoadBalancerProvider(String policyName) {
       this.policyName = policyName;
     }
