@@ -45,8 +45,10 @@ import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrappe
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
 import javax.annotation.Nullable;
@@ -102,11 +104,14 @@ final class GcpAuthenticationFilter implements Filter {
       // Validate cache_config
       if (gcpAuthnProto.hasCacheConfig()) {
         TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
-        cacheSize = cacheConfig.getCacheSize().getValue();
-        if (cacheSize == 0) {
-          return ConfigOrError.fromError(
-              "cache_config.cache_size must be greater than zero");
+        if (cacheConfig.hasCacheSize()) {
+          cacheSize = cacheConfig.getCacheSize().getValue();
+          if (cacheSize == 0) {
+            return ConfigOrError.fromError(
+                "cache_config.cache_size must be greater than zero");
+          }
         }
+
         // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
         cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);
       }
@@ -128,6 +133,7 @@ final class GcpAuthenticationFilter implements Filter {
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
+    callCredentialsCache.resizeCache(((GcpAuthenticationConfig) config).getCacheSize());
     return new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -254,8 +260,10 @@ final class GcpAuthenticationFilter implements Filter {
   private static final class LruCache<K, V> {
 
     private final Map<K, V> cache;
+    private int maxSize;
 
     LruCache(int maxSize) {
+      this.maxSize = maxSize;
       this.cache = new LinkedHashMap<K, V>(
           maxSize,
           0.75f,
@@ -269,6 +277,19 @@ final class GcpAuthenticationFilter implements Filter {
 
     V getOrInsert(K key, Function<K, V> create) {
       return cache.computeIfAbsent(key, create);
+    }
+
+    private void resizeCache(int newSize) {
+      while (cache.size() > newSize) {
+        Iterator<Entry<K, V>> iterator = cache.entrySet().iterator();
+        if (iterator.hasNext()) {
+          iterator.next();
+          iterator.remove();
+        } else {
+          break;
+        }
+      }
+      maxSize = newSize;
     }
   }
 
