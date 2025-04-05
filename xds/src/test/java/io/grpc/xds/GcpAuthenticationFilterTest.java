@@ -357,7 +357,7 @@ public class GcpAuthenticationFilterTest {
         .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
     GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 2);
     ClientInterceptor interceptor1
-        = filter.buildClientInterceptor(new GcpAuthenticationConfig(2), null, null);
+        = filter.buildClientInterceptor(new GcpAuthenticationConfig(4), null, null);
     ClientInterceptor interceptor2
         = filter.buildClientInterceptor(new GcpAuthenticationConfig(2), null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
