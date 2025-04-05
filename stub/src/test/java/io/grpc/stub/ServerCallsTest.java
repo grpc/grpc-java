@@ -556,6 +556,35 @@ public class ServerCallsTest {
   }
 
   @Test
+  public void clientSendsOne_serverOnErrorWithTrailers_serverStreaming() {
+    Metadata trailers = new Metadata();
+    Metadata.Key<String> key = Metadata.Key.of("trailers-test-key1",
+            Metadata.ASCII_STRING_MARSHALLER);
+    trailers.put(key, "trailers-test-value1");
+
+    ServerCallRecorder serverCall = new ServerCallRecorder(SERVER_STREAMING_METHOD);
+    ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncServerStreamingCall(
+        new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
+          @Override
+          public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
+            responseObserver.onError(
+                    Status.fromCode(Status.Code.INTERNAL)
+                            .asRuntimeException(trailers)
+            );
+          }
+        });
+    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
+    serverCall.isReady = true;
+    serverCall.isCancelled = false;
+    listener.onReady();
+    listener.onMessage(1);
+    listener.onHalfClose();
+    // verify trailers key is set
+    assertTrue(serverCall.trailers.containsKey(key));
+    assertTrue(serverCall.status.equals(Status.INTERNAL));
+  }
+
+  @Test
   public void inprocessTransportManualFlow() throws Exception {
     final Semaphore semaphore = new Semaphore(1);
     ServerServiceDefinition service = ServerServiceDefinition.builder(
@@ -652,6 +681,7 @@ public class ServerCallsTest {
     private boolean isCancelled;
     private boolean isReady;
     private int onReadyThreshold;
+    private Metadata trailers;
 
     public ServerCallRecorder(MethodDescriptor<Integer, Integer> methodDescriptor) {
       this.methodDescriptor = methodDescriptor;
@@ -674,6 +704,7 @@ public class ServerCallsTest {
     @Override
     public void close(Status status, Metadata trailers) {
       this.status = status;
+      this.trailers = trailers;
     }
 
     @Override
