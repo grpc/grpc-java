@@ -45,8 +45,9 @@ import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrappe
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
-import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
@@ -133,7 +134,9 @@ final class GcpAuthenticationFilter implements Filter {
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
-    callCredentialsCache.resizeCache(((GcpAuthenticationConfig) config).getCacheSize());
+    synchronized (callCredentialsCache) {
+      callCredentialsCache.resizeCache(((GcpAuthenticationConfig) config).getCacheSize());
+    }
     return new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -259,7 +262,7 @@ final class GcpAuthenticationFilter implements Filter {
 
   private static final class LruCache<K, V> {
 
-    private final Map<K, V> cache;
+    private Map<K, V> cache;
     private int maxSize;
 
     LruCache(int maxSize) {
@@ -270,7 +273,7 @@ final class GcpAuthenticationFilter implements Filter {
           true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-          return size() > maxSize;
+          return size() > LruCache.this.maxSize;
         }
       };
     }
@@ -280,15 +283,19 @@ final class GcpAuthenticationFilter implements Filter {
     }
 
     private void resizeCache(int newSize) {
-      while (cache.size() > newSize) {
-        Iterator<Entry<K, V>> iterator = cache.entrySet().iterator();
-        if (iterator.hasNext()) {
-          iterator.next();
-          iterator.remove();
-        } else {
-          break;
-        }
+      if (newSize >= maxSize) {
+        maxSize = newSize;
+        return;
       }
+      LinkedHashMap<K, V> newCache = new LinkedHashMap<>(newSize, 0.75f, true);
+      // Copy the MRU entries (which are at the end of access-order map)
+      List<Entry<K, V>> entries = new ArrayList<>(cache.entrySet());
+      int start = Math.max(0, entries.size() - newSize);
+      for (int i = entries.size() - 1; i >= start; i--) {
+        Map.Entry<K, V> entry = entries.get(i);
+        newCache.put(entry.getKey(), entry.getValue());
+      }
+      cache = newCache;
       maxSize = newSize;
     }
   }
