@@ -357,8 +357,6 @@ public class GcpAuthenticationFilterTest {
         .withOption(XDS_CONFIG_CALL_OPTION_KEY, defaultXdsConfig);
     GcpAuthenticationFilter filter = new GcpAuthenticationFilter("FILTER_INSTANCE_NAME", 2);
     ClientInterceptor interceptor1
-        = filter.buildClientInterceptor(new GcpAuthenticationConfig(4), null, null);
-    ClientInterceptor interceptor2
         = filter.buildClientInterceptor(new GcpAuthenticationConfig(2), null, null);
     MethodDescriptor<Void, Void> methodDescriptor = TestMethodDescriptors.voidMethod();
     Channel mockChannel = Mockito.mock(Channel.class);
@@ -368,6 +366,8 @@ public class GcpAuthenticationFilterTest {
     verify(mockChannel).newCall(eq(methodDescriptor), callOptionsCaptor.capture());
     CallOptions capturedOptions1 = callOptionsCaptor.getAllValues().get(0);
     assertNotNull(capturedOptions1.getCredentials());
+    ClientInterceptor interceptor2
+        = filter.buildClientInterceptor(new GcpAuthenticationConfig(1), null, null);
     interceptor2.interceptCall(methodDescriptor, callOptionsWithXds, mockChannel);
     verify(mockChannel, times(2))
         .newCall(eq(methodDescriptor), callOptionsCaptor.capture());

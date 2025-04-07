@@ -45,11 +45,8 @@ import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrappe
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
 import javax.annotation.Nullable;
@@ -267,15 +264,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     LruCache(int maxSize) {
       this.maxSize = maxSize;
-      this.cache = new LinkedHashMap<K, V>(
-          maxSize,
-          0.75f,
-          true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-          return size() > LruCache.this.maxSize;
-        }
-      };
+      this.cache = createEvictingMap(maxSize);
     }
 
     V getOrInsert(K key, Function<K, V> create) {
@@ -287,16 +276,20 @@ final class GcpAuthenticationFilter implements Filter {
         maxSize = newSize;
         return;
       }
-      LinkedHashMap<K, V> newCache = new LinkedHashMap<>(newSize, 0.75f, true);
-      // Copy the MRU entries (which are at the end of access-order map)
-      List<Entry<K, V>> entries = new ArrayList<>(cache.entrySet());
-      int start = Math.max(0, entries.size() - newSize);
-      for (int i = entries.size() - 1; i >= start; i--) {
-        Map.Entry<K, V> entry = entries.get(i);
-        newCache.put(entry.getKey(), entry.getValue());
-      }
+      LinkedHashMap<K, V> newCache = createEvictingMap(newSize);
+      newCache.putAll(cache);
       cache = newCache;
       maxSize = newSize;
+    }
+
+    @SuppressWarnings("NonApiType")
+    private LinkedHashMap<K, V> createEvictingMap(int size) {
+      return new LinkedHashMap<K, V>(size, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+          return size() > LruCache.this.maxSize;
+        }
+      };
     }
   }
 
