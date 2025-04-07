@@ -790,7 +790,7 @@ public class ClusterResolverLoadBalancerTest {
     InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
             backoffPolicy1, backoffPolicy2);
     ClusterResolverConfig config = new ClusterResolverConfig(
-            Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin, false);
+            Collections.singletonList(logicalDnsDiscoveryMechanism), roundRobin);
     deliverLbConfig(config);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
     assertThat(childBalancers).isEmpty();
