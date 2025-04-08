@@ -72,6 +72,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -169,8 +170,8 @@ final class XdsServerWrapper extends Server {
     });
     Exception exception;
     try {
-      exception = initialStartFuture.get();
-    } catch (InterruptedException | ExecutionException e) {
+      exception = initialStartFuture.get(5000, TimeUnit.MILLISECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
       throw new RuntimeException(e);
     }
     if (exception != null) {
