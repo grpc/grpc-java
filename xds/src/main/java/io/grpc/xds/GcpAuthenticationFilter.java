@@ -68,7 +68,7 @@ final class GcpAuthenticationFilter implements Filter {
   }
 
   static final class Provider implements Filter.Provider {
-    long cacheSize = 10;
+    private final int cacheSize = 10;
 
     @Override
     public String[] typeUrls() {
@@ -82,7 +82,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public GcpAuthenticationFilter newInstance(String name) {
-      return new GcpAuthenticationFilter(name, (int) cacheSize);
+      return new GcpAuthenticationFilter(name, cacheSize);
     }
 
     @Override
@@ -99,6 +99,7 @@ final class GcpAuthenticationFilter implements Filter {
         return ConfigOrError.fromError("Invalid proto: " + e);
       }
 
+      long cacheSize = 10;
       // Validate cache_config
       if (gcpAuthnProto.hasCacheConfig()) {
         TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
