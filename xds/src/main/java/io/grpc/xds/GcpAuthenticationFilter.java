@@ -276,17 +276,17 @@ final class GcpAuthenticationFilter implements Filter {
         maxSize = newSize;
         return;
       }
-      LinkedHashMap<K, V> newCache = (LinkedHashMap<K, V>) createEvictingMap(newSize);
+      Map<K, V> newCache = createEvictingMap(newSize);
+      maxSize = newSize;
       newCache.putAll(cache);
       cache = newCache;
-      maxSize = newSize;
     }
 
     private Map<K, V> createEvictingMap(int size) {
       return new LinkedHashMap<K, V>(size, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-          return size() > size;
+          return size() > LruCache.this.maxSize;
         }
       };
     }
