@@ -18,7 +18,6 @@ package io.grpc.xds.internal.security;
 
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 
 /** Class for utility functions for {@link CommonTlsContext}. */
 public final class CommonTlsContextUtil {
