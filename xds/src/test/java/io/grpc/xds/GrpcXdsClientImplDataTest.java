@@ -3096,10 +3096,7 @@ public class GrpcXdsClientImplDataTest {
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
               .setDefaultValidationContext(CertificateValidationContext.newBuilder()
                 .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
-                  .setInstanceName("name1")
-                  .build())
-                .build())
-              .build())
+                  .setInstanceName("name1"))))
         .build();
     XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
