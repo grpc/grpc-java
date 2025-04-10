@@ -297,7 +297,9 @@ final class ServletServerStream extends AbstractServerStream {
       }
       transportState.runOnTransportThread(() -> transportState.transportReportStatus(status));
       // There is no way to RST_STREAM with CANCEL code, so write trailers instead
-      close(Status.CANCELLED.withCause(status.asRuntimeException()), new Metadata());
+      close(Status.CANCELLED.withDescription("Servlet stream cancelled")
+              .withCause(status.asRuntimeException()),
+          new Metadata());
       CountDownLatch countDownLatch = new CountDownLatch(1);
       transportState.runOnTransportThread(() -> {
         asyncCtx.complete();

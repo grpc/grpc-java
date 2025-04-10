@@ -27,6 +27,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -65,7 +66,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -79,9 +79,6 @@ import org.mockito.junit.MockitoRule;
 public class InternalSubchannelTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "mosaic";
@@ -544,8 +541,9 @@ public class InternalSubchannelTest {
   public void updateAddresses_emptyEagList_throws() {
     SocketAddress addr = new FakeSocketAddress();
     createInternalSubchannel(addr);
-    thrown.expect(IllegalArgumentException.class);
-    internalSubchannel.updateAddresses(Arrays.<EquivalentAddressGroup>asList());
+    List<EquivalentAddressGroup> newAddressGroups = Collections.emptyList();
+    assertThrows(IllegalArgumentException.class,
+        () -> internalSubchannel.updateAddresses(newAddressGroups));
   }
 
   @Test
@@ -553,8 +551,7 @@ public class InternalSubchannelTest {
     SocketAddress addr = new FakeSocketAddress();
     createInternalSubchannel(addr);
     List<EquivalentAddressGroup> eags = Arrays.asList((EquivalentAddressGroup) null);
-    thrown.expect(NullPointerException.class);
-    internalSubchannel.updateAddresses(eags);
+    assertThrows(NullPointerException.class, () -> internalSubchannel.updateAddresses(eags));
   }
 
   @Test public void updateAddresses_intersecting_ready() {

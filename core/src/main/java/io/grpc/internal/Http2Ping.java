@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import com.google.common.base.Stopwatch;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
+import io.grpc.Status;
 import io.grpc.internal.ClientTransport.PingCallback;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -62,7 +63,7 @@ public class Http2Ping {
   /**
    * If non-null, indicates the ping failed.
    */
-  @GuardedBy("this") private Throwable failureCause;
+  @GuardedBy("this") private Status failureCause;
 
   /**
    * The round-trip time for the ping, in nanoseconds. This value is only meaningful when
@@ -144,7 +145,7 @@ public class Http2Ping {
    *
    * @param failureCause the cause of failure
    */
-  public void failed(Throwable failureCause) {
+  public void failed(Status failureCause) {
     Map<ClientTransport.PingCallback, Executor> callbacks;
     synchronized (this) {
       if (completed) {
@@ -167,7 +168,7 @@ public class Http2Ping {
    * @param executor the executor used to invoke the callback
    * @param cause the cause of failure
    */
-  public static void notifyFailed(PingCallback callback, Executor executor, Throwable cause) {
+  public static void notifyFailed(PingCallback callback, Executor executor, Status cause) {
     doExecute(executor, asRunnable(callback, cause));
   }
 
@@ -203,7 +204,7 @@ public class Http2Ping {
    * failure.
    */
   private static Runnable asRunnable(final ClientTransport.PingCallback callback,
-                                     final Throwable failureCause) {
+                                     final Status failureCause) {
     return new Runnable() {
       @Override
       public void run() {

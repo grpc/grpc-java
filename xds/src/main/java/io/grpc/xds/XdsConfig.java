@@ -258,6 +258,7 @@ final class XdsConfig {
     XdsConfig build() {
       checkNotNull(listener, "listener");
       checkNotNull(route, "route");
+      checkNotNull(virtualHost, "virtualHost");
       return new XdsConfig(listener, route, clusters, virtualHost);
     }
   }

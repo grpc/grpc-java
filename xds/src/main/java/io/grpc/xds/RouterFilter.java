@@ -56,7 +56,7 @@ final class RouterFilter implements Filter {
     }
 
     @Override
-    public RouterFilter newInstance() {
+    public RouterFilter newInstance(String name) {
       return INSTANCE;
     }
 

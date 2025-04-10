@@ -34,7 +34,6 @@ import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
-import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
@@ -46,14 +45,12 @@ import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
-import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
-import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
@@ -67,15 +64,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
@@ -262,17 +256,17 @@ public class XdsTestUtils {
 
     // Need to create endpoints to create locality endpoints map to create edsUpdate
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
-    LbEndpoint lbEndpoint =
-        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
+    LbEndpoint lbEndpoint = LbEndpoint.create(
+        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
-        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
 
     // Need to create EdsUpdate to create CdsUpdate to create XdsClusterConfig for builder
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
-        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null)
+        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null, false)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
@@ -288,16 +282,16 @@ public class XdsTestUtils {
 
   static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
-    LbEndpoint lbEndpoint =
-        LbEndpoint.create(serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME);
+    LbEndpoint lbEndpoint = LbEndpoint.create(
+        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
-        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0));
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
     return lbEndpointsMap;
   }
 
   @SuppressWarnings("unchecked")
-  private static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
+  static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
     String lbConfigStr = "{\"wrr_locality_experimental\" : "
         + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
 
@@ -371,71 +365,6 @@ public class XdsTestUtils {
   }
 
   /**
-   * Matches a {@link DiscoveryRequest} with the same node metadata, versionInfo, typeUrl,
-   * response nonce and collection of resource names regardless of order.
-   */
-  static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
-    private final Node node;
-    private final String versionInfo;
-    private final String typeUrl;
-    private final Set<String> resources;
-    private final String responseNonce;
-    @Nullable
-    private final Integer errorCode;
-    private final List<String> errorMessages;
-
-    private DiscoveryRequestMatcher(
-        Node node, String versionInfo, List<String> resources,
-        String typeUrl, String responseNonce, @Nullable Integer errorCode,
-        @Nullable List<String> errorMessages) {
-      this.node = node;
-      this.versionInfo = versionInfo;
-      this.resources = new HashSet<>(resources);
-      this.typeUrl = typeUrl;
-      this.responseNonce = responseNonce;
-      this.errorCode = errorCode;
-      this.errorMessages = errorMessages != null ? errorMessages : ImmutableList.<String>of();
-    }
-
-    @Override
-    public boolean matches(DiscoveryRequest argument) {
-      if (!typeUrl.equals(argument.getTypeUrl())) {
-        return false;
-      }
-      if (!versionInfo.equals(argument.getVersionInfo())) {
-        return false;
-      }
-      if (!responseNonce.equals(argument.getResponseNonce())) {
-        return false;
-      }
-      if (!resources.equals(new HashSet<>(argument.getResourceNamesList()))) {
-        return false;
-      }
-      if (errorCode == null && argument.hasErrorDetail()) {
-        return false;
-      }
-      if (errorCode != null
-          && !matchErrorDetail(argument.getErrorDetail(), errorCode, errorMessages)) {
-        return false;
-      }
-      return node.equals(argument.getNode());
-    }
-
-    @Override
-    public String toString() {
-      return "DiscoveryRequestMatcher{"
-          + "node=" + node
-          + ", versionInfo='" + versionInfo + '\''
-          + ", typeUrl='" + typeUrl + '\''
-          + ", resources=" + resources
-          + ", responseNonce='" + responseNonce + '\''
-          + ", errorCode=" + errorCode
-          + ", errorMessages=" + errorMessages
-          + '}';
-    }
-  }
-
-  /**
    * Matches a {@link LoadStatsRequest} containing a collection of {@link ClusterStats} with
    * the same list of clusterName:clusterServiceName pair.
    */
@@ -484,20 +413,6 @@ public class XdsTestUtils {
               .setLoadReportingInterval(Durations.fromNanos(loadReportIntervalNano))
               .build();
       responseObserver.onNext(response);
-    }
-  }
-
-  static class StatusMatcher implements ArgumentMatcher<Status> {
-    private final Status expectedStatus;
-
-    StatusMatcher(Status expectedStatus) {
-      this.expectedStatus = expectedStatus;
-    }
-
-    @Override
-    public boolean matches(Status status) {
-      return status != null && expectedStatus.getCode().equals(status.getCode())
-          && expectedStatus.getDescription().equals(status.getDescription());
     }
   }
 }

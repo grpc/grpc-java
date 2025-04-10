@@ -25,12 +25,14 @@ import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
@@ -43,7 +45,6 @@ import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.XdsResourceType;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -162,13 +163,16 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     String address = null;
+    SocketAddress socketAddress = null;
     if (proto.getAddress().hasSocketAddress()) {
-      SocketAddress socketAddress = proto.getAddress().getSocketAddress();
+      socketAddress = proto.getAddress().getSocketAddress();
       address = socketAddress.getAddress();
+      if (address.isEmpty()) {
+        throw new ResourceInvalidException("Invalid address: Empty address is not allowed.");
+      }
       switch (socketAddress.getPortSpecifierCase()) {
         case NAMED_PORT:
-          address = address + ":" + socketAddress.getNamedPort();
-          break;
+          throw new ResourceInvalidException("NAMED_PORT is not supported in gRPC.");
         case PORT_VALUE:
           address = address + ":" + socketAddress.getPortValue();
           break;
@@ -178,6 +182,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     ImmutableList.Builder<FilterChain> filterChains = ImmutableList.builder();
+    Set<String> filterChainNames = new HashSet<>();
     Set<FilterChainMatch> filterChainMatchSet = new HashSet<>();
     int i = 0;
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
@@ -186,6 +191,10 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       if (filterChainName.isEmpty()) {
         // Generate a name, so we can identify it in the logs.
         filterChainName = "chain_" + i;
+      }
+      if (!filterChainNames.add(filterChainName)) {
+        throw new ResourceInvalidException("Filter chain names must be unique. "
+            + "Found duplicate: " + filterChainName);
       }
       filterChains.add(
           parseFilterChain(fc, filterChainName, tlsContextManager, filterRegistry,
@@ -204,8 +213,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           null, certProviderInstances, args);
     }
 
-    return EnvoyServerProtoData.Listener.create(
-        proto.getName(), address, filterChains.build(), defaultFilterChain);
+    return EnvoyServerProtoData.Listener.create(proto.getName(), address, filterChains.build(),
+        defaultFilterChain, socketAddress == null ? null : socketAddress.getProtocol());
   }
 
   @VisibleForTesting
@@ -446,16 +455,18 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     try {
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
         prefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+            CidrRange.create(InetAddresses.forString(range.getAddressPrefix()),
+                range.getPrefixLen().getValue()));
       }
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range
           : proto.getSourcePrefixRangesList()) {
-        sourcePrefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+        sourcePrefixRanges.add(CidrRange.create(
+            InetAddresses.forString(range.getAddressPrefix()), range.getPrefixLen().getValue()));
       }
-    } catch (UnknownHostException e) {
-      throw new ResourceInvalidException("Failed to create CidrRange", e);
+    } catch (IllegalArgumentException ex) {
+      throw new ResourceInvalidException("Failed to create CidrRange", ex);
     }
+
     ConnectionSourceType sourceType;
     switch (proto.getSourceType()) {
       case ANY:
@@ -633,7 +644,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
                                     String listenerName) {
       checkNotNull(httpConnectionManager, "httpConnectionManager");
       EnvoyServerProtoData.Listener listener = EnvoyServerProtoData.Listener.create(
-          listenerName, null, ImmutableList.of(), null);
+          listenerName, null, ImmutableList.of(), null, Protocol.TCP);
       return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(httpConnectionManager,
           listener);
     }

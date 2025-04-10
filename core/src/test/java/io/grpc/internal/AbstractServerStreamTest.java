@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,9 +46,7 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -59,9 +58,6 @@ import org.mockito.ArgumentCaptor;
 public class AbstractServerStreamTest {
   private static final int TIMEOUT_MS = 1000;
   private static final int MAX_MESSAGE_SIZE = 100;
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
     @Override
@@ -226,9 +222,9 @@ public class AbstractServerStreamTest {
   public void setListener_setOnlyOnce() {
     TransportState state = stream.transportState();
     state.setListener(new ServerStreamListenerBase());
-    thrown.expect(IllegalStateException.class);
 
-    state.setListener(new ServerStreamListenerBase());
+    ServerStreamListenerBase listener2 = new ServerStreamListenerBase();
+    assertThrows(IllegalStateException.class, () -> state.setListener(listener2));
   }
 
   @Test
@@ -238,8 +234,7 @@ public class AbstractServerStreamTest {
 
     TransportState state = stream.transportState();
 
-    thrown.expect(IllegalStateException.class);
-    state.onStreamAllocated();
+    assertThrows(IllegalStateException.class, state::onStreamAllocated);
   }
 
   @Test
@@ -255,8 +250,7 @@ public class AbstractServerStreamTest {
   public void setListener_failsOnNull() {
     TransportState state = stream.transportState();
 
-    thrown.expect(NullPointerException.class);
-    state.setListener(null);
+    assertThrows(NullPointerException.class, () -> state.setListener(null));
   }
 
   // TODO(ericgribkoff) This test is only valid if deframeInTransportThread=true, as otherwise the
@@ -284,9 +278,7 @@ public class AbstractServerStreamTest {
 
   @Test
   public void writeHeaders_failsOnNullHeaders() {
-    thrown.expect(NullPointerException.class);
-
-    stream.writeHeaders(null, true);
+    assertThrows(NullPointerException.class, () -> stream.writeHeaders(null, true));
   }
 
   @Test
@@ -336,16 +328,13 @@ public class AbstractServerStreamTest {
 
   @Test
   public void close_failsOnNullStatus() {
-    thrown.expect(NullPointerException.class);
-
-    stream.close(null, new Metadata());
+    Metadata trailers = new Metadata();
+    assertThrows(NullPointerException.class, () -> stream.close(null, trailers));
   }
 
   @Test
   public void close_failsOnNullMetadata() {
-    thrown.expect(NullPointerException.class);
-
-    stream.close(Status.INTERNAL, null);
+    assertThrows(NullPointerException.class, () -> stream.close(Status.INTERNAL, null));
   }
 
   @Test
@@ -451,4 +440,3 @@ public class AbstractServerStreamTest {
     }
   }
 }
-
