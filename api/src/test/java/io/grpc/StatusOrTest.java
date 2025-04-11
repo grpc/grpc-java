@@ -61,6 +61,8 @@ public class StatusOrTest {
   @Test
   public void equals_sameStatuses() {
     assertThat(StatusOr.fromStatus(Status.ABORTED)).isEqualTo(StatusOr.fromStatus(Status.ABORTED));
+    assertThat(StatusOr.fromStatus(Status.ABORTED.withDescription("aborted")))
+            .isEqualTo(StatusOr.fromStatus(Status.ABORTED.withDescription("aborted")));
   }
 
   @Test
