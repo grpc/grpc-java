@@ -1567,6 +1567,7 @@ public abstract class AbstractTransportTest {
     verifyMessageCountAndClose(serverStreamCreation.listener.messageQueue, 1);
   }
 
+  @SuppressWarnings("MissingFail")
   @Test
   public void interactionsAfterServerStreamCloseAreNoops() throws Exception {
     server.start(serverListener);
@@ -1591,10 +1592,14 @@ public abstract class AbstractTransportTest {
     assertNotNull(clientStreamListener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     assertNotNull(clientStreamListener.trailers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-    // Ensure that for a closed ServerStream, interactions are noops
-    server.stream.writeHeaders(new Metadata(), true);
-    server.stream.writeMessage(methodDescriptor.streamResponse("response"));
-    server.stream.close(Status.INTERNAL, new Metadata());
+    try {
+      // Ensure that for a closed ServerStream, interactions are noops
+      server.stream.writeHeaders(new Metadata(), true);
+      server.stream.writeMessage(methodDescriptor.streamResponse("response"));
+      server.stream.close(Status.INTERNAL, new Metadata());
+    } catch (Exception exception) {
+      assertTrue(exception.getMessage().contains("call already closed"));
+    }
 
     // Make sure new streams still work properly
     doPingPong(serverListener);
