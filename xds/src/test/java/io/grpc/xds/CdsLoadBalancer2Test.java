@@ -802,8 +802,9 @@ public class CdsLoadBalancer2Test {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
+      return Status.OK;
     }
 
     @Override
