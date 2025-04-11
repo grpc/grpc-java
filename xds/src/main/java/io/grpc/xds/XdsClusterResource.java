@@ -450,15 +450,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       throw new ResourceInvalidException(
           "common-tls-context with validation_context_sds_secret_config is not supported");
     }
-    if (commonTlsContext.hasValidationContextCertificateProvider()) {
-      throw new ResourceInvalidException(
-          "common-tls-context with validation_context_certificate_provider is not supported");
-    }
-    if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
-      throw new ResourceInvalidException(
-          "common-tls-context with validation_context_certificate_provider_instance is not"
-              + " supported");
-    }
     String certInstanceName = getIdentityCertInstanceName(commonTlsContext);
     if (certInstanceName == null) {
       if (server) {
@@ -470,10 +461,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
             "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
-        throw new ResourceInvalidException(
-            "tls_certificate_provider_instance is unset");
-      }
-      if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
         throw new ResourceInvalidException(
             "tls_certificate_provider_instance is unset");
       }
@@ -505,7 +492,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
             .getDefaultValidationContext();
       }
       if (certificateValidationContext != null) {
-        if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
+        @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+        int matchSubjectAltNamesCount = certificateValidationContext.getMatchSubjectAltNamesCount();
+        if (matchSubjectAltNamesCount > 0 && server) {
           throw new ResourceInvalidException(
               "match_subject_alt_names only allowed in upstream_tls_context");
         }
@@ -536,8 +525,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   private static String getIdentityCertInstanceName(CommonTlsContext commonTlsContext) {
     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
       return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
-    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
-      return commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName();
     }
     return null;
   }
@@ -556,10 +543,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .hasCaCertificateProviderInstance()) {
         return combinedCertificateValidationContext.getDefaultValidationContext()
             .getCaCertificateProviderInstance().getInstanceName();
-      } else if (combinedCertificateValidationContext
-          .hasValidationContextCertificateProviderInstance()) {
-        return combinedCertificateValidationContext
-            .getValidationContextCertificateProviderInstance().getInstanceName();
       }
     }
     return null;
