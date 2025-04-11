@@ -1,5 +1,5 @@
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
-bazel_dep(name = "grpc-java", repo_name = "io_grpc_grpc_java", version = "1.72.0-SNAPSHOT")  # CURRENT_GRPC_VERSION
+bazel_dep(name = "grpc-java", repo_name = "io_grpc_grpc_java", version = "1.73.0-SNAPSHOT")  # CURRENT_GRPC_VERSION
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
 bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
 bazel_dep(name = "rules_jvm_external", version = "6.0")

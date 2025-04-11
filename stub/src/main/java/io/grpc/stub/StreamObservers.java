@@ -23,12 +23,21 @@ import java.util.Iterator;
 /**
  * Utility functions for working with {@link StreamObserver} and it's common subclasses like
  * {@link CallStreamObserver}.
- *
- * @deprecated Of questionable utility and generally not used.
  */
-@Deprecated
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4694")
 public final class StreamObservers {
+  // Prevent instantiation
+  private StreamObservers() { }
+
+  /**
+   * Utility method to call {@link StreamObserver#onNext(Object)} and
+   * {@link StreamObserver#onCompleted()} on the specified responseObserver.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10957")
+  public static <T> void nextAndComplete(StreamObserver<T> responseObserver, T response) {
+    responseObserver.onNext(response);
+    responseObserver.onCompleted();
+  }
+
   /**
    * Copy the values of an {@link Iterator} to the target {@link CallStreamObserver} while properly
    * accounting for outbound flow-control.  After calling this method, {@code target} should no
@@ -40,7 +49,10 @@ public final class StreamObservers {
    *
    * @param source of values expressed as an {@link Iterator}.
    * @param target {@link CallStreamObserver} which accepts values from the source.
+   * @deprecated Of questionable utility and generally not used.
    */
+  @Deprecated
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4694")
   public static <V> void copyWithFlowControl(final Iterator<V> source,
       final CallStreamObserver<V> target) {
     Preconditions.checkNotNull(source, "source");
@@ -80,7 +92,10 @@ public final class StreamObservers {
    *
    * @param source of values expressed as an {@link Iterable}.
    * @param target {@link CallStreamObserver} which accepts values from the source.
+   * @deprecated Of questionable utility and generally not used.
    */
+  @Deprecated
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4694")
   public static <V> void copyWithFlowControl(final Iterable<V> source,
       CallStreamObserver<V> target) {
     Preconditions.checkNotNull(source, "source");

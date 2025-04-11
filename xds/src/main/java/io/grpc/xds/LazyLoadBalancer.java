@@ -107,11 +107,6 @@ final class LazyLoadBalancer extends ForwardingLoadBalancer {
         helper.getSynchronizationContext().execute(LazyDelegate.this::activate);
         return PickResult.withNoResult();
       }
-
-      @Override
-      public void requestConnection() {
-        helper.getSynchronizationContext().execute(LazyDelegate.this::requestConnection);
-      }
     }
   }
 

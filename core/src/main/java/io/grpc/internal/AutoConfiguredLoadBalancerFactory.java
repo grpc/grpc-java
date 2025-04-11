@@ -40,8 +40,6 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
-// TODO(creamsoup) fully deprecate LoadBalancer.ATTR_LOAD_BALANCING_CONFIG
-@SuppressWarnings("deprecation")
 public final class AutoConfiguredLoadBalancerFactory {
 
   private final LoadBalancerRegistry registry;
