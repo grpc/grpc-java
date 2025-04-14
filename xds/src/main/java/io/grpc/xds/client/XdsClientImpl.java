@@ -243,6 +243,15 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   }
 
   @Override
+  public String getAuthority(XdsResourceType<?> resourceType, String resourceName) {
+    Map<String, ResourceSubscriber<? extends ResourceUpdate>> resourceEntry = resourceSubscribers.get(resourceType);
+    if (resourceEntry != null) {
+      return resourceEntry.get(resourceName).authority;
+    }
+    return null;
+  }
+
+  @Override
   public Object getSecurityConfig() {
     return securityConfig;
   }

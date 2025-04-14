@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongGaugeMetricInstrument;
@@ -29,12 +30,11 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ServerConnectionCallback;
+import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -90,7 +90,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
         Arrays.asList("grpc.target", "grpc.xds.server"), Collections.emptyList(), false);
     RESOURCES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.xds_client.resources",
         "EXPERIMENTAL.  Number of xDS resources.", "{resource}",
-        Arrays.asList("grpc.target", "grpc.xds.cache_state",
+        Arrays.asList("grpc.target", "grpc.xds.authority", "grpc.xds.cache_state",
             "grpc.xds.resource_type"), Collections.emptyList(), false);
   }
 
@@ -143,7 +143,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
           getResourceMetadataCompleted.get(10, TimeUnit.SECONDS);
 
-      computeAndReportResourceCounts(metadataByType, callback);
+      computeAndReportResourceCounts(xdsClient, metadataByType, callback);
 
       // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
       Void unused = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
@@ -155,21 +155,30 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
   }
 
-  private void computeAndReportResourceCounts(
-      Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
-      MetricReporterCallback callback) {
+  private void computeAndReportResourceCounts(XdsClient xdsClient,
+                                              Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
+                                              MetricReporterCallback callback) {
     for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry :
         metadataByType.entrySet()) {
       XdsResourceType<?> type = metadataByTypeEntry.getKey();
 
       Map<String, Long> resourceCountsByState = new HashMap<>();
+      List<String> authorities = new ArrayList<>();
       for (ResourceMetadata metadata : metadataByTypeEntry.getValue().values()) {
         String cacheState = cacheStateFromResourceStatus(metadata.getStatus(), metadata.isCached());
         resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
       }
+      for (String resourceName : metadataByTypeEntry.getValue().keySet()) {
+        authorities.add(xdsClient.getAuthority(type, resourceName));
+      }
 
-      resourceCountsByState.forEach((cacheState, count) ->
-          callback.reportResourceCountGauge(count, cacheState, type.typeUrl()));
+      Iterator<String> authorityIterator = authorities.iterator();
+      resourceCountsByState.forEach((cacheState, count) -> {
+                if (authorityIterator.hasNext()) {
+                  String authority = authorityIterator.next();
+                  callback.reportResourceCountGauge(authority, count, cacheState, type.typeUrl());
+                }
+              });
     }
   }
 
@@ -200,10 +209,11 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
 
     // TODO(dnvindhya): include the "authority" label once xds.authority is available.
-    void reportResourceCountGauge(long resourceCount, String cacheState,
+    void reportResourceCountGauge(String authority, long resourceCount, String cacheState,
         String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
-          Arrays.asList(target, cacheState, resourceType), Collections.emptyList());
+          Arrays.asList(target, authority == null ? "#old" : authority,
+                  cacheState, resourceType), Collections.emptyList());
     }
 
     @Override

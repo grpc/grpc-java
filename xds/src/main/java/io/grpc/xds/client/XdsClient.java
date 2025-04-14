@@ -318,7 +318,9 @@ public abstract class XdsClient {
       getSubscribedResourcesMetadataSnapshot() {
     throw new UnsupportedOperationException();
   }
-
+  public String getAuthority(XdsResourceType<?> resourceType, String resourceName) {
+    throw new UnsupportedOperationException();
+  }
   /**
    * Registers a data watcher for the given Xds resource.
    */
