@@ -34,7 +34,7 @@ import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.xds.Filter.ServerInterceptorBuilder;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.datatype.GrpcService;
@@ -46,14 +46,17 @@ import io.grpc.xds.internal.rlqs.RlqsBucketSettings;
 import io.grpc.xds.internal.rlqs.RlqsCache;
 import io.grpc.xds.internal.rlqs.RlqsFilterState;
 import io.grpc.xds.internal.rlqs.RlqsRateLimitResult;
+import java.util.ConcurrentModificationException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /** RBAC Http filter implementation. */
 // TODO(sergiitk): introduce a layer between the filter and interceptor.
 // lds has filter names and the names are unique - even for server instances.
-final class RlqsFilter implements Filter, ServerInterceptorBuilder {
+final class RlqsFilter implements Filter {
   private final XdsLogger logger;
 
   static final boolean enabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ENABLE_RLQS", false);
@@ -62,70 +65,124 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
   // Do do not fail on parsing errors, only log requests.
   static final boolean dryRun = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_RLQS_DRY_RUN", false);
 
-  static final RlqsFilter INSTANCE = new RlqsFilter();
-
   static final String TYPE_URL = "type.googleapis.com/"
       + "envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaFilterConfig";
   static final String TYPE_URL_OVERRIDE_CONFIG = "type.googleapis.com/"
       + "envoy.extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaOverride";
 
+  private final AtomicBoolean shutdown = new AtomicBoolean();
   private final AtomicReference<RlqsCache> rlqsCache = new AtomicReference<>();
 
-  public RlqsFilter() {
-    // TODO(sergiitk): one per new instance when filters are refactored.
+  // TODO(sergiitk): [IMPL] figure out what to use here.
+  private final ScheduledExecutorService scheduler =
+      SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
+
+  public RlqsFilter(String name) {
     logger = XdsLogger.withLogId(InternalLogId.allocate(this.getClass(), null));
     logger.log(XdsLogLevel.DEBUG,
-        "Created RLQS Filter with enabled=" + enabled + ", dryRun=" + dryRun);
+        "Created RLQS Filter name='%s' with enabled=%s, dryRun=%s", name, enabled, dryRun);
+  }
+
+  static final class Provider implements Filter.Provider {
+    private static final Logger logger = Logger.getLogger(Provider.class.getName());
+
+    @Override
+    public String[] typeUrls() {
+      return new String[]{TYPE_URL, TYPE_URL_OVERRIDE_CONFIG};
+    }
+
+    @Override
+    public boolean isServerFilter() {
+      return true;
+    }
+
+    @Override
+    public RlqsFilter newInstance(String name) {
+      return new RlqsFilter(name);
+    }
+
+    @Override
+    public ConfigOrError<RlqsFilterConfig> parseFilterConfig(Message rawProtoMessage) {
+      try {
+        RlqsFilterConfig rlqsFilterConfig =
+            parseRlqsFilter(unpackAny(rawProtoMessage, RateLimitQuotaFilterConfig.class));
+        return ConfigOrError.fromConfig(rlqsFilterConfig);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Can't unpack RateLimitQuotaFilterConfig proto: " + e);
+      } catch (ResourceInvalidException e) {
+        return ConfigOrError.fromError(e.getMessage());
+      }
+    }
+
+    @Override
+    public ConfigOrError<RlqsFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      try {
+        RlqsFilterConfig rlqsFilterConfig =
+            parseRlqsFilterOverride(unpackAny(rawProtoMessage, RateLimitQuotaOverride.class));
+        return ConfigOrError.fromConfig(rlqsFilterConfig);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Can't unpack RateLimitQuotaOverride proto: " + e);
+      } catch (ResourceInvalidException e) {
+        return ConfigOrError.fromError(e.getMessage());
+      }
+    }
+
+    @VisibleForTesting
+    RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
+        throws ResourceInvalidException, InvalidProtocolBufferException {
+      RlqsFilterConfig.Builder builder = RlqsFilterConfig.builder();
+      if (rlqsFilterProto.getDomain().isEmpty()) {
+        throw new ResourceInvalidException("RateLimitQuotaFilterConfig domain is required");
+      }
+      builder.domain(rlqsFilterProto.getDomain())
+          .rlqsService(GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer()));
+
+      // TODO(sergiitk): [IMPL] Remove
+      if (dryRun) {
+        logger.finest("RLQS DRY RUN: not parsing matchers");
+        return builder.build();
+      }
+
+      // TODO(sergiitk): [IMPL] actually parse, move to RlqsBucketSettings.fromProto()
+      RateLimitQuotaBucketSettings fallbackBucketSettingsProto = unpackAny(
+          rlqsFilterProto.getBucketMatchers().getOnNoMatch().getAction().getTypedConfig(),
+          RateLimitQuotaBucketSettings.class);
+      RlqsBucketSettings fallbackBucket = RlqsBucketSettings.create(
+          ImmutableMap.of("bucket_id", headers -> "hello"),
+          fallbackBucketSettingsProto.getReportingInterval());
+
+      // TODO(sergiitk): [IMPL] actually parse, move to Matcher.fromProto()
+      Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers = new RlqsMatcher(fallbackBucket);
+
+      return builder.bucketMatchers(bucketMatchers).build();
+    }
   }
 
   @Override
-  public String[] typeUrls() {
-    return new String[]{TYPE_URL, TYPE_URL_OVERRIDE_CONFIG};
+  public void close() {
+    // TODO(sergiitk): [DESIGN] besides shutting down everything, should there
+    //    be per-route interceptor destructors?
+    if (!shutdown.compareAndSet(false, true)) {
+      throw new ConcurrentModificationException(
+          "Unexpected: RlqsFilter#close called multiple times");
+    }
+    RlqsCache oldCache = rlqsCache.getAndUpdate(unused -> null);
+    if (oldCache != null) {
+      oldCache.shutdown();
+    }
   }
 
-  @Override
+  // @Override
   public boolean isEnabled() {
     return enabled;
-  }
-
-  @Override
-  public ConfigOrError<RlqsFilterConfig> parseFilterConfig(Message rawProtoMessage) {
-    try {
-      RlqsFilterConfig rlqsFilterConfig =
-          parseRlqsFilter(unpackAny(rawProtoMessage, RateLimitQuotaFilterConfig.class));
-      return ConfigOrError.fromConfig(rlqsFilterConfig);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Can't unpack RateLimitQuotaFilterConfig proto: " + e);
-    } catch (ResourceInvalidException e) {
-      return ConfigOrError.fromError(e.getMessage());
-    }
-  }
-
-  @Override
-  public ConfigOrError<RlqsFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-    try {
-      RlqsFilterConfig rlqsFilterConfig =
-          parseRlqsFilterOverride(unpackAny(rawProtoMessage, RateLimitQuotaOverride.class));
-      return ConfigOrError.fromConfig(rlqsFilterConfig);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Can't unpack RateLimitQuotaOverride proto: " + e);
-    } catch (ResourceInvalidException e) {
-      return ConfigOrError.fromError(e.getMessage());
-    }
   }
 
   @Nullable
   @Override
   public ServerInterceptor buildServerInterceptor(
       FilterConfig config, @Nullable FilterConfig overrideConfig) {
-    throw new UnsupportedOperationException("ScheduledExecutorService scheduler required");
-  }
+    // ScheduledExecutorService scheduler
 
-  @Override
-  public ServerInterceptor buildServerInterceptor(
-      FilterConfig config,
-      @Nullable FilterConfig overrideConfig,
-      ScheduledExecutorService scheduler) {
     // Called when we get an xds update - when the LRS or RLS changes.
     RlqsFilterConfig rlqsFilterConfig = (RlqsFilterConfig) checkNotNull(config, "config");
 
@@ -146,16 +203,6 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
 
     rlqsCache.compareAndSet(null, RlqsCache.newInstance(scheduler));
     return generateRlqsInterceptor(rlqsFilterConfig);
-  }
-
-  @Override
-  public void shutdown() {
-    // TODO(sergiitk): [DESIGN] besides shutting down everything, should there
-    //    be per-route interceptor destructors?
-    RlqsCache oldCache = rlqsCache.getAndUpdate(unused -> null);
-    if (oldCache != null) {
-      oldCache.shutdown();
-    }
   }
 
   @Nullable
@@ -191,36 +238,6 @@ final class RlqsFilter implements Filter, ServerInterceptorBuilder {
         return new ServerCall.Listener<ReqT>(){};
       }
     };
-  }
-
-  @VisibleForTesting
-  RlqsFilterConfig parseRlqsFilter(RateLimitQuotaFilterConfig rlqsFilterProto)
-      throws ResourceInvalidException, InvalidProtocolBufferException {
-    RlqsFilterConfig.Builder builder = RlqsFilterConfig.builder();
-    if (rlqsFilterProto.getDomain().isEmpty()) {
-      throw new ResourceInvalidException("RateLimitQuotaFilterConfig domain is required");
-    }
-    builder.domain(rlqsFilterProto.getDomain())
-        .rlqsService(GrpcService.fromEnvoyProto(rlqsFilterProto.getRlqsServer()));
-
-    // TODO(sergiitk): [IMPL] Remove
-    if (dryRun) {
-      logger.log(XdsLogLevel.DEBUG, "Dry run: not parsing  matchers in the filter filter");
-      return builder.build();
-    }
-
-    // TODO(sergiitk): [IMPL] actually parse, move to RlqsBucketSettings.fromProto()
-    RateLimitQuotaBucketSettings fallbackBucketSettingsProto = unpackAny(
-        rlqsFilterProto.getBucketMatchers().getOnNoMatch().getAction().getTypedConfig(),
-        RateLimitQuotaBucketSettings.class);
-    RlqsBucketSettings fallbackBucket = RlqsBucketSettings.create(
-        ImmutableMap.of("bucket_id", headers -> "hello"),
-        fallbackBucketSettingsProto.getReportingInterval());
-
-    // TODO(sergiitk): [IMPL] actually parse, move to Matcher.fromProto()
-    Matcher<HttpMatchInput, RlqsBucketSettings> bucketMatchers = new RlqsMatcher(fallbackBucket);
-
-    return builder.bucketMatchers(bucketMatchers).build();
   }
 
   static class RlqsMatcher extends Matcher<HttpMatchInput, RlqsBucketSettings> {
