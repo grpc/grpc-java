@@ -618,6 +618,26 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .isHttp11ProxyAvailable(false);
     }
 
+    Builder toBuilder() {
+      return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
+          .choiceCount(choiceCount())
+          .clusterName(clusterName())
+          .clusterType(clusterType())
+          .dnsHostName(dnsHostName())
+          .edsServiceName(edsServiceName())
+          .isHttp11ProxyAvailable(isHttp11ProxyAvailable())
+          .lrsServerInfo(lrsServerInfo())
+          .maxConcurrentRequests(maxConcurrentRequests())
+          .maxRingSize(maxRingSize())
+          .minRingSize(minRingSize())
+          .lbPolicyConfig(lbPolicyConfig())
+          .upstreamTlsContext(upstreamTlsContext())
+          .prioritizedClusterNames(prioritizedClusterNames())
+          .outlierDetection(outlierDetection())
+          .filterMetadata(filterMetadata())
+          .parsedMetadata(parsedMetadata());
+    }
+
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
       checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
       return newBuilder(clusterName)

@@ -63,6 +63,7 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
@@ -100,6 +101,9 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
   static final CallOptions.Key<Boolean> AUTO_HOST_REWRITE_KEY =
       CallOptions.Key.create("io.grpc.xds.AUTO_HOST_REWRITE_KEY");
+  // DNS-resolved endpoints do not have the definition of the locality it belongs to, just hardcode
+  // to an empty locality.
+  static final Locality LOGICAL_DNS_CLUSTER_LOCALITY = Locality.create("", "", "");
   @VisibleForTesting
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
@@ -173,8 +177,9 @@ final class XdsNameResolver extends NameResolver {
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
-    this.xdsClientPoolFactory = bootstrapOverride == null ? checkNotNull(xdsClientPoolFactory,
-            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
+    this.xdsClientPoolFactory = bootstrapOverride == null
+                                ? checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory")
+                                : new SharedXdsClientPoolProvider();
     this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
@@ -235,6 +240,12 @@ final class XdsNameResolver extends NameResolver {
 
   private static String expandPercentS(String template, String replacement) {
     return template.replace("%s", replacement);
+  }
+
+  @Override
+  public void refresh() {
+    super.refresh();
+    resolveState.xdsDependencyManager.requestReresolution();
   }
 
   @Override
@@ -456,7 +467,7 @@ final class XdsNameResolver extends NameResolver {
           timeoutNanos = null;
         }
       }
-      RetryPolicy retryPolicy = routeAction.retryPolicy();
+      RetryPolicy retryPolicy = routeAction == null ? null : routeAction.retryPolicy();
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig =
           generateServiceConfigWithMethodConfig(timeoutNanos, retryPolicy);

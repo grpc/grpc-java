@@ -2622,8 +2622,11 @@ public class XdsNameResolverTest {
         String rdsName,
         @Nullable List<NamedFilterConfig> filterConfigs) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0, rdsName, filterConfigs)));
+        HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
+            0, rdsName, filterConfigs);
+        if (httpConnectionManager != null) {
+          ldsWatcher.onChanged(LdsUpdate.forApiListener(httpConnectionManager));
+        }
       });
     }
 

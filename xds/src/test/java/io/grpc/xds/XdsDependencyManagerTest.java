@@ -39,6 +39,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Message;
@@ -64,9 +65,12 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
+import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsTransportFactory;
 import java.io.Closeable;
 import java.io.IOException;
@@ -79,6 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -457,8 +462,9 @@ public class XdsDependencyManagerTest {
     String ldsResourceName =
         "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, ldsResourceName, nameResolverArgs, scheduler);
+    FakeXdsClient fakeXdsClient = new FakeXdsClient();
+    xdsDependencyManager = new XdsDependencyManager(fakeXdsClient, xdsConfigWatcher, syncContext,
+        serverName, serverName, nameResolverArgs, scheduler);
 
     verify(xdsConfigWatcher, timeout(1000)).onUpdate(
         argThat(StatusOrMatcher.hasStatus(
@@ -703,16 +709,19 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testCdsError() throws IOException {
-    controlPlaneService.setXdsConfig(
-        ADS_TYPE_URL_CDS, ImmutableMap.of(XdsTestUtils.CLUSTER_NAME,
-          Cluster.newBuilder().setName(XdsTestUtils.CLUSTER_NAME).build()));
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
+    FakeXdsClient fakeXdsClient = new FakeXdsClient();
+
+    xdsDependencyManager = new XdsDependencyManager(fakeXdsClient, xdsConfigWatcher, syncContext,
         serverName, serverName, nameResolverArgs, scheduler);
 
+    Closeable subscribe = xdsDependencyManager.subscribeToCluster(CLUSTER_NAME);
+    fakeXdsClient.deliverCdsError(CLUSTER_NAME, Status.UNAVAILABLE);
     verify(xdsConfigWatcher, timeout(1000)).onUpdate(xdsUpdateCaptor.capture());
     Status status = xdsUpdateCaptor.getValue().getValue()
         .getClusters().get(CLUSTER_NAME).getStatus();
     assertThat(status.getDescription()).contains(XdsTestUtils.CLUSTER_NAME);
+    assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    subscribe.close();
   }
 
   private Listener buildInlineClientListener(String rdsName, String clusterName) {
@@ -764,4 +773,95 @@ public class XdsDependencyManagerTest {
           && xdsConfig.getClusters().keySet().containsAll(expectedNames);
     }
   }
+
+  /**
+   * A fake XdsClient that can be used to send errors to the dependency manager.
+   */
+  private class FakeXdsClient extends XdsClient {
+    private ResourceWatcher<LdsUpdate> ldsWatcher;
+    private ResourceWatcher<XdsRouteConfigureResource.RdsUpdate> rdsWatcher;
+    private final Map<String, List<ResourceWatcher<CdsUpdate>>> cdsWatchers = new HashMap<>();
+    private final Map<String, List<ResourceWatcher<EdsUpdate>>> edsWatchers = new HashMap<>();
+
+    private void deliverCdsError(String clusterName, Status error) {
+      if (!cdsWatchers.containsKey(clusterName)) {
+        return;
+      }
+      syncContext.execute(() -> {
+        ImmutableList.copyOf(cdsWatchers.get(clusterName))
+            .forEach(w -> w.onError(error));
+      });
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
+                                                            String resourceName,
+                                                            ResourceWatcher<T> watcher,
+                                                            Executor syncContext) {
+      switch (resourceType.typeName()) {
+        case "LDS":
+          assertThat(ldsWatcher).isNull();
+          ldsWatcher = (ResourceWatcher<LdsUpdate>) watcher;
+          syncContext.execute(() -> {
+            try {
+              XdsConfig defaultConfig = XdsTestUtils.getDefaultXdsConfig(serverName);
+              ldsWatcher.onChanged(defaultConfig.getListener());
+            } catch (XdsResourceType.ResourceInvalidException | IOException e) {
+              throw new RuntimeException(e);
+            }
+          });
+          break;
+        case "RDS":
+          assertThat(rdsWatcher).isNull();
+          rdsWatcher = (ResourceWatcher<XdsRouteConfigureResource.RdsUpdate>) watcher;
+          try {
+            XdsConfig defaultConfig = XdsTestUtils.getDefaultXdsConfig(serverName);
+            rdsWatcher.onChanged(defaultConfig.getRoute());
+          } catch (XdsResourceType.ResourceInvalidException | IOException e) {
+            throw new RuntimeException(e);
+          }
+          break;
+        case "CDS":
+          cdsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
+              .add((ResourceWatcher<CdsUpdate>) watcher);
+          break;
+        case "EDS":
+          edsWatchers.computeIfAbsent(resourceName, k -> new ArrayList<>())
+              .add((ResourceWatcher<EdsUpdate>) watcher);
+          break;
+        default:
+      }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
+                                                                  String resourceName,
+                                                                  ResourceWatcher<T> watcher) {
+      switch (type.typeName()) {
+        case "LDS":
+          assertThat(ldsWatcher).isNotNull();
+          ldsWatcher = null;
+          break;
+        case "RDS":
+          assertThat(rdsWatcher).isNotNull();
+          rdsWatcher = null;
+          break;
+        case "CDS":
+          assertThat(cdsWatchers).containsKey(resourceName);
+          assertThat(cdsWatchers.get(resourceName)).contains(watcher);
+          cdsWatchers.get(resourceName).remove((ResourceWatcher<CdsUpdate>) watcher);
+          break;
+        case "EDS":
+          assertThat(edsWatchers).containsKey(resourceName);
+          assertThat(edsWatchers.get(resourceName)).contains(watcher);
+          edsWatchers.get(resourceName).remove((ResourceWatcher<EdsUpdate>) watcher);
+          break;
+        default:
+      }
+    }
+
+  }
+
 }

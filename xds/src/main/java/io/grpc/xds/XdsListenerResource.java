@@ -32,6 +32,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
@@ -637,6 +638,15 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     static LdsUpdate forApiListener(io.grpc.xds.HttpConnectionManager httpConnectionManager) {
       checkNotNull(httpConnectionManager, "httpConnectionManager");
       return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(httpConnectionManager, null);
+    }
+
+    static LdsUpdate forApiListener(io.grpc.xds.HttpConnectionManager httpConnectionManager,
+                                    String listenerName) {
+      checkNotNull(httpConnectionManager, "httpConnectionManager");
+      EnvoyServerProtoData.Listener listener = EnvoyServerProtoData.Listener.create(
+          listenerName, null, ImmutableList.of(), null, Protocol.TCP);
+      return new io.grpc.xds.AutoValue_XdsListenerResource_LdsUpdate(httpConnectionManager,
+          listener);
     }
 
     static LdsUpdate forTcpListener(EnvoyServerProtoData.Listener listener) {

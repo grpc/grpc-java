@@ -42,6 +42,10 @@ final class RoutingUtils {
    */
   @Nullable
   static VirtualHost findVirtualHostForHostName(List<VirtualHost> virtualHosts, String hostName) {
+    if (virtualHosts == null || virtualHosts.isEmpty()) {
+      return null;
+    }
+
     // Domain search order:
     //  1. Exact domain names: ``www.foo.com``.
     //  2. Suffix domain wildcards: ``*.foo.com`` or ``*-bar.foo.com``.
