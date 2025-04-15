@@ -318,9 +318,20 @@ public abstract class XdsClient {
       getSubscribedResourcesMetadataSnapshot() {
     throw new UnsupportedOperationException();
   }
-  public String getAuthority(XdsResourceType<?> resourceType, String resourceName) {
+
+  /**
+   * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
+   * they are at the moment of the call.
+   *
+   * <p>The snapshot is a map from the "resource type" to
+   * a map ("resource name": "authority").
+   */
+  // Must be synchronized.
+  public ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
+      getSubscribedResourcesAuthoritySnapshot() {
     throw new UnsupportedOperationException();
   }
+
   /**
    * Registers a data watcher for the given Xds resource.
    */

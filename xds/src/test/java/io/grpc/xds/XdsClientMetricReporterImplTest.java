@@ -76,6 +76,7 @@ import org.mockito.junit.MockitoRule;
 public class XdsClientMetricReporterImplTest {
 
   private static final String target = "test-target";
+  private static final String authority = "test-authority";
   private static final String server = "trafficdirector.googleapis.com";
   private static final String resourceTypeUrl =
       "resourceTypeUrl.googleapis.com/envoy.config.cluster.v3.Cluster";
@@ -101,7 +102,6 @@ public class XdsClientMetricReporterImplTest {
 
   @Test
   public void reportResourceUpdates() {
-    // TODO(dnvindhya): add the "authority" label once available.
     reporter.reportResourceUpdates(10, 5, server, resourceTypeUrl);
     verify(mockMetricRecorder).addLongCounter(
         eqMetricInstrumentName("grpc.xds_client.resource_updates_valid"), eq((long) 10),
@@ -129,6 +129,8 @@ public class XdsClientMetricReporterImplTest {
     future.set(null);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
         ImmutableMap.of()));
+    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
+        .thenReturn(Futures.immediateFuture(ImmutableMap.of()));
     when(mockXdsClient.reportServerConnections(any(ServerConnectionCallback.class)))
         .thenReturn(future);
     reporter.setXdsClient(mockXdsClient);
@@ -150,6 +152,8 @@ public class XdsClientMetricReporterImplTest {
     future.set(null);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
         ImmutableMap.of()));
+    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
+            .thenReturn(Futures.immediateFuture(ImmutableMap.of()));
 
     // Create a future that will throw an exception
     SettableFuture<Void> serverConnectionsFeature = SettableFuture.create();
@@ -177,6 +181,8 @@ public class XdsClientMetricReporterImplTest {
     future.set(null);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
         ImmutableMap.of()));
+    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
+        .thenReturn(Futures.immediateFuture(ImmutableMap.of()));
     when(mockXdsClient.reportServerConnections(any(ServerConnectionCallback.class)))
         .thenReturn(future);
     reporter.setXdsClient(mockXdsClient);
@@ -222,16 +228,17 @@ public class XdsClientMetricReporterImplTest {
         eq(Lists.newArrayList()));
 
     String cacheState = "requested";
-    callback.reportResourceCountGauge("BuzzLightyear", 10, cacheState, resourceTypeUrl);
+    callback.reportResourceCountGauge(authority, 10, cacheState, resourceTypeUrl);
     verify(mockBatchRecorder, times(1)).recordLongGauge(
         eqMetricInstrumentName("grpc.xds_client.resources"), eq(10L),
-        eq(Arrays.asList(target, cacheState, resourceTypeUrl)),
+        eq(Arrays.asList(target, authority, cacheState, resourceTypeUrl)),
         eq(Collections.emptyList()));
   }
 
   @Test
   public void reportCallbackMetrics_computeAndReportResourceCounts() {
     Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType = new HashMap<>();
+    Map<XdsResourceType<?>, Map<String, String>> authorityByType = new HashMap<>();
     XdsResourceType<?> listenerResource = XdsListenerResource.getInstance();
     XdsResourceType<?> routeConfigResource = XdsRouteConfigureResource.getInstance();
     XdsResourceType<?> clusterResource = XdsClusterResource.getInstance();
@@ -241,31 +248,44 @@ public class XdsClientMetricReporterImplTest {
     long nanosLastUpdate = 1577923199_606042047L;
 
     Map<String, ResourceMetadata> ldsResourceMetadataMap = new HashMap<>();
+    Map<String, String> ldsAuthorityMap = new HashMap<>();
     ldsResourceMetadataMap.put("resource1",
         ResourceMetadata.newResourceMetadataRequested());
+    ldsAuthorityMap.put("resource1", "authority1");
     ResourceMetadata ackedLdsResource = ResourceMetadata.newResourceMetadataAcked(rawListener, "42",
         nanosLastUpdate);
     ldsResourceMetadataMap.put("resource2", ackedLdsResource);
+    ldsAuthorityMap.put("resource2", "authority2");
     ldsResourceMetadataMap.put("resource3",
         ResourceMetadata.newResourceMetadataAcked(rawListener, "43", nanosLastUpdate));
+    ldsAuthorityMap.put("resource3", "authority3");
     ldsResourceMetadataMap.put("resource4",
         ResourceMetadata.newResourceMetadataNacked(ackedLdsResource, "44", nanosLastUpdate,
             "nacked after previous ack", true));
+    ldsAuthorityMap.put("resource4", "authority4");
 
     Map<String, ResourceMetadata> rdsResourceMetadataMap = new HashMap<>();
+    Map<String, String> rdsAuthorityMap = new HashMap<>();
     ResourceMetadata requestedRdsResourceMetadata = ResourceMetadata.newResourceMetadataRequested();
     rdsResourceMetadataMap.put("resource5",
         ResourceMetadata.newResourceMetadataNacked(requestedRdsResourceMetadata, "24",
             nanosLastUpdate, "nacked after request", false));
+    rdsAuthorityMap.put("resource5", "authority5");
     rdsResourceMetadataMap.put("resource6",
         ResourceMetadata.newResourceMetadataDoesNotExist());
+    rdsAuthorityMap.put("resource6", "authority6");
 
     Map<String, ResourceMetadata> cdsResourceMetadataMap = new HashMap<>();
+    Map<String, String> cdsAuthorityMap = new HashMap<>();
     cdsResourceMetadataMap.put("resource7", ResourceMetadata.newResourceMetadataUnknown());
+    cdsAuthorityMap.put("resource7", "authority7");
 
     metadataByType.put(listenerResource, ldsResourceMetadataMap);
+    authorityByType.put(listenerResource, ldsAuthorityMap);
     metadataByType.put(routeConfigResource, rdsResourceMetadataMap);
+    authorityByType.put(routeConfigResource, rdsAuthorityMap);
     metadataByType.put(clusterResource, cdsResourceMetadataMap);
+    authorityByType.put(clusterResource, cdsAuthorityMap);
 
     SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
     reportServerConnectionsCompleted.set(null);
@@ -277,36 +297,49 @@ public class XdsClientMetricReporterImplTest {
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
         .thenReturn(getResourceMetadataCompleted);
 
+    ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
+            getResourceAuthorityCompleted = Futures.immediateFuture(authorityByType);
+    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
+            .thenReturn(getResourceAuthorityCompleted);
+
     reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
 
     // LDS resource requested
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "requested", listenerResource.typeUrl())), any());
+        eq(1L), eq(Arrays.asList(target, "authority1",
+            "requested", listenerResource.typeUrl())), any());
     // LDS resources acked
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(2L), eq(Arrays.asList(target, "acked", listenerResource.typeUrl())), any());
+        eq(2L), eq(Arrays.asList(target, "authority3",
+            "acked", listenerResource.typeUrl())), any());
     // LDS resource nacked but cached
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "nacked_but_cached", listenerResource.typeUrl())), any());
+        eq(1L), eq(Arrays.asList(target, "authority4",
+            "nacked_but_cached", listenerResource.typeUrl())), any());
 
     // RDS resource nacked
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "nacked", routeConfigResource.typeUrl())), any());
+        eq(1L), eq(Arrays.asList(target, "authority5",
+            "nacked", routeConfigResource.typeUrl())), any());
     // RDS resource does not exist
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "does_not_exist", routeConfigResource.typeUrl())), any());
+        eq(1L), eq(Arrays.asList(target, "authority6",
+            "does_not_exist", routeConfigResource.typeUrl())), any());
 
     // CDS resource unknown
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "unknown", clusterResource.typeUrl())), any());
+        eq(1L), eq(Arrays.asList(target, "authority7",
+            "unknown", clusterResource.typeUrl())), any());
     verifyNoMoreInteractions(mockBatchRecorder);
   }
 
   @Test
   public void reportCallbackMetrics_computeAndReportResourceCounts_emptyResources() {
     Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType = new HashMap<>();
+    Map<XdsResourceType<?>, Map<String, String>> authorityByType = new HashMap<>();
     XdsResourceType<?> listenerResource = XdsListenerResource.getInstance();
     metadataByType.put(listenerResource, Collections.emptyMap());
+    authorityByType.put(listenerResource, Collections.emptyMap());
 
     SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
     reportServerConnectionsCompleted.set(null);
@@ -317,6 +350,11 @@ public class XdsClientMetricReporterImplTest {
         getResourceMetadataCompleted = Futures.immediateFuture(metadataByType);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
         .thenReturn(getResourceMetadataCompleted);
+
+    ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
+            getAuthorityCompleted = Futures.immediateFuture(authorityByType);
+    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
+            .thenReturn(getAuthorityCompleted);
 
     reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
 

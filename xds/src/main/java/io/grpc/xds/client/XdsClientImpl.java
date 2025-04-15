@@ -242,13 +242,31 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     return future;
   }
 
+  // As XdsClient APIs becomes resource agnostic, subscribed resource types are dynamic.
+  // ResourceTypes that do not have subscribers does not show up in the snapshot keys.
   @Override
-  public String getAuthority(XdsResourceType<?> resourceType, String resourceName) {
-    Map<String, ResourceSubscriber<? extends ResourceUpdate>> resourceEntry = resourceSubscribers.get(resourceType);
-    if (resourceEntry != null) {
-      return resourceEntry.get(resourceName).authority;
-    }
-    return null;
+  public ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
+      getSubscribedResourcesAuthoritySnapshot() {
+    final SettableFuture<Map<XdsResourceType<?>, Map<String, String>>> future =
+            SettableFuture.create();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        // A map from a "resource type" to a map ("resource name": "authority")
+        ImmutableMap.Builder<XdsResourceType<?>, Map<String, String>> authoritySnapshot =
+                ImmutableMap.builder();
+        for (XdsResourceType<?> resourceType : resourceSubscribers.keySet()) {
+          ImmutableMap.Builder<String, String> authorityMap = ImmutableMap.builder();
+          for (Map.Entry<String, ResourceSubscriber<? extends ResourceUpdate>> resourceEntry
+                  : resourceSubscribers.get(resourceType).entrySet()) {
+            authorityMap.put(resourceEntry.getKey(), resourceEntry.getValue().authority);
+          }
+          authoritySnapshot.put(resourceType, authorityMap.buildOrThrow());
+        }
+        future.set(authoritySnapshot.buildOrThrow());
+      }
+    });
+    return future;
   }
 
   @Override

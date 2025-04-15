@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongGaugeMetricInstrument;
@@ -30,11 +29,12 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.client.XdsClient.ServerConnectionCallback;
-import io.grpc.xds.client.XdsClientImpl;
 import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
-
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -143,7 +143,13 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
           getResourceMetadataCompleted.get(10, TimeUnit.SECONDS);
 
-      computeAndReportResourceCounts(xdsClient, metadataByType, callback);
+      ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
+              getResourceAuthorityCompleted = xdsClient.getSubscribedResourcesAuthoritySnapshot();
+
+      Map<XdsResourceType<?>, Map<String, String>> authorityByType =
+              getResourceAuthorityCompleted.get(10, TimeUnit.SECONDS);
+
+      computeAndReportResourceCounts(metadataByType, authorityByType, callback);
 
       // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
       Void unused = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
@@ -155,30 +161,29 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     }
   }
 
-  private void computeAndReportResourceCounts(XdsClient xdsClient,
-                                              Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
-                                              MetricReporterCallback callback) {
+  private void computeAndReportResourceCounts(
+      Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
+      Map<XdsResourceType<?>, Map<String, String>> authorityByType,
+      MetricReporterCallback callback) {
     for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry :
         metadataByType.entrySet()) {
       XdsResourceType<?> type = metadataByTypeEntry.getKey();
 
       Map<String, Long> resourceCountsByState = new HashMap<>();
-      List<String> authorities = new ArrayList<>();
-      for (ResourceMetadata metadata : metadataByTypeEntry.getValue().values()) {
+      Map<String, String> authorityByState = new HashMap<>();
+      for (Map.Entry<String, ResourceMetadata> metadataByName :
+              metadataByTypeEntry.getValue().entrySet()) {
+        String resourceName = metadataByName.getKey();
+        ResourceMetadata metadata = metadataByName.getValue();
         String cacheState = cacheStateFromResourceStatus(metadata.getStatus(), metadata.isCached());
         resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
-      }
-      for (String resourceName : metadataByTypeEntry.getValue().keySet()) {
-        authorities.add(xdsClient.getAuthority(type, resourceName));
+        authorityByState.put(cacheState, authorityByType.get(type).get(resourceName));
       }
 
-      Iterator<String> authorityIterator = authorities.iterator();
       resourceCountsByState.forEach((cacheState, count) -> {
-                if (authorityIterator.hasNext()) {
-                  String authority = authorityIterator.next();
-                  callback.reportResourceCountGauge(authority, count, cacheState, type.typeUrl());
-                }
-              });
+        callback.reportResourceCountGauge(authorityByState.get(cacheState),
+            count, cacheState, type.typeUrl());
+      });
     }
   }
 
