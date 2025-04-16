@@ -17,7 +17,6 @@
 package io.grpc.opentelemetry;
 
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
-import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
@@ -52,6 +51,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcServerRule;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
@@ -1103,7 +1103,7 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributesWithBackendService
         = clientAttributes.toBuilder()
-        .put(BACKEND_SERVICE_KEY, "the-moon")
+        .put(AttributeKey.stringKey("grpc.lb.backend_service"), "the-moon")
         .build();
 
     assertThat(openTelemetryTesting.getMetrics())
@@ -1168,7 +1168,7 @@ public class OpenTelemetryMetricsModuleTest {
 
     io.opentelemetry.api.common.Attributes clientAttributesWithBackendService
         = clientAttributes.toBuilder()
-        .put(BACKEND_SERVICE_KEY, "")
+        .put(AttributeKey.stringKey("grpc.lb.backend_service"), "")
         .build();
 
     assertThat(openTelemetryTesting.getMetrics())
