@@ -22,6 +22,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import java.util.List;
@@ -74,6 +75,21 @@ public abstract class Bootstrapper {
         boolean isTrustedXdsServer) {
       return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
           ignoreResourceDeletion, isTrustedXdsServer);
+    }
+  }
+
+  /**
+   * TODO(sergiitk): description.
+   */
+  @AutoValue
+  @Internal
+  public abstract static class RemoteServerInfo {
+    public abstract String target();
+
+    public abstract ChannelCredentials channelCredentials();
+
+    public static RemoteServerInfo create(String target, ChannelCredentials channelCredentials) {
+      return new AutoValue_Bootstrapper_RemoteServerInfo(target, channelCredentials);
     }
   }
 
