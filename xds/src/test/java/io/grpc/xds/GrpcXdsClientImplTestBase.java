@@ -47,7 +47,6 @@ import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
 import io.grpc.ChannelCredentials;
 import io.grpc.Context;
@@ -2245,7 +2244,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing UpstreamTlsContext for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithUpstreamTlsContext() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
@@ -2269,9 +2267,9 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(cdsResourceWatcher, times(1))
         .onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
+    CertificateProviderPluginInstance certificateProviderInstance =
         cdsUpdate.upstreamTlsContext().getCommonTlsContext().getCombinedValidationContext()
-            .getValidationContextCertificateProviderInstance();
+            .getDefaultValidationContext().getCaCertificateProviderInstance();
     assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("cert-instance-name");
     assertThat(certificateProviderInstance.getCertificateName()).isEqualTo("cert1");
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
@@ -2282,7 +2280,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing new UpstreamTlsContext for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithNewUpstreamTlsContext() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
@@ -2344,7 +2341,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing OutlierDetection for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithOutlierDetection() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
@@ -2413,7 +2409,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing OutlierDetection for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithInvalidOutlierDetectionNacks() {
 
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,

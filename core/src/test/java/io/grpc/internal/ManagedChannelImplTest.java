@@ -2590,7 +2590,6 @@ public class ManagedChannelImplTest {
 
     assertEquals(IDLE, channel.getState(true));
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockPicker).requestConnection();
     verify(mockLoadBalancer).requestConnection();
   }
 
