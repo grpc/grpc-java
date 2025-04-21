@@ -34,6 +34,7 @@ import io.grpc.xds.client.XdsResourceType;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -41,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -143,13 +145,15 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
           getResourceMetadataCompleted.get(10, TimeUnit.SECONDS);
 
-      ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
-              getResourceAuthorityCompleted = xdsClient.getSubscribedResourcesAuthoritySnapshot();
+      List<String> resourceNames = metadataByType.values()
+          .stream()
+          .flatMap(innerMap -> innerMap.keySet().stream())
+          .collect(Collectors.toList());
 
-      Map<XdsResourceType<?>, Map<String, String>> authorityByType =
-              getResourceAuthorityCompleted.get(10, TimeUnit.SECONDS);
+      Map<String, String> resourceNameToAuthority =
+          xdsClient.getResourceNameToAuthorityMap(resourceNames);
 
-      computeAndReportResourceCounts(metadataByType, authorityByType, callback);
+      computeAndReportResourceCounts(metadataByType, resourceNameToAuthority, callback);
 
       // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
       Void unused = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
@@ -163,27 +167,37 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
 
   private void computeAndReportResourceCounts(
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
-      Map<XdsResourceType<?>, Map<String, String>> authorityByType,
+      Map<String, String> resourceNameToAuthority,
       MetricReporterCallback callback) {
     for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry :
         metadataByType.entrySet()) {
       XdsResourceType<?> type = metadataByTypeEntry.getKey();
+      Map<String, ResourceMetadata> resources = metadataByTypeEntry.getValue();
 
-      Map<String, Long> resourceCountsByState = new HashMap<>();
-      Map<String, String> authorityByState = new HashMap<>();
-      for (Map.Entry<String, ResourceMetadata> metadataByName :
-              metadataByTypeEntry.getValue().entrySet()) {
-        String resourceName = metadataByName.getKey();
-        ResourceMetadata metadata = metadataByName.getValue();
+      Map<String, Map<String, Long>> resourceCountsByAuthorityAndState = new HashMap<>();
+      for (Map.Entry<String, ResourceMetadata> resourceEntry : resources.entrySet()) {
+        String resourceName = resourceEntry.getKey();
+        ResourceMetadata metadata = resourceEntry.getValue();
+        String authority = resourceNameToAuthority.getOrDefault(resourceName, "");
         String cacheState = cacheStateFromResourceStatus(metadata.getStatus(), metadata.isCached());
-        resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
-        authorityByState.put(cacheState, authorityByType.get(type).get(resourceName));
+        resourceCountsByAuthorityAndState
+            .computeIfAbsent(authority, k -> new HashMap<>())
+            .merge(cacheState, 1L, Long::sum);
       }
 
-      resourceCountsByState.forEach((cacheState, count) -> {
-        callback.reportResourceCountGauge(authorityByState.get(cacheState),
-            count, cacheState, type.typeUrl());
-      });
+      // Report metrics
+      for (Map.Entry<String, Map<String, Long>> authorityEntry
+              : resourceCountsByAuthorityAndState.entrySet()) {
+        String authority = authorityEntry.getKey();
+        Map<String, Long> stateCounts = authorityEntry.getValue();
+
+        for (Map.Entry<String, Long> stateEntry : stateCounts.entrySet()) {
+          String cacheState = stateEntry.getKey();
+          Long count = stateEntry.getValue();
+
+          callback.reportResourceCountGauge(authority, count, cacheState, type.typeUrl());
+        }
+      }
     }
   }
 
@@ -213,12 +227,11 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       this.target = target;
     }
 
-    // TODO(dnvindhya): include the "authority" label once xds.authority is available.
     void reportResourceCountGauge(String authority, long resourceCount, String cacheState,
         String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
-          Arrays.asList(target, authority == null ? "#old" : authority,
-                  cacheState, resourceType), Collections.emptyList());
+          Arrays.asList(target, authority.isEmpty() ? "#old" : authority,
+          cacheState, resourceType), Collections.emptyList());
     }
 
     @Override

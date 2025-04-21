@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -129,8 +130,6 @@ public class XdsClientMetricReporterImplTest {
     future.set(null);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
         ImmutableMap.of()));
-    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
-        .thenReturn(Futures.immediateFuture(ImmutableMap.of()));
     when(mockXdsClient.reportServerConnections(any(ServerConnectionCallback.class)))
         .thenReturn(future);
     reporter.setXdsClient(mockXdsClient);
@@ -152,8 +151,6 @@ public class XdsClientMetricReporterImplTest {
     future.set(null);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
         ImmutableMap.of()));
-    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
-            .thenReturn(Futures.immediateFuture(ImmutableMap.of()));
 
     // Create a future that will throw an exception
     SettableFuture<Void> serverConnectionsFeature = SettableFuture.create();
@@ -181,8 +178,6 @@ public class XdsClientMetricReporterImplTest {
     future.set(null);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot()).thenReturn(Futures.immediateFuture(
         ImmutableMap.of()));
-    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
-        .thenReturn(Futures.immediateFuture(ImmutableMap.of()));
     when(mockXdsClient.reportServerConnections(any(ServerConnectionCallback.class)))
         .thenReturn(future);
     reporter.setXdsClient(mockXdsClient);
@@ -238,7 +233,7 @@ public class XdsClientMetricReporterImplTest {
   @Test
   public void reportCallbackMetrics_computeAndReportResourceCounts() {
     Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType = new HashMap<>();
-    Map<XdsResourceType<?>, Map<String, String>> authorityByType = new HashMap<>();
+    Map<String, String> resourceNameByAuthority = new HashMap<>();
     XdsResourceType<?> listenerResource = XdsListenerResource.getInstance();
     XdsResourceType<?> routeConfigResource = XdsRouteConfigureResource.getInstance();
     XdsResourceType<?> clusterResource = XdsClusterResource.getInstance();
@@ -248,44 +243,37 @@ public class XdsClientMetricReporterImplTest {
     long nanosLastUpdate = 1577923199_606042047L;
 
     Map<String, ResourceMetadata> ldsResourceMetadataMap = new HashMap<>();
-    Map<String, String> ldsAuthorityMap = new HashMap<>();
     ldsResourceMetadataMap.put("resource1",
         ResourceMetadata.newResourceMetadataRequested());
-    ldsAuthorityMap.put("resource1", "authority1");
+    resourceNameByAuthority.put("resource1", "authority1");
     ResourceMetadata ackedLdsResource = ResourceMetadata.newResourceMetadataAcked(rawListener, "42",
         nanosLastUpdate);
     ldsResourceMetadataMap.put("resource2", ackedLdsResource);
-    ldsAuthorityMap.put("resource2", "authority2");
+    resourceNameByAuthority.put("resource2", "authority2");
     ldsResourceMetadataMap.put("resource3",
         ResourceMetadata.newResourceMetadataAcked(rawListener, "43", nanosLastUpdate));
-    ldsAuthorityMap.put("resource3", "authority3");
+    resourceNameByAuthority.put("resource3", "authority2");
     ldsResourceMetadataMap.put("resource4",
         ResourceMetadata.newResourceMetadataNacked(ackedLdsResource, "44", nanosLastUpdate,
             "nacked after previous ack", true));
-    ldsAuthorityMap.put("resource4", "authority4");
+    resourceNameByAuthority.put("resource4", "authority4");
 
     Map<String, ResourceMetadata> rdsResourceMetadataMap = new HashMap<>();
-    Map<String, String> rdsAuthorityMap = new HashMap<>();
     ResourceMetadata requestedRdsResourceMetadata = ResourceMetadata.newResourceMetadataRequested();
     rdsResourceMetadataMap.put("resource5",
         ResourceMetadata.newResourceMetadataNacked(requestedRdsResourceMetadata, "24",
             nanosLastUpdate, "nacked after request", false));
-    rdsAuthorityMap.put("resource5", "authority5");
+    resourceNameByAuthority.put("resource5", "authority5");
     rdsResourceMetadataMap.put("resource6",
         ResourceMetadata.newResourceMetadataDoesNotExist());
-    rdsAuthorityMap.put("resource6", "authority6");
+    resourceNameByAuthority.put("resource6", "authority6");
 
     Map<String, ResourceMetadata> cdsResourceMetadataMap = new HashMap<>();
-    Map<String, String> cdsAuthorityMap = new HashMap<>();
     cdsResourceMetadataMap.put("resource7", ResourceMetadata.newResourceMetadataUnknown());
-    cdsAuthorityMap.put("resource7", "authority7");
 
     metadataByType.put(listenerResource, ldsResourceMetadataMap);
-    authorityByType.put(listenerResource, ldsAuthorityMap);
     metadataByType.put(routeConfigResource, rdsResourceMetadataMap);
-    authorityByType.put(routeConfigResource, rdsAuthorityMap);
     metadataByType.put(clusterResource, cdsResourceMetadataMap);
-    authorityByType.put(clusterResource, cdsAuthorityMap);
 
     SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
     reportServerConnectionsCompleted.set(null);
@@ -297,10 +285,8 @@ public class XdsClientMetricReporterImplTest {
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
         .thenReturn(getResourceMetadataCompleted);
 
-    ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
-            getResourceAuthorityCompleted = Futures.immediateFuture(authorityByType);
-    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
-            .thenReturn(getResourceAuthorityCompleted);
+    when(mockXdsClient.getResourceNameToAuthorityMap(anyList()))
+            .thenReturn(resourceNameByAuthority);
 
     reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
 
@@ -310,7 +296,7 @@ public class XdsClientMetricReporterImplTest {
             "requested", listenerResource.typeUrl())), any());
     // LDS resources acked
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(2L), eq(Arrays.asList(target, "authority3",
+        eq(2L), eq(Arrays.asList(target, "authority2",
             "acked", listenerResource.typeUrl())), any());
     // LDS resource nacked but cached
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
@@ -328,7 +314,7 @@ public class XdsClientMetricReporterImplTest {
 
     // CDS resource unknown
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "authority7",
+        eq(1L), eq(Arrays.asList(target, "#old",
             "unknown", clusterResource.typeUrl())), any());
     verifyNoMoreInteractions(mockBatchRecorder);
   }
@@ -336,10 +322,8 @@ public class XdsClientMetricReporterImplTest {
   @Test
   public void reportCallbackMetrics_computeAndReportResourceCounts_emptyResources() {
     Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType = new HashMap<>();
-    Map<XdsResourceType<?>, Map<String, String>> authorityByType = new HashMap<>();
     XdsResourceType<?> listenerResource = XdsListenerResource.getInstance();
     metadataByType.put(listenerResource, Collections.emptyMap());
-    authorityByType.put(listenerResource, Collections.emptyMap());
 
     SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
     reportServerConnectionsCompleted.set(null);
@@ -350,11 +334,6 @@ public class XdsClientMetricReporterImplTest {
         getResourceMetadataCompleted = Futures.immediateFuture(metadataByType);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
         .thenReturn(getResourceMetadataCompleted);
-
-    ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
-            getAuthorityCompleted = Futures.immediateFuture(authorityByType);
-    when(mockXdsClient.getSubscribedResourcesAuthoritySnapshot())
-            .thenReturn(getAuthorityCompleted);
 
     reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
 

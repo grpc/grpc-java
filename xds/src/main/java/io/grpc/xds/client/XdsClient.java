@@ -320,19 +320,6 @@ public abstract class XdsClient {
   }
 
   /**
-   * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
-   * they are at the moment of the call.
-   *
-   * <p>The snapshot is a map from the "resource type" to
-   * a map ("resource name": "authority").
-   */
-  // Must be synchronized.
-  public ListenableFuture<Map<XdsResourceType<?>, Map<String, String>>>
-      getSubscribedResourcesAuthoritySnapshot() {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
    * Registers a data watcher for the given Xds resource.
    */
   public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
@@ -388,6 +375,13 @@ public abstract class XdsClient {
    * responsible for sending load reports to the control plane servers.
    */
   public Map<Bootstrapper.ServerInfo, LoadReportClient> getServerLrsClientMap() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns a map of resource names to the authority.
+   */
+  public Map<String, String> getResourceNameToAuthorityMap(List<String> resourceNames) {
     throw new UnsupportedOperationException();
   }
 
