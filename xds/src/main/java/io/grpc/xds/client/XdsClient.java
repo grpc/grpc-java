@@ -379,10 +379,20 @@ public abstract class XdsClient {
   }
 
   /**
-   * Returns a map of resource names to the authority.
+   * Returns the authority from the resource name.
    */
-  public Map<String, String> getResourceNameToAuthorityMap(List<String> resourceNames) {
-    throw new UnsupportedOperationException();
+  public static String getAuthorityFromResourceName(String resourceNames) {
+    String authority;
+    if (resourceNames.startsWith(XDSTP_SCHEME)) {
+      URI uri = URI.create(resourceNames);
+      authority = uri.getAuthority();
+      if (authority == null) {
+        authority = "";
+      }
+    } else {
+      authority = null;
+    }
+    return authority;
   }
 
   /** Callback used to report a gauge metric value for server connections. */

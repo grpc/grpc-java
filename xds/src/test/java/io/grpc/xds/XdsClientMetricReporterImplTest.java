@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -233,43 +232,36 @@ public class XdsClientMetricReporterImplTest {
   @Test
   public void reportCallbackMetrics_computeAndReportResourceCounts() {
     Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType = new HashMap<>();
-    Map<String, String> resourceNameByAuthority = new HashMap<>();
     XdsResourceType<?> listenerResource = XdsListenerResource.getInstance();
     XdsResourceType<?> routeConfigResource = XdsRouteConfigureResource.getInstance();
     XdsResourceType<?> clusterResource = XdsClusterResource.getInstance();
 
     Any rawListener =
-        Any.pack(Listener.newBuilder().setName("listener.googleapis.com").build());
+            Any.pack(Listener.newBuilder().setName("listener.googleapis.com").build());
     long nanosLastUpdate = 1577923199_606042047L;
 
     Map<String, ResourceMetadata> ldsResourceMetadataMap = new HashMap<>();
-    ldsResourceMetadataMap.put("resource1",
-        ResourceMetadata.newResourceMetadataRequested());
-    resourceNameByAuthority.put("resource1", "authority1");
+    ldsResourceMetadataMap.put("xdstp://authority1",
+            ResourceMetadata.newResourceMetadataRequested());
     ResourceMetadata ackedLdsResource = ResourceMetadata.newResourceMetadataAcked(rawListener, "42",
-        nanosLastUpdate);
+            nanosLastUpdate);
     ldsResourceMetadataMap.put("resource2", ackedLdsResource);
-    resourceNameByAuthority.put("resource2", "authority2");
     ldsResourceMetadataMap.put("resource3",
-        ResourceMetadata.newResourceMetadataAcked(rawListener, "43", nanosLastUpdate));
-    resourceNameByAuthority.put("resource3", "authority2");
-    ldsResourceMetadataMap.put("resource4",
-        ResourceMetadata.newResourceMetadataNacked(ackedLdsResource, "44", nanosLastUpdate,
-            "nacked after previous ack", true));
-    resourceNameByAuthority.put("resource4", "authority4");
+            ResourceMetadata.newResourceMetadataAcked(rawListener, "43", nanosLastUpdate));
+    ldsResourceMetadataMap.put("xdstp:/need_this",
+            ResourceMetadata.newResourceMetadataNacked(ackedLdsResource, "44", nanosLastUpdate,
+                    "nacked after previous ack", true));
 
     Map<String, ResourceMetadata> rdsResourceMetadataMap = new HashMap<>();
     ResourceMetadata requestedRdsResourceMetadata = ResourceMetadata.newResourceMetadataRequested();
-    rdsResourceMetadataMap.put("resource5",
-        ResourceMetadata.newResourceMetadataNacked(requestedRdsResourceMetadata, "24",
-            nanosLastUpdate, "nacked after request", false));
-    resourceNameByAuthority.put("resource5", "authority5");
-    rdsResourceMetadataMap.put("resource6",
-        ResourceMetadata.newResourceMetadataDoesNotExist());
-    resourceNameByAuthority.put("resource6", "authority6");
+    rdsResourceMetadataMap.put("xdstp://authority5",
+            ResourceMetadata.newResourceMetadataNacked(requestedRdsResourceMetadata, "24",
+                    nanosLastUpdate, "nacked after request", false));
+    rdsResourceMetadataMap.put("xdstp://authority6",
+            ResourceMetadata.newResourceMetadataDoesNotExist());
 
     Map<String, ResourceMetadata> cdsResourceMetadataMap = new HashMap<>();
-    cdsResourceMetadataMap.put("resource7", ResourceMetadata.newResourceMetadataUnknown());
+    cdsResourceMetadataMap.put("xdstp://authority7", ResourceMetadata.newResourceMetadataUnknown());
 
     metadataByType.put(listenerResource, ldsResourceMetadataMap);
     metadataByType.put(routeConfigResource, rdsResourceMetadataMap);
@@ -278,15 +270,13 @@ public class XdsClientMetricReporterImplTest {
     SettableFuture<Void> reportServerConnectionsCompleted = SettableFuture.create();
     reportServerConnectionsCompleted.set(null);
     when(mockXdsClient.reportServerConnections(any(MetricReporterCallback.class)))
-        .thenReturn(reportServerConnectionsCompleted);
+            .thenReturn(reportServerConnectionsCompleted);
 
     ListenableFuture<Map<XdsResourceType<?>, Map<String, ResourceMetadata>>>
-        getResourceMetadataCompleted = Futures.immediateFuture(metadataByType);
+            getResourceMetadataCompleted = Futures.immediateFuture(metadataByType);
     when(mockXdsClient.getSubscribedResourcesMetadataSnapshot())
-        .thenReturn(getResourceMetadataCompleted);
+            .thenReturn(getResourceMetadataCompleted);
 
-    when(mockXdsClient.getResourceNameToAuthorityMap(anyList()))
-            .thenReturn(resourceNameByAuthority);
 
     reporter.reportCallbackMetrics(mockBatchRecorder, mockXdsClient);
 
@@ -296,11 +286,11 @@ public class XdsClientMetricReporterImplTest {
             "requested", listenerResource.typeUrl())), any());
     // LDS resources acked
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(2L), eq(Arrays.asList(target, "authority2",
+        eq(2L), eq(Arrays.asList(target, "#old",
             "acked", listenerResource.typeUrl())), any());
     // LDS resource nacked but cached
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "authority4",
+        eq(1L), eq(Arrays.asList(target, "",
             "nacked_but_cached", listenerResource.typeUrl())), any());
 
     // RDS resource nacked
@@ -314,7 +304,7 @@ public class XdsClientMetricReporterImplTest {
 
     // CDS resource unknown
     verify(mockBatchRecorder).recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"),
-        eq(1L), eq(Arrays.asList(target, "#old",
+        eq(1L), eq(Arrays.asList(target, "authority7",
             "unknown", clusterResource.typeUrl())), any());
     verifyNoMoreInteractions(mockBatchRecorder);
   }

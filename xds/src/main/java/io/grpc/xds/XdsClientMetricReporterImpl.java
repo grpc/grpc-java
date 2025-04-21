@@ -34,7 +34,6 @@ import io.grpc.xds.client.XdsResourceType;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -42,7 +41,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /**
@@ -145,15 +143,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType =
           getResourceMetadataCompleted.get(10, TimeUnit.SECONDS);
 
-      List<String> resourceNames = metadataByType.values()
-          .stream()
-          .flatMap(innerMap -> innerMap.keySet().stream())
-          .collect(Collectors.toList());
-
-      Map<String, String> resourceNameToAuthority =
-          xdsClient.getResourceNameToAuthorityMap(resourceNames);
-
-      computeAndReportResourceCounts(metadataByType, resourceNameToAuthority, callback);
+      computeAndReportResourceCounts(metadataByType, callback);
 
       // Normally this shouldn't take long, but adding a timeout to avoid indefinite blocking
       Void unused = reportServerConnectionsCompleted.get(5, TimeUnit.SECONDS);
@@ -167,7 +157,6 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
 
   private void computeAndReportResourceCounts(
       Map<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByType,
-      Map<String, String> resourceNameToAuthority,
       MetricReporterCallback callback) {
     for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry :
         metadataByType.entrySet()) {
@@ -178,7 +167,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       for (Map.Entry<String, ResourceMetadata> resourceEntry : resources.entrySet()) {
         String resourceName = resourceEntry.getKey();
         ResourceMetadata metadata = resourceEntry.getValue();
-        String authority = resourceNameToAuthority.getOrDefault(resourceName, "");
+        String authority = XdsClient.getAuthorityFromResourceName(resourceName);
         String cacheState = cacheStateFromResourceStatus(metadata.getStatus(), metadata.isCached());
         resourceCountsByAuthorityAndState
             .computeIfAbsent(authority, k -> new HashMap<>())
@@ -230,7 +219,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     void reportResourceCountGauge(String authority, long resourceCount, String cacheState,
         String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
-          Arrays.asList(target, authority == null || authority.isEmpty() ? "#old" : authority,
+          Arrays.asList(target, authority == null ? "#old" : authority,
           cacheState, resourceType), Collections.emptyList());
     }
 
