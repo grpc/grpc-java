@@ -230,7 +230,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     void reportResourceCountGauge(String authority, long resourceCount, String cacheState,
         String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
-          Arrays.asList(target, authority.isEmpty() ? "#old" : authority,
+          Arrays.asList(target, authority == null || authority.isEmpty() ? "#old" : authority,
           cacheState, resourceType), Collections.emptyList());
     }
 
