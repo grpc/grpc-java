@@ -51,6 +51,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcServerRule;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
@@ -1062,6 +1063,140 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasHistogramSatisfying(
                         histogram -> histogram.hasPointsSatisfying(
                             point -> point.hasAttributes(clientAttributesWithLocality))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_CALL_DURATION)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributes))));
+  }
+
+  @Test
+  public void clientBackendServiceMetrics_present() {
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
+        emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer.addOptionalLabel("grpc.lb.foo", "unimportant");
+    tracer.addOptionalLabel("grpc.lb.backend_service", "should-be-overwritten");
+    tracer.addOptionalLabel("grpc.lb.backend_service", "the-moon");
+    tracer.addOptionalLabel("grpc.lb.foo", "thats-no-moon");
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    io.opentelemetry.api.common.Attributes clientAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Status.Code.OK.toString());
+
+    io.opentelemetry.api.common.Attributes clientAttributesWithBackendService
+        = clientAttributes.toBuilder()
+        .put(AttributeKey.stringKey("grpc.lb.backend_service"), "the-moon")
+        .build();
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasLongSumSatisfying(
+                        longSum -> longSum.hasPointsSatisfying(
+                            point -> point.hasAttributes(attributes))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithBackendService))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithBackendService))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithBackendService))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_CALL_DURATION)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributes))));
+  }
+
+  @Test
+  public void clientBackendServiceMetrics_missing() {
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
+        emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    io.opentelemetry.api.common.Attributes clientAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName(),
+        STATUS_KEY, Status.Code.OK.toString());
+
+    io.opentelemetry.api.common.Attributes clientAttributesWithBackendService
+        = clientAttributes.toBuilder()
+        .put(AttributeKey.stringKey("grpc.lb.backend_service"), "")
+        .build();
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasLongSumSatisfying(
+                        longSum -> longSum.hasPointsSatisfying(
+                            point -> point.hasAttributes(attributes))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithBackendService))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithBackendService))),
+            metric ->
+                assertThat(metric)
+                    .hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                    .hasHistogramSatisfying(
+                        histogram -> histogram.hasPointsSatisfying(
+                            point -> point.hasAttributes(clientAttributesWithBackendService))),
             metric ->
                 assertThat(metric)
                     .hasName(CLIENT_CALL_DURATION)
