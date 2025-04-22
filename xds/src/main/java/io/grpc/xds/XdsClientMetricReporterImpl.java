@@ -176,7 +176,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
 
       // Report metrics
       for (Map.Entry<String, Map<String, Long>> authorityEntry
-              : resourceCountsByAuthorityAndState.entrySet()) {
+            : resourceCountsByAuthorityAndState.entrySet()) {
         String authority = authorityEntry.getKey();
         Map<String, Long> stateCounts = authorityEntry.getValue();
 
@@ -218,9 +218,10 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
 
     void reportResourceCountGauge(long resourceCount, String authority, String cacheState,
         String resourceType) {
+      // authority = #old, for non-xdstp resource names
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
-          Arrays.asList(target, authority == null ? "#old" : authority,
-          cacheState, resourceType), Collections.emptyList());
+          Arrays.asList(target, authority == null ? "#old" : authority, cacheState, resourceType),
+          Collections.emptyList());
     }
 
     @Override
