@@ -118,6 +118,23 @@ public abstract class XdsClient {
     return Joiner.on('/').join(encodedSegs);
   }
 
+  /**
+   * Returns the authority from the resource name.
+   */
+  public static String getAuthorityFromResourceName(String resourceNames) {
+    String authority;
+    if (resourceNames.startsWith(XDSTP_SCHEME)) {
+      URI uri = URI.create(resourceNames);
+      authority = uri.getAuthority();
+      if (authority == null) {
+        authority = "";
+      }
+    } else {
+      authority = null;
+    }
+    return authority;
+  }
+
   public interface ResourceUpdate {}
 
   /**
@@ -376,23 +393,6 @@ public abstract class XdsClient {
    */
   public Map<Bootstrapper.ServerInfo, LoadReportClient> getServerLrsClientMap() {
     throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Returns the authority from the resource name.
-   */
-  public static String getAuthorityFromResourceName(String resourceNames) {
-    String authority;
-    if (resourceNames.startsWith(XDSTP_SCHEME)) {
-      URI uri = URI.create(resourceNames);
-      authority = uri.getAuthority();
-      if (authority == null) {
-        authority = "";
-      }
-    } else {
-      authority = null;
-    }
-    return authority;
   }
 
   /** Callback used to report a gauge metric value for server connections. */
