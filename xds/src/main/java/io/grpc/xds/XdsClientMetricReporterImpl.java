@@ -184,7 +184,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
           String cacheState = stateEntry.getKey();
           Long count = stateEntry.getValue();
 
-          callback.reportResourceCountGauge(authority, count, cacheState, type.typeUrl());
+          callback.reportResourceCountGauge(count, authority, cacheState, type.typeUrl());
         }
       }
     }
@@ -216,7 +216,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       this.target = target;
     }
 
-    void reportResourceCountGauge(String authority, long resourceCount, String cacheState,
+    void reportResourceCountGauge(long resourceCount, String authority, String cacheState,
         String resourceType) {
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
           Arrays.asList(target, authority == null ? "#old" : authority,

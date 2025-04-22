@@ -199,7 +199,7 @@ public class XdsClientMetricReporterImplTest {
 
     // Verify that reportResourceCounts and reportServerConnections were called
     // with the captured callback
-    callback.reportResourceCountGauge("PotatoHead", 10, "acked", resourceTypeUrl);
+    callback.reportResourceCountGauge(10, "PotatoHead", "acked", resourceTypeUrl);
     inOrder.verify(mockBatchRecorder)
         .recordLongGauge(eqMetricInstrumentName("grpc.xds_client.resources"), eq(10L), any(),
             any());
@@ -222,7 +222,7 @@ public class XdsClientMetricReporterImplTest {
         eq(Lists.newArrayList()));
 
     String cacheState = "requested";
-    callback.reportResourceCountGauge(authority, 10, cacheState, resourceTypeUrl);
+    callback.reportResourceCountGauge(10, authority, cacheState, resourceTypeUrl);
     verify(mockBatchRecorder, times(1)).recordLongGauge(
         eqMetricInstrumentName("grpc.xds_client.resources"), eq(10L),
         eq(Arrays.asList(target, authority, cacheState, resourceTypeUrl)),
