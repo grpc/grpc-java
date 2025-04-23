@@ -32,6 +32,7 @@ import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.grpc.xds.client.MessagePrettyPrinter;
@@ -65,7 +66,8 @@ final class MessagePrinter implements MessagePrettyPrinter {
               .add(RouteConfiguration.getDescriptor())
               .add(Cluster.getDescriptor())
               .add(ClusterConfig.getDescriptor())
-              .add(ClusterLoadAssignment.getDescriptor());
+              .add(ClusterLoadAssignment.getDescriptor())
+              .add(WrrLocality.getDescriptor());
       try {
         @SuppressWarnings("unchecked")
         Class<? extends Message> routeLookupClusterSpecifierClass =
