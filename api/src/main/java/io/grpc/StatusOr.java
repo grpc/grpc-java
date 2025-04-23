@@ -66,6 +66,14 @@ public class StatusOr<T> {
     return status == null ? Status.OK : status;
   }
 
+  /**
+   * Note that StatusOr containing statuses, the equality comparision is delegated to
+   * {@link Status#equals} which just does a reference equality check because equality on
+   * Statuses is not well defined.
+   * Instead, do comparison based on their Code with {@link Status#getCode}.  The description and
+   * cause of the Status are unlikely to be stable, and additional fields may be added to Status
+   * in the future.
+   */
   @Override
   public boolean equals(Object other) {
     if (!(other instanceof StatusOr)) {
