@@ -21,7 +21,7 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    //fail on android lint warnings if failOnWarning is set true
+    // fail on android lint warnings if failOnWarning is set true
     lintOptions {
         abortOnError true
         if (rootProject.hasProperty("failOnWarnings") && rootProject.failOnWarnings.toBoolean()) {
@@ -52,7 +52,7 @@ dependencies {
     testImplementation libraries.truth
 }
 
-//Enforce -Werror on java compiler if failOnWarning is set
+// Enforce -Werror on java compiler if failOnWarning is set
 tasks.withType(JavaCompile).configureEach {
     it.options.compilerArgs += ["-Xlint:all"]
     if (rootProject.hasProperty("failOnWarnings") && rootProject.failOnWarnings.toBoolean()) {
