@@ -1,14 +1,18 @@
+echo on
 @rem set PROTOBUF_VER=21.7
+choco install -y gradle git curl pkgconfiglite
+choco install -y openjdk --version=22.0.2
+set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-22.0.2\bin"
+set JAVA_HOME=
 set PROTOBUF_VER=22.5
 set ABSL_VERSION=20230125.4
-set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 
 if not exist "protobuf-%PROTOBUF_VER%\build\Release\" (
   call :installProto || exit /b 1
 )
 
 echo Compile gRPC-Java with something like:
-echo -PtargetArch=x86_32 -PvcProtobufLibs=%cd%\protobuf-%PROTOBUF_VER%\build\Release -PvcProtobufInclude=%cd%\protobuf-%PROTOBUF_VER%\build\include
+echo -PtargetArch=x86_32 -PvcProtobufLibPath=%cd%\protobuf-%PROTOBUF_VER%\build\protobuf-%PROTOBUF_VER%\lib -PvcProtobufInclude=%cd%\protobuf-%PROTOBUF_VER%\build\protobuf-%PROTOBUF_VER%\include -PvcProtobufLibs=insert-list-of-libs-from-pkg-config-output-here
 goto :eof
 
 
@@ -16,6 +20,7 @@ goto :eof
 
 where /q cmake
 if not ERRORLEVEL 1 goto :hasCmake
+set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 if not exist "%CMAKE_NAME%" (
   call :installCmake || exit /b 1
 )
@@ -29,23 +34,26 @@ powershell -command "$ErrorActionPreference = 'stop'; & { [Net.ServicePointManag
 powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('absl.zip', '.') }" || exit /b 1
 del absl.zip
 rmdir protobuf-%PROTOBUF_VER%\third_party\abseil-cpp
-rename abseil-cpp-%ABSL_VERSION% protobuf-%PROTOBUF_VER%\third_party\abseil-cpp
+move abseil-cpp-%ABSL_VERSION% protobuf-%PROTOBUF_VER%\third_party\abseil-cpp
 mkdir protobuf-%PROTOBUF_VER%\build
 pushd protobuf-%PROTOBUF_VER%\build
 
-@rem Workaround https://github.com/protocolbuffers/protobuf/issues/10174
-powershell -command "(Get-Content ..\cmake\extract_includes.bat.in) -replace '\.\.\\', '' | Out-File -encoding ascii ..\cmake\extract_includes.bat.in"
 @rem cmake does not detect x86_64 from the vcvars64.bat variables.
 @rem If vcvars64.bat has set PLATFORM to X64, then inform cmake to use the Win64 version of VS
-if "%PLATFORM%" == "X64" (
+if "%PLATFORM%" == "x64" (
   @rem Note the space
-  SET CMAKE_VSARCH= Win64
+  SET CMAKE_VSARCH=-A x64
 ) else (
   SET CMAKE_VSARCH=
 )
-cmake -Dprotobuf_BUILD_TESTS=OFF -G "Visual Studio %VisualStudioVersion:~0,2%%CMAKE_VSARCH%" .. || exit /b 1
-msbuild /maxcpucount /p:Configuration=Release /verbosity:minimal libprotoc.vcxproj || exit /b 1
-call extract_includes.bat || exit /b 1
+for /f "tokens=4 delims=\" %%a in ("%VCINSTALLDIR%") do (
+  SET VC_YEAR=%%a
+)
+for /f "tokens=1 delims=." %%a in ("%VisualStudioVersion%") do (
+  SET visual_studio_major_version=%%a
+)
+cmake -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% ..
+cmake --build . --config Release --target install 
 popd
 goto :eof
 
@@ -56,3 +64,4 @@ powershell -command "$ErrorActionPreference = 'stop'; & { iwr https://cmake.org/
 powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('cmake.zip', '.') }" || exit /b 1
 del cmake.zip
 goto :eof
+
