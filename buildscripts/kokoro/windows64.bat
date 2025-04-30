@@ -17,7 +17,7 @@ set JAVA_HOME=
 
 mkdir grpc-java-helper64
 cd grpc-java-helper64
-call "%VS170COMNTOOLS%\..\..\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+call "%VS140COMNTOOLS%\vsvars64.bat" || exit /b 1
 call "%WORKSPACE%\buildscripts\make_dependencies.bat" || exit /b 1
 
 cd "%WORKSPACE%"
