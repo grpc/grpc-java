@@ -100,7 +100,7 @@ model {
         all {
             if (toolChain in Gcc || toolChain in Clang) {
                 cppCompiler.define("GRPC_VERSION", version)
-                cppCompiler.args "--std=c++14"
+                cppCompiler.args "--std=c++0x"
                 addEnvArgs("CXXFLAGS", cppCompiler.args)
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
                 if (osdetector.os == "osx") {
@@ -126,10 +126,15 @@ model {
                 cppCompiler.args "/EHsc", "/MT"
                 if (rootProject.hasProperty('vcProtobufInclude')) {
                     cppCompiler.args "/I${rootProject.vcProtobufInclude}"
-                }
-                linker.args "libprotobuf.lib", "libprotoc.lib"
+                } 
                 if (rootProject.hasProperty('vcProtobufLibs')) {
-                    linker.args "/LIBPATH:${rootProject.vcProtobufLibs}"
+                    String libsList = rootProject.property('vcProtobufLibs') as String
+                    linker.args.add("libprotoc.lib")
+                    linker.args.add("libprotobuf.lib")
+                    libsList.split(',').each() { lib -> linker.args.add(lib) }
+                } 
+                if (rootProject.hasProperty('vcProtobufLibPaths')) {
+                    linker.args "/LIBPATH:${rootProject.vcProtobufLibPaths}"
                 }
             }
         }
