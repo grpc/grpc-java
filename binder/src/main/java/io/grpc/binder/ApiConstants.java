@@ -17,7 +17,9 @@
 package io.grpc.binder;
 
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.UserHandle;
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.NameResolver;
 
@@ -43,4 +45,22 @@ public final class ApiConstants {
    */
   public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
       NameResolver.Args.Key.create("target-android-user");
+
+  /**
+   * Marks an {@link io.grpc.EquivalentAddressGroup} as needing pre-authorization.
+   *
+   * <p>Clients should authorize servers before connecting to them, but older versions of the binder
+   * transport didn't do so. While this important extra security check is now possible (see {@link
+   * BinderChannelBuilder#preAuthorizeServers(boolean)}, it remains optional, because it's a slight
+   * behavior change and has a small performance cost and we don't want to break existing apps.
+   */
+  public static final Attributes.Key<Void> PRE_AUTH_REQUIRED =
+      Attributes.Key.create("pre-auth-required");
+
+  /**
+   * The authentic ServiceInfo for an {@link io.grpc.EquivalentAddressGroup} of {@link
+   * AndroidComponentAddress}es, in case a {@link NameResolver} has already looked it up.
+   */
+  public static final Attributes.Key<ServiceInfo> TARGET_SERVICE_INFO =
+      Attributes.Key.create("target-service-info");
 }

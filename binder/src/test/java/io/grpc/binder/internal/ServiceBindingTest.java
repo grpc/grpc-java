@@ -27,6 +27,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.UserHandle;
@@ -59,6 +60,7 @@ public final class ServiceBindingTest {
 
   private Application appContext;
   private ComponentName serviceComponent;
+  private ServiceInfo serviceInfo = new ServiceInfo();
   private ShadowApplication shadowApplication;
   private TestObserver observer;
   private ServiceBinding binding;
@@ -67,10 +69,13 @@ public final class ServiceBindingTest {
   public void setUp() {
     appContext = ApplicationProvider.getApplicationContext();
     serviceComponent = new ComponentName("DUMMY", "SERVICE");
+    serviceInfo.packageName = serviceComponent.getPackageName();
+    serviceInfo.name = serviceComponent.getClassName();
     observer = new TestObserver();
 
     shadowApplication = shadowOf(appContext);
     shadowApplication.setComponentNameAndServiceForBindService(serviceComponent, mockBinder);
+    shadowOf(appContext.getPackageManager()).addOrUpdateService(serviceInfo);
 
     // Don't call onServiceDisconnected() upon unbindService(), just like the real Android doesn't.
     shadowApplication.setUnbindServiceCallsOnServiceDisconnected(false);
@@ -274,6 +279,22 @@ public final class ServiceBindingTest {
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
+  }
+
+  @Test
+  public void testResolve() throws Exception {
+    ServiceInfo resolvedServiceInfo = binding.resolve();
+    assertThat(resolvedServiceInfo.packageName).isEqualTo(serviceInfo.packageName);
+    assertThat(resolvedServiceInfo.name).isEqualTo(serviceInfo.name);
+  }
+
+  @Test
+  @Config(sdk = 33)
+  public void testResolveWithTargetUserHandle() throws Exception {
+    binding = newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
+    ServiceInfo resolvedServiceInfo = binding.resolve();
+    assertThat(resolvedServiceInfo.packageName).isEqualTo(serviceInfo.packageName);
+    assertThat(resolvedServiceInfo.name).isEqualTo(serviceInfo.name);
   }
 
   @Test

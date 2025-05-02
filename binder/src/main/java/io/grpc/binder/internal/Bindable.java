@@ -16,6 +16,7 @@
 
 package io.grpc.binder.internal;
 
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
@@ -44,6 +45,10 @@ interface Bindable {
     @MainThread
     void onUnbound(Status reason);
   }
+
+  /** Fetches details about the remote service from PackageManager *before* binding to it. */
+  @AnyThread
+  ServiceInfo resolve();
 
   /**
    * Attempt to bind with the remote service.

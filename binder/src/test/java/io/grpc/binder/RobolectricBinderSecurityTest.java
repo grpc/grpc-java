@@ -80,6 +80,7 @@ public final class RobolectricBinderSecurityTest {
             .executor(executor)
             .scheduledExecutorService(executor)
             .offloadExecutor(executor)
+            .preAuthorizeServers(false)
             .build();
     idleLoopers();
   }
@@ -146,6 +147,23 @@ public final class RobolectricBinderSecurityTest {
         .setType(MethodDescriptor.MethodType.UNARY)
         .setSampledToLocalTracing(true)
         .build();
+  }
+
+  static class ConstantSecurityPolicy extends AsyncSecurityPolicy {
+    final SettableFuture<Status> result = SettableFuture.create();
+
+    ConstantSecurityPolicy(Status status) {
+      result.set(status);
+    }
+
+    ConstantSecurityPolicy(Throwable t) {
+      result.setException(t);
+    }
+
+    @Override
+    public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+      return Futures.nonCancellationPropagating(result);
+    }
   }
 
   private static class SomeService extends LifecycleService {

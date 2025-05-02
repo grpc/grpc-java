@@ -158,7 +158,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   }
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
-  private final BinderClientTransportFactory.Builder transportFactoryBuilder;
+  final BinderClientTransportFactory.Builder transportFactoryBuilder;
 
   private boolean strictLifecycleManagement;
 
@@ -179,6 +179,8 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
     } else {
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(target, transportFactoryBuilder, null);
+
+      preAuthorizeServers(true); // Pre-authorize resolved addresses by default.
     }
     idleTimeout(60, TimeUnit.SECONDS);
   }
@@ -276,6 +278,29 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   public BinderChannelBuilder strictLifecycleManagement() {
     strictLifecycleManagement = true;
     super.idleTimeout(1000, TimeUnit.DAYS); // >30 days disables timeouts entirely.
+    return this;
+  }
+
+  /**
+   * Checks server addresses against this channel's {@link SecurityPolicy} *before* connecting.
+   *
+   * <p>Android users can be tricked into installing a malicious app with the same package name as a
+   * legitimate server. That's why we don't send calls to a server until it has been authorized by
+   * an appropriate {@link SecurityPolicy}. But merely connecting to a malicious server can enable
+   * "keep-alive" and "background activity launch" attacks, even if that server is ultimately
+   * disallowed by the channel's security policy. Pre-authorization is even more important for
+   * security when the server's address isn't known in advance but rather resolved via target URI or
+   * discovered by other means.
+   *
+   * <p>Pre-authorization is strongly recommended but it remains optional for now because of the
+   * small performance cost and because it precludes servers that proxy their "endpoint binder"
+   * through another (unauthorized) app (not recommended, but technically a behavior change).
+   *
+   * <p>The default value of this property is false but it will become true in a future release.
+   * Clients that require a particular behavior should configure it explicitly using this method.
+   */
+  public BinderChannelBuilder preAuthorizeServers(boolean preAuthorize) {
+    transportFactoryBuilder.setPreAuthorizeServers(preAuthorize);
     return this;
   }
 
