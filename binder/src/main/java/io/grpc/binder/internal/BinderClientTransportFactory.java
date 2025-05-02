@@ -225,10 +225,5 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
       this.preAuthorizeServers = preAuthorizeServers;
       return this;
     }
-
-    /** Whether to check server addresses against the SecurityPolicy before binding to them. */
-    public boolean getPreAuthorizeServers() {
-      return this.preAuthorizeServers;
-    }
   }
 }
