@@ -179,8 +179,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
     } else {
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(target, transportFactoryBuilder, null);
-
-      preAuthorizeServers(true); // Pre-authorize resolved addresses by default.
+      preAuthorizeServers(true); // Pre-authorize addresses from a NameResolver by default.
     }
     idleTimeout(60, TimeUnit.SECONDS);
   }
