@@ -17,7 +17,7 @@ set JAVA_HOME=
 
 mkdir grpc-java-helper64
 cd grpc-java-helper64
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+call "%VS170COMNTOOLS%\..\..\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
 call "%WORKSPACE%\buildscripts\make_dependencies.bat" || exit /b 1
 
 cd "%WORKSPACE%"
