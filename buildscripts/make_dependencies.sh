@@ -62,7 +62,8 @@ else
     fi
     cmake .. \
       -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
-      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -Dcrosscompile_ARCH="$GCC_ARCH" \
+      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
+      -Dcrosscompile_ARCH="$GCC_ARCH" \
       -DCMAKE_TOOLCHAIN_FILE=$BUILDSCRIPTS_DIR/toolchain.cmake \
       -B.
   fi
