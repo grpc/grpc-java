@@ -611,9 +611,7 @@ public abstract class BinderTransport
       this.securityPolicy = factory.securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
       this.readyTimeoutMillis = factory.readyTimeoutMillis;
-      this.preAuthorizeServer =
-          factory.preAuthorizeServers
-              || (options.getEagAttributes().get(ApiConstants.PRE_AUTH_REQUIRED) != null);
+      this.preAuthorizeServer = factory.preAuthorizeServers;
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
