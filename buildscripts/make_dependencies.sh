@@ -30,6 +30,16 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
   echo "Not building protobuf. Already built"
 # TODO(ejona): swap to `brew install --devel protobuf` once it is up-to-date
 else
+  if [[ ! -d "cmake-${CMAKE_VERSION}" ]]; then
+    curl -Ls "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz" | tar xz
+  fi
+  # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first 
+  rm -rf "$DOWNLOAD_DIR/cmake-${CMAKE_VERSION}/bin"
+  cd "$DOWNLOAD_DIR/cmake-${CMAKE_VERSION}"
+  ./bootstrap
+  make
+  make install
+  ln -s /usr/local/bin/cmake /usr/bin/cmake
   cd "$DOWNLOAD_DIR"
   if [[ ! -d "protobuf-${PROTOBUF_VERSION}" ]]; then
     curl -Ls "https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz" | tar xz
