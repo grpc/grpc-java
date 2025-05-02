@@ -158,7 +158,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   }
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
-  private final BinderClientTransportFactory.Builder transportFactoryBuilder;
+  final BinderClientTransportFactory.Builder transportFactoryBuilder;
 
   private boolean strictLifecycleManagement;
 

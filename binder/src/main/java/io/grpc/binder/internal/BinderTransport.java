@@ -54,6 +54,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.AndroidComponentAddress;
+import io.grpc.binder.ApiConstants;
 import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
@@ -840,7 +841,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
           authResultFuture = checkServerAuthorizationAsync(remoteUid);
           Futures.addCallback(
               authResultFuture,
-          new FutureCallback<Status>() {
+              new FutureCallback<Status>() {
                 @Override
                 public void onSuccess(Status result) {
                   handleAuthResult(binder, result);

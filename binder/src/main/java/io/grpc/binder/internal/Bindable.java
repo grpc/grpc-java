@@ -47,6 +47,10 @@ interface Bindable {
     void onUnbound(Status reason);
   }
 
+  /** Fetches details about the remote service from PackageManager *before* binding to it. */
+  @AnyThread
+  ServiceInfo resolve();
+
   /**
    * Fetches details about the remote Service from PackageManager without binding to it.
    *

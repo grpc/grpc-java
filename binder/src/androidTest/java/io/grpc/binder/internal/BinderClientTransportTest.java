@@ -377,10 +377,11 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testBlackHoleSecurityPolicyAuthTimeout() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport =
         new BinderClientTransportBuilder()
+            .setSecurityPolicy(securityPolicy)
             .setPreAuthorizeServer(false)
-            .setSecurityPolicy(blockingSecurityPolicy)
             .setReadyTimeoutMillis(1_234)
             .build();
     transport.start(transportListener).run();
@@ -398,17 +399,24 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testBlackHoleSecurityPolicyPreAuthTimeout() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport =
         new BinderClientTransportBuilder()
-            .setSecurityPolicy(blockingSecurityPolicy)
+            .setSecurityPolicy(securityPolicy)
             .setPreAuthorizeServer(true)
             .setReadyTimeoutMillis(1_234)
             .build();
     transport.start(transportListener).run();
+    // Take the pre-auth request but don't respond to it, in order to trigger the ready timeout.
+    AuthRequest preAuthRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
+
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     assertThat(transportStatus.getDescription()).contains("1234");
     transportListener.awaitTermination();
+
+    // If the transport gave up waiting on auth, it should cancel its request.
+    assertThat(preAuthRequest.isCancelled()).isTrue();
   }
 
   @Test
@@ -420,8 +428,8 @@ public final class BinderClientTransportTest {
             .setSecurityPolicy(securityPolicy)
             .build();
     RuntimeException exception = new NullPointerException();
-    securityPolicy.setAuthorizationException(exception);
     transport.start(transportListener).run();
+    securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS).setResult(exception);
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.INTERNAL);
     assertThat(transportStatus.getCause()).isEqualTo(exception);
@@ -446,15 +454,17 @@ public final class BinderClientTransportTest {
   }
 
   @Test
-  public void testAsyncSecurityPolicySuccess() throws Exception {
+  public void testAsyncSecurityPolicyAuthSuccess() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport =
         new BinderClientTransportBuilder()
             .setPreAuthorizeServer(false)
             .setSecurityPolicy(securityPolicy)
             .build();
-    securityPolicy.setAuthorizationResult(Status.PERMISSION_DENIED.withDescription("xyzzy"));
     transport.start(transportListener).run();
+    securityPolicy
+        .takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS)
+        .setResult(Status.PERMISSION_DENIED.withDescription("xyzzy"));
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.PERMISSION_DENIED);
     assertThat(transportStatus.getDescription()).contains("xyzzy");
@@ -469,11 +479,10 @@ public final class BinderClientTransportTest {
             .setPreAuthorizeServer(true)
             .setSecurityPolicy(securityPolicy)
             .build();
-    securityPolicy.setAuthorizationResult(Status.PERMISSION_DENIED.withDescription("xyzzy"));
     transport.start(transportListener).run();
     securityPolicy
         .takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS)
-        .setResult(Status.PERMISSION_DENIED);
+        .setResult(Status.PERMISSION_DENIED.withDescription("xyzzy"));
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.PERMISSION_DENIED);
     assertThat(transportStatus.getDescription()).contains("xyzzy");
@@ -484,9 +493,8 @@ public final class BinderClientTransportTest {
   public void testAsyncSecurityPolicyAuthCancelledUponExternalTermination() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport = new BinderClientTransportBuilder()
-        .setSecurityPolicy(securityPolicy)
         .setPreAuthorizeServer(false)
-        .build();
+        .setSecurityPolicy(securityPolicy).build();
     transport.start(transportListener).run();
     AuthRequest authRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
     transport.shutdownNow(Status.UNAVAILABLE); // 'authRequest' remains unanswered!
@@ -499,12 +507,11 @@ public final class BinderClientTransportTest {
   public void testAsyncSecurityPolicyPreAuthCancelledUponExternalTermination() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport = new BinderClientTransportBuilder()
-        .setSecurityPolicy(securityPolicy)
         .setPreAuthorizeServer(true)
-        .build();
+        .setSecurityPolicy(securityPolicy).build();
     transport.start(transportListener).run();
     AuthRequest preAuthRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
-    transport.shutdownNow(Status.UNAVAILABLE); // 'authRequest' remains unanswered!
+    transport.shutdownNow(Status.UNAVAILABLE); // 'preAuthRequest' remains unanswered!
     transportListener.awaitShutdown();
     transportListener.awaitTermination();
     assertThat(preAuthRequest.isCancelled()).isTrue();
