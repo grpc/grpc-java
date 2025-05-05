@@ -29,7 +29,7 @@ SET PKG_CONFIG_PATH=%ESCWORKSPACE%\\grpc-java-helper64\\protobuf-%PROTOBUF_VER%\
 SET VC_PROTOBUF_LIB_PATHS=%ESCWORKSPACE%\\grpc-java-helper64\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\lib
 SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper64\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\include
 call :Get_Libs
-SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibPaths=%VC_PROTOBUF_LIB_PATHS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE% -PskipAndroid=true
+SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibPaths=%VC_PROTOBUF_LIB_PATHS% -PvcProtobufLibs=%VC_PROTOBUF_LIBS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE% -PskipAndroid=true
 SET GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
 @rem make sure no daemons have any files open
