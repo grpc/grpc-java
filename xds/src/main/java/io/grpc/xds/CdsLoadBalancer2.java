@@ -26,6 +26,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+// import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.GracefulSwitchLoadBalancer;
@@ -419,6 +420,98 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         handleClusterDiscovered();
       }
 
+
+      // After A74 maybe:
+      /*@Override
+      public void onResourceChanged(StatusOr<CdsUpdate> update) {
+        if (shutdown) {
+          return;
+        }
+
+        discovered = true;
+        if (!update.hasValue()) {
+          Status error = Status.UNAVAILABLE
+              .withDescription(String.format("Unable to load CDS %s. xDS server returned: %s: %s",
+                  name, update.getStatus().getCode(), update.getStatus().getDescription()))
+              .withCause(update.getStatus().getCause());
+          if (ClusterState.this == root) {
+            handleClusterDiscoveryError(error);
+          }
+          result = null;
+          if (childClusterStates != null) {
+            for (ClusterState state : childClusterStates.values()) {
+              state.shutdown();
+            }
+            childClusterStates = null;
+          }
+          handleClusterDiscovered();
+          return;
+        }
+
+        CdsUpdate cdsUpdate = update.getValue();
+        logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", cdsUpdate);
+        result = cdsUpdate;
+
+        if (cdsUpdate.clusterType() == ClusterType.AGGREGATE) {
+          isLeaf = false;
+          logger.log(XdsLogLevel.INFO, "Aggregate cluster {0}, underlying clusters: {1}",
+              cdsUpdate.clusterName(), cdsUpdate.prioritizedClusterNames());
+          Map<String, ClusterState> newChildStates = new LinkedHashMap<>();
+          for (String cluster : cdsUpdate.prioritizedClusterNames()) {
+            if (newChildStates.containsKey(cluster)) {
+              logger.log(XdsLogLevel.WARNING,
+                  String.format("duplicate cluster name %s in aggregate %s is being ignored",
+                      cluster, cdsUpdate.clusterName()));
+              continue;
+            }
+            if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
+              ClusterState childState;
+              if (clusterStates.containsKey(cluster)) {
+                childState = clusterStates.get(cluster);
+                if (childState.shutdown) {
+                  childState.start();
+                }
+              } else {
+                childState = new ClusterState(cluster);
+                clusterStates.put(cluster, childState);
+                childState.start();
+              }
+              newChildStates.put(cluster, childState);
+            } else {
+              newChildStates.put(cluster, childClusterStates.remove(cluster));
+            }
+          }
+          if (childClusterStates != null) {  // stop subscribing to revoked child clusters
+            for (ClusterState watcher : childClusterStates.values()) {
+              watcher.shutdown();
+            }
+          }
+          childClusterStates = newChildStates;
+        } else if (cdsUpdate.clusterType() == ClusterType.EDS) {
+          isLeaf = true;
+          logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
+              cdsUpdate.clusterName(), cdsUpdate.edsServiceName());
+        } else {  // logical DNS
+          isLeaf = true;
+          logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", cdsUpdate.clusterName());
+        }
+        handleClusterDiscovered();
+      }
+
+      @Override
+      public void onAmbientError(Status error) {
+        if (shutdown) {
+          return;
+        }
+        Status status = Status.UNAVAILABLE
+            .withDescription(String.format("Unable to load CDS %s. xDS server returned: %s: %s",
+                name, error.getCode(), error.getDescription()))
+            .withCause(error.getCause());
+        // All watchers should receive the same error, so we only propagate it once.
+        if (ClusterState.this == root) {
+          handleClusterDiscoveryError(status);
+        }
+      }*/
     }
   }
 }

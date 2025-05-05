@@ -20,8 +20,8 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -58,6 +58,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -268,10 +269,6 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Captor
   private ArgumentCaptor<LdsUpdate> ldsUpdateCaptor;
-  @Captor
-  private ArgumentCaptor<RdsUpdate> rdsUpdateCaptor;
-  @Captor
-  private ArgumentCaptor<CdsUpdate> cdsUpdateCaptor;
   @Captor
   private ArgumentCaptor<EdsUpdate> edsUpdateCaptor;
   @Captor
@@ -670,7 +667,10 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
     // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Status.Code.NOT_FOUND
+            && statusOr.getStatus().getDescription().contains(LDS_RESOURCE)));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
     // Check metric data.
@@ -683,11 +683,11 @@ public abstract class GrpcXdsClientImplTestBase {
         "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
-    Status error = errorCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
-    assertThat(error.getDescription()).isEqualTo(
-        "Wrong configuration: xds server does not exist for resource " + ldsResourceName);
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Status.Code.INVALID_ARGUMENT
+            && statusOr.getStatus().getDescription().equals(
+            "Wrong configuration: xds server does not exist for resource " + ldsResourceName)));
     assertThat(resourceDiscoveryCalls.poll()).isNull();
     xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
@@ -729,7 +729,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
     // The response is NACKed with the same error message.
     call.verifyRequestNack(LDS, LDS_RESOURCE, "", "0000", NODE, errors);
-    verify(ldsResourceWatcher).onChanged(any(LdsUpdate.class));
+    verify(ldsResourceWatcher).onResourceChanged(any());
   }
 
   /**
@@ -897,8 +897,17 @@ public abstract class GrpcXdsClientImplTestBase {
     // Client sends an ACK LDS request.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (Exception e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -912,8 +921,17 @@ public abstract class GrpcXdsClientImplTestBase {
     // Client sends an ACK LDS request.
     call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (Exception e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -931,8 +949,17 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(LDS, mf.buildWrappedResourceWithName(innerResource, LDS_RESOURCE), VERSION_1,
         "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, innerResource, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -946,8 +973,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sends an ACK LDS request.
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerRds(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -965,8 +1001,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     ResourceWatcher<LdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, watcher);
-    verify(watcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
+    verify(watcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerRds(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -978,11 +1023,30 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
         ldsResourceWatcher);
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
-    // Add another watcher.
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getStatus().getDescription()).isEqualTo(LDS_RESOURCE);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     ResourceWatcher<LdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, watcher);
-    verify(watcher).onResourceDoesNotExist(LDS_RESOURCE);
+    verify(watcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getStatus().getDescription()).isEqualTo(LDS_RESOURCE);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -997,15 +1061,33 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial LDS response.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
 
     // Updated LDS response.
     call.sendResponse(LDS, testListenerRds, VERSION_2, "0001");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
-    verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_2, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
     assertThat(channelForCustomAuthority).isNull();
@@ -1021,8 +1103,17 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial LDS response.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
@@ -1035,8 +1126,17 @@ public abstract class GrpcXdsClientImplTestBase {
         mf.buildRouteConfiguration("new", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
     call.sendResponse(LDS, testListenerVhosts2, VERSION_2, "0001");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts2, VERSION_2,
         TIME_INCREMENT * 2);
   }
@@ -1054,8 +1154,17 @@ public abstract class GrpcXdsClientImplTestBase {
         mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(
         LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
   }
@@ -1072,8 +1181,17 @@ public abstract class GrpcXdsClientImplTestBase {
         mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(
         LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
   }
@@ -1141,11 +1259,20 @@ public abstract class GrpcXdsClientImplTestBase {
         "xdstp://unknown.example.com/envoy.config.route.v3.RouteConfiguration/route1";
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), rdsResourceName,
         rdsResourceWatcher);
-    verify(rdsResourceWatcher).onError(errorCaptor.capture());
-    Status error = errorCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
-    assertThat(error.getDescription()).isEqualTo(
-        "Wrong configuration: xds server does not exist for resource " + rdsResourceName);
+    verify(rdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        Status error = statusOr.getStatus();
+        assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+        assertThat(error.getDescription()).isEqualTo(
+            "Wrong configuration: xds server does not exist for resource " + rdsResourceName);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(resourceDiscoveryCalls.size()).isEqualTo(0);
     xdsClient.cancelXdsResourceWatch(
         XdsRouteConfigureResource.getInstance(), rdsResourceName, rdsResourceWatcher);
@@ -1176,11 +1303,20 @@ public abstract class GrpcXdsClientImplTestBase {
     String cdsResourceName = "xdstp://unknown.example.com/envoy.config.cluster.v3.Cluster/cluster1";
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), cdsResourceName,
         cdsResourceWatcher);
-    verify(cdsResourceWatcher).onError(errorCaptor.capture());
-    Status error = errorCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
-    assertThat(error.getDescription()).isEqualTo(
-        "Wrong configuration: xds server does not exist for resource " + cdsResourceName);
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        Status error = statusOr.getStatus();
+        assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+        assertThat(error.getDescription()).isEqualTo(
+            "Wrong configuration: xds server does not exist for resource " + cdsResourceName);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(resourceDiscoveryCalls.poll()).isNull();
     xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), cdsResourceName,
         cdsResourceWatcher);
@@ -1216,11 +1352,20 @@ public abstract class GrpcXdsClientImplTestBase {
         "xdstp://unknown.example.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1";
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(),
         edsResourceName, edsResourceWatcher);
-    verify(edsResourceWatcher).onError(errorCaptor.capture());
-    Status error = errorCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
-    assertThat(error.getDescription()).isEqualTo(
-        "Wrong configuration: xds server does not exist for resource " + edsResourceName);
+    verify(edsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        Status error = statusOr.getStatus();
+        assertThat(error.getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+        assertThat(error.getDescription()).isEqualTo(
+            "Wrong configuration: xds server does not exist for resource " + edsResourceName);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(resourceDiscoveryCalls.poll()).isNull();
     xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(),
         edsResourceName, edsResourceWatcher);
@@ -1266,11 +1411,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sends an ACK LDS request.
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<LdsUpdate>> captor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(ldsResourceWatcher).onResourceChanged(captor.capture());
+
+    StatusOr<LdsUpdate> result = captor.getValue();
+    assertThat(result.hasValue()).isTrue();
+    LdsUpdate ldsUpdate = result.getValue();
+
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, listener, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
-    LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
     assertThat(ldsUpdate.httpConnectionManager().virtualHosts()).hasSize(2);
     assertThat(ldsUpdate.httpConnectionManager().httpFilterConfigs().get(0).name)
         .isEqualTo("envoy.fault");
@@ -1303,15 +1454,34 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial LDS response.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
     // Empty LDS response deletes the listener.
     call.sendResponse(LDS, Collections.<Any>emptyList(), VERSION_2, "0001");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
+    verify(ldsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getStatus().getDescription()).contains(LDS_RESOURCE);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
@@ -1331,8 +1501,17 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial LDS response.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
@@ -1342,14 +1521,24 @@ public abstract class GrpcXdsClientImplTestBase {
     // The resource is still ACKED at VERSION_1 (no changes).
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
-    // onResourceDoesNotExist not called
-    verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+    verify(ldsResourceWatcher, never()).onResourceChanged(
+        argThat(arg -> !arg.hasValue() && arg.getStatus().getCode() == Status.Code.NOT_FOUND));
+    verify(ldsResourceWatcher, never()).onAmbientError(any());
 
     // Next update is correct, and contains the listener again.
     call.sendResponse(LDS, testListenerVhosts, VERSION_3, "0003");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_3, "0003", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     // LDS is now ACKEd at VERSION_3.
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_3,
         TIME_INCREMENT * 3);
@@ -1374,9 +1563,12 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(2, 0, 0, 0);
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
-    verify(watcher1).onResourceDoesNotExist(ldsResourceTwo);
-    verify(watcher2).onResourceDoesNotExist(ldsResourceTwo);
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue() && statusOr.getStatus().getDescription().contains(LDS_RESOURCE)));
+    verify(watcher1).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue() && statusOr.getStatus().getDescription().contains(ldsResourceTwo)));
+    verify(watcher2).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue() && statusOr.getStatus().getDescription().contains(ldsResourceTwo)));
     verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(LDS, ldsResourceTwo);
     verifySubscribedResourcesMetadataSizes(2, 0, 0, 0);
@@ -1384,15 +1576,42 @@ public abstract class GrpcXdsClientImplTestBase {
     Any listenerTwo = Any.pack(mf.buildListenerWithApiListenerForRds(ldsResourceTwo, RDS_RESOURCE));
     call.sendResponse(LDS, ImmutableList.of(testListenerVhosts, listenerTwo), VERSION_1, "0000");
     // ResourceWatcher called with listenerVhosts.
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     // watcher1 called with listenerTwo.
-    verify(watcher1).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
+    verify(watcher2).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerRds(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts()).isNull();
     // watcher2 called with listenerTwo.
-    verify(watcher2).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
+    verify(watcher2).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerRds(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts()).isNull();
     // Metadata of both listeners is stored.
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
@@ -1415,7 +1634,8 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
     // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
+    verify(rdsResourceWatcher).onResourceChanged(argThat(
+        arg -> !arg.hasValue() && arg.getStatus().getDescription().contains(RDS_RESOURCE)));
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1456,7 +1676,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
     // The response is NACKed with the same error message.
     call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, errors);
-    verify(rdsResourceWatcher).onChanged(any(RdsUpdate.class));
+    verify(rdsResourceWatcher).onResourceChanged(any());
   }
 
   @Test
@@ -1501,7 +1721,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
     // The response is NACKed with the same error message.
     call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, errors);
-    verify(rdsResourceWatcher, never()).onChanged(any(RdsUpdate.class));
+    verify(rdsResourceWatcher, never()).onResourceChanged(any());
   }
 
   /**
@@ -1583,8 +1803,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sends an ACK RDS request.
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
+    verify(rdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenRouteConfig(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1598,8 +1827,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sends an ACK RDS request.
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
+    verify(rdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenRouteConfig(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1617,8 +1855,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     ResourceWatcher<RdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, watcher);
-    verify(watcher).onChanged(rdsUpdateCaptor.capture());
-    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
+    verify(watcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenRouteConfig(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1630,11 +1877,13 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = startResourceWatcher(XdsRouteConfigureResource.getInstance(),
         RDS_RESOURCE, rdsResourceWatcher);
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
+    verify(rdsResourceWatcher).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue() && statusOr.getStatus().getDescription().equals(RDS_RESOURCE)));
     // Add another watcher.
     ResourceWatcher<RdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE, watcher);
-    verify(watcher).onResourceDoesNotExist(RDS_RESOURCE);
+    verify(watcher).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue() && statusOr.getStatus().getDescription().equals(RDS_RESOURCE)));
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
@@ -1649,8 +1898,17 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial RDS response.
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
+    verify(rdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenRouteConfig(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
 
     // Updated RDS response.
@@ -1660,8 +1918,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sends an ACK RDS request.
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_2, "0001", NODE);
-    verify(rdsResourceWatcher, times(2)).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
+    verify(rdsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getValue().virtualHosts).hasSize(4);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, routeConfigUpdated, VERSION_2,
         TIME_INCREMENT * 2);
   }
@@ -1708,15 +1975,33 @@ public abstract class GrpcXdsClientImplTestBase {
 
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerRds(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerRds(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
-    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
+    verify(rdsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenRouteConfig(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
@@ -1726,8 +2011,17 @@ public abstract class GrpcXdsClientImplTestBase {
     // Note that this must work the same despite the ignore_resource_deletion feature is on.
     // This happens because the Listener is getting replaced, and not deleted.
     call.sendResponse(LDS, testListenerVhosts, VERSION_2, "0001");
-    verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
+    verify(ldsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenListenerVhosts(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyNoMoreInteractions(rdsResourceWatcher);
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(
@@ -1759,20 +2053,37 @@ public abstract class GrpcXdsClientImplTestBase {
     // referencing RDS_RESOURCE.
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendResponse(LDS, packedListener, VERSION_1, "0000");
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-
-    assertThat(ldsUpdateCaptor.getValue().listener().filterChains()).hasSize(1);
-    FilterChain parsedFilterChain = Iterables.getOnlyElement(
-        ldsUpdateCaptor.getValue().listener().filterChains());
-    assertThat(parsedFilterChain.httpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getValue().listener().filterChains()).hasSize(1);
+        FilterChain parsedFilterChain = Iterables.getOnlyElement(
+            statusOr.getValue().listener().filterChains());
+        assertThat(parsedFilterChain.httpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(LDS, LISTENER_RESOURCE, packedListener, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     // Simulates receiving the requested RDS resource.
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
-    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
+    verify(rdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenRouteConfig(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
 
     // Simulates receiving an updated version of the requested LDS resource as a TCP listener
@@ -1790,12 +2101,22 @@ public abstract class GrpcXdsClientImplTestBase {
     packedListener =
         Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
     call.sendResponse(LDS, packedListener, VERSION_2, "0001");
-    verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().listener().filterChains()).hasSize(1);
-    parsedFilterChain = Iterables.getOnlyElement(
-        ldsUpdateCaptor.getValue().listener().filterChains());
-    assertThat(parsedFilterChain.httpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
-    verify(rdsResourceWatcher, never()).onResourceDoesNotExist(RDS_RESOURCE);
+    verify(ldsResourceWatcher, times(2)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getValue().listener().filterChains()).hasSize(1);
+        FilterChain parsedFilterChain = Iterables.getOnlyElement(
+            statusOr.getValue().listener().filterChains());
+        assertThat(parsedFilterChain.httpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
+    verify(rdsResourceWatcher, never()).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue() && statusOr.getStatus().getDescription().equals(RDS_RESOURCE)));
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
     verifyResourceMetadataAcked(
         LDS, LISTENER_RESOURCE, packedListener, VERSION_2, TIME_INCREMENT * 3);
@@ -1808,6 +2129,7 @@ public abstract class GrpcXdsClientImplTestBase {
     String rdsResourceTwo = "route-bar.googleapis.com";
     ResourceWatcher<RdsUpdate> watcher1 = mock(ResourceWatcher.class);
     ResourceWatcher<RdsUpdate> watcher2 = mock(ResourceWatcher.class);
+    ArgumentCaptor<StatusOr<RdsUpdate>> rdsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), rdsResourceTwo, watcher1);
@@ -1820,16 +2142,20 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
-    verify(watcher1).onResourceDoesNotExist(rdsResourceTwo);
-    verify(watcher2).onResourceDoesNotExist(rdsResourceTwo);
+    verify(rdsResourceWatcher).onResourceChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().getStatus().getDescription()).contains(RDS_RESOURCE);
+    verify(watcher1).onResourceChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().getStatus().getDescription()).contains(rdsResourceTwo);
+    verify(watcher2).onResourceChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().getStatus().getDescription()).contains(rdsResourceTwo);
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(RDS, rdsResourceTwo);
     verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
 
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
-    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue());
+    verify(rdsResourceWatcher, times(2))
+        .onResourceChanged(rdsUpdateCaptor.capture());
+    verifyGoldenRouteConfig(rdsUpdateCaptor.getValue().getValue());
     verifyNoMoreInteractions(watcher1, watcher2);
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataDoesNotExist(RDS, rdsResourceTwo);
@@ -1838,10 +2164,10 @@ public abstract class GrpcXdsClientImplTestBase {
     Any routeConfigTwo =
         Any.pack(mf.buildRouteConfiguration(rdsResourceTwo, mf.buildOpaqueVirtualHosts(4)));
     call.sendResponse(RDS, routeConfigTwo, VERSION_2, "0002");
-    verify(watcher1).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
-    verify(watcher2).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
+    verify(watcher1).onResourceChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().getValue().virtualHosts).hasSize(4);
+    verify(watcher2).onResourceChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().getValue().virtualHosts).hasSize(4);
     verifyNoMoreInteractions(rdsResourceWatcher);
     verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(RDS, rdsResourceTwo, routeConfigTwo, VERSION_2, TIME_INCREMENT * 2);
@@ -1867,7 +2193,11 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
     // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<CdsUpdate>> captor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher).onResourceChanged(captor.capture());
+    StatusOr<CdsUpdate> result = captor.getValue();
+    assertThat(result.getStatus().getDescription()).contains(CDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -1909,7 +2239,7 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
     // The response is NACKed with the same error message.
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, errors);
-    verify(cdsResourceWatcher).onChanged(any(CdsUpdate.class));
+    verify(cdsResourceWatcher).onResourceChanged(any());
   }
 
   /**
@@ -2099,8 +2429,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenClusterRoundRobin(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
@@ -2115,8 +2454,17 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        verifyGoldenClusterRoundRobin(statusOr.getValue());
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
@@ -2136,20 +2484,31 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
-    assertThat(childConfigs.get(0).getRawConfigValue().get("choiceCount")).isEqualTo(3);
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getValue().clusterName()).isEqualTo(CDS_RESOURCE);
+        assertThat(statusOr.getValue().clusterType()).isEqualTo(ClusterType.EDS);
+        assertThat(statusOr.getValue().edsServiceName()).isNull();
+        LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
+            statusOr.getValue().lbPolicyConfig());
+        assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+        List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+            JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+        assertThat(childConfigs.get(0).getPolicyName())
+            .isEqualTo("least_request_experimental");
+        assertThat(childConfigs.get(0).getRawConfigValue().get("choiceCount"))
+            .isEqualTo(3);
+        assertThat(statusOr.getValue().lrsServerInfo()).isNull();
+        assertThat(statusOr.getValue().maxConcurrentRequests()).isNull();
+        assertThat(statusOr.getValue().upstreamTlsContext()).isNull();
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterRingHash, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2168,20 +2527,29 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "minRingSize")).isEqualTo(
-        10L);
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "maxRingSize")).isEqualTo(
-        100L);
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getValue().clusterName()).isEqualTo(CDS_RESOURCE);
+        assertThat(statusOr.getValue().clusterType()).isEqualTo(ClusterType.EDS);
+        assertThat(statusOr.getValue().edsServiceName()).isNull();
+        LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
+            statusOr.getValue().lbPolicyConfig());
+        assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
+        assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "minRingSize"))
+            .isEqualTo(10L);
+        assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "maxRingSize"))
+            .isEqualTo(100L);
+        assertThat(statusOr.getValue().lrsServerInfo()).isNull();
+        assertThat(statusOr.getValue().maxConcurrentRequests()).isNull();
+        assertThat(statusOr.getValue().upstreamTlsContext()).isNull();
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterRingHash, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2199,16 +2567,26 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.AGGREGATE);
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.prioritizedClusterNames()).containsExactlyElementsIn(candidates).inOrder();
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getValue().clusterName()).isEqualTo(CDS_RESOURCE);
+        assertThat(statusOr.getValue().clusterType()).isEqualTo(ClusterType.AGGREGATE);
+        LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
+            statusOr.getValue().lbPolicyConfig());
+        assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+        List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+            JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+        assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+        assertThat(statusOr.getValue().prioritizedClusterNames())
+            .containsExactlyElementsIn(candidates).inOrder();
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterAggregate, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
@@ -2224,19 +2602,28 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getValue().clusterName()).isEqualTo(CDS_RESOURCE);
+        assertThat(statusOr.getValue().clusterType()).isEqualTo(ClusterType.EDS);
+        assertThat(statusOr.getValue().edsServiceName()).isNull();
+        LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
+            statusOr.getValue().lbPolicyConfig());
+        assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
+        List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
+            JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
+        assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+        assertThat(statusOr.getValue().lrsServerInfo()).isNull();
+        assertThat(statusOr.getValue().maxConcurrentRequests()).isEqualTo(200L);
+        assertThat(statusOr.getValue().upstreamTlsContext()).isNull();
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterCircuitBreakers, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2267,14 +2654,25 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher, times(1))
-        .onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
-        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getCombinedValidationContext()
-            .getValidationContextCertificateProviderInstance();
-    assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("cert-instance-name");
-    assertThat(certificateProviderInstance.getCertificateName()).isEqualTo("cert1");
+    verify(cdsResourceWatcher, times(1)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
+            statusOr.getValue().upstreamTlsContext()
+                .getCommonTlsContext()
+                .getCombinedValidationContext()
+                .getValidationContextCertificateProviderInstance();
+        assertThat(certificateProviderInstance.getInstanceName())
+            .isEqualTo("cert-instance-name");
+        assertThat(certificateProviderInstance.getCertificateName())
+            .isEqualTo("cert1");
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
@@ -2304,13 +2702,25 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    CertificateProviderPluginInstance certificateProviderInstance =
-        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getValidationContext()
-            .getCaCertificateProviderInstance();
-    assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("cert-instance-name");
-    assertThat(certificateProviderInstance.getCertificateName()).isEqualTo("cert1");
+    verify(cdsResourceWatcher, times(1)).onResourceChanged(argThat(statusOr -> {
+      if (!statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        CertificateProviderPluginInstance certificateProviderInstance =
+            statusOr.getValue().upstreamTlsContext()
+                .getCommonTlsContext()
+                .getValidationContext()
+                .getCaCertificateProviderInstance();
+        assertThat(certificateProviderInstance.getInstanceName())
+            .isEqualTo("cert-instance-name");
+        assertThat(certificateProviderInstance.getCertificateName())
+            .isEqualTo("cert1");
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
@@ -2337,7 +2747,7 @@ public abstract class GrpcXdsClientImplTestBase {
         + "ca_certificate_provider_instance or system_root_certs is required in "
         + "upstream-tls-context";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
@@ -2380,8 +2790,11 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<CdsUpdate>> cdsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher, times(1))
+        .onResourceChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue().getValue();
 
     // The outlier detection config in CdsUpdate should match what we get from xDS.
     EnvoyServerProtoData.OutlierDetection outlierDetection = cdsUpdate.outlierDetection();
@@ -2442,7 +2855,7 @@ public abstract class GrpcXdsClientImplTestBase {
         + "io.grpc.xds.client.XdsResourceType$ResourceInvalidException: outlier_detection "
         + "max_ejection_percent is > 100";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
@@ -2537,7 +2950,7 @@ public abstract class GrpcXdsClientImplTestBase {
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
         + "transport-socket with name envoy.transport_sockets.bad not supported.";
     call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
@@ -2580,13 +2993,14 @@ public abstract class GrpcXdsClientImplTestBase {
 
     ResourceWatcher<CdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, watcher);
-    verify(watcher).onChanged(cdsUpdateCaptor.capture());
-    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    ArgumentCaptor<StatusOr<CdsUpdate>> cdsUpdateCaptor1 = ArgumentCaptor.forClass(StatusOr.class);
+    verify(watcher).onResourceChanged(cdsUpdateCaptor1.capture());
+    StatusOr<CdsUpdate> statusOrCdsUpdate = cdsUpdateCaptor1.getValue();
+    verifyGoldenClusterRoundRobin(statusOrCdsUpdate.getValue());
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
-
   }
 
   @Test
@@ -2595,10 +3009,15 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    ArgumentCaptor<StatusOr<CdsUpdate>> statusOrCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher).onResourceChanged(statusOrCaptor.capture());
+    StatusOr<CdsUpdate> statusOr = statusOrCaptor.getValue();
+    assertThat(statusOr.getStatus().getDescription()).contains(CDS_RESOURCE);
     ResourceWatcher<CdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, watcher);
-    verify(watcher).onResourceDoesNotExist(CDS_RESOURCE);
+    verify(watcher).onResourceChanged(statusOrCaptor.capture());
+    StatusOr<CdsUpdate> watcherStatusOr = statusOrCaptor.getValue();
+    assertThat(watcherStatusOr.getStatus().getDescription()).contains(CDS_RESOURCE);
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2618,8 +3037,10 @@ public abstract class GrpcXdsClientImplTestBase {
             null, null, false, null, null));
     call.sendResponse(CDS, clusterDns, VERSION_1, "0000");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<CdsUpdate>> statusOrCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher).onResourceChanged(statusOrCaptor.capture());
+    CdsUpdate cdsUpdate = statusOrCaptor.getValue().getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
@@ -2641,8 +3062,8 @@ public abstract class GrpcXdsClientImplTestBase {
         ));
     call.sendResponse(CDS, clusterEds, VERSION_2, "0001");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_2, "0001", NODE);
-    verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
-    cdsUpdate = cdsUpdateCaptor.getValue();
+    verify(cdsResourceWatcher, times(2)).onResourceChanged(statusOrCaptor.capture());
+    cdsUpdate = statusOrCaptor.getValue().getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
@@ -2683,27 +3104,27 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Configure with round robin, the update should be sent to the watcher.
     call.sendResponse(CDS, roundRobinConfig, VERSION_2, "0001");
-    verify(cdsResourceWatcher, times(1)).onChanged(isA(CdsUpdate.class));
+    verify(cdsResourceWatcher, times(1)).onResourceChanged(any());
 
     // Second update is identical, watcher should not get an additional update.
     call.sendResponse(CDS, roundRobinConfig, VERSION_2, "0002");
-    verify(cdsResourceWatcher, times(1)).onChanged(isA(CdsUpdate.class));
+    verify(cdsResourceWatcher, times(1)).onResourceChanged(any());
 
     // Now we switch to ring hash so the watcher should be notified.
     call.sendResponse(CDS, ringHashConfig, VERSION_2, "0003");
-    verify(cdsResourceWatcher, times(2)).onChanged(isA(CdsUpdate.class));
+    verify(cdsResourceWatcher, times(2)).onResourceChanged(any());
 
     // Second update to ring hash should not result in watcher being notified.
     call.sendResponse(CDS, ringHashConfig, VERSION_2, "0004");
-    verify(cdsResourceWatcher, times(2)).onChanged(isA(CdsUpdate.class));
+    verify(cdsResourceWatcher, times(2)).onResourceChanged(any());
 
     // Now we switch to least request so the watcher should be notified.
     call.sendResponse(CDS, leastRequestConfig, VERSION_2, "0005");
-    verify(cdsResourceWatcher, times(3)).onChanged(isA(CdsUpdate.class));
+    verify(cdsResourceWatcher, times(3)).onResourceChanged(any());
 
     // Second update to least request should not result in watcher being notified.
     call.sendResponse(CDS, leastRequestConfig, VERSION_2, "0006");
-    verify(cdsResourceWatcher, times(3)).onChanged(isA(CdsUpdate.class));
+    verify(cdsResourceWatcher, times(3)).onResourceChanged(any());
   }
 
   @Test
@@ -2717,8 +3138,10 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial CDS response.
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<CdsUpdate>> statusOrCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher).onResourceChanged(statusOrCaptor.capture());
+    verifyGoldenClusterRoundRobin(statusOrCaptor.getValue().getValue());
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2726,7 +3149,9 @@ public abstract class GrpcXdsClientImplTestBase {
     // Empty CDS response deletes the cluster.
     call.sendResponse(CDS, Collections.<Any>emptyList(), VERSION_2, "0001");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_2, "0001", NODE);
-    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    verify(cdsResourceWatcher).onResourceChanged(statusOrCaptor.capture());
+    StatusOr<CdsUpdate> statusOr = statusOrCaptor.getValue();
+    assertThat(statusOr.getStatus().getDescription()).contains(CDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
@@ -2746,8 +3171,10 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial CDS response.
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<CdsUpdate>> statusOrCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher).onResourceChanged(statusOrCaptor.capture());
+    verifyGoldenClusterRoundRobin(statusOrCaptor.getValue().getValue());
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2760,14 +3187,23 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
-    // onResourceDoesNotExist must not be called.
-    verify(ldsResourceWatcher, never()).onResourceDoesNotExist(CDS_RESOURCE);
+    verify(ldsResourceWatcher).onResourceChanged(argThat(statusOr -> {
+      if (statusOr.hasValue()) {
+        return false;
+      }
+      try {
+        assertThat(statusOr.getStatus().getDescription()).doesNotContain(CDS_RESOURCE);
+        return true;
+      } catch (AssertionError e) {
+        return false;
+      }
+    }));
 
     // Next update is correct, and contains the cluster again.
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_3, "0003");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_3, "0003", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    verifyGoldenClusterRoundRobin(cdsUpdateCaptor.getValue());
+    verify(cdsResourceWatcher).onResourceChanged(statusOrCaptor.capture());
+    verifyGoldenClusterRoundRobin(statusOrCaptor.getValue().getValue());
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_3,
         TIME_INCREMENT * 3);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2790,9 +3226,12 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
-    verify(watcher1).onResourceDoesNotExist(cdsResourceTwo);
-    verify(watcher2).onResourceDoesNotExist(cdsResourceTwo);
+    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr ->
+        statusOr.getStatus().getDescription().contains(CDS_RESOURCE)));
+    verify(watcher1).onResourceChanged(argThat(statusOr ->
+        statusOr.getStatus().getDescription().contains(cdsResourceTwo)));
+    verify(watcher2).onResourceChanged(argThat(statusOr ->
+        statusOr.getStatus().getDescription().contains(cdsResourceTwo)));
     verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(CDS, cdsResourceTwo);
     verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
@@ -2806,8 +3245,11 @@ public abstract class GrpcXdsClientImplTestBase {
         Any.pack(mf.buildEdsCluster(cdsResourceTwo, edsService, "round_robin", null, null, true,
             null, "envoy.transport_sockets.tls", null, null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    ArgumentCaptor<StatusOr<CdsUpdate>> cdsUpdateCaptor1 = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher).onResourceChanged(cdsUpdateCaptor1.capture());
+    StatusOr<CdsUpdate> cdsUpdateStatusOr = cdsUpdateCaptor1.getValue();
+    assertThat(cdsUpdateStatusOr.getStatus().isOk()).isTrue();
+    CdsUpdate cdsUpdate = cdsUpdateStatusOr.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
@@ -2816,11 +3258,10 @@ public abstract class GrpcXdsClientImplTestBase {
     List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
         JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
-    verify(watcher1).onChanged(cdsUpdateCaptor.capture());
-    cdsUpdate = cdsUpdateCaptor.getValue();
+    verify(watcher1).onResourceChanged(cdsUpdateCaptor1.capture());
+    cdsUpdateStatusOr = cdsUpdateCaptor1.getValue();
+    assertThat(cdsUpdateStatusOr.getStatus().isOk()).isTrue();
+    cdsUpdate = cdsUpdateStatusOr.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
@@ -2829,11 +3270,10 @@ public abstract class GrpcXdsClientImplTestBase {
     childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
         JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
     assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(xdsServerInfo);
-    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
-    verify(watcher2).onChanged(cdsUpdateCaptor.capture());
-    cdsUpdate = cdsUpdateCaptor.getValue();
+    verify(watcher2).onResourceChanged(cdsUpdateCaptor1.capture());
+    cdsUpdateStatusOr = cdsUpdateCaptor1.getValue();
+    assertThat(cdsUpdateStatusOr.getStatus().isOk()).isTrue();
+    cdsUpdate = cdsUpdateStatusOr.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
@@ -2868,7 +3308,8 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
     // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verify(edsResourceWatcher).onResourceChanged(argThat(statusOr ->
+        statusOr.getStatus().getDescription().contains(EDS_RESOURCE)));
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -2892,7 +3333,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A.1} -> ACK, version 1
     call.verifyRequest(EDS, "A.1", VERSION_1, "0000", NODE);
-    verify(edsResourceWatcher, times(1)).onChanged(any());
+    verify(edsResourceWatcher, times(1)).onResourceChanged(any());
 
     // trigger an EDS resource unsubscription.
     xdsClient.cancelXdsResourceWatch(XdsEndpointResource.getInstance(), "A.1", edsResourceWatcher);
@@ -2943,9 +3384,10 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
     // The response is NACKed with the same error message.
     call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0000", NODE, errors);
-    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<EdsUpdate>> edsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().getValue().clusterName).isEqualTo(EDS_RESOURCE);
   }
 
   /**
@@ -3028,8 +3470,10 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK EDS request.
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue());
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<EdsUpdate>> edsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue().getValue());
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -3043,8 +3487,10 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK EDS request.
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue());
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<EdsUpdate>> edsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(edsResourceWatcher).onResourceChanged(edsUpdateCaptor.capture());
+    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue().getValue());
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -3062,8 +3508,10 @@ public abstract class GrpcXdsClientImplTestBase {
     // Add another watcher.
     ResourceWatcher<EdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, watcher);
-    verify(watcher).onChanged(edsUpdateCaptor.capture());
-    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue());
+    ArgumentCaptor<StatusOr<EdsUpdate>> edsUpdateCaptor =
+        ArgumentCaptor.forClass(StatusOr.class);
+    verify(watcher).onResourceChanged(edsUpdateCaptor.capture());
+    validateGoldenClusterLoadAssignment(edsUpdateCaptor.getValue().getValue());
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
@@ -3076,10 +3524,12 @@ public abstract class GrpcXdsClientImplTestBase {
     DiscoveryRpcCall call = startResourceWatcher(XdsEndpointResource.getInstance(), EDS_RESOURCE,
         edsResourceWatcher);
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verify(edsResourceWatcher).onResourceChanged(argThat(statusOr ->
+        statusOr.getStatus().getDescription().contains(EDS_RESOURCE)));
     ResourceWatcher<EdsUpdate> watcher = mock(ResourceWatcher.class);
     xdsClient.watchXdsResource(XdsEndpointResource.getInstance(), EDS_RESOURCE, watcher);
-    verify(watcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verify(watcher).onResourceChanged(argThat(statusOr ->
+        statusOr.getStatus().getDescription().contains(EDS_RESOURCE)));
     call.verifyNoMoreRequest();
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
@@ -3110,7 +3560,10 @@ public abstract class GrpcXdsClientImplTestBase {
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     assertThat(fakeWatchClock.getPendingTasks().size()).isEqualTo(2);
     CyclicBarrier barrier = new CyclicBarrier(2);
-    doAnswer(blockUpdate(barrier)).when(cdsResourceWatcher).onChanged(any(CdsUpdate.class));
+    doAnswer(invocation -> {
+      barrier.await();
+      return null;
+    }).when(cdsResourceWatcher).onResourceChanged(any());
 
     CountDownLatch latch = new CountDownLatch(1);
     new Thread(() -> {
@@ -3132,16 +3585,18 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(
         CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1, TIME_INCREMENT);
     barrier.await();
-    verify(cdsResourceWatcher, atLeastOnce()).onChanged(any());
+    verify(cdsResourceWatcher, atLeastOnce()).onResourceChanged(any());
     String errorMsg = "CDS response Cluster 'cluster.googleapis.com2' validation error: "
         + "Cluster cluster.googleapis.com2: unspecified cluster discovery type";
     call.verifyRequestNack(CDS, Arrays.asList(CDS_RESOURCE, anotherCdsResource), VERSION_1, "0001",
         NODE, Arrays.asList(errorMsg));
     barrier.await();
     latch.await(10, TimeUnit.SECONDS);
-    verify(cdsResourceWatcher, times(2)).onChanged(any());
-    verify(anotherWatcher).onResourceDoesNotExist(eq(anotherCdsResource));
-    verify(anotherWatcher).onError(any());
+    verify(cdsResourceWatcher, times(2)).onResourceChanged(any());
+    ArgumentCaptor<StatusOr<CdsUpdate>> captor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(anotherWatcher).onResourceChanged(captor.capture());
+    assertThat(captor.getValue().getStatus().getDescription()).contains(anotherCdsResource);
+    verify(anotherWatcher).onAmbientError(any());
   }
 
   private Answer<Void> blockUpdate(CyclicBarrier barrier) {
@@ -3180,7 +3635,7 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(call.isReady()).isFalse();
 
     CyclicBarrier barrier = new CyclicBarrier(2);
-    doAnswer(blockUpdate(barrier)).when(edsResourceWatcher).onChanged(any(EdsUpdate.class));
+    doAnswer(blockUpdate(barrier)).when(edsResourceWatcher).onResourceChanged(any());
 
     CountDownLatch latch = new CountDownLatch(1);
     new Thread(() -> {
@@ -3195,12 +3650,14 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
     barrier.await();
-    verify(edsResourceWatcher, atLeastOnce()).onChanged(edsUpdateCaptor.capture());
-    EdsUpdate edsUpdate = edsUpdateCaptor.getAllValues().get(0);
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<EdsUpdate>> edsCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(edsResourceWatcher, atLeastOnce()).onResourceChanged(edsCaptor.capture());
+    EdsUpdate edsUpdate = edsCaptor.getAllValues().get(0).getValue();
     validateGoldenClusterLoadAssignment(edsUpdate);
     barrier.await();
     latch.await(10, TimeUnit.SECONDS);
-    verify(edsResourceWatcher, times(2)).onChanged(any());
+    verify(edsResourceWatcher, times(2)).onResourceChanged(any());
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
         TIME_INCREMENT * 2);
   }
@@ -3212,7 +3669,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(edsResourceWatcher).onChanged(any());
+    verify(edsResourceWatcher).onResourceChanged(any());
   }
 
   @Test
@@ -3224,8 +3681,10 @@ public abstract class GrpcXdsClientImplTestBase {
     // Initial EDS response.
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<EdsUpdate>> captor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(edsResourceWatcher).onResourceChanged(captor.capture());
+    EdsUpdate edsUpdate = captor.getValue().getValue();
     validateGoldenClusterLoadAssignment(edsUpdate);
     verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
         TIME_INCREMENT);
@@ -3237,8 +3696,8 @@ public abstract class GrpcXdsClientImplTestBase {
         ImmutableList.<Message>of()));
     call.sendResponse(EDS, updatedClusterLoadAssignment, VERSION_2, "0001");
 
-    verify(edsResourceWatcher, times(2)).onChanged(edsUpdateCaptor.capture());
-    edsUpdate = edsUpdateCaptor.getValue();
+    verify(edsResourceWatcher, times(2)).onResourceChanged(captor.capture());
+    edsUpdate = captor.getValue().getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies).isEmpty();
     assertThat(edsUpdate.localityLbEndpointsMap)
@@ -3302,12 +3761,13 @@ public abstract class GrpcXdsClientImplTestBase {
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, EDS_RESOURCE, "round_robin", null, null, false,
             null, "envoy.transport_sockets.tls", null, null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
-    verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    ArgumentCaptor<StatusOr<CdsUpdate>> cdsCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsWatcher).onResourceChanged(cdsCaptor.capture());
+    CdsUpdate cdsUpdate = cdsCaptor.getValue().getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(null);
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(xdsServerInfo);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    cdsUpdate = cdsUpdateCaptor.getValue();
+    verify(cdsResourceWatcher).onResourceChanged(cdsCaptor.capture());
+    cdsUpdate = cdsCaptor.getValue().getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(EDS_RESOURCE);
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_1, TIME_INCREMENT);
@@ -3331,10 +3791,11 @@ public abstract class GrpcXdsClientImplTestBase {
                                 "endpoint-host-name"), 1, 0)),
                     ImmutableList.of(mf.buildDropOverload("lb", 100)))));
     call.sendResponse(EDS, clusterLoadAssignments, VERSION_1, "0000");
-    verify(edsWatcher).onChanged(edsUpdateCaptor.capture());
-    assertThat(edsUpdateCaptor.getValue().clusterName).isEqualTo(resource);
-    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    assertThat(edsUpdateCaptor.getValue().clusterName).isEqualTo(EDS_RESOURCE);
+    ArgumentCaptor<StatusOr<EdsUpdate>> edsCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(edsWatcher).onResourceChanged(edsCaptor.capture());
+    assertThat(edsCaptor.getValue().getValue().clusterName).isEqualTo(resource);
+    verify(edsResourceWatcher).onResourceChanged(edsCaptor.capture());
+    assertThat(edsCaptor.getValue().getValue().clusterName).isEqualTo(EDS_RESOURCE);
 
     verifyResourceMetadataAcked(
         EDS, EDS_RESOURCE, clusterLoadAssignments.get(0), VERSION_1, TIME_INCREMENT * 2);
@@ -3352,12 +3813,14 @@ public abstract class GrpcXdsClientImplTestBase {
             "envoy.transport_sockets.tls", null, null
         )));
     call.sendResponse(CDS, clusters, VERSION_2, "0001");
-    verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
-    assertThat(cdsUpdateCaptor.getValue().edsServiceName()).isNull();
+    verify(cdsResourceWatcher, times(2)).onResourceChanged(cdsCaptor.capture());
+    assertThat(cdsCaptor.getValue().getValue().edsServiceName()).isNull();
     // Note that the endpoint must be deleted even if the ignore_resource_deletion feature.
     // This happens because the cluster CDS_RESOURCE is getting replaced, and not deleted.
-    verify(edsResourceWatcher, never()).onResourceDoesNotExist(EDS_RESOURCE);
-    verify(edsResourceWatcher, never()).onResourceDoesNotExist(resource);
+    verify(edsResourceWatcher, never()).onResourceChanged(
+        argThat(statusOr -> !statusOr.getStatus().getDescription().contains(EDS_RESOURCE)));
+    verify(edsResourceWatcher, never()).onResourceChanged(
+        argThat(statusOr -> !statusOr.getStatus().getDescription().contains(resource)));
     verifyNoMoreInteractions(cdsWatcher, edsWatcher);
     verifyResourceMetadataAcked(
         EDS, EDS_RESOURCE, clusterLoadAssignments.get(0), VERSION_1, TIME_INCREMENT * 2);
@@ -3383,15 +3846,18 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
-    verify(watcher1).onResourceDoesNotExist(edsResourceTwo);
-    verify(watcher2).onResourceDoesNotExist(edsResourceTwo);
+    verify(edsResourceWatcher).onResourceChanged(
+        argThat(statusOr -> !statusOr.getStatus().getDescription().contains(EDS_RESOURCE)));
+    verify(watcher1).onResourceChanged(
+        argThat(statusOr -> !statusOr.getStatus().getDescription().contains(edsResourceTwo)));
+    verify(watcher2).onResourceChanged(
+        argThat(statusOr -> !statusOr.getStatus().getDescription().contains(edsResourceTwo)));
     verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(EDS, edsResourceTwo);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
 
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
-    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
+    verify(edsResourceWatcher).onResourceChanged(StatusOr.fromValue(edsUpdateCaptor.capture()));
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
     validateGoldenClusterLoadAssignment(edsUpdate);
     verifyNoMoreInteractions(watcher1, watcher2);
@@ -3409,7 +3875,7 @@ public abstract class GrpcXdsClientImplTestBase {
             ImmutableList.<Message>of()));
     call.sendResponse(EDS, clusterLoadAssignmentTwo, VERSION_2, "0001");
 
-    verify(watcher1).onChanged(edsUpdateCaptor.capture());
+    verify(watcher1).onResourceChanged(StatusOr.fromValue(edsUpdateCaptor.capture()));
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResourceTwo);
     assertThat(edsUpdate.dropPolicies).isEmpty();
@@ -3421,7 +3887,7 @@ public abstract class GrpcXdsClientImplTestBase {
                     LbEndpoint.create("172.44.2.2", 8000, 3,
                         true, "endpoint-host-name", ImmutableMap.of())),
                 2, 0, ImmutableMap.of()));
-    verify(watcher2).onChanged(edsUpdateCaptor.capture());
+    verify(watcher2).onResourceChanged(StatusOr.fromValue(edsUpdateCaptor.capture()));
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResourceTwo);
     assertThat(edsUpdate.dropPolicies).isEmpty();
@@ -3442,6 +3908,7 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void useIndependentRpcContext() {
     // Simulates making RPCs within the context of an inbound RPC.
     CancellableContext cancellableContext = Context.current().withCancellation();
@@ -3453,10 +3920,10 @@ public abstract class GrpcXdsClientImplTestBase {
       // The inbound RPC finishes and closes its context. The outbound RPC's control plane RPC
       // should not be impacted.
       cancellableContext.close();
-      verify(ldsResourceWatcher, never()).onError(any(Status.class));
+      verify(ldsResourceWatcher, never()).onAmbientError(any());
 
       call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
-      verify(ldsResourceWatcher).onChanged(any(LdsUpdate.class));
+      verify(ldsResourceWatcher).onResourceChanged(any());
     } finally {
       cancellableContext.detach(prevContext);
     }
@@ -3477,10 +3944,10 @@ public abstract class GrpcXdsClientImplTestBase {
     callback_ReportServerConnection();
     verifyServerConnection(1, false, xdsServerInfo.target());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
-        .onError(errorCaptor.capture());
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
         "ADS stream closed with OK before receiving a response");
-    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
         "ADS stream closed with OK before receiving a response");
   }
@@ -3510,8 +3977,8 @@ public abstract class GrpcXdsClientImplTestBase {
     // Check metric data.
     callback_ReportServerConnection();
     verifyServerConnection(3, true, xdsServerInfo.target());
-    verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
-    verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, never()).onAmbientError(any(Status.class));
+    verify(rdsResourceWatcher, never()).onAmbientError(any(Status.class));
   }
 
   @Test
@@ -3535,13 +4002,13 @@ public abstract class GrpcXdsClientImplTestBase {
     fakeClock.forwardNanos(1000L); // Make sure retry isn't based on stopwatch 0
     call.sendError(Status.UNKNOWN.asException());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
-        .onError(errorCaptor.capture());
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
-    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
-    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
-    verify(edsResourceWatcher).onError(errorCaptor.capture());
+    verify(edsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNKNOWN, "");
 
     // Check metric data.
@@ -3568,13 +4035,17 @@ public abstract class GrpcXdsClientImplTestBase {
     // Management server becomes unreachable.
     String errorMsg = "my fault";
     call.sendError(Status.UNAVAILABLE.withDescription(errorMsg).asException());
-    verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
-    verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
-    verify(cdsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
-    verify(edsResourceWatcher, times(2)).onError(errorCaptor.capture());
+    verify(edsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
 
     // Check metric data.
@@ -3613,11 +4084,15 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendError(Status.DEADLINE_EXCEEDED.asException());
 
     // Already received LDS and RDS, so they only error twice.
-    verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher, times(3)).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
+    verify(rdsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
+    verify(cdsResourceWatcher, times(3))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
-    verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
+    verify(edsResourceWatcher, times(3))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.DEADLINE_EXCEEDED, "");
 
     // Check metric data.
@@ -3644,11 +4119,15 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Management server becomes unreachable again.
     call.sendError(Status.UNAVAILABLE.asException());
-    verify(ldsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(rdsResourceWatcher, times(2)).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher, times(4)).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
+    verify(rdsResourceWatcher, times(2))
+        .onAmbientError(errorCaptor.capture());
+    verify(cdsResourceWatcher, times(4))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(edsResourceWatcher, times(4)).onError(errorCaptor.capture());
+    verify(edsResourceWatcher, times(4))
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
 
     // Check metric data.
@@ -3691,9 +4170,9 @@ public abstract class GrpcXdsClientImplTestBase {
     verifyServerConnection(1, true, xdsServerInfo.target());
     call.sendError(Status.UNAVAILABLE.asException());
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
-        .onError(errorCaptor.capture());
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
     ScheduledTask retryTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
@@ -3767,10 +4246,10 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendError(Status.UNAVAILABLE.asException());
     assertThat(cdsResourceTimeout.isCancelled()).isTrue();
     assertThat(edsResourceTimeout.isCancelled()).isTrue();
-    verify(ldsResourceWatcher, never()).onError(errorCaptor.capture());
-    verify(rdsResourceWatcher, never()).onError(errorCaptor.capture());
-    verify(cdsResourceWatcher, never()).onError(errorCaptor.capture());
-    verify(edsResourceWatcher, never()).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher, never()).onAmbientError(errorCaptor.capture());
+    verify(rdsResourceWatcher, never()).onAmbientError(errorCaptor.capture());
+    verify(cdsResourceWatcher, never()).onAmbientError(errorCaptor.capture());
+    verify(edsResourceWatcher, never()).onAmbientError(errorCaptor.capture());
     // Check metric data.
     callback_ReportServerConnection();
     verifyServerConnection(4, true, xdsServerInfo.target());
@@ -3779,9 +4258,9 @@ public abstract class GrpcXdsClientImplTestBase {
     fakeClock.forwardTime(5, TimeUnit.SECONDS);
     DiscoveryRpcCall call2 = resourceDiscoveryCalls.poll();
     call2.sendError(Status.UNAVAILABLE.asException());
-    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verify(cdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
-    verify(edsResourceWatcher).onError(errorCaptor.capture());
+    verify(edsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, "");
 
     fakeClock.forwardTime(5, TimeUnit.SECONDS);
@@ -3840,8 +4319,10 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendResponse(LDS, listeners, "0", "0000");
     // Client sends an ACK LDS request.
     call.verifyRequest(LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
-    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    EnvoyServerProtoData.Listener parsedListener = ldsUpdateCaptor.getValue().listener();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<LdsUpdate>> ldsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(ldsResourceWatcher).onResourceChanged(ldsUpdateCaptor.capture());
+    EnvoyServerProtoData.Listener parsedListener = ldsUpdateCaptor.getValue().getValue().listener();
     assertThat(parsedListener.name()).isEqualTo(LISTENER_RESOURCE);
     assertThat(parsedListener.address()).isEqualTo("0.0.0.0:7000");
     assertThat(parsedListener.defaultFilterChain()).isNull();
@@ -3878,7 +4359,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
     verifyNoInteractions(ldsResourceWatcher);
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    verify(ldsResourceWatcher).onResourceDoesNotExist(LISTENER_RESOURCE);
+    verify(ldsResourceWatcher).onResourceChanged(argThat(
+        statusOr -> statusOr.getStatus().getDescription().contains(LISTENER_RESOURCE)));
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -3904,7 +4386,7 @@ public abstract class GrpcXdsClientImplTestBase {
         + "0.0.0.0:7000\' validation error: "
         + "common-tls-context is required in downstream-tls-context";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
@@ -3931,7 +4413,7 @@ public abstract class GrpcXdsClientImplTestBase {
         + "transport-socket with name envoy.transport_sockets.bad1 not supported.";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
         errorMsg));
-    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    verify(ldsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
   }
 
@@ -3962,7 +4444,8 @@ public abstract class GrpcXdsClientImplTestBase {
               .build()
               .start());
       fakeClock.forwardTime(5, TimeUnit.SECONDS);
-      verify(ldsResourceWatcher, never()).onResourceDoesNotExist(LDS_RESOURCE);
+      verify(ldsResourceWatcher, never()).onResourceChanged(argThat(
+              statusOr -> statusOr.getStatus().getDescription().contains(LDS_RESOURCE)));
       fakeClock.forwardTime(20, TimeUnit.SECONDS); // Trigger rpcRetryTimer
       DiscoveryRpcCall call = resourceDiscoveryCalls.poll(3, TimeUnit.SECONDS);
       // Check metric data.
@@ -3983,7 +4466,7 @@ public abstract class GrpcXdsClientImplTestBase {
       // Send a response and do verifications
       call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0001");
       call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE);
-      verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+      verify(ldsResourceWatcher).onResourceChanged(StatusOr.fromValue(ldsUpdateCaptor.capture()));
       verifyGoldenListenerVhosts(ldsUpdateCaptor.getValue());
       assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
       verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
@@ -4005,7 +4488,7 @@ public abstract class GrpcXdsClientImplTestBase {
     client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
     verify(ldsResourceWatcher, Mockito.timeout(5000).atLeastOnce())
-        .onError(errorCaptor.capture());
+        .onAmbientError(errorCaptor.capture());
     assertThat(errorCaptor.getValue().getDescription()).contains(garbageUri);
     client.shutdown();
   }
@@ -4021,9 +4504,10 @@ public abstract class GrpcXdsClientImplTestBase {
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
-    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<StatusOr<CdsUpdate>> cdsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
+    verify(cdsResourceWatcher).onResourceChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue().getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(4294967295L);
@@ -4037,7 +4521,8 @@ public abstract class GrpcXdsClientImplTestBase {
     // file. Assume localhost doesn't speak HTTP/2 on the finger port
     XdsClientImpl client = createXdsClient("localhost:79");
     client.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
-    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1)).onError(ArgumentMatchers.any());
+    verify(ldsResourceWatcher, Mockito.timeout(5000).times(1))
+        .onAmbientError(ArgumentMatchers.any());
     assertThat(fakeClock.numPendingTasks()).isEqualTo(1); //retry
     assertThat(fakeClock.getPendingTasks().iterator().next().toString().contains("RpcRetryTask"))
         .isTrue();
@@ -4104,10 +4589,10 @@ public abstract class GrpcXdsClientImplTestBase {
     // Management server closes the RPC stream before sending any response.
     call.sendCompleted();
     verify(ldsResourceWatcher, Mockito.timeout(1000).times(1))
-        .onError(errorCaptor.capture());
+        .onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
         "ADS stream closed with OK before receiving a response");
-    verify(rdsResourceWatcher).onError(errorCaptor.capture());
+    verify(rdsResourceWatcher).onAmbientError(errorCaptor.capture());
     verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE,
         "ADS stream closed with OK before receiving a response");
     verifyServerFailureCount(1, 1, xdsServerInfo.target());

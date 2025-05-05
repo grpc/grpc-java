@@ -1302,18 +1302,24 @@ public class ClusterResolverLoadBalancerTest {
       if (watchers.containsKey(resource)) {
         watchers.get(resource).onChanged(
             new XdsEndpointResource.EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
+        /*watchers.get(resource).onResourceChanged(StatusOr.fromValue(
+            new XdsEndpointResource.EdsUpdate(resource, localityLbEndpointsMap, dropOverloads)));*/
       }
     }
 
     void deliverResourceNotFound(String resource) {
       if (watchers.containsKey(resource)) {
         watchers.get(resource).onResourceDoesNotExist(resource);
+        /*Status status = Status.NOT_FOUND
+            .withDescription("Resource " + resource + " does not exist");
+        watchers.get(resource).onResourceChanged(StatusOr.fromStatus(status));*/
       }
     }
 
     void deliverError(Status error) {
       for (ResourceWatcher<EdsUpdate> watcher : watchers.values()) {
         watcher.onError(error);
+        // watcher.onAmbientError(error);
       }
     }
   }

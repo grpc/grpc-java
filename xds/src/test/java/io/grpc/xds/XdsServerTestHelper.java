@@ -23,6 +23,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
+import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -291,7 +293,7 @@ public class XdsServerTestHelper {
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
-      execute(() -> ldsWatcher.onChanged(ldsUpdate));
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate)));
     }
 
     void deliverLdsUpdate(
@@ -306,11 +308,13 @@ public class XdsServerTestHelper {
     }
 
     void deliverLdsResourceNotFound() {
-      execute(() -> ldsWatcher.onResourceDoesNotExist(awaitLdsResource(DEFAULT_TIMEOUT)));
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromStatus(
+          Status.NOT_FOUND.withDescription("LDS resource not found"))));
     }
 
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
-      execute(() -> rdsWatchers.get(resourceName).onChanged(new RdsUpdate(virtualHosts)));
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(
+          StatusOr.fromValue(new RdsUpdate(virtualHosts))));
     }
 
     void deliverRdsUpdate(String resourceName, VirtualHost virtualHost) {
@@ -318,7 +322,8 @@ public class XdsServerTestHelper {
     }
 
     void deliverRdsResourceNotFound(String resourceName) {
-      execute(() -> rdsWatchers.get(resourceName).onResourceDoesNotExist(resourceName));
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(StatusOr.fromStatus(
+          Status.NOT_FOUND.withDescription("RDS resource not found: " + resourceName))));
     }
   }
 }

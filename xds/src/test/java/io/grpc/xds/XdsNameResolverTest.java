@@ -68,6 +68,7 @@ import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory;
 import io.grpc.internal.FakeClock;
@@ -2509,8 +2510,9 @@ public class XdsNameResolverTest {
 
     void deliverLdsUpdateOnly(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            httpMaxStreamDurationNano, virtualHosts, null)));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(
+            LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+                httpMaxStreamDurationNano, virtualHosts, null))));
       });
     }
 
@@ -2521,8 +2523,9 @@ public class XdsNameResolverTest {
       }
 
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            httpMaxStreamDurationNano, virtualHosts, null)));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(
+            LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+                httpMaxStreamDurationNano, virtualHosts, null))));
         createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
       });
     }
@@ -2535,8 +2538,9 @@ public class XdsNameResolverTest {
       List<String> clusterNames = getClusterNames(routes);
 
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(virtualHost), null)));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(
+            LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+                0L, Collections.singletonList(virtualHost), null))));
         if (!clusterNames.isEmpty()) {
           createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
         }
@@ -2545,8 +2549,9 @@ public class XdsNameResolverTest {
 
     void deliverLdsUpdateWithFilters(VirtualHost vhost, List<NamedFilterConfig> filterConfigs) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(vhost), filterConfigs)));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(
+            LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+                0L, Collections.singletonList(vhost), filterConfigs))));
       });
     }
 
@@ -2593,8 +2598,9 @@ public class XdsNameResolverTest {
           Collections.singletonList(route),
           overrideConfig);
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(virtualHost), filterChain)));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(
+            LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+                0L, Collections.singletonList(virtualHost), filterChain))));
         createAndDeliverClusterUpdates(this, cluster);
       });
     }
@@ -2609,8 +2615,9 @@ public class XdsNameResolverTest {
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0L, rdsName, filterChain)));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(
+            LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+                0L, rdsName, filterChain))));
       });
     }
 
@@ -2622,14 +2629,17 @@ public class XdsNameResolverTest {
         String rdsName,
         @Nullable List<NamedFilterConfig> filterConfigs) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0, rdsName, filterConfigs)));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(
+            LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(0, rdsName, filterConfigs))
+        ));
       });
     }
 
     void deliverLdsResourceNotFound() {
       syncContext.execute(() -> {
-        ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+        ldsWatcher.onResourceChanged(
+            StatusOr.fromStatus(Status.NOT_FOUND.withDescription(
+                "Resource " + expectedLdsResourceName + " does not exist")));
       });
     }
 
@@ -2691,7 +2701,8 @@ public class XdsNameResolverTest {
           Collections.singletonList(route),
           overrideConfig);
       syncContext.execute(() -> {
-        rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+        rdsWatcher.onResourceChanged(StatusOr.fromValue(
+            new RdsUpdate(Collections.singletonList(virtualHost))));
         createAndDeliverClusterUpdates(this, cluster1);
       });
     }
@@ -2701,7 +2712,7 @@ public class XdsNameResolverTest {
         return;
       }
       syncContext.execute(() -> {
-        rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
+        rdsWatcher.onResourceChanged(StatusOr.fromValue(new RdsUpdate(virtualHosts)));
       });
     }
 
@@ -2714,7 +2725,8 @@ public class XdsNameResolverTest {
         return;
       }
       syncContext.execute(() -> {
-        rdsWatcher.onResourceDoesNotExist(rdsResource);
+        rdsWatcher.onResourceChanged(StatusOr.fromStatus(
+            Status.NOT_FOUND.withDescription("RDS resource not found: " + rdsResource)));
       });
     }
 
@@ -2725,7 +2737,7 @@ public class XdsNameResolverTest {
       syncContext.execute(() -> {
         List<ResourceWatcher<CdsUpdate>> resourceWatchers =
             ImmutableList.copyOf(cdsWatchers.get(clusterName));
-        resourceWatchers.forEach(w -> w.onChanged(update));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
       });
     }
 
@@ -2736,7 +2748,7 @@ public class XdsNameResolverTest {
         }
         List<ResourceWatcher<EdsUpdate>> resourceWatchers =
             ImmutableList.copyOf(edsWatchers.get(name));
-        resourceWatchers.forEach(w -> w.onChanged(update));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
       });
     }
 
@@ -2744,18 +2756,18 @@ public class XdsNameResolverTest {
     void deliverError(final Status error) {
       if (ldsWatcher != null) {
         syncContext.execute(() -> {
-          ldsWatcher.onError(error);
+          ldsWatcher.onAmbientError(error);
         });
       }
       if (rdsWatcher != null) {
         syncContext.execute(() -> {
-          rdsWatcher.onError(error);
+          rdsWatcher.onAmbientError(error);
         });
       }
       syncContext.execute(() -> {
         cdsWatchers.values().stream()
             .flatMap(List::stream)
-            .forEach(w -> w.onError(error));
+            .forEach(w -> w.onAmbientError(error));
       });
     }
   }

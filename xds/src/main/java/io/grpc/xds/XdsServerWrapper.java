@@ -39,6 +39,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.GrpcUtil;
@@ -378,10 +379,19 @@ final class XdsServerWrapper extends Server {
     }
 
     @Override
-    public void onChanged(final LdsUpdate update) {
+    public void onResourceChanged(StatusOr<LdsUpdate> updateOrError) {
       if (stopped) {
         return;
       }
+      if (!updateOrError.hasValue()) {
+        Status error = updateOrError.getStatus();
+        StatusException statusException = error.withDescription(
+                error.getDescription() + " xDS node ID: "
+                    + xdsClient.getBootstrapInfo().node().getId()).asException();
+        handleConfigNotFound(statusException);
+        return;
+      }
+      LdsUpdate update = updateOrError.getValue();
       logger.log(Level.FINEST, "Received Lds update {0}", update);
       checkNotNull(update.listener(), "update");
       if (!pendingRds.isEmpty()) {
@@ -433,18 +443,7 @@ final class XdsServerWrapper extends Server {
     }
 
     @Override
-    public void onResourceDoesNotExist(final String resourceName) {
-      if (stopped) {
-        return;
-      }
-      StatusException statusException = Status.UNAVAILABLE.withDescription(
-          String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
-              xdsClient.getBootstrapInfo().node().getId())).asException();
-      handleConfigNotFound(statusException);
-    }
-
-    @Override
-    public void onError(final Status error) {
+    public void onAmbientError(Status error) {
       if (stopped) {
         return;
       }
@@ -745,17 +744,29 @@ final class XdsServerWrapper extends Server {
       }
 
       @Override
-      public void onChanged(final RdsUpdate update) {
+      public void onResourceChanged(StatusOr<RdsUpdate> updateOrError) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            if (savedVirtualHosts == null && !isPending) {
-              logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
+            if (!updateOrError.hasValue()) {
+              Status error = updateOrError.getStatus();
+              String description = error.getDescription() == null
+                  ? "" : error.getDescription() + " ";
+              Status errorWithNodeId = error.withDescription(
+                  description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
+              logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
+                  new Object[]{resourceName, errorWithNodeId});
+              savedVirtualHosts = null;
+            } else {
+              RdsUpdate update = updateOrError.getValue();
+              if (savedVirtualHosts == null && !isPending) {
+                logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
+              }
+              savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
             }
-            savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
             updateRdsRoutingConfig();
             maybeUpdateSelector();
           }
@@ -763,23 +774,7 @@ final class XdsServerWrapper extends Server {
       }
 
       @Override
-      public void onResourceDoesNotExist(final String resourceName) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!routeDiscoveryStates.containsKey(resourceName)) {
-              return;
-            }
-            logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
-            savedVirtualHosts = null;
-            updateRdsRoutingConfig();
-            maybeUpdateSelector();
-          }
-        });
-      }
-
-      @Override
-      public void onError(final Status error) {
+      public void onAmbientError(Status error) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {

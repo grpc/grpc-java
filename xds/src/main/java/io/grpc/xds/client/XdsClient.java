@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -127,7 +128,21 @@ public abstract class XdsClient {
   public interface ResourceWatcher<T extends ResourceUpdate> {
 
     /**
-     * Called when the resource discovery RPC encounters some transient error.
+     * Called when a new version of the resource is received, or when the resource becomes invalid.
+     *
+     * <p>If an error is passed, the watcher must stop using the resource and treat
+     * it as non-existent.
+     */
+    default void onResourceChanged(StatusOr<T> update) {
+      // do nothing
+    }
+
+    /**
+     * Called for ambient errors (e.g., connection lost to xDS server).
+     * The watcher may retain its current state.
+     *
+     * <p>This error can be cleared by another call to onAmbientError() with OK,
+     * or a new onResourceChanged().
      *
      * <p>Note that we expect that the implementer to:
      * - Comply with the guarantee to not generate certain statuses by the library:
@@ -136,16 +151,27 @@ public abstract class XdsClient {
      * - Keep {@link Status} description in one form or another, as it contains valuable debugging
      *   information.
      */
-    void onError(Status error);
+    default void onAmbientError(Status status) {
+      // do nothing
+    }
+
+    // APIs (onError, onResourceDoesNotExist and onChanged) will be deleted in subsequent commit.
+    default void onError(Status error) {
+      // do nothing
+    }
 
     /**
      * Called when the requested resource is not available.
      *
      * @param resourceName name of the resource requested in discovery request.
      */
-    void onResourceDoesNotExist(String resourceName);
+    default void onResourceDoesNotExist(String resourceName) {
+      // do nothing
+    }
 
-    void onChanged(T update);
+    default void onChanged(T update) {
+      // do nothing
+    }
   }
 
   /**

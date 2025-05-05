@@ -21,7 +21,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -35,9 +35,12 @@ import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.MetricRecorder;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.LoadReportClient;
@@ -99,25 +102,24 @@ public class XdsClientFallbackTest {
   private XdsClientMetricReporter xdsClientMetricReporter;
 
   @Captor
-  private ArgumentCaptor<Status> errorCaptor;
+  private ArgumentCaptor<StatusOr<LdsUpdate>> errorCaptor;
 
 
   private final XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate> raalLdsWatcher =
       new XdsClient.ResourceWatcher<XdsListenerResource.LdsUpdate>() {
 
         @Override
-        public void onChanged(XdsListenerResource.LdsUpdate update) {
-          log.log(Level.FINE, "LDS update: " + update);
+        public void onResourceChanged(StatusOr<XdsListenerResource.LdsUpdate> update) {
+          if (update.getStatus().isOk()) {
+            log.log(Level.FINE, "LDS update: " + update.getValue());
+          } else {
+            log.log(Level.FINE, "LDS update error: " + update.getStatus().getDescription());
+          }
         }
 
         @Override
-        public void onError(Status error) {
-          log.log(Level.FINE, "LDS update error: " + error.getDescription());
-        }
-
-        @Override
-        public void onResourceDoesNotExist(String resourceName) {
-          log.log(Level.FINE, "LDS resource does not exist: " + resourceName);
+        public void onAmbientError(Status error) {
+          log.log(Level.FINE, "LDS Ambient error: " + error.getDescription());
         }
       };
 
@@ -138,18 +140,17 @@ public class XdsClientFallbackTest {
       new XdsClient.ResourceWatcher<XdsClusterResource.CdsUpdate>() {
 
         @Override
-        public void onChanged(XdsClusterResource.CdsUpdate update) {
-          log.log(Level.FINE, "CDS update: " + update);
+        public void onResourceChanged(StatusOr<CdsUpdate> update) {
+          if (update.getStatus().isOk()) {
+            log.log(Level.FINE, "CDS update: " + update.getValue());
+          } else {
+            log.log(Level.FINE, "CDS update error: " + update.getStatus().getDescription());
+          }
         }
 
         @Override
-        public void onError(Status error) {
-          log.log(Level.FINE, "CDS update error: " + error.getDescription());
-        }
-
-        @Override
-        public void onResourceDoesNotExist(String resourceName) {
-          log.log(Level.FINE, "CDS resource does not exist: " + resourceName);
+        public void onAmbientError(Status error) {
+          log.log(Level.FINE, "CDS Ambient error: " + error.getDescription());
         }
       };
 
@@ -222,12 +223,12 @@ public class XdsClientFallbackTest {
     fallbackServer.restartXdsServer();
     xdsClient = xdsClientPool.getObject();
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-    verify(ldsWatcher, timeout(5000)).onChanged(
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
         XdsListenerResource.LdsUpdate.forApiListener(
-            MAIN_HTTP_CONNECTION_MANAGER));
+            MAIN_HTTP_CONNECTION_MANAGER)));
 
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
-    verify(rdsWatcher, timeout(5000)).onChanged(any());
+    verify(rdsWatcher, timeout(5000)).onResourceChanged(any());
   }
 
   @Test
@@ -239,9 +240,9 @@ public class XdsClientFallbackTest {
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
-    verify(ldsWatcher, timeout(5000)).onChanged(
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
         XdsListenerResource.LdsUpdate.forApiListener(
-            FALLBACK_HTTP_CONNECTION_MANAGER));
+            FALLBACK_HTTP_CONNECTION_MANAGER)));
   }
 
   @Test
@@ -252,7 +253,8 @@ public class XdsClientFallbackTest {
     String badPrefix = "xdstp://authority.xds.bad/envoy.config.listener.v3.Listener/";
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
         badPrefix + "listener.googleapis.com", ldsWatcher);
-    inOrder.verify(ldsWatcher, timeout(5000)).onError(any());
+    inOrder.verify(ldsWatcher, timeout(5000)).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()));
 
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
         badPrefix + "route-config.googleapis.bad", rdsWatcher);
@@ -260,15 +262,18 @@ public class XdsClientFallbackTest {
         badPrefix + "route-config2.googleapis.bad", rdsWatcher2);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(),
         badPrefix + "route-config3.googleapis.bad", rdsWatcher3);
-    inOrder.verify(rdsWatcher, timeout(5000).times(1)).onError(any());
-    inOrder.verify(rdsWatcher2, timeout(5000).times(1)).onError(any());
-    inOrder.verify(rdsWatcher3, timeout(5000).times(1)).onError(any());
-    verify(rdsWatcher, never()).onChanged(any());
+    inOrder.verify(rdsWatcher, timeout(5000).times(1)).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()));
+    inOrder.verify(rdsWatcher2, timeout(5000).times(1)).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()));
+    inOrder.verify(rdsWatcher3, timeout(5000).times(1)).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()));
+    verify(rdsWatcher, never()).onResourceChanged(argThat(StatusOr::hasValue));
 
     // even after an error, a valid one will still work
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher2);
-    verify(ldsWatcher2, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher2, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
   }
 
   @Test
@@ -278,21 +283,24 @@ public class XdsClientFallbackTest {
     xdsClient = xdsClientPool.getObject();
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-    verify(ldsWatcher, timeout(5000).atLeastOnce()).onError(any());
-    verify(ldsWatcher, timeout(5000).times(0)).onChanged(any());
+    verify(ldsWatcher, timeout(5000).atLeastOnce()).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()));
+    verify(ldsWatcher, timeout(5000).times(0)).onResourceChanged(any());
+
     xdsClient.watchXdsResource(
         XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher2);
-    verify(rdsWatcher2, timeout(5000).atLeastOnce()).onError(any());
+    verify(rdsWatcher2, timeout(5000).atLeastOnce()).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()));
 
     mainXdsServer.restartXdsServer();
 
     xdsClient.watchXdsResource(
         XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
 
-    verify(ldsWatcher, timeout(16000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
-    verify(rdsWatcher, timeout(5000)).onChanged(any());
-    verify(rdsWatcher2, timeout(5000)).onChanged(any());
+    verify(ldsWatcher, timeout(16000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
+    verify(rdsWatcher, timeout(5000)).onResourceChanged(any());
+    verify(rdsWatcher2, timeout(5000)).onResourceChanged(any());
   }
 
   @Test
@@ -303,10 +311,10 @@ public class XdsClientFallbackTest {
     InOrder inOrder = inOrder(ldsWatcher, rdsWatcher, cdsWatcher, cdsWatcher2);
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-    inOrder.verify(ldsWatcher, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+    inOrder.verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), FALLBACK_CLUSTER_NAME, cdsWatcher);
-    inOrder.verify(cdsWatcher, timeout(5000)).onChanged(any());
+    inOrder.verify(cdsWatcher, timeout(5000)).onResourceChanged(any());
 
     assertThat(fallbackServer.getService().getSubscriberCounts()
         .get("type.googleapis.com/envoy.config.listener.v3.Listener")).isEqualTo(1);
@@ -314,15 +322,15 @@ public class XdsClientFallbackTest {
 
     mainXdsServer.restartXdsServer();
 
-    verify(ldsWatcher, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
 
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
-    inOrder.verify(rdsWatcher, timeout(5000)).onChanged(any());
+    inOrder.verify(rdsWatcher, timeout(5000)).onResourceChanged(any());
     verifyNoSubscribers(fallbackServer);
 
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher2);
-    inOrder.verify(cdsWatcher2, timeout(5000)).onChanged(any());
+    inOrder.verify(cdsWatcher2, timeout(5000)).onResourceChanged(any());
 
     verifyNoSubscribers(fallbackServer);
     assertThat(mainXdsServer.getService().getSubscriberCounts()
@@ -362,11 +370,11 @@ public class XdsClientFallbackTest {
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
-    verify(ldsWatcher, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
 
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
-    verify(rdsWatcher, timeout(5000)).onChanged(any());
+    verify(rdsWatcher, timeout(5000)).onResourceChanged(any());
 
     mainXdsServer.getServer().shutdownNow();
     // Sleep for the ADS stream disconnect to be processed and for the retry to fail. Between those
@@ -378,38 +386,46 @@ public class XdsClientFallbackTest {
     }
 
     // Shouldn't do fallback since all watchers are loaded
-    verify(ldsWatcher, never()).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher, never()).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
 
     // Should just get from cache
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher2);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher2);
-    verify(ldsWatcher2, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
-    verify(ldsWatcher, never()).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher2, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
+    verify(ldsWatcher, never()).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
     // Make sure that rdsWatcher wasn't called again
-    verify(rdsWatcher, times(1)).onChanged(any());
-    verify(rdsWatcher2, timeout(5000)).onChanged(any());
+    verify(rdsWatcher, times(1)).onResourceChanged(any());
+    verify(rdsWatcher2, timeout(5000)).onResourceChanged(any());
 
     // Asking for something not in cache should force a fallback
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), FALLBACK_CLUSTER_NAME, cdsWatcher);
-    verify(ldsWatcher, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
-    verify(ldsWatcher2, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER));
-    verify(cdsWatcher, timeout(5000)).onChanged(any());
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+    verify(ldsWatcher2, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+    verify(cdsWatcher, timeout(5000)).onResourceChanged(any());
 
     xdsClient.watchXdsResource(
         XdsRouteConfigureResource.getInstance(), FALLBACK_RDS_NAME, rdsWatcher3);
-    verify(rdsWatcher3, timeout(5000)).onChanged(any());
+    verify(rdsWatcher3, timeout(5000)).onResourceChanged(any());
 
     // Test that resource defined in main but not fallback is handled correctly
     xdsClient.watchXdsResource(
         XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher2);
-    verify(cdsWatcher2, never()).onResourceDoesNotExist(eq(CLUSTER_NAME));
-    fakeClock.forwardTime(15000, TimeUnit.MILLISECONDS); // Does not exist timer
-    verify(cdsWatcher2, timeout(5000)).onResourceDoesNotExist(eq(CLUSTER_NAME));
+    verify(cdsWatcher2, never()).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Status.Code.NOT_FOUND
+            && statusOr.getStatus().getDescription().contains(CLUSTER_NAME)
+    ));
+    fakeClock.forwardTime(15000, TimeUnit.MILLISECONDS);
+    verify(cdsWatcher2, timeout(5000)).onResourceChanged(argThat(statusOr ->
+        !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Status.Code.NOT_FOUND
+            && statusOr.getStatus().getDescription().contains(CLUSTER_NAME)
+    ));
     xdsClient.shutdown();
     executor.shutdown();
   }
@@ -421,8 +437,8 @@ public class XdsClientFallbackTest {
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
-    verify(ldsWatcher, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
 
     mainXdsServer.getServer().shutdownNow();
     fallbackServer.getServer().shutdownNow();
@@ -431,9 +447,9 @@ public class XdsClientFallbackTest {
 
     mainXdsServer.restartXdsServer();
 
-    verify(cdsWatcher, timeout(5000)).onChanged(any());
-    verify(ldsWatcher, timeout(5000).atLeastOnce()).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+    verify(cdsWatcher, timeout(5000)).onResourceChanged(any());
+    verify(ldsWatcher, timeout(5000).atLeastOnce()).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
   }
 
   @Test
@@ -448,10 +464,11 @@ public class XdsClientFallbackTest {
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
-    verify(ldsWatcher, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(
-            MAIN_HTTP_CONNECTION_MANAGER));
-    verify(ldsWatcher, never()).onError(any());
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
+    verify(ldsWatcher, never()).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()
+    ));
 
     client.shutdown();
   }
@@ -467,10 +484,12 @@ public class XdsClientFallbackTest {
         new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
-    verify(ldsWatcher, timeout(5000)).onChanged(
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
         XdsListenerResource.LdsUpdate.forApiListener(
-            MAIN_HTTP_CONNECTION_MANAGER));
-    verify(ldsWatcher, never()).onError(any());
+            MAIN_HTTP_CONNECTION_MANAGER)));
+    verify(ldsWatcher, never()).onResourceChanged(argThat(
+        statusOr -> !statusOr.getStatus().isOk()
+    ));
 
     client.shutdown();
   }
@@ -487,9 +506,12 @@ public class XdsClientFallbackTest {
 
     client.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
     fakeClock.forwardTime(20, TimeUnit.SECONDS);
-    verify(ldsWatcher, Mockito.timeout(5000).atLeastOnce()).onError(errorCaptor.capture());
-    assertThat(errorCaptor.getValue().getDescription()).contains(garbageUri2);
-    verify(ldsWatcher, never()).onChanged(any());
+    verify(ldsWatcher, Mockito.timeout(5000).atLeastOnce())
+        .onResourceChanged(errorCaptor.capture());
+    assertThat(errorCaptor.getValue().getStatus().getDescription()).contains(garbageUri2);
+    verify(ldsWatcher, never()).onResourceChanged(argThat(
+        statusOr -> statusOr.getStatus().isOk()
+    ));
     client.shutdown();
   }
 
@@ -509,8 +531,8 @@ public class XdsClientFallbackTest {
 
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
-    verify(ldsWatcher, timeout(5000)).onChanged(
-        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER));
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
 
     mainXdsServer.restartXdsServer();
 
@@ -519,7 +541,7 @@ public class XdsClientFallbackTest {
 
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher);
 
-    verify(cdsWatcher, timeout(5000)).onChanged(any());
+    verify(cdsWatcher, timeout(5000)).onResourceChanged(any());
     assertThat(getLrsServerInfo("localhost:" + fallbackServer.getServer().getPort())).isNull();
   }
 
@@ -547,5 +569,4 @@ public class XdsClientFallbackTest {
         "fallback-policy", "fallback"
       );
   }
-
 }
