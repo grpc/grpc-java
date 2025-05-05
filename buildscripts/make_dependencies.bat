@@ -1,7 +1,7 @@
 echo on
 @rem set PROTOBUF_VER=21.7
 choco install -y gradle git curl pkgconfiglite
-choco install -y openjdk --version=11.0.27
+choco install -y openjdk --version=11.0
 set JAVA_HOME="c:\Program Files\OpenJDK\jdk-21"
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-21\bin"
 set PROTOBUF_VER=22.5
