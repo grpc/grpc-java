@@ -100,7 +100,7 @@ model {
         all {
             if (toolChain in Gcc || toolChain in Clang) {
                 cppCompiler.define("GRPC_VERSION", version)
-                cppCompiler.args "--std=c++0x"
+                cppCompiler.args "--std=c++14"
                 addEnvArgs("CXXFLAGS", cppCompiler.args)
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
                 if (osdetector.os == "osx") {
