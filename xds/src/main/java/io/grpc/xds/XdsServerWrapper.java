@@ -392,7 +392,7 @@ final class XdsServerWrapper extends Server {
         StatusException statusException = error.withDescription(
                 error.getDescription() + " xDS node ID: "
                     + xdsClient.getBootstrapInfo().node().getId()).asException();
-        handleConfigNotFound(statusException);
+        handleConfigNotFoundOrMismatch(statusException);
         return;
       }
       LdsUpdate update = updateOrError.getValue();
