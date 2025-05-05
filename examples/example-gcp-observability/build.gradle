@@ -1,7 +1,7 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'java'

@@ -151,7 +151,7 @@ subprojects {
                 appendToProperty(
                     it.options.errorprone.excludedPaths,
                     ".*/src/generated/[^/]+/java/.*" +
-                        "|.*/build/generated/source/proto/[^/]+/java/.*",
+                        "|.*/build/generated/sources/proto/[^/]+/java/.*",
                     "|")
             }
         }

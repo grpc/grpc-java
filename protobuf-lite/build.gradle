@@ -39,7 +39,7 @@ tasks.named("compileTestJava").configure {
     options.compilerArgs += [
         "-Xlint:-cast"
     ]
-    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
+    options.errorprone.excludedPaths = ".*/build/generated/sources/proto/.*"
 }
 
 protobuf {
