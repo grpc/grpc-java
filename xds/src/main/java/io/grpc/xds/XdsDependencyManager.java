@@ -201,6 +201,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     for (Map.Entry<String, XdsWatcherBase<T>> watcherEntry : watchers.watchers.entrySet()) {
       xdsClient.cancelXdsResourceWatch(watchers.resourceType, watcherEntry.getKey(),
           watcherEntry.getValue());
+      watcherEntry.getValue().cancelled = true;
     }
   }
 
@@ -598,7 +599,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
       if (result.hasValue()) {
         setData(result.getValue());
-      } else {
+      } else if (!hasDataValue()) { 
+        // Don't update configuration on error, if we've already received configuration
         setDataAsStatus(Status.UNAVAILABLE.withDescription(
             String.format("Error retrieving %s: %s",
                 toContextString(), result.getStatus().getDescription())));

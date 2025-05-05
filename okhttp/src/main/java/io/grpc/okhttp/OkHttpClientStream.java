@@ -409,7 +409,7 @@ class OkHttpClientStream extends AbstractClientStream {
               transport.isUsingPlaintext());
       // TODO(b/145386688): This access should be guarded by 'this.transport.lock'; instead found:
       // 'this.lock'
-      transport.streamReadyToStart(OkHttpClientStream.this);
+      transport.streamReadyToStart(OkHttpClientStream.this, authority);
     }
 
     Tag tag() {

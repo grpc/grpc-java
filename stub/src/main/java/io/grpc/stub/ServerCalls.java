@@ -382,9 +382,10 @@ public final class ServerCalls {
 
     @Override
     public void onError(Throwable t) {
-      Metadata metadata = Status.trailersFromThrowable(t);
-      if (metadata == null) {
-        metadata = new Metadata();
+      Metadata metadata = new Metadata();
+      Metadata trailers = Status.trailersFromThrowable(t);
+      if (trailers != null) {
+        metadata.merge(trailers);
       }
       call.close(Status.fromThrowable(t), metadata);
       aborted = true;

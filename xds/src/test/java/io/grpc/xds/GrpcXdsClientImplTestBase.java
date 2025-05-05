@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static io.grpc.xds.GrpcXdsTransportFactory.DEFAULT_XDS_TRANSPORT_FACTORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -48,7 +47,6 @@ import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
 import io.grpc.ChannelCredentials;
 import io.grpc.Context;
@@ -2633,7 +2631,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing UpstreamTlsContext for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithUpstreamTlsContext() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
@@ -2681,7 +2678,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing new UpstreamTlsContext for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithNewUpstreamTlsContext() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
@@ -2755,7 +2751,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing OutlierDetection for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithOutlierDetection() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);
@@ -2827,7 +2822,6 @@ public abstract class GrpcXdsClientImplTestBase {
    * CDS response containing OutlierDetection for a cluster.
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void cdsResponseWithInvalidOutlierDetectionNacks() {
 
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
@@ -4678,7 +4672,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
-        DEFAULT_XDS_TRANSPORT_FACTORY,
+        new GrpcXdsTransportFactory(null),
         bootstrapInfo,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,

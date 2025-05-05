@@ -2,7 +2,7 @@ module(
     name = "grpc-java",
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
-    version = "1.72.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
+    version = "1.73.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
 )
 
 # GRPC_DEPS_START

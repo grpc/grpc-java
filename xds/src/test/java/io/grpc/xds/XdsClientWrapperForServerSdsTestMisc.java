@@ -32,6 +32,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
@@ -166,9 +167,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
     EnvoyServerProtoData.Listener tcpListener =
         EnvoyServerProtoData.Listener.create(
             "listener1",
-            "10.1.2.3",
+            "0.0.0.0:7000",
             ImmutableList.of(),
-            null);
+            null,
+            Protocol.TCP);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(tcpListener);
     xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromValue(listenerUpdate));
     verify(listener, timeout(5000)).onServing();

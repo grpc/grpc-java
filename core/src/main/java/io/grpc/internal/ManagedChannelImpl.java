@@ -187,7 +187,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
               Level.SEVERE,
               "[" + getLogId() + "] Uncaught exception in the SynchronizationContext. Panic!",
               e);
-          panic(e);
+          try {
+            panic(e);
+          } catch (Throwable anotherT) {
+            logger.log(
+                Level.SEVERE, "[" + getLogId() + "] Uncaught exception while panicking", anotherT);
+          }
         }
       });
 
@@ -223,11 +228,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @Nullable
   private LbHelperImpl lbHelper;
 
-  // Must ONLY be assigned from updateSubchannelPicker(), which is called from syncContext.
-  // null if channel is in idle mode.
-  @Nullable
-  private volatile SubchannelPicker subchannelPicker;
-
   // Must be accessed from the syncContext
   private boolean panicMode;
 
@@ -254,8 +254,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Channel's shutdown process:
   // 1. shutdown(): stop accepting new calls from applications
   //   1a shutdown <- true
-  //   1b subchannelPicker <- null
-  //   1c delayedTransport.shutdown()
+  //   1b delayedTransport.shutdown()
   // 2. delayedTransport terminated: stop stream-creation functionality
   //   2a terminating <- true
   //   2b loadBalancer.shutdown()
@@ -388,7 +387,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       lbHelper.lb.shutdown();
       lbHelper = null;
     }
-    subchannelPicker = null;
   }
 
   /**
@@ -799,7 +797,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   // Called from syncContext
   private void updateSubchannelPicker(SubchannelPicker newPicker) {
-    subchannelPicker = newPicker;
     delayedTransport.reprocess(newPicker);
   }
 
@@ -1223,9 +1220,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         public void run() {
           exitIdleMode();
-          if (subchannelPicker != null) {
-            subchannelPicker.requestConnection();
-          }
           if (lbHelper != null) {
             lbHelper.lb.requestConnection();
           }

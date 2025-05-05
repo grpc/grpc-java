@@ -16,8 +16,10 @@
 
 package io.grpc;
 
-import java.util.Arrays;
+import static java.util.Objects.requireNonNull;
+
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -33,7 +35,7 @@ import java.util.concurrent.TimeUnit;
  * passed to the various components unambiguously.
  */
 public final class Deadline implements Comparable<Deadline> {
-  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
+  private static final Ticker SYSTEM_TICKER = new SystemTicker();
   // nanoTime has a range of just under 300 years. Only allow up to 100 years in the past or future
   // to prevent wraparound as long as process runs for less than ~100 years.
   private static final long MAX_OFFSET = TimeUnit.DAYS.toNanos(100 * 365);
@@ -91,7 +93,7 @@ public final class Deadline implements Comparable<Deadline> {
    * @since 1.24.0
    */
   public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
-    checkNotNull(units, "units");
+    requireNonNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
 
@@ -191,8 +193,8 @@ public final class Deadline implements Comparable<Deadline> {
    * @return {@link ScheduledFuture} which can be used to cancel execution of the task
    */
   public ScheduledFuture<?> runOnExpiration(Runnable task, ScheduledExecutorService scheduler) {
-    checkNotNull(task, "task");
-    checkNotNull(scheduler, "scheduler");
+    requireNonNull(task, "task");
+    requireNonNull(scheduler, "scheduler");
     return scheduler.schedule(task, deadlineNanos - ticker.nanoTime(), TimeUnit.NANOSECONDS);
   }
 
@@ -225,37 +227,27 @@ public final class Deadline implements Comparable<Deadline> {
   @Override
   public int compareTo(Deadline that) {
     checkTicker(that);
-    long diff = this.deadlineNanos - that.deadlineNanos;
-    if (diff < 0) {
-      return -1;
-    } else if (diff > 0) {
-      return 1;
-    }
-    return 0;
+    return Long.compare(this.deadlineNanos, that.deadlineNanos);
   }
 
   @Override
   public int hashCode() {
-    return Arrays.asList(this.ticker, this.deadlineNanos).hashCode();
+    return Objects.hash(this.ticker, this.deadlineNanos);
   }
 
   @Override
-  public boolean equals(final Object o) {
-    if (o == this) {
+  public boolean equals(final Object object) {
+    if (object == this) {
       return true;
     }
-    if (!(o instanceof Deadline)) {
+    if (!(object instanceof Deadline)) {
       return false;
     }
-
-    final Deadline other = (Deadline) o;
-    if (this.ticker == null ? other.ticker != null : this.ticker != other.ticker) {
+    final Deadline that = (Deadline) object;
+    if (this.ticker == null ? that.ticker != null : this.ticker != that.ticker) {
       return false;
     }
-    if (this.deadlineNanos != other.deadlineNanos) {
-      return false;
-    }
-    return true;
+    return this.deadlineNanos == that.deadlineNanos;
   }
 
   /**
@@ -275,22 +267,15 @@ public final class Deadline implements Comparable<Deadline> {
    * @since 1.24.0
    */
   public abstract static class Ticker {
-    /** Returns the number of nanoseconds since this source's epoch. */
+    /** Returns the number of nanoseconds elapsed since this ticker's reference point in time. */
     public abstract long nanoTime();
   }
 
-  private static class SystemTicker extends Ticker {
+  private static final class SystemTicker extends Ticker {
     @Override
     public long nanoTime() {
       return System.nanoTime();
     }
-  }
-
-  private static <T> T checkNotNull(T reference, Object errorMessage) {
-    if (reference == null) {
-      throw new NullPointerException(String.valueOf(errorMessage));
-    }
-    return reference;
   }
 
   private void checkTicker(Deadline other) {
