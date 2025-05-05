@@ -2,7 +2,7 @@ plugins {
     id 'application' // Provide convenience executables for trying out the examples.
     id 'java'
 
-    id "com.google.protobuf" version "0.9.4"
+    id "com.google.protobuf" version "0.9.5"
     id 'com.google.cloud.tools.jib' version '3.4.4' // For releasing to Docker Hub
 }
 
