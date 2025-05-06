@@ -2656,11 +2656,10 @@ public abstract class GrpcXdsClientImplTestBase {
         return false;
       }
       try {
-        CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
+        CertificateProviderPluginInstance certificateProviderInstance =
             statusOr.getValue().upstreamTlsContext()
-                .getCommonTlsContext()
-                .getCombinedValidationContext()
-                .getValidationContextCertificateProviderInstance();
+                .getCommonTlsContext().getCombinedValidationContext()
+                .getDefaultValidationContext().getCaCertificateProviderInstance();
         assertThat(certificateProviderInstance.getInstanceName())
             .isEqualTo("cert-instance-name");
         assertThat(certificateProviderInstance.getCertificateName())
