@@ -673,13 +673,16 @@ public abstract class BinderTransport
       Attributes eagAttrs = checkNotNull(attributes.get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS));
       ServiceInfo serviceInfo = eagAttrs.get(ApiConstants.TARGET_SERVICE_INFO);
       if (serviceInfo == null) {
-        // It's unlikely, but the identity of the server could change by the time we actually
-        // bind/connect. It doesn't matter though, because:
-        // - if pre-auth fails, grpc-core will eventually retry against the replacement server.
-        // - even if pre-auth succeeds, we'll check the SecurityPolicy again in SETUP_TRANSPORT
-        // against the actual/new server's identity.
         serviceInfo = serviceBinding.resolve();
       }
+
+      // It's unlikely, but in theory the server identity/existence represented by this ServiceInfo
+      // could change by the time we actually bind/connect. It doesn't matter though, because:
+      // - If pre-auth fails (but would succeed for the new identity), grpc-core will retry
+      // against the replacement server using a new instance of BinderClientTransport.
+      // - If pre-auth succeeds (but would fail for the new identity), we might incorrectly bind
+      // to an unauthorized server, but we'll check the SecurityPolicy again in SETUP_TRANSPORT
+      // against the actual/new server's identity.
       if (serviceInfo == null) {
         preAuthResultFuture =
             Futures.immediateFuture(
