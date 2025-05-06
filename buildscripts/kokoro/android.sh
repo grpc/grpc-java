@@ -31,8 +31,8 @@ rm cmdline.zip
 mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
 (yes || true) | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses
 curl -Ls https://github.com/Kitware/CMake/releases/download/v3.26.3/cmake-3.26.3-linux-x86_64.tar.gz | \
-    tar xz -C /var/local
-export PATH=/var/local/cmake-3.26.3-linux-x86_64/bin:$PATH
+    tar xz -C /usr/local
+export PATH=/usr/local/cmake-3.26.3-linux-x86_64/bin:$PATH
     
 # Proto deps
 buildscripts/make_dependencies.sh
