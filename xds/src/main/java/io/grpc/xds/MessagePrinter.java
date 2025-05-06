@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.github.xds.type.v3.TypedStruct;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -67,7 +68,8 @@ final class MessagePrinter implements MessagePrettyPrinter {
               .add(Cluster.getDescriptor())
               .add(ClusterConfig.getDescriptor())
               .add(ClusterLoadAssignment.getDescriptor())
-              .add(WrrLocality.getDescriptor());
+              .add(WrrLocality.getDescriptor())
+              .add(TypedStruct.getDescriptor());
       try {
         @SuppressWarnings("unchecked")
         Class<? extends Message> routeLookupClusterSpecifierClass =
