@@ -52,11 +52,11 @@ for /f "tokens=*" %%a in ('pkg-config --libs protobuf') do (
       set lib=!lib: =!
       @rem Because protobuf is specified as libprotobuf and elsewhere
       if !lib! NEQ protobuf (
-        set lib=!lib!.lib,
+        set lib=!lib!.lib
         if "!libs_list!"=="" (
           set libs_list=!lib!
         ) else (
-          set libs_list=!libs_list! !lib!
+          set libs_list=!libs_list!,!lib!
         )
       )
     )
