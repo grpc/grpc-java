@@ -317,7 +317,6 @@ public class ClientSslContextProviderFactoryTest {
         .isSameInstanceAs(sslContextProvider);
   }
 
-  @SuppressWarnings("deprecation")
   static CommonTlsContext.Builder addFilenames(
       CommonTlsContext.Builder builder, String certChain, String privateKey, String trustCa) {
     TlsCertificate tlsCert =
@@ -329,13 +328,10 @@ public class ClientSslContextProviderFactoryTest {
         CertificateValidationContext.newBuilder()
             .setTrustedCa(DataSource.newBuilder().setFilename(trustCa))
             .build();
-    CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
-        builder.getValidationContextCertificateProviderInstance();
     CommonTlsContext.CombinedCertificateValidationContext.Builder combinedBuilder =
         CommonTlsContext.CombinedCertificateValidationContext.newBuilder();
     combinedBuilder
-        .setDefaultValidationContext(certContext)
-        .setValidationContextCertificateProviderInstance(certificateProviderInstance);
+        .setDefaultValidationContext(certContext);
     return builder
         .addTlsCertificates(tlsCert)
         .setCombinedValidationContext(combinedBuilder.build());

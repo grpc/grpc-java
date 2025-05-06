@@ -16,12 +16,14 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -54,7 +56,6 @@ import java.io.InputStreamReader;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -64,8 +65,6 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class ServerCallImplTest {
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private ServerStream stream;
@@ -175,20 +174,20 @@ public class ServerCallImplTest {
   @Test
   public void sendHeader_failsOnSecondCall() {
     call.sendHeaders(new Metadata());
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("sendHeaders has already been called");
-
-    call.sendHeaders(new Metadata());
+    Metadata headers = new Metadata();
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        () -> call.sendHeaders(headers));
+    assertThat(e).hasMessageThat().isEqualTo("sendHeaders has already been called");
   }
 
   @Test
   public void sendHeader_failsOnClosed() {
     call.close(Status.CANCELLED, new Metadata());
 
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("call is closed");
-
-    call.sendHeaders(new Metadata());
+    Metadata headers = new Metadata();
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        () -> call.sendHeaders(headers));
+    assertThat(e).hasMessageThat().isEqualTo("call is closed");
   }
 
   @Test
@@ -204,18 +203,16 @@ public class ServerCallImplTest {
     call.sendHeaders(new Metadata());
     call.close(Status.CANCELLED, new Metadata());
 
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("call is closed");
-
-    call.sendMessage(1234L);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        () -> call.sendMessage(1234L));
+    assertThat(e).hasMessageThat().isEqualTo("call is closed");
   }
 
   @Test
   public void sendMessage_failsIfheadersUnsent() {
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("sendHeaders has not been called");
-
-    call.sendMessage(1234L);
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+        () -> call.sendMessage(1234L));
+    assertThat(e).hasMessageThat().isEqualTo("sendHeaders has not been called");
   }
 
   @Test
@@ -490,9 +487,10 @@ public class ServerCallImplTest {
 
     InputStream inputStream = UNARY_METHOD.streamRequest(1234L);
 
-    thrown.expect(RuntimeException.class);
-    thrown.expectMessage("unexpected exception");
-    streamListener.messagesAvailable(new SingleMessageProducer(inputStream));
+    SingleMessageProducer producer = new SingleMessageProducer(inputStream);
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> streamListener.messagesAvailable(producer));
+    assertThat(e).hasMessageThat().isEqualTo("unexpected exception");
   }
 
   private static class LongMarshaller implements Marshaller<Long> {

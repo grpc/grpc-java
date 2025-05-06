@@ -90,7 +90,7 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
         Arrays.asList("grpc.target", "grpc.xds.server"), Collections.emptyList(), false);
     RESOURCES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.xds_client.resources",
         "EXPERIMENTAL.  Number of xDS resources.", "{resource}",
-        Arrays.asList("grpc.target", "grpc.xds.cache_state",
+        Arrays.asList("grpc.target", "grpc.xds.authority", "grpc.xds.cache_state",
             "grpc.xds.resource_type"), Collections.emptyList(), false);
   }
 
@@ -161,15 +161,32 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
     for (Map.Entry<XdsResourceType<?>, Map<String, ResourceMetadata>> metadataByTypeEntry :
         metadataByType.entrySet()) {
       XdsResourceType<?> type = metadataByTypeEntry.getKey();
+      Map<String, ResourceMetadata> resources = metadataByTypeEntry.getValue();
 
-      Map<String, Long> resourceCountsByState = new HashMap<>();
-      for (ResourceMetadata metadata : metadataByTypeEntry.getValue().values()) {
+      Map<String, Map<String, Long>> resourceCountsByAuthorityAndState = new HashMap<>();
+      for (Map.Entry<String, ResourceMetadata> resourceEntry : resources.entrySet()) {
+        String resourceName = resourceEntry.getKey();
+        ResourceMetadata metadata = resourceEntry.getValue();
+        String authority = XdsClient.getAuthorityFromResourceName(resourceName);
         String cacheState = cacheStateFromResourceStatus(metadata.getStatus(), metadata.isCached());
-        resourceCountsByState.compute(cacheState, (k, v) -> (v == null) ? 1 : v + 1);
+        resourceCountsByAuthorityAndState
+            .computeIfAbsent(authority, k -> new HashMap<>())
+            .merge(cacheState, 1L, Long::sum);
       }
 
-      resourceCountsByState.forEach((cacheState, count) ->
-          callback.reportResourceCountGauge(count, cacheState, type.typeUrl()));
+      // Report metrics
+      for (Map.Entry<String, Map<String, Long>> authorityEntry
+            : resourceCountsByAuthorityAndState.entrySet()) {
+        String authority = authorityEntry.getKey();
+        Map<String, Long> stateCounts = authorityEntry.getValue();
+
+        for (Map.Entry<String, Long> stateEntry : stateCounts.entrySet()) {
+          String cacheState = stateEntry.getKey();
+          Long count = stateEntry.getValue();
+
+          callback.reportResourceCountGauge(count, authority, cacheState, type.typeUrl());
+        }
+      }
     }
   }
 
@@ -199,11 +216,12 @@ final class XdsClientMetricReporterImpl implements XdsClientMetricReporter {
       this.target = target;
     }
 
-    // TODO(dnvindhya): include the "authority" label once xds.authority is available.
-    void reportResourceCountGauge(long resourceCount, String cacheState,
+    void reportResourceCountGauge(long resourceCount, String authority, String cacheState,
         String resourceType) {
+      // authority = #old, for non-xdstp resource names
       recorder.recordLongGauge(RESOURCES_GAUGE, resourceCount,
-          Arrays.asList(target, cacheState, resourceType), Collections.emptyList());
+          Arrays.asList(target, authority == null ? "#old" : authority, cacheState, resourceType),
+          Collections.emptyList());
     }
 
     @Override

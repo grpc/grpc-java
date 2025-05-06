@@ -33,6 +33,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -657,79 +658,84 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
         @Override
         public void onResult(final ResolutionResult resolutionResult) {
-          class NameResolved implements Runnable {
-            @Override
-            public void run() {
-              if (shutdown) {
-                return;
-              }
-              backoffPolicy = null;  // reset backoff sequence if succeeded
-              // Arbitrary priority notation for all DNS-resolved endpoints.
-              String priorityName = priorityName(name, 0);  // value doesn't matter
-              List<EquivalentAddressGroup> addresses = new ArrayList<>();
-              for (EquivalentAddressGroup eag : resolutionResult.getAddresses()) {
-                // No weight attribute is attached, all endpoint-level LB policy should be able
-                // to handle such it.
-                String localityName = localityName(LOGICAL_DNS_CLUSTER_LOCALITY);
-                Attributes attr = eag.getAttributes().toBuilder()
-                    .set(XdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
-                    .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
-                    .set(XdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
-                    .build();
-                eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
-                eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
-                addresses.add(eag);
-              }
-              PriorityChildConfig priorityChildConfig = generateDnsBasedPriorityChildConfig(
-                  name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
-                  lbRegistry, Collections.<DropOverload>emptyList());
-              status = Status.OK;
-              resolved = true;
-              result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
-              handleEndpointResourceUpdate();
-            }
-          }
+          syncContext.execute(() -> onResult2(resolutionResult));
+        }
 
-          syncContext.execute(new NameResolved());
+        @Override
+        public Status onResult2(final ResolutionResult resolutionResult) {
+          if (shutdown) {
+            return Status.OK;
+          }
+          // Arbitrary priority notation for all DNS-resolved endpoints.
+          String priorityName = priorityName(name, 0);  // value doesn't matter
+          List<EquivalentAddressGroup> addresses = new ArrayList<>();
+          StatusOr<List<EquivalentAddressGroup>> addressesOrError =
+                  resolutionResult.getAddressesOrError();
+          if (addressesOrError.hasValue()) {
+            backoffPolicy = null;  // reset backoff sequence if succeeded
+            for (EquivalentAddressGroup eag : addressesOrError.getValue()) {
+              // No weight attribute is attached, all endpoint-level LB policy should be able
+              // to handle such it.
+              String localityName = localityName(LOGICAL_DNS_CLUSTER_LOCALITY);
+              Attributes attr = eag.getAttributes().toBuilder()
+                      .set(XdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
+                      .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                      .set(XdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
+                      .build();
+              eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
+              eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
+              addresses.add(eag);
+            }
+            PriorityChildConfig priorityChildConfig = generateDnsBasedPriorityChildConfig(
+                    name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
+                    lbRegistry, Collections.<DropOverload>emptyList());
+            status = Status.OK;
+            resolved = true;
+            result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
+            handleEndpointResourceUpdate();
+            return Status.OK;
+          } else {
+            handleErrorInSyncContext(addressesOrError.getStatus());
+            return addressesOrError.getStatus();
+          }
         }
 
         @Override
         public void onError(final Status error) {
-          syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              if (shutdown) {
-                return;
-              }
-              status = error;
-              // NameResolver.Listener API cannot distinguish between address-not-found and
-              // transient errors. If the error occurs in the first resolution, treat it as
-              // address not found. Otherwise, either there is previously resolved addresses
-              // previously encountered error, propagate the error to downstream/upstream and
-              // let downstream/upstream handle it.
-              if (!resolved) {
-                resolved = true;
-                handleEndpointResourceUpdate();
-              } else {
-                handleEndpointResolutionError();
-              }
-              if (scheduledRefresh != null && scheduledRefresh.isPending()) {
-                return;
-              }
-              if (backoffPolicy == null) {
-                backoffPolicy = backoffPolicyProvider.get();
-              }
-              long delayNanos = backoffPolicy.nextBackoffNanos();
-              logger.log(XdsLogLevel.DEBUG,
+          syncContext.execute(() -> handleErrorInSyncContext(error));
+        }
+
+        private void handleErrorInSyncContext(final Status error) {
+          if (shutdown) {
+            return;
+          }
+          status = error;
+          // NameResolver.Listener API cannot distinguish between address-not-found and
+          // transient errors. If the error occurs in the first resolution, treat it as
+          // address not found. Otherwise, either there is previously resolved addresses
+          // previously encountered error, propagate the error to downstream/upstream and
+          // let downstream/upstream handle it.
+          if (!resolved) {
+            resolved = true;
+            handleEndpointResourceUpdate();
+          } else {
+            handleEndpointResolutionError();
+          }
+          if (scheduledRefresh != null && scheduledRefresh.isPending()) {
+            return;
+          }
+          if (backoffPolicy == null) {
+            backoffPolicy = backoffPolicyProvider.get();
+          }
+          long delayNanos = backoffPolicy.nextBackoffNanos();
+          logger.log(XdsLogLevel.DEBUG,
                   "Logical DNS resolver for cluster {0} encountered name resolution "
-                      + "error: {1}, scheduling DNS resolution backoff for {2} ns",
+                          + "error: {1}, scheduling DNS resolution backoff for {2} ns",
                   name, error, delayNanos);
-              scheduledRefresh =
+          scheduledRefresh =
                   syncContext.schedule(
-                      new DelayedNameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,
-                      timeService);
-            }
-          });
+                          new DelayedNameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,
+                          timeService);
         }
       }
     }

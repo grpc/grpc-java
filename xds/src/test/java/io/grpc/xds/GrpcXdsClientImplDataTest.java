@@ -98,7 +98,6 @@ import io.envoyproxy.envoy.extensions.transport_sockets.http_11_proxy.v3.Http11P
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
@@ -129,6 +128,7 @@ import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
@@ -1267,7 +1267,7 @@ public class GrpcXdsClientImplDataTest {
       }
 
       @Override
-      public TestFilter newInstance() {
+      public TestFilter newInstance(String name) {
         return new TestFilter();
       }
 
@@ -2417,8 +2417,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void processCluster_parsesAudienceMetadata()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void processCluster_parsesAudienceMetadata() throws Exception {
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()
@@ -2462,7 +2461,10 @@ public class GrpcXdsClientImplDataTest {
         "FILTER_METADATA", ImmutableMap.of(
             "key1", "value1",
             "key2", 42.0));
-    assertThat(update.parsedMetadata()).isEqualTo(expectedParsedMetadata);
+    assertThat(update.parsedMetadata().get("FILTER_METADATA"))
+        .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
+    assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
+        .isInstanceOf(AudienceWrapper.class);
   }
 
   @Test
@@ -2519,8 +2521,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void processCluster_metadataKeyCollision_resolvesToTypedMetadata()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void processCluster_metadataKeyCollision_resolvesToTypedMetadata() throws Exception {
     MetadataRegistry metadataRegistry = MetadataRegistry.getInstance();
 
     MetadataValueParser testParser =
@@ -2575,8 +2576,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void parseNonAggregateCluster_withHttp11ProxyTransportSocket()
-      throws ResourceInvalidException, InvalidProtocolBufferException {
+  public void parseNonAggregateCluster_withHttp11ProxyTransportSocket() throws Exception {
     XdsClusterResource.isEnabledXdsHttpConnect = true;
 
     Http11ProxyUpstreamTransport http11ProxyUpstreamTransport =
@@ -2656,6 +2656,41 @@ public class GrpcXdsClientImplDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 cannot have use_original_dst set to true");
+    XdsListenerResource.parseServerSideListener(
+        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+  }
+
+  @Test
+  public void parseServerSideListener_emptyAddress() throws ResourceInvalidException {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(
+                    SocketAddress.newBuilder()))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Invalid address: Empty address is not allowed.");
+
+    XdsListenerResource.parseServerSideListener(
+        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+  }
+
+  @Test
+  public void parseServerSideListener_namedPort() throws ResourceInvalidException {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(
+                    SocketAddress.newBuilder()
+                        .setAddress("172.14.14.5").setNamedPort("")))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("NAMED_PORT is not supported in gRPC.");
+
     XdsListenerResource.parseServerSideListener(
         listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
   }
@@ -3007,35 +3042,6 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
-  public void validateCommonTlsContext_validationContextCertificateProvider()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setValidationContextCertificateProvider(
-            CommonTlsContext.CertificateProvider.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
-        "common-tls-context with validation_context_certificate_provider is not supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void validateCommonTlsContext_validationContextCertificateProviderInstance()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setValidationContextCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
-        "common-tls-context with validation_context_certificate_provider_instance is not "
-            + "supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
-  }
-
-  @Test
   public void validateCommonTlsContext_tlsCertificateProviderInstance_isRequiredForServer()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -3047,36 +3053,33 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_tlsNewCertificateProviderInstance()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setTlsCertificateProviderInstance(
-            CertificateProviderPluginInstance.newBuilder().setInstanceName("name1").build())
+            CertificateProviderPluginInstance.newBuilder().setInstanceName("name1"))
         .build();
     XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_tlsCertificateProviderInstance()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setTlsCertificateCertificateProviderInstance(
-            CertificateProviderInstance.newBuilder().setInstanceName("name1").build())
+        .setTlsCertificateProviderInstance(
+            CertificateProviderPluginInstance.newBuilder().setInstanceName("name1"))
         .build();
     XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_tlsCertificateProviderInstance_absentInBootstrapFile()
           throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setTlsCertificateCertificateProviderInstance(
-            CertificateProviderInstance.newBuilder().setInstanceName("bad-name").build())
+        .setTlsCertificateProviderInstance(
+            CertificateProviderPluginInstance.newBuilder().setInstanceName("bad-name"))
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -3086,15 +3089,14 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_validationContextProviderInstance()
           throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CertificateProviderInstance.newBuilder().setInstanceName("name1").build())
-                .build())
+              .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+                  .setInstanceName("name1"))))
         .build();
     XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
@@ -3182,15 +3184,14 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_validationContextProviderInstance_absentInBootstrapFile()
           throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CertificateProviderInstance.newBuilder().setInstanceName("bad-name").build())
-                .build())
+              .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+                  .setInstanceName("bad-name"))))
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -3215,20 +3216,6 @@ public class GrpcXdsClientImplDataTest {
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .addTlsCertificateSdsSecretConfigs(SdsSecretConfig.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
-        "tls_certificate_provider_instance is unset");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void validateCommonTlsContext_tlsCertificateCertificateProvider()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setTlsCertificateCertificateProvider(
-            CommonTlsContext.CertificateProvider.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -3268,13 +3255,13 @@ public class GrpcXdsClientImplDataTest {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CertificateProviderInstance.getDefaultInstance())
                 .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())
                     .addMatchSubjectAltNames(StringMatcher.newBuilder().setExact("foo.com").build())
                     .build()))
-        .setTlsCertificateCertificateProviderInstance(
-            CertificateProviderInstance.getDefaultInstance())
+        .setTlsCertificateProviderInstance(
+            CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("match_subject_alt_names only allowed in upstream_tls_context");
@@ -3282,18 +3269,16 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextWithDefaultValContextVerifyCertSpki()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-                .setDefaultValidationContext(
-                    CertificateValidationContext.newBuilder().addVerifyCertificateSpki("foo")))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())
+                    .addVerifyCertificateSpki("foo")))
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("verify_certificate_spki in default_validation_context is not "
@@ -3302,18 +3287,16 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextWithDefaultValContextVerifyCertHash()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-                .setDefaultValidationContext(
-                    CertificateValidationContext.newBuilder().addVerifyCertificateHash("foo")))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())
+                    .addVerifyCertificateHash("foo")))
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("verify_certificate_hash in default_validation_context is not "
@@ -3322,18 +3305,17 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextDfltValContextRequireSignedCertTimestamp()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
                 .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())
                     .setRequireSignedCertificateTimestamp(BoolValue.of(true))))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+        .setTlsCertificateProviderInstance(
+            CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -3343,18 +3325,16 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValidationContextWithDefaultValidationContextCrl()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
                 .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())
                     .setCrl(DataSource.getDefaultInstance())))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("crl in default_validation_context is not supported");
@@ -3362,18 +3342,16 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextWithDfltValContextCustomValidatorConfig()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
                 .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())
                     .setCustomValidatorConfig(TypedExtensionConfig.getDefaultInstance())))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("custom_validator_config in default_validation_context is not "
@@ -3390,15 +3368,14 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateDownstreamTlsContext_hasRequireSni() throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())))
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.newBuilder()
         .setCommonTlsContext(commonTlsContext)
@@ -3410,15 +3387,14 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void validateDownstreamTlsContext_hasOcspStaplePolicy() throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .setCaCertificateProviderInstance(
+                        CertificateProviderPluginInstance.getDefaultInstance())))
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
     DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.newBuilder()
         .setCommonTlsContext(commonTlsContext)

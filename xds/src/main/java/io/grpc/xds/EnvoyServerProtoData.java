@@ -22,6 +22,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData;
@@ -248,13 +249,17 @@ public final class EnvoyServerProtoData {
     @Nullable
     abstract FilterChain defaultFilterChain();
 
+    @Nullable
+    abstract Protocol protocol();
+
     static Listener create(
         String name,
         @Nullable String address,
         ImmutableList<FilterChain> filterChains,
-        @Nullable FilterChain defaultFilterChain) {
+        @Nullable FilterChain defaultFilterChain,
+        @Nullable Protocol protocol) {
       return new AutoValue_EnvoyServerProtoData_Listener(name, address, filterChains,
-          defaultFilterChain);
+          defaultFilterChain, protocol);
     }
   }
 

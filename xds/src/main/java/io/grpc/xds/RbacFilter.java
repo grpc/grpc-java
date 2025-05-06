@@ -89,7 +89,7 @@ final class RbacFilter implements Filter {
     }
 
     @Override
-    public RbacFilter newInstance() {
+    public RbacFilter newInstance(String name) {
       return INSTANCE;
     }
 
@@ -276,8 +276,13 @@ final class RbacFilter implements Filter {
         return createSourceIpMatcher(principal.getDirectRemoteIp());
       case REMOTE_IP:
         return createSourceIpMatcher(principal.getRemoteIp());
-      case SOURCE_IP:
-        return createSourceIpMatcher(principal.getSourceIp());
+      case SOURCE_IP: {
+        // gRFC A41 has identical handling of source_ip as remote_ip and direct_remote_ip and
+        // pre-dates the deprecation.
+        @SuppressWarnings("deprecation")
+        CidrRange sourceIp = principal.getSourceIp();
+        return createSourceIpMatcher(sourceIp);
+      }
       case HEADER:
         return parseHeaderMatcher(principal.getHeader());
       case NOT_ID:

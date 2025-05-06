@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
@@ -67,7 +68,6 @@ import java.util.regex.Pattern;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -99,8 +99,6 @@ public class ManagedChannelImplBuilderTest {
       };
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
   @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Mock private ClientTransportFactory mockClientTransportFactory;
@@ -424,10 +422,9 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void checkAuthority_invalidAuthorityFailed() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority");
-
-    builder.checkAuthority(DUMMY_AUTHORITY_INVALID);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
   @Test
@@ -450,11 +447,10 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void disableCheckAuthority_invalidAuthorityFailed() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Invalid authority");
-
     builder.disableCheckAuthority().enableCheckAuthority();
-    builder.checkAuthority(DUMMY_AUTHORITY_INVALID);
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> builder.checkAuthority(DUMMY_AUTHORITY_INVALID));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid authority: [ : : 1]");
   }
 
   @Test
@@ -533,12 +529,9 @@ public class ManagedChannelImplBuilderTest {
       List<ClientInterceptor> effectiveInterceptors =
           builder.getEffectiveInterceptors("unused:///");
       assertThat(effectiveInterceptors).hasSize(2);
-      try {
-        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
-        fail("exception expected");
-      } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Configurators are already set");
-      }
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+      assertThat(InternalConfiguratorRegistry.getConfigurators()).isEmpty();
+      assertThat(InternalConfiguratorRegistry.getConfiguratorsCallCountBeforeSet()).isEqualTo(1);
     }
   }
 
@@ -680,14 +673,12 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void retryBufferSizeInvalidArg() {
-    thrown.expect(IllegalArgumentException.class);
-    builder.retryBufferSize(0L);
+    assertThrows(IllegalArgumentException.class, () -> builder.retryBufferSize(0L));
   }
 
   @Test
   public void perRpcBufferLimitInvalidArg() {
-    thrown.expect(IllegalArgumentException.class);
-    builder.perRpcBufferLimit(0L);
+    assertThrows(IllegalArgumentException.class, () -> builder.perRpcBufferLimit(0L));
   }
 
   @Test
@@ -710,8 +701,7 @@ public class ManagedChannelImplBuilderTest {
     Map<String, Object> config = new HashMap<>();
     config.put(null, "val");
 
-    thrown.expect(IllegalArgumentException.class);
-    builder.defaultServiceConfig(config);
+    assertThrows(IllegalArgumentException.class, () -> builder.defaultServiceConfig(config));
   }
 
   @Test
@@ -721,8 +711,7 @@ public class ManagedChannelImplBuilderTest {
     Map<String, Object> config = new HashMap<>();
     config.put("key", subConfig);
 
-    thrown.expect(IllegalArgumentException.class);
-    builder.defaultServiceConfig(config);
+    assertThrows(IllegalArgumentException.class, () -> builder.defaultServiceConfig(config));
   }
 
   @Test
@@ -730,8 +719,7 @@ public class ManagedChannelImplBuilderTest {
     Map<String, Object> config = new HashMap<>();
     config.put("key", 3);
 
-    thrown.expect(IllegalArgumentException.class);
-    builder.defaultServiceConfig(config);
+    assertThrows(IllegalArgumentException.class, () -> builder.defaultServiceConfig(config));
   }
 
   @Test

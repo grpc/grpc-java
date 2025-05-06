@@ -51,7 +51,6 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
-import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
@@ -281,8 +280,18 @@ public class XdsTestUtils {
     return builder.build();
   }
 
+  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
+    Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
+    LbEndpoint lbEndpoint = LbEndpoint.create(
+        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+    lbEndpointsMap.put(
+        Locality.create("", "", ""),
+        LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
+    return lbEndpointsMap;
+  }
+
   @SuppressWarnings("unchecked")
-  private static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
+  static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
     String lbConfigStr = "{\"wrr_locality_experimental\" : "
         + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
 
@@ -353,7 +362,6 @@ public class XdsTestUtils {
     return Listener.newBuilder()
         .setName(serverName)
         .setApiListener(clientListenerBuilder.build()).build();
-
   }
 
   /**
@@ -405,20 +413,6 @@ public class XdsTestUtils {
               .setLoadReportingInterval(Durations.fromNanos(loadReportIntervalNano))
               .build();
       responseObserver.onNext(response);
-    }
-  }
-
-  static class StatusMatcher implements ArgumentMatcher<Status> {
-    private final Status expectedStatus;
-
-    StatusMatcher(Status expectedStatus) {
-      this.expectedStatus = expectedStatus;
-    }
-
-    @Override
-    public boolean matches(Status status) {
-      return status != null && expectedStatus.getCode().equals(status.getCode())
-          && expectedStatus.getDescription().equals(status.getDescription());
     }
   }
 }

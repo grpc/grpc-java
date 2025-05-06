@@ -37,6 +37,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
@@ -54,6 +55,7 @@ import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
+import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
@@ -61,6 +63,7 @@ import io.grpc.xds.StatefulFilter.Config;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
@@ -536,6 +539,146 @@ public class XdsServerWrapperTest {
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
     verify(listener).onServing();
     verify(mockServer).start();
+  }
+
+  @Test
+  public void onChanged_listenerIsNull()
+      throws ExecutionException, InterruptedException, TimeoutException {
+    xdsServerWrapper = new XdsServerWrapper("10.1.2.3:1", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient),
+        filterRegistry, executor.getScheduledExecutorService());
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsResource).isEqualTo("grpc/server?udpa.resource.listening_address=10.1.2.3:1");
+    VirtualHost virtualHost =
+        VirtualHost.create(
+            "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+            ImmutableMap.<String, FilterConfig>of());
+
+    xdsClient.deliverLdsUpdateWithApiListener(0L, Arrays.asList(virtualHost));
+
+    verify(listener, timeout(10000)).onNotServing(any());
+  }
+
+  @Test
+  public void onChanged_listenerAddressMissingPort()
+      throws ExecutionException, InterruptedException, TimeoutException {
+    xdsServerWrapper = new XdsServerWrapper("10.1.2.3:1", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient),
+        filterRegistry, executor.getScheduledExecutorService());
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsResource).isEqualTo("grpc/server?udpa.resource.listening_address=10.1.2.3:1");
+    VirtualHost virtualHost =
+        VirtualHost.create(
+            "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+            ImmutableMap.<String, FilterConfig>of());
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
+        0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
+        mock(TlsContextManager.class));
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(
+        Listener.create("listener", "20.3.4.5:",
+            ImmutableList.copyOf(Collections.singletonList(filterChain)), null, Protocol.TCP));
+
+    xdsClient.deliverLdsUpdate(listenerUpdate);
+
+    verify(listener, timeout(10000)).onNotServing(any());
+  }
+
+  @Test
+  public void onChanged_listenerAddressMismatch()
+      throws ExecutionException, InterruptedException, TimeoutException {
+    xdsServerWrapper = new XdsServerWrapper("10.1.2.3:1", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient),
+        filterRegistry, executor.getScheduledExecutorService());
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsResource).isEqualTo("grpc/server?udpa.resource.listening_address=10.1.2.3:1");
+    VirtualHost virtualHost =
+        VirtualHost.create(
+            "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+            ImmutableMap.<String, FilterConfig>of());
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
+        0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
+        mock(TlsContextManager.class));
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(
+        Listener.create("listener", "20.3.4.5:1",
+            ImmutableList.copyOf(Collections.singletonList(filterChain)), null, Protocol.TCP));
+
+    xdsClient.deliverLdsUpdate(listenerUpdate);
+
+    verify(listener, timeout(10000)).onNotServing(any());
+  }
+
+  @Test
+  public void onChanged_listenerAddressPortMismatch()
+      throws ExecutionException, InterruptedException, TimeoutException {
+    xdsServerWrapper = new XdsServerWrapper("10.1.2.3:1", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient),
+        filterRegistry, executor.getScheduledExecutorService());
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsResource).isEqualTo("grpc/server?udpa.resource.listening_address=10.1.2.3:1");
+    VirtualHost virtualHost =
+        VirtualHost.create(
+            "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+            ImmutableMap.<String, FilterConfig>of());
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
+        0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
+        mock(TlsContextManager.class));
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(
+        Listener.create("listener", "10.1.2.3:2",
+            ImmutableList.copyOf(Collections.singletonList(filterChain)), null, Protocol.TCP));
+
+    xdsClient.deliverLdsUpdate(listenerUpdate);
+
+    verify(listener, timeout(10000)).onNotServing(any());
   }
 
   @Test
@@ -1135,7 +1278,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance()).thenReturn(filter);
+    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);
@@ -1208,7 +1351,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance()).thenReturn(filter);
+    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);
@@ -1811,7 +1954,7 @@ public class XdsServerWrapperTest {
   /**
    * Returns the least-specific match-all Filter Chain Match.
    */
-  private static FilterChainMatch createMatch() {
+  static FilterChainMatch createMatch() {
     return FilterChainMatch.create(
         0,
         ImmutableList.of(),
@@ -1867,7 +2010,7 @@ public class XdsServerWrapperTest {
             .build();
   }
 
-  private static EnvoyServerProtoData.DownstreamTlsContext createTls() {
+  static EnvoyServerProtoData.DownstreamTlsContext createTls() {
     return CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
   }
 }

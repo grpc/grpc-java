@@ -99,7 +99,7 @@ final class FaultFilter implements Filter {
     }
 
     @Override
-    public FaultFilter newInstance() {
+    public FaultFilter newInstance(String name) {
       return INSTANCE;
     }
 

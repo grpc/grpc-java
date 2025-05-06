@@ -737,18 +737,16 @@ public final class ManagedChannelImplBuilder
   // TODO(zdapeng): FIX IT
   @VisibleForTesting
   List<ClientInterceptor> getEffectiveInterceptors(String computedTarget) {
-    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
-    for (int i = 0; i < effectiveInterceptors.size(); i++) {
-      if (!(effectiveInterceptors.get(i) instanceof InterceptorFactoryWrapper)) {
-        continue;
+    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors.size());
+    for (ClientInterceptor interceptor : this.interceptors) {
+      if (interceptor instanceof InterceptorFactoryWrapper) {
+        InterceptorFactory factory = ((InterceptorFactoryWrapper) interceptor).factory;
+        interceptor = factory.newInterceptor(computedTarget);
+        if (interceptor == null) {
+          throw new NullPointerException("Factory returned null interceptor: " + factory);
+        }
       }
-      InterceptorFactory factory =
-          ((InterceptorFactoryWrapper) effectiveInterceptors.get(i)).factory;
-      ClientInterceptor interceptor = factory.newInterceptor(computedTarget);
-      if (interceptor == null) {
-        throw new NullPointerException("Factory returned null interceptor: " + factory);
-      }
-      effectiveInterceptors.set(i, interceptor);
+      effectiveInterceptors.add(interceptor);
     }
 
     boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();

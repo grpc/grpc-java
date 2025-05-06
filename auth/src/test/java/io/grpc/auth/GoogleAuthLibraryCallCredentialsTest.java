@@ -50,10 +50,12 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.JsonParser;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.testing.TlsTesting;
+import io.grpc.util.CertificateUtils;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -342,7 +344,10 @@ public class GoogleAuthLibraryCallCredentialsTest {
 
   @Test
   public void serviceAccountToJwt() throws Exception {
-    KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PrivateKey privateKey;
+    try (InputStream server1Key = TlsTesting.loadCert("server1.key")) {
+      privateKey = CertificateUtils.getPrivateKey(server1Key);
+    }
 
     HttpTransportFactory factory = Mockito.mock(HttpTransportFactory.class);
     Mockito.when(factory.create()).thenThrow(new AssertionError());
@@ -350,7 +355,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
     ServiceAccountCredentials credentials =
         ServiceAccountCredentials.newBuilder()
             .setClientEmail("test-email@example.com")
-            .setPrivateKey(pair.getPrivate())
+            .setPrivateKey(privateKey)
             .setPrivateKeyId("test-private-key-id")
             .setHttpTransportFactory(factory)
             .build();
@@ -390,13 +395,16 @@ public class GoogleAuthLibraryCallCredentialsTest {
 
   @Test
   public void jwtAccessCredentialsInRequestMetadata() throws Exception {
-    KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PrivateKey privateKey;
+    try (InputStream server1Key = TlsTesting.loadCert("server1.key")) {
+      privateKey = CertificateUtils.getPrivateKey(server1Key);
+    }
 
     ServiceAccountCredentials credentials =
         ServiceAccountCredentials.newBuilder()
             .setClientId("test-client")
             .setClientEmail("test-email@example.com")
-            .setPrivateKey(pair.getPrivate())
+            .setPrivateKey(privateKey)
             .setPrivateKeyId("test-private-key-id")
             .setQuotaProjectId("test-quota-project-id")
             .build();

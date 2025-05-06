@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
@@ -145,12 +144,9 @@ public class ServerImplBuilderTest {
               });
       assertThat(builder.getTracerFactories()).hasSize(2);
       assertThat(builder.interceptors).hasSize(0);
-      try {
-        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
-        fail("exception expected");
-      } catch (IllegalStateException e) {
-        assertThat(e).hasMessageThat().contains("Configurators are already set");
-      }
+      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+      assertThat(InternalConfiguratorRegistry.getConfigurators()).isEmpty();
+      assertThat(InternalConfiguratorRegistry.getConfiguratorsCallCountBeforeSet()).isEqualTo(1);
     }
   }
 

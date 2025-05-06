@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.base.VerifyException;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.net.InetAddresses;
@@ -82,7 +84,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.DisableOnDebug;
-import org.junit.rules.ExpectedException;
 import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
@@ -99,8 +100,6 @@ public class DnsNameResolverTest {
 
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final Map<String, ?> serviceConfig = new LinkedHashMap<>();
 
@@ -914,9 +913,10 @@ public class DnsNameResolverTest {
   public void maybeChooseServiceConfig_failsOnMisspelling() {
     Map<String, Object> bad = new LinkedHashMap<>();
     bad.put("parcentage", 1.0);
-    thrown.expectMessage("Bad key");
-
-    DnsNameResolver.maybeChooseServiceConfig(bad, new Random(), "host");
+    Random random = new Random();
+    VerifyException e = assertThrows(VerifyException.class,
+        () -> DnsNameResolver.maybeChooseServiceConfig(bad, random, "host"));
+    assertThat(e).hasMessageThat().isEqualTo("Bad key: parcentage=1.0");
   }
 
   @Test
@@ -1155,25 +1155,25 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void parseTxtResults_badTypeFails() throws Exception {
+  public void parseTxtResults_badTypeFails() {
     List<String> txtRecords = new ArrayList<>();
     txtRecords.add("some_record");
     txtRecords.add("grpc_config={}");
 
-    thrown.expect(ClassCastException.class);
-    thrown.expectMessage("wrong type");
-    DnsNameResolver.parseTxtResults(txtRecords);
+    ClassCastException e = assertThrows(ClassCastException.class,
+        () -> DnsNameResolver.parseTxtResults(txtRecords));
+    assertThat(e).hasMessageThat().isEqualTo("wrong type {}");
   }
 
   @Test
-  public void parseTxtResults_badInnerTypeFails() throws Exception {
+  public void parseTxtResults_badInnerTypeFails() {
     List<String> txtRecords = new ArrayList<>();
     txtRecords.add("some_record");
     txtRecords.add("grpc_config=[\"bogus\"]");
 
-    thrown.expect(ClassCastException.class);
-    thrown.expectMessage("not object");
-    DnsNameResolver.parseTxtResults(txtRecords);
+    ClassCastException e = assertThrows(ClassCastException.class,
+        () -> DnsNameResolver.parseTxtResults(txtRecords));
+    assertThat(e).hasMessageThat().isEqualTo("value bogus for idx 0 in [bogus] is not object");
   }
 
   @Test
