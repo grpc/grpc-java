@@ -19,6 +19,8 @@ package io.grpc.census;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.ClientInterceptor;
+import io.grpc.ServerBuilder;
+import io.grpc.ServerStreamTracer;
 import io.opencensus.stats.StatsRecorder;
 import io.opencensus.tags.Tagger;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
@@ -82,6 +84,65 @@ public final class GrpcCensus {
             Tracing.getTracer(),
             Tracing.getPropagationComponent().getBinaryFormat());
     return censusTracing.getClientInterceptor();
+  }
+
+  /**
+   * Returns a {@link ServerStreamTracer.Factory} with default stats implementation.
+   */
+  public static ServerStreamTracer.Factory getServerStreamTracerFactory(
+      boolean recordStartedRpcs,
+      boolean recordFinishedRpcs,
+      boolean recordRealTimeMetrics) {
+    CensusStatsModule censusStats =
+        new CensusStatsModule(
+            STOPWATCH_SUPPLIER,
+            true, /* propagateTags */
+            recordStartedRpcs,
+            recordFinishedRpcs,
+            recordRealTimeMetrics,
+            false);
+    return censusStats.getServerTracerFactory();
+  }
+
+  /**
+   * Returns a {@link ServerStreamTracer.Factory} with custom stats implementation.
+   */
+  public static ServerStreamTracer.Factory getServerStreamTracerFactory(
+      Tagger tagger,
+      TagContextBinarySerializer tagCtxSerializer,
+      StatsRecorder statsRecorder,
+      Supplier<Stopwatch> stopwatchSupplier,
+      boolean propagateTags,
+      boolean recordStartedRpcs,
+      boolean recordFinishedRpcs,
+      boolean recordRealTimeMetrics) {
+    CensusStatsModule censusStats =
+        new CensusStatsModule(
+            tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
+            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics, false);
+    return censusStats.getServerTracerFactory();
+  }
+
+  /**
+   * Returns a {@link ServerStreamTracer.Factory} with default tracing implementation.
+   */
+  public static ServerStreamTracer.Factory getServerStreamTracerFactory() {
+    CensusTracingModule censusTracing =
+        new CensusTracingModule(
+            Tracing.getTracer(),
+            Tracing.getPropagationComponent().getBinaryFormat());
+    return censusTracing.getServerTracerFactory();
+  }
+
+  /**
+   * Configures the given {@link ServerBuilder} with the provided serverStreamTracerFactory.
+   *
+   * @param serverBuilder             the server builder to configure
+   * @param serverStreamTracerFactory the server stream tracer factory to configure
+   */
+  public static void configureServerBuilder(ServerBuilder<?> serverBuilder,
+                                            ServerStreamTracer.Factory serverStreamTracerFactory) {
+    serverBuilder.addStreamTracerFactory(serverStreamTracerFactory);
   }
 
 }
