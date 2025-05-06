@@ -39,10 +39,11 @@ mkdir protobuf-%PROTOBUF_VER%\build
 pushd protobuf-%PROTOBUF_VER%\build
 
 @rem cmake does not detect x86_64 from the vcvars64.bat variables.
-@rem If vcvars64.bat has set PLATFORM to X64, then inform cmake to use the Win64 version of VS
+@rem If vcvars64.bat has set PLATFORM to X64, then inform cmake to use the Win64 version of VS, likewise for x32
 if "%PLATFORM%" == "x64" (
-  @rem Note the space
   SET CMAKE_VSARCH=-A x64
+) else if "%PLATFORM%" == "x32" (
+  SET CMAKE_VSARCH=-A x32
 ) else (
   SET CMAKE_VSARCH=
 )
@@ -53,7 +54,7 @@ for /f "tokens=1 delims=." %%a in ("%VisualStudioVersion%") do (
   SET visual_studio_major_version=%%a
 )
 cmake -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% ..
-cmake --build . --config Release --target install 
+cmake --build . --config Release --target install
 popd
 goto :eof
 

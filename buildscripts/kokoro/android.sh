@@ -33,7 +33,7 @@ mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/
 curl -Ls https://github.com/Kitware/CMake/releases/download/v3.26.3/cmake-3.26.3-linux-x86_64.tar.gz | \
     tar xz -C /tmp
 export PATH=/tmp/cmake-3.26.3-linux-x86_64/bin:$PATH
-sudo apt-get install pkg-config
+sudo apt-get update && sudo apt-get install pkg-config
     
 # Proto deps
 buildscripts/make_dependencies.sh
