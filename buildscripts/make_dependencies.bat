@@ -42,7 +42,7 @@ pushd protobuf-%PROTOBUF_VER%\build
 @rem If vcvars64.bat has set PLATFORM to X64, then inform cmake to use the Win64 version of VS, likewise for x32
 if "%PLATFORM%" == "x64" (
   SET CMAKE_VSARCH=-A x64
-) else if "%PLATFORM%" == "x32" (
+) else if "%PLATFORM%" == "x86" (
   SET CMAKE_VSARCH=-A x32
 ) else (
   SET CMAKE_VSARCH=
