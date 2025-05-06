@@ -127,12 +127,12 @@ model {
                 if (rootProject.hasProperty('vcProtobufInclude')) {
                     cppCompiler.args "/I${rootProject.vcProtobufInclude}"
                 } 
+                linker.args.add("libprotoc.lib")
+                linker.args.add("libprotobuf.lib")
                 if (rootProject.hasProperty('vcProtobufLibs')) {
                     String libsList = rootProject.property('vcProtobufLibs') as String
-                    linker.args.add("libprotoc.lib")
-                    linker.args.add("libprotobuf.lib")
                     libsList.split(',').each() { lib -> linker.args.add(lib) }
-                } 
+                }
                 if (rootProject.hasProperty('vcProtobufLibPaths')) {
                     linker.args "/LIBPATH:${rootProject.vcProtobufLibPaths}"
                 }
