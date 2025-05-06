@@ -23,6 +23,17 @@ subprojects {
     group = "io.grpc"
     version = "1.73.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
+    plugins.withId("com.android.base") {
+        android {
+            lint {
+                abortOnError true
+                if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                    warningsAsErrors true
+                }
+            }
+        }
+    }
+
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
             url "https://maven-central.storage-download.googleapis.com/maven2/"

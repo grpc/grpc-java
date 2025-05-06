@@ -20,15 +20,7 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
-
-    // fail on android lint warnings if failOnWarning is set true
-    lintOptions {
-        abortOnError true
-        if (rootProject.hasProperty("failOnWarnings") && rootProject.failOnWarnings.toBoolean()) {
-            warningsAsErrors true
-        }
-    }
-
+    lintOptions { abortOnError true }
     publishing {
         singleVariant('release') {
             withSourcesJar()
@@ -50,14 +42,6 @@ dependencies {
     testImplementation libraries.junit
     testImplementation libraries.robolectric
     testImplementation libraries.truth
-}
-
-// Enforce -Werror on java compiler if failOnWarning is set
-tasks.withType(JavaCompile).configureEach {
-    it.options.compilerArgs += ["-Xlint:all"]
-    if (rootProject.hasProperty("failOnWarnings") && rootProject.failOnWarnings.toBoolean()) {
-        it.options.compilerArgs += ["-Werror"]
-    }
 }
 
 tasks.register("javadocs", Javadoc) {
