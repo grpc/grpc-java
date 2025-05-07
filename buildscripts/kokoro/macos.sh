@@ -17,6 +17,6 @@ trap spongify_logs EXIT
 
 export -n JAVA_HOME
 export PATH="$(/usr/libexec/java_home -v"1.8.0")/bin:${PATH}"
-sudo apt-get update && sudo apt-get install pkg-config
+brew install pkg-config
 
 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
