@@ -43,7 +43,8 @@ pushd protobuf-%PROTOBUF_VER%\build
 if "%PLATFORM%" == "x64" (
   SET CMAKE_VSARCH=-A x64
 ) else if "%PLATFORM%" == "x86" (
-  SET CMAKE_VSARCH=-A x86
+  @rem -A x86 doesn't work: https://github.com/microsoft/vcpkg/issues/15465
+  SET CMAKE_VSARCH=-DCMAKE_GENERATOR_PLATFORM=WIN32
 ) else (
   SET CMAKE_VSARCH=
 )
