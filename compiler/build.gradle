@@ -152,7 +152,7 @@ dependencies {
 }
 
 tasks.named("compileTestJava").configure {
-    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
+    options.errorprone.excludedPaths = ".*/build/generated/sources/proto/.*"
 }
 
 tasks.named("compileTestLiteJava").configure {
@@ -160,7 +160,7 @@ tasks.named("compileTestLiteJava").configure {
     options.compilerArgs += [
         "-Xlint:-cast"
     ]
-    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
+    options.errorprone.excludedPaths = ".*/build/generated/sources/proto/.*"
 }
 
 tasks.named("checkstyleTestLite").configure {
