@@ -58,12 +58,13 @@ public final class RobolectricBinderSecurityTest {
   private static final String SERVICE_NAME = "fake_service";
   private static final String FULL_METHOD_NAME = "fake_service/fake_method";
   private final Application context = ApplicationProvider.getApplicationContext();
+  private AndroidComponentAddress listenAddress;
   private ManagedChannel channel;
 
   @Before
   public void setUp() {
-    AndroidComponentAddress listenAddress = AndroidComponentAddress
-        .forRemoteComponent(context.getPackageName(), "HostService");
+    listenAddress =
+        AndroidComponentAddress.forRemoteComponent(context.getPackageName(), "HostService");
     channel =
         BinderChannelBuilder.forAddress(listenAddress, context)
             .build();
@@ -99,8 +100,7 @@ public final class RobolectricBinderSecurityTest {
   }
 
   private ListenableFuture<Status> makeCall() {
-    ClientCall<Empty, Empty> call =
-        channel.newCall(getMethodDescriptor(), CallOptions.DEFAULT);
+    ClientCall<Empty, Empty> call = channel.newCall(getMethodDescriptor(), CallOptions.DEFAULT);
     ListenableFuture<Empty> responseFuture =
         ClientCalls.futureUnaryCall(call, Empty.getDefaultInstance());
 
@@ -141,31 +141,30 @@ public final class RobolectricBinderSecurityTest {
       ServerServiceDefinition def =
           ServerServiceDefinition.builder(SERVICE_NAME).addMethod(methodDef).build();
 
-      server =
-          BinderServerBuilder.forAddress(AndroidComponentAddress.forContext(context), binderReceiver)
-              .addService(def)
-              .securityPolicy(
-                  ServerSecurityPolicy.newBuilder()
-                      .servicePolicy(
-                          SERVICE_NAME,
-                          new AsyncSecurityPolicy() {
-                            @Override
-                            public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-                                    SettableFuture<Status> status = SettableFuture.create();
-                                    statusesToSet.add(status);
-                                    return status;
-                                    }
-                            }
-                          )
-                      .build())
-              .build();
+    server =
+        BinderServerBuilder.forAddress(listenAddress, binderReceiver)
+            .addService(def)
+            .securityPolicy(
+                ServerSecurityPolicy.newBuilder()
+                    .servicePolicy(
+                        SERVICE_NAME,
+                        new AsyncSecurityPolicy() {
+                          @Override
+                          public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                            SettableFuture<Status> status = SettableFuture.create();
+                            statusesToSet.add(status);
+                            return status;
+                          }
+                        })
+                    .build())
+            .build();
       try {
         server.start();
       } catch (IOException e) {
         throw new IllegalStateException(e);
       }
 
-      ComponentName componentName = new ComponentName(context, "SomeService");
+    ComponentName componentName = new ComponentName(context, "SomeService");
       shadowOf(context)
           .setComponentNameAndServiceForBindService(
               componentName, checkNotNull(binderReceiver.get()));
