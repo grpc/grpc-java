@@ -33,6 +33,7 @@ import com.google.protobuf.Any;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -713,14 +714,15 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       T savedData = data;
       boolean savedAbsent = absent;
       watcherExecutor.execute(() -> {
-        if (errorDescription != null) {
-          watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
-          return;
-        }
         if (savedData != null) {
-          notifyWatcher(watcher, savedData);
+          if (errorDescription != null) {
+            watcher.onAmbientError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
+          } else {
+            notifyWatcher(watcher, savedData);
+          }
         } else if (savedAbsent) {
-          watcher.onResourceDoesNotExist(resource);
+          watcher.onResourceChanged(StatusOr.fromStatus(Status.NOT_FOUND.withDescription(
+              "Resource " + resource + " does not exist")));
         }
       });
     }
@@ -862,7 +864,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           }
           watchers.get(watcher).execute(() -> {
             try {
-              watcher.onResourceDoesNotExist(resource);
+              watcher.onResourceChanged(StatusOr.fromStatus(Status.NOT_FOUND.withDescription(
+                  "Resource " + resource + " does not exist")));
             } finally {
               if (processingTracker != null) {
                 processingTracker.onComplete();
@@ -892,7 +895,12 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         }
         watchers.get(watcher).execute(() -> {
           try {
-            watcher.onError(errorAugmented);
+            if (data == null) {
+              watcher.onResourceChanged(StatusOr.fromStatus(errorAugmented));
+            } else {
+              // Have cached data: continue using it
+              watcher.onAmbientError(errorAugmented);
+            }
           } finally {
             if (tracker != null) {
               tracker.onComplete();
@@ -909,7 +917,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     }
 
     private void notifyWatcher(ResourceWatcher<T> watcher, T update) {
-      watcher.onChanged(update);
+      watcher.onResourceChanged(StatusOr.fromValue(update));
     }
   }
 
