@@ -60,7 +60,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   static boolean enableLeastRequest =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
-          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
+          : Boolean.parseBoolean(
+              System.getProperty("io.grpc.xds.experimentalEnableLeastRequest", "true"));
   @VisibleForTesting
   public static boolean enableSystemRootCerts =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);

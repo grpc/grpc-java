@@ -186,7 +186,6 @@ public class GrpcXdsClientImplDataTest {
     originalEnableRouteLookup = XdsRouteConfigureResource.enableRouteLookup;
     originalEnableLeastRequest = XdsClusterResource.enableLeastRequest;
     originalEnableUseSystemRootCerts = XdsClusterResource.enableSystemRootCerts;
-    assertThat(originalEnableLeastRequest).isFalse();
   }
 
   @After
