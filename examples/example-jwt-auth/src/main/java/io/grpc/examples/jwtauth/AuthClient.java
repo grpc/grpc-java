@@ -100,7 +100,7 @@ public class AuthClient {
       port = Integer.parseInt(args[1]); // Use the second argument as the server port if provided
     }
     if (args.length > 2) {
-      user = args[2]; // Use the the third argument as the name to greet if provided
+      user = args[2]; // Use the third argument as the name to greet if provided
     }
     if (args.length > 3) {
       clientId = args[3]; // Use the fourth argument as the client identifier if provided

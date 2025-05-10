@@ -396,12 +396,12 @@ public class SynchronizationContextTest {
       return future = super.schedule(command, delay, unit);
     }
 
-    @Override public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long intialDelay,
+    @Override public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay,
         long delay, TimeUnit unit) {
       this.command = command;
       this.delay = delay;
       this.unit = unit;
-      return future = super.scheduleWithFixedDelay(command, intialDelay, delay, unit);
+      return future = super.scheduleWithFixedDelay(command, initialDelay, delay, unit);
     }
   }
 }

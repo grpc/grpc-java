@@ -437,7 +437,7 @@ public class WeightedTargetLoadBalancerTest {
             .build());
 
     // Both of the two child LB policies will call the helper to update the balancing state.
-    // But since those calls happen during the handling of teh resolved addresses of the parent
+    // But since those calls happen during the handling of the resolved addresses of the parent
     // WeightedTargetLLoadBalancer, the overall balancing state should only be updated once.
     verify(helper, times(1)).updateBalancingState(any(), any());
 

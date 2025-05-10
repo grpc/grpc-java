@@ -594,7 +594,7 @@ final class OpenTelemetryMetricsModule {
         }
       }
       // Only record method name as an attribute if isSampledToLocalTracing is set to true,
-      // which is true for all generated methods. Otherwise, programatically
+      // which is true for all generated methods. Otherwise, programmatically
       // created methods result in high cardinality metrics.
       final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
           OpenTelemetryMetricsModule.this, target,

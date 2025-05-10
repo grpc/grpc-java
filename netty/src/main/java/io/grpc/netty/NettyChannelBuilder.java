@@ -565,7 +565,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   }
 
   /**
-   * This class is meant to be overriden with a custom implementation of
+   * This class is meant to be overridden with a custom implementation of
    * {@link #createSocketAddress}.  The default implementation is a no-op.
    *
    * @since 1.16.0

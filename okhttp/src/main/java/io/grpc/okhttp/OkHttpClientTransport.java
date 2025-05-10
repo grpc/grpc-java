@@ -737,7 +737,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           }
           if (sslSocketFactory != null) {
             SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
-                sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
+                sslSocketFactory, hostnameVerifier, sock, getOverriddenHost(), getOverriddenPort(),
                 connectionSpec);
             sslSession = sslSocket.getSession();
             sock = sslSocket;
@@ -954,7 +954,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
    * authority, uri.getHost() will (rightly) return null, since the authority is no longer
    * an actual service.  This method overrides the behavior for practical reasons.  For example,
    * if an authority is in the form "invalid_authority" (note the "_"), rather than return null,
-   * we return the input.  This is because the return value, in conjunction with getOverridenPort,
+   * we return the input.  This is because the return value, in conjunction with getOverriddenPort,
    * are used by the SSL library to reconstruct the actual authority.  It /already/ has a
    * connection to the port, independent of this function.
    *
@@ -963,7 +963,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
    * authorities do not have ports, so this is even more wrong than before.  Sorry.
    */
   @VisibleForTesting
-  String getOverridenHost() {
+  String getOverriddenHost() {
     URI uri = GrpcUtil.authorityToUri(defaultAuthority);
     if (uri.getHost() != null) {
       return uri.getHost();
@@ -973,7 +973,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @VisibleForTesting
-  int getOverridenPort() {
+  int getOverriddenPort() {
     URI uri = GrpcUtil.authorityToUri(defaultAuthority);
     if (uri.getPort() != -1) {
       return uri.getPort();

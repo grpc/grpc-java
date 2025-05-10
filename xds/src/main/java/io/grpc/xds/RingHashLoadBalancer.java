@@ -130,7 +130,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     long minWeight = Collections.min(serverWeights.values());
     double normalizedMinWeight = (double) minWeight / totalWeight;
     // Scale up the number of hashes per host such that the least-weighted host gets a whole
-    // number of hashes on the the ring. Other hosts might not end up with whole numbers, and
+    // number of hashes on the ring. Other hosts might not end up with whole numbers, and
     // that's fine (the ring-building algorithm can handle this). This preserves the original
     // implementation's behavior: when weights aren't provided, all hosts should get an equal
     // number of hashes. In the case where this number exceeds the max_ring_size, it's scaled

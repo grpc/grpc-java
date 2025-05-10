@@ -137,7 +137,7 @@ final class AsyncSink implements Sink {
             synchronized (lock) {
               buf.write(buffer, buffer.completeSegmentByteCount());
               writeEnqueued = false;
-              // Imprecise because we only tranfer complete segments, but not by much and error
+              // Imprecise because we only transfer complete segments, but not by much and error
               // won't accumulate over time
               writingControlFrames = queuedControlFrames;
             }

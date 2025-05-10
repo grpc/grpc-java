@@ -285,7 +285,7 @@ message RateLimitQuotaBucketSettings {
     //
     // * static ``StringValue string_value`` — becomes the value in the ``BucketId`` map as is.
     // * dynamic ``TypedExtensionConfig custom_value`` — evaluated for each request. Must produce
-    //   a string output, which becomes the value in the the ``BucketId`` map.
+    //   a string output, which becomes the value in the ``BucketId`` map.
     //
     // See usage examples in the docs to :ref:`bucket_id_builder
     // <envoy_v3_api_field_extensions.filters.http.rate_limit_quota.v3.RateLimitQuotaBucketSettings.bucket_id_builder>`
@@ -407,7 +407,7 @@ message RateLimitQuotaBucketSettings {
   DenyResponseSettings deny_response_settings = 3;
 
   // Configures the behavior in the "no assignment" state: after the first request has been
-  // matched to the bucket, and before the the RLQS server returns the first quota assignment.
+  // matched to the bucket, and before the RLQS server returns the first quota assignment.
   //
   // If not set, the default behavior is to allow all requests.
   NoAssignmentBehavior no_assignment_behavior = 4;

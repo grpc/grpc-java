@@ -67,7 +67,7 @@ public class StatusOr<T> {
   }
 
   /**
-   * Note that StatusOr containing statuses, the equality comparision is delegated to
+   * Note that StatusOr containing statuses, the equality comparison is delegated to
    * {@link Status#equals} which just does a reference equality check because equality on
    * Statuses is not well defined.
    * Instead, do comparison based on their Code with {@link Status#getCode}.  The description and

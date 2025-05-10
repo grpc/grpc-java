@@ -372,7 +372,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
   protected abstract void makeStream() throws Exception;
 
   @Test
-  public void dataPingSentOnHeaderRecieved() throws Exception {
+  public void dataPingSentOnHeaderReceived() throws Exception {
     manualSetUp();
     makeStream();
     AbstractNettyHandler handler = (AbstractNettyHandler) handler();

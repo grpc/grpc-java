@@ -743,7 +743,7 @@ public class OrcaOobUtilTest {
     assertThat(orcaServiceImps[0].calls).hasSize(1);
     assertLog(subchannels[0].logs,
         "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
-    // ORCA reporting RPC restarts and the the real report interval is adjusted.
+    // ORCA reporting RPC restarts and the real report interval is adjusted.
     assertThat(Durations.toNanos(orcaServiceImps[0].calls.poll().request.getReportInterval()))
         .isEqualTo(MEDIUM_INTERVAL_CONFIG.getReportIntervalNanos());
   }

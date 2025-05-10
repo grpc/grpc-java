@@ -1800,8 +1800,8 @@ public class OkHttpClientTransportTest {
         tooManyPingsRunnable,
         null);
 
-    String host = clientTransport.getOverridenHost();
-    int port = clientTransport.getOverridenPort();
+    String host = clientTransport.getOverriddenHost();
+    int port = clientTransport.getOverriddenPort();
 
     assertEquals("invalid_authority", host);
     assertEquals(1234, port);
