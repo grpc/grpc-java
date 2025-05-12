@@ -99,7 +99,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   ServerCallExecutorSupplier executorSupplier;
 
   /**
-   * An interface to provide to provide transport specific information for the server. This method
+   * An interface to provide transport specific information for the server. This method
    * is meant for Transport implementors and should not be used by normal users.
    */
   public interface ClientTransportServersBuilder {
