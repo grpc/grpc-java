@@ -105,6 +105,7 @@ model {
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
                 if (osdetector.os == "osx") {
                     cppCompiler.args "-mmacosx-version-min=10.7", "-stdlib=libc++"
+                    linker.args "-framework", "CoreFoundation"
                     addLibraryIfNotLinked('protoc', linker.args)
                     addLibraryIfNotLinked('protobuf', linker.args)
                 } else if (osdetector.os == "windows") {
