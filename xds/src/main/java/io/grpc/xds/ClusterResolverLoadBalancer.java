@@ -395,6 +395,19 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       @Override
       public void onChanged(final EdsUpdate update) {
+        // Maybe after A74
+        /*if (!resourceUpdate.getStatus().isOk()) {
+          Status error = resourceUpdate.getStatus();
+          String resourceName = edsServiceName != null ? edsServiceName : name;
+          status = Status.UNAVAILABLE
+              .withDescription(String.format("Unable to load EDS %s. xDS server returned: %s: %s",
+                  resourceName, error.getCode(), error.getDescription()))
+              .withCause(error.getCause());
+          logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
+          handleEndpointResolutionError();
+          return;
+        }
+        final EdsUpdate update = resourceUpdate.getValue();*/
         class EndpointsUpdated implements Runnable {
           @Override
           public void run() {
@@ -571,6 +584,26 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
         handleEndpointResolutionError();
       }
+
+      // Maybe after A74
+      /*@Override
+      public void onAmbientError(final Status error) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (shutdown) {
+              return;
+            }
+            logger.log(
+                XdsLogLevel.WARNING, "Received transient error from EDS resource: {0}", error);
+            status = Status.UNAVAILABLE
+                .withDescription(
+                    "Transient error while watching EDS resource: " + error.getDescription())
+                .withCause(error.getCause());
+            handleEndpointResolutionError();
+          }
+        });
+      }*/
     }
 
     private final class LogicalDnsClusterState extends ClusterState {
