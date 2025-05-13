@@ -245,10 +245,12 @@ def checkArtifacts = tasks.register("checkArtifacts") {
             if (ret.exitValue != 0) {
                 throw new GradleException("dumpbin exited with " + ret.exitValue)
             }
-            def dlls = os.toString() =~ /Image has the following dependencies:\s+(.*)\s+Summary/
-            if (dlls[0][2] != "KERNEL32.dll") {
-                throw new Exception("unexpected dll deps: " + dlls[0][1]);
+            def dlls = os.toString() =~ /Image has the following dependencies:([\S\s]*)Summary/
+            def second_dll =  dlls[0][1].trim().split("\\s+")[1]
+            if (second_dll != "KERNEL32.dll") {
+                throw new Exception("unexpected dll deps: " + dlls[0][2]);
             }
+
             os.reset()
             ret = exec {
                 executable 'dumpbin'
