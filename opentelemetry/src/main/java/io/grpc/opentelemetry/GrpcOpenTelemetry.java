@@ -65,8 +65,8 @@ public final class GrpcOpenTelemetry {
   };
 
   @VisibleForTesting
-  static boolean ENABLE_OTEL_TRACING = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING",
-      false);
+  static boolean ENABLE_OTEL_TRACING =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING", false);
 
   private final OpenTelemetry openTelemetrySdk;
   private final MeterProvider meterProvider;
@@ -242,8 +242,7 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isMetricEnabled("grpc.client.call.retries", enableMetrics,
-        disableDefault)) {
+    if (isMetricEnabled("grpc.client.call.retries", enableMetrics, disableDefault)) {
       builder.clientCallRetriesCounter(
           meter.histogramBuilder(
                   "grpc.client.call.retries")
@@ -254,14 +253,13 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isMetricEnabled("grpc.client.call.retry_delay", enableMetrics,
-        disableDefault)) {
+    if (isMetricEnabled("grpc.client.call.retry_delay", enableMetrics, disableDefault)) {
       builder.clientCallRetryDelayCounter(
           meter.histogramBuilder(
                   "grpc.client.call.retry_delay")
               .setUnit("s")
-              .setDescription("Total time of delay while there is no active attempt during the " +
-                  "client call")
+              .setDescription("Total time of delay while there is no active attempt during the "
+                  + "client call")
               .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
