@@ -32,6 +32,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.GrpcUtil;
@@ -150,7 +151,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
-            .setAttributes(attributes)
+            .setAttributes(attributes.toBuilder()
+              .set(NameResolver.ATTR_BACKEND_SERVICE, cluster)
+              .build())
             .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
     return Status.OK;

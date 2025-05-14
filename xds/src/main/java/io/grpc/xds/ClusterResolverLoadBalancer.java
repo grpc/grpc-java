@@ -673,7 +673,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   resolutionResult.getAddressesOrError();
           if (addressesOrError.hasValue()) {
             backoffPolicy = null;  // reset backoff sequence if succeeded
-            for (EquivalentAddressGroup eag : resolutionResult.getAddresses()) {
+            for (EquivalentAddressGroup eag : addressesOrError.getValue()) {
               // No weight attribute is attached, all endpoint-level LB policy should be able
               // to handle such it.
               String localityName = localityName(LOGICAL_DNS_CLUSTER_LOCALITY);

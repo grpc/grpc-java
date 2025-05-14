@@ -99,8 +99,6 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       CommonTlsContext commonTlsContext) {
     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
       return CommonTlsContextUtil.convert(commonTlsContext.getTlsCertificateProviderInstance());
-    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
-      return commonTlsContext.getTlsCertificateCertificateProviderInstance();
     }
     return null;
   }
@@ -127,15 +125,6 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
         commonTlsContext);
     if (certValidationContext != null && certValidationContext.hasCaCertificateProviderInstance()) {
       return CommonTlsContextUtil.convert(certValidationContext.getCaCertificateProviderInstance());
-    }
-    if (commonTlsContext.hasCombinedValidationContext()) {
-      CommonTlsContext.CombinedCertificateValidationContext combinedValidationContext =
-          commonTlsContext.getCombinedValidationContext();
-      if (combinedValidationContext.hasValidationContextCertificateProviderInstance()) {
-        return combinedValidationContext.getValidationContextCertificateProviderInstance();
-      }
-    } else if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
-      return commonTlsContext.getValidationContextCertificateProviderInstance();
     }
     return null;
   }

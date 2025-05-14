@@ -1,6 +1,6 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'java'
@@ -16,7 +16,7 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
-def grpcVersion = '1.73.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.25.5'
 
 dependencies {
