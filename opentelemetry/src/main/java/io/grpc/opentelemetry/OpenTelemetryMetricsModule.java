@@ -416,29 +416,32 @@ final class OpenTelemetryMetricsModule {
       }
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
 
+      // Base attributes
+      io.opentelemetry.api.common.Attributes baseAttributes =
+          io.opentelemetry.api.common.Attributes.of(
+              METHOD_KEY, fullMethodName,
+              TARGET_KEY, target
+          );
+
+      // Duration
       if (module.resource.clientCallDurationCounter() != null) {
-        long retriesPerCall = 0;
-        long attempts = attemptsPerCall.get();
-        if (attempts > 0) {
-          retriesPerCall = attempts - 1;
-        }
-
-        // Base attributes
-        io.opentelemetry.api.common.Attributes baseAttributes =
-            io.opentelemetry.api.common.Attributes.of(
-                METHOD_KEY, fullMethodName,
-                TARGET_KEY, target
-        );
-
-        // Duration
         module.resource.clientCallDurationCounter().record(
             callLatencyNanos * SECONDS_PER_NANO,
             baseAttributes.toBuilder()
                 .put(STATUS_KEY, status.getCode().toString())
                 .build()
         );
+      }
 
-        // Retry counts
+      // Retry counts
+      if (module.resource.clientCallRetriesCounter() != null) {
+
+        long retriesPerCall = 0;
+        long attempts = attemptsPerCall.get();
+        if (attempts > 0) {
+          retriesPerCall = attempts - 1;
+        }
+
         module.resource.clientCallRetriesCounter().record(
             retriesPerCall,
             baseAttributes.toBuilder()
@@ -452,8 +455,10 @@ final class OpenTelemetryMetricsModule {
                 .put(RETRY_TYPE_KEY, OpenTelemetryConstants.RetryType.TRANSPARENT.getValue())
                 .build()
         );
+      }
 
-        // Retry delay
+      // Retry delay
+      if (module.resource.clientCallRetryDelayCounter() != null) {
         module.resource.clientCallRetryDelayCounter().record(
             retryDelayNanos / NANOS_PER_SEC,
             baseAttributes
