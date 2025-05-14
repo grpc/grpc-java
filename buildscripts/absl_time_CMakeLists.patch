@@ -1,9 +1,0 @@
-57,60d56
-< if(APPLE)
-<   find_library(CoreFoundation CoreFoundation)
-< endif()
-< 
-87c83
-<     $<$<PLATFORM_ID:Darwin>:${CoreFoundation}>
----
->     $<$<PLATFORM_ID:Darwin>:-Wl,-framework,CoreFoundation>
