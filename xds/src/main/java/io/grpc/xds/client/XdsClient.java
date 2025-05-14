@@ -118,6 +118,23 @@ public abstract class XdsClient {
     return Joiner.on('/').join(encodedSegs);
   }
 
+  /**
+   * Returns the authority from the resource name.
+   */
+  public static String getAuthorityFromResourceName(String resourceNames) {
+    String authority;
+    if (resourceNames.startsWith(XDSTP_SCHEME)) {
+      URI uri = URI.create(resourceNames);
+      authority = uri.getAuthority();
+      if (authority == null) {
+        authority = "";
+      }
+    } else {
+      authority = null;
+    }
+    return authority;
+  }
+
   public interface ResourceUpdate {}
 
   /**

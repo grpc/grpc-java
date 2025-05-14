@@ -1125,7 +1125,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void filterChainMatch_unsupportedMatchers() throws Exception {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext1 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "ROOTCA");
@@ -1194,7 +1193,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     assertThat(sslSet.get()).isEqualTo(defaultFilterChain.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext().getCommonTlsContext()
-            .getTlsCertificateCertificateProviderInstance()
+            .getTlsCertificateProviderInstance()
             .getCertificateName()).isEqualTo("CERT3");
   }
 

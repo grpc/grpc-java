@@ -13,7 +13,7 @@ pluginManagement {
 	// https://github.com/google/osdetector-gradle-plugin/tags
         id "com.google.osdetector" version "1.7.3"
         // https://github.com/google/protobuf-gradle-plugin/releases
-        id "com.google.protobuf" version "0.9.4"
+        id "com.google.protobuf" version "0.9.5"
         // https://github.com/GradleUp/shadow/releases
         // 8.3.2+ requires Java 11+
         // 8.3.1 breaks apache imports for netty/shaded, fixed in 8.3.2

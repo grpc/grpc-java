@@ -18,7 +18,6 @@ package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 import static io.grpc.xds.client.BootstrapperImpl.XdsDataErrorHandlingEnabled;
 import static io.grpc.xds.client.XdsResourceType.ParsedResource;
 import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
@@ -44,7 +43,6 @@ import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient.ResourceStore;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -532,21 +530,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     return ImmutableMap.copyOf(serverLrsClientMap);
   }
 
-  private String getAuthority(String resource) {
-    String authority;
-    if (resource.startsWith(XDSTP_SCHEME)) {
-      URI uri = URI.create(resource);
-      authority = uri.getAuthority();
-      if (authority == null) {
-        authority = "";
-      }
-    } else {
-      authority = null;
-    }
-
-    return authority;
-  }
-
   @Nullable
   private ImmutableList<ServerInfo> getServerInfos(String authority) {
     if (authority != null) {
@@ -700,7 +683,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
       this.resource = resource;
-      this.authority = getAuthority(resource);
+      this.authority = getAuthorityFromResourceName(resource);
       if (getServerInfos(authority) == null) {
         this.errorDescription = "Wrong configuration: xds server does not exist for resource "
             + resource;
