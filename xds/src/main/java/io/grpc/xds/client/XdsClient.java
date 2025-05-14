@@ -182,6 +182,10 @@ public abstract class XdsClient {
       return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, false, null, null);
     }
 
+    public static ResourceMetadata newResourceMetadataTimeout() {
+      return new ResourceMetadata(ResourceMetadataStatus.TIMEOUT, "", 0, false, null, null);
+    }
+
     public static ResourceMetadata newResourceMetadataAcked(
         Any rawResource, String version, long updateTimeNanos) {
       checkNotNull(rawResource, "rawResource");
@@ -239,7 +243,7 @@ public abstract class XdsClient {
      * config_dump.proto</a>
      */
     public enum ResourceMetadataStatus {
-      UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED
+      UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED, TIMEOUT
     }
 
     /**
