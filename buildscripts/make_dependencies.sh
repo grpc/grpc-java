@@ -34,7 +34,6 @@ else
     curl -Ls "https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz" | tar xz
     curl -Ls "https://github.com/abseil/abseil-cpp/archive/refs/tags/${ABSL_VERSION}.tar.gz" | tar xz
     rmdir "protobuf-$PROTOBUF_VERSION/third_party/abseil-cpp"
-    os_name=$(uname -s)
     mv "abseil-cpp-$ABSL_VERSION" "protobuf-$PROTOBUF_VERSION/third_party/abseil-cpp"
   fi
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first

@@ -1,11 +1,10 @@
-echo on
-@rem set PROTOBUF_VER=21.7
 choco install -y pkgconfiglite
 choco install -y openjdk --version=17.0
 set JAVA_HOME="c:\Program Files\OpenJDK\jdk-17"
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
 set PROTOBUF_VER=22.5
 set ABSL_VERSION=20230125.4
+set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 
 if not exist "protobuf-%PROTOBUF_VER%\build\Release\" (
   call :installProto || exit /b 1
@@ -20,7 +19,6 @@ goto :eof
 
 where /q cmake
 if not ERRORLEVEL 1 goto :hasCmake
-set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 if not exist "%CMAKE_NAME%" (
   call :installCmake || exit /b 1
 )
@@ -54,8 +52,8 @@ for /f "tokens=4 delims=\" %%a in ("%VCINSTALLDIR%") do (
 for /f "tokens=1 delims=." %%a in ("%VisualStudioVersion%") do (
   SET visual_studio_major_version=%%a
 )
-cmake -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% ..
-cmake --build . --config Release --target install
+cmake -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% .. || exit /b 1
+cmake --build . --config Release --target install || exit /b 1
 popd
 goto :eof
 

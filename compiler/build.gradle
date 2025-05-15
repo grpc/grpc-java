@@ -111,9 +111,9 @@ model {
                 } else if (osdetector.os == "windows") {
                     linker.args "-static", "-lprotoc", "-lprotobuf", "-static-libgcc", "-static-libstdc++",
                             "-s"
-          		  } else if (osdetector.arch == "ppcle_64") {
-	   	              linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
-          		  } else {
+                } else if (osdetector.arch == "ppcle_64") {
+                    linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
+                } else {
                     // Link protoc, protobuf, libgcc and libstdc++ statically.
                     // Link other (system) libraries dynamically.
                     // Clang under OSX doesn't support these options.
@@ -133,9 +133,6 @@ model {
                 if (rootProject.hasProperty('vcProtobufLibs')) {
                     String libsList = rootProject.property('vcProtobufLibs') as String
                     libsList.split(',').each() { lib -> linker.args.add(lib) }
-                }
-                if (rootProject.hasProperty('vcProtobufLibPaths')) {
-                    linker.args "/LIBPATH:${rootProject.vcProtobufLibPaths}"
                 }
             }
         }
@@ -245,12 +242,11 @@ def checkArtifacts = tasks.register("checkArtifacts") {
             if (ret.exitValue != 0) {
                 throw new GradleException("dumpbin exited with " + ret.exitValue)
             }
-            def dlls = os.toString() =~ /Image has the following dependencies:([\S\s]*)Summary/
-            def second_dll =  dlls[0][1].trim().split("\\s+")[1]
-            if (second_dll != "KERNEL32.dll") {
-                throw new Exception("unexpected dll deps: " + dlls[0][2]);
+            def dlls_match_results = os.toString() =~ /Image has the following dependencies:([\S\s]*)Summary/
+            def dlls =  dlls_match_results[0][1].trim().split("\\s+").sort()
+            if (dlls != ["KERNEL32.dll", "dbghelp.dll"]) {
+                throw new Exception("unexpected dll deps: " + dlls);
             }
-
             os.reset()
             ret = exec {
                 executable 'dumpbin'
