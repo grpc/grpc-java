@@ -103,7 +103,7 @@ cd $BASE_DIR/github/grpc-java
 ./gradlew clean
 git checkout HEAD^
 ./gradlew --stop  # use a new daemon to build the previous commit
-GRADLE_FLAGS="${GRADLE_FLAGS} -PskipCodegen=true"
+GRADLE_FLAGS="${GRADLE_FLAGS} -PskipCodegen=true" # skip codegen for build from previous commit since it wasn't built with --std=c++14 when making this change
 ./gradlew publishToMavenLocal $GRADLE_FLAGS
 cd examples/android/helloworld/
 ../../gradlew build $GRADLE_FLAGS
