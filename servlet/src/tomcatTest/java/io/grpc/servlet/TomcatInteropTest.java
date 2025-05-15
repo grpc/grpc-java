@@ -60,7 +60,9 @@ public class TomcatInteropTest extends AbstractInteropTest {
 
   @Override
   protected ServerBuilder<?> getServerBuilder() {
-    return new ServletServerBuilder().maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    return new ServletServerBuilder()
+            .forceTrailers(true)
+            .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
   }
 
   @Override
@@ -113,27 +115,4 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @Test
   public void gracefulShutdown() {}
 
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void specialStatusMessage() {}
-
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void unimplementedMethod() {}
-
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void statusCodeAndMessage() {}
-
-  // FIXME
-  @Override
-  @Ignore("Tomcat is not able to send trailer only")
-  @Test
-  public void emptyStream() {}
 }
