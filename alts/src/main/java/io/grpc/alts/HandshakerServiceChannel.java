@@ -47,7 +47,7 @@ final class HandshakerServiceChannel {
   }
 
   private static final boolean EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS =
-    GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS", false);
+     GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS", false);
 
   private static class ChannelResource implements Resource<Channel> {
     private final String target;
@@ -62,7 +62,7 @@ final class HandshakerServiceChannel {
       EventLoopGroup eventGroup =
           new NioEventLoopGroup(1, new DefaultThreadFactory("handshaker pool", true));
       NettyChannelBuilder channelBuilder =
-      NettyChannelBuilder.forTarget(target)
+          NettyChannelBuilder.forTarget(target)
           .channelType(NioSocketChannel.class, InetSocketAddress.class)
           .directExecutor()
           .eventLoopGroup(eventGroup)
