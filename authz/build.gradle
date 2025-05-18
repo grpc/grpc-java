@@ -2,8 +2,8 @@ plugins {
     id "java-library"
     id "maven-publish"
 
-    id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
+    id "com.gradleup.shadow"
     id "ru.vyarus.animalsniffer"
 }
 
@@ -26,7 +26,11 @@ dependencies {
     shadow configurations.implementation.getDependencies().minus([xdsDependency])
     shadow project(path: ':grpc-xds', configuration: 'shadow')
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("jar").configure {

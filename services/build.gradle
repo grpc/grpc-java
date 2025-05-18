@@ -27,11 +27,10 @@ dependencies {
     implementation project(':grpc-core'),
             project(':grpc-protobuf'),
             project(':grpc-util'),
-            libraries.protobuf.java.util,
-            libraries.guava.jre // JRE required by protobuf-java-util
+            libraries.guava.jre, // JRE required by protobuf-java-util
+            libraries.protobuf.java.util
 
     runtimeOnly libraries.errorprone.annotations,
-            libraries.j2objc.annotations, // Explicit dependency to keep in step with version used by guava
             libraries.gson  // to fix checkUpperBoundDeps error here
     compileOnly libraries.javax.annotation
     testImplementation project(':grpc-testing'),
@@ -40,7 +39,11 @@ dependencies {
             testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api'))
     testCompileOnly libraries.javax.annotation
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()
@@ -59,6 +62,7 @@ tasks.named("jacocoTestReport").configure {
                 '**/io/grpc/binarylog/v1/**',
                 '**/io/grpc/channelz/v1/**',
                 '**/io/grpc/health/v1/**',
+                '**/io/grpc/reflection/v1/**',
                 '**/io/grpc/reflection/v1alpha/**',
         ])
     }

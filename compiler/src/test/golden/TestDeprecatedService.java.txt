@@ -8,7 +8,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.65.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.74.0-SNAPSHOT)",
     comments = "Source: grpc/testing/compiler/test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 @java.lang.Deprecated
@@ -62,6 +62,21 @@ public final class TestDeprecatedServiceGrpc {
         }
       };
     return TestDeprecatedServiceStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new blocking-style stub that supports all types of calls on the service
+   */
+  public static TestDeprecatedServiceBlockingV2Stub newBlockingV2Stub(
+      io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<TestDeprecatedServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<TestDeprecatedServiceBlockingV2Stub>() {
+        @java.lang.Override
+        public TestDeprecatedServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new TestDeprecatedServiceBlockingV2Stub(channel, callOptions);
+        }
+      };
+    return TestDeprecatedServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
@@ -164,6 +179,38 @@ public final class TestDeprecatedServiceGrpc {
 
   /**
    * A stub to allow clients to do synchronous rpc calls to service TestDeprecatedService.
+   * <pre>
+   * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
+   * </pre>
+   */
+  @java.lang.Deprecated
+  public static final class TestDeprecatedServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<TestDeprecatedServiceBlockingV2Stub> {
+    private TestDeprecatedServiceBlockingV2Stub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
+    }
+
+    @java.lang.Override
+    protected TestDeprecatedServiceBlockingV2Stub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new TestDeprecatedServiceBlockingV2Stub(channel, callOptions);
+    }
+
+    /**
+     * <pre>
+     * An RPC method that has been deprecated and should generate with Java's &#64;Deprecated annotation
+     * </pre>
+     */
+    @java.lang.Deprecated
+    public io.grpc.testing.compiler.Test.SimpleResponse deprecatedMethod(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getDeprecatedMethodMethod(), getCallOptions(), request);
+    }
+  }
+
+  /**
+   * A stub to allow clients to do limited synchronous rpc calls to service TestDeprecatedService.
    * <pre>
    * Test service that has been deprecated and should generate with Java's &#64;Deprecated annotation
    * </pre>

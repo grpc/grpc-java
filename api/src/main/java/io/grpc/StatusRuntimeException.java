@@ -30,7 +30,7 @@ public class StatusRuntimeException extends RuntimeException {
   private final Metadata trailers;
 
   /**
-   * Constructs the exception with both a status. See also {@link Status#asRuntimeException()}.
+   * Constructs the exception with a status. See also {@link Status#asRuntimeException()}.
    *
    * @since 1.0.0
    */
@@ -45,12 +45,7 @@ public class StatusRuntimeException extends RuntimeException {
    * @since 1.0.0
    */
   public StatusRuntimeException(Status status, @Nullable Metadata trailers) {
-    this(status, trailers, /*fillInStackTrace=*/ true);
-  }
-
-  StatusRuntimeException(Status status, @Nullable Metadata trailers, boolean fillInStackTrace) {
-    super(Status.formatThrowableMessage(status), status.getCause(),
-            /* enable suppressions */ true, /* writableStackTrace */ fillInStackTrace);
+    super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
     this.trailers = trailers;
   }

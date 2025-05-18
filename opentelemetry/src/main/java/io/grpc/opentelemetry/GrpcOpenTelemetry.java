@@ -18,6 +18,8 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.SIZE_BUCKETS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -31,10 +33,12 @@ import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.MeterProvider;
+import io.opentelemetry.api.trace.Tracer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -59,6 +63,10 @@ public final class GrpcOpenTelemetry {
     }
   };
 
+  @VisibleForTesting
+  static boolean ENABLE_OTEL_TRACING = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING",
+      false);
+
   private final OpenTelemetry openTelemetrySdk;
   private final MeterProvider meterProvider;
   private final Meter meter;
@@ -66,6 +74,7 @@ public final class GrpcOpenTelemetry {
   private final boolean disableDefault;
   private final OpenTelemetryMetricsResource resource;
   private final OpenTelemetryMetricsModule openTelemetryMetricsModule;
+  private final OpenTelemetryTracingModule openTelemetryTracingModule;
   private final List<String> optionalLabels;
   private final MetricSink sink;
 
@@ -84,8 +93,9 @@ public final class GrpcOpenTelemetry {
     this.disableDefault = builder.disableAll;
     this.resource = createMetricInstruments(meter, enableMetrics, disableDefault);
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
-    this.openTelemetryMetricsModule =
-        new OpenTelemetryMetricsModule(STOPWATCH_SUPPLIER, resource, optionalLabels);
+    this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
+        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
+    this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
 
@@ -123,6 +133,11 @@ public final class GrpcOpenTelemetry {
     return sink;
   }
 
+  @VisibleForTesting
+  Tracer getTracer() {
+    return this.openTelemetryTracingModule.getTracer();
+  }
+
   /**
    * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
@@ -150,6 +165,9 @@ public final class GrpcOpenTelemetry {
     InternalManagedChannelBuilder.addMetricSink(builder, sink);
     InternalManagedChannelBuilder.interceptWithTarget(
         builder, openTelemetryMetricsModule::getClientInterceptor);
+    if (ENABLE_OTEL_TRACING) {
+      builder.intercept(openTelemetryTracingModule.getClientInterceptor());
+    }
   }
 
   /**
@@ -159,6 +177,11 @@ public final class GrpcOpenTelemetry {
    */
   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
     serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
+    if (ENABLE_OTEL_TRACING) {
+      serverBuilder.addStreamTracerFactory(
+          openTelemetryTracingModule.getServerTracerFactory());
+      serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
+    }
   }
 
   @VisibleForTesting
@@ -172,6 +195,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("s")
               .setDescription(
                   "Time taken by gRPC to complete an RPC from application's perspective")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -189,6 +213,7 @@ public final class GrpcOpenTelemetry {
                   "grpc.client.attempt.duration")
               .setUnit("s")
               .setDescription("Time taken to complete a client call attempt")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -200,6 +225,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes sent per client call attempt")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -211,6 +237,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes received per call attempt")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -228,6 +255,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("s")
               .setDescription(
                   "Time taken to complete a call from server transport's perspective")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
 
@@ -239,6 +267,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes sent per server call")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -250,6 +279,7 @@ public final class GrpcOpenTelemetry {
               .setUnit("By")
               .setDescription("Compressed message bytes received per server call")
               .ofLongs()
+              .setExplicitBucketBoundariesAdvice(SIZE_BUCKETS)
               .build());
     }
 
@@ -272,6 +302,7 @@ public final class GrpcOpenTelemetry {
    */
   public static class Builder {
     private OpenTelemetry openTelemetrySdk = OpenTelemetry.noop();
+    private final List<OpenTelemetryPlugin> plugins = new ArrayList<>();
     private final Collection<String> optionalLabels = new ArrayList<>();
     private final Map<String, Boolean> enableMetrics = new HashMap<>();
     private boolean disableAll;
@@ -285,6 +316,11 @@ public final class GrpcOpenTelemetry {
      */
     public Builder sdk(OpenTelemetry sdk) {
       this.openTelemetrySdk = sdk;
+      return this;
+    }
+
+    Builder plugin(OpenTelemetryPlugin plugin) {
+      plugins.add(checkNotNull(plugin, "plugin"));
       return this;
     }
 
@@ -324,6 +360,11 @@ public final class GrpcOpenTelemetry {
     public Builder disableAllMetrics() {
       this.enableMetrics.clear();
       this.disableAll = true;
+      return this;
+    }
+
+    Builder enableTracing(boolean enable) {
+      ENABLE_OTEL_TRACING = enable;
       return this;
     }
 

@@ -22,6 +22,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
@@ -47,9 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckForNull;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /** A logical {@link ClientStream} that is retriable. */
 abstract class RetriableStream<ReqT> implements ClientStream {
@@ -382,7 +382,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  /** Starts the first PRC attempt. */
+  /** Starts the first RPC attempt. */
   @Override
   public final void start(ClientStreamListener listener) {
     masterListener = listener;
@@ -846,6 +846,15 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
+  private static final boolean isExperimentalRetryJitterEnabled = GrpcUtil
+          .getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
+
+  public static long intervalWithJitter(long intervalNanos) {
+    double inverseJitterFactor = isExperimentalRetryJitterEnabled
+            ? 0.8 * random.nextDouble() + 0.4 : random.nextDouble();
+    return (long) (intervalNanos * inverseJitterFactor);
+  }
+
   private static final class SavedCloseMasterListenerReason {
     private final Status status;
     private final RpcProgress progress;
@@ -1066,7 +1075,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (pushbackMillis == null) {
           if (isRetryableStatusCode) {
             shouldRetry = true;
-            backoffNanos = (long) (nextBackoffIntervalNanos * random.nextDouble());
+            backoffNanos = intervalWithJitter(nextBackoffIntervalNanos);
             nextBackoffIntervalNanos = Math.min(
                 (long) (nextBackoffIntervalNanos * retryPolicy.backoffMultiplier),
                 retryPolicy.maxBackoffNanos);

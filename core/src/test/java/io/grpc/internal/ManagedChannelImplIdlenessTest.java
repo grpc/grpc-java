@@ -63,6 +63,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolverProvider;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
@@ -615,7 +616,7 @@ public class ManagedChannelImplIdlenessTest {
     // the NameResolver.
     ResolutionResult resolutionResult =
         ResolutionResult.newBuilder()
-            .setAddresses(servers)
+            .setAddressesOrError(StatusOr.fromValue(servers))
             .setAttributes(Attributes.EMPTY)
             .build();
     nameResolverListenerCaptor.getValue().onResult(resolutionResult);

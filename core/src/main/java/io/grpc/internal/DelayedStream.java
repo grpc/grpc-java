@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -30,8 +32,6 @@ import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.CheckReturnValue;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A stream that queues requests before the transport is available, and delegates to a real stream
@@ -208,7 +208,6 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setAuthority(final String authority) {
-    checkState(listener == null, "May only be called before start");
     checkNotNull(authority, "authority");
     preStartPendingCalls.add(new Runnable() {
       @Override

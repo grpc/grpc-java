@@ -23,6 +23,7 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
@@ -72,12 +73,14 @@ public class XdsClientFederationTest {
 
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private static final String DUMMY_TARGET = "dummy";
+  private final MetricRecorder metricRecorder = new MetricRecorder() {};
 
   @Before
   public void setUp() throws XdsInitializationException {
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
-    xdsClientPool = clientPoolProvider.getOrCreate();
+    xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET, metricRecorder);
     xdsClient = xdsClientPool.getObject();
   }
 

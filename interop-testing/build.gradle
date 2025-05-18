@@ -13,11 +13,10 @@ dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'),
             project(':grpc-census'),
-            project(':grpc-core'),
-            project(':grpc-googleapis'),
+            project(':grpc-opentelemetry'),
+            project(':grpc-gcp-csm-observability'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
-            project(':grpc-rls'),
             project(':grpc-services'),
             project(':grpc-testing'),
             project(':grpc-protobuf-lite'),
@@ -26,6 +25,7 @@ dependencies {
             libraries.truth,
             libraries.opencensus.contrib.grpc.metrics,
             libraries.google.auth.oauth2Http,
+            libraries.opentelemetry.sdk.extension.autoconfigure,
             libraries.guava.jre // Fix checkUpperBoundDeps using -android
     api project(':grpc-api'),
             project(':grpc-stub'),
@@ -42,6 +42,8 @@ dependencies {
     runtimeOnly libraries.opencensus.impl,
             libraries.netty.tcnative,
             libraries.netty.tcnative.classes,
+            libraries.opentelemetry.exporter.prometheus, // For xds interop client
+            project(':grpc-googleapis'),
             project(':grpc-grpclb'),
             project(':grpc-rls')
     testImplementation testFixtures(project(':grpc-api')),
@@ -51,8 +53,16 @@ dependencies {
             libraries.mockito.core,
             libraries.okhttp
 
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()
@@ -159,7 +169,9 @@ application {
         from(xds_test_client)
         from(xds_test_server)
         from(xds_federation_test_client)
-        fileMode = 0755
+        filePermissions {
+            unix(0755)
+        }
     }
 }
 

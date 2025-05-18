@@ -22,10 +22,15 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -140,6 +145,65 @@ public final class MetadataUtils {
           trailersCapture.set(trailers);
           super.onClose(status, trailers);
         }
+      }
+    }
+  }
+
+  /**
+   * Returns a ServerInterceptor that adds the specified Metadata to every response stream, one way
+   * or another.
+   *
+   * <p>If, absent this interceptor, a stream would have headers, 'extras' will be added to those
+   * headers. Otherwise, 'extras' will be sent as trailers. This pattern is useful when you have
+   * some fixed information, server identity say, that should be included no matter how the call
+   * turns out. The fallback to trailers avoids artificially committing clients to error responses
+   * that could otherwise be retried (see https://grpc.io/docs/guides/retry/ for more).
+   *
+   * <p>For correct operation, be sure to arrange for this interceptor to run *before* any others
+   * that might add headers.
+   *
+   * @param extras the Metadata to be added to each stream. Caller gives up ownership.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11462")
+  public static ServerInterceptor newAttachMetadataServerInterceptor(Metadata extras) {
+    return new MetadataAttachingServerInterceptor(extras);
+  }
+
+  private static final class MetadataAttachingServerInterceptor implements ServerInterceptor {
+
+    private final Metadata extras;
+
+    MetadataAttachingServerInterceptor(Metadata extras) {
+      this.extras = extras;
+    }
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      return next.startCall(new MetadataAttachingServerCall<>(call), headers);
+    }
+
+    final class MetadataAttachingServerCall<ReqT, RespT>
+        extends SimpleForwardingServerCall<ReqT, RespT> {
+      boolean headersSent;
+
+      MetadataAttachingServerCall(ServerCall<ReqT, RespT> delegate) {
+        super(delegate);
+      }
+
+      @Override
+      public void sendHeaders(Metadata headers) {
+        headers.merge(extras);
+        headersSent = true;
+        super.sendHeaders(headers);
+      }
+
+      @Override
+      public void close(Status status, Metadata trailers) {
+        if (!headersSent) {
+          trailers.merge(extras);
+        }
+        super.close(status, trailers);
       }
     }
   }

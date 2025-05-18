@@ -2,13 +2,11 @@ plugins {
     id 'application' // Provide convenience executables for trying out the examples.
     id 'java'
 
-    id "com.google.protobuf" version "0.9.4"
-    id 'com.google.cloud.tools.jib' version '3.4.1' // For releasing to Docker Hub
+    id "com.google.protobuf" version "0.9.5"
+    id 'com.google.cloud.tools.jib' version '3.4.4' // For releasing to Docker Hub
 }
 
 repositories {
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenCentral()
     mavenLocal()
 }
@@ -23,8 +21,8 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.65.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.25.1'
+def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.5'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"

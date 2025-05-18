@@ -19,7 +19,6 @@ package io.grpc.gcp.observability;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.cloud.ServiceOptions;
-import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -28,6 +27,7 @@ import io.grpc.internal.JsonUtil;
 import io.opencensus.trace.Sampler;
 import io.opencensus.trace.samplers.Samplers;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -75,7 +75,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
 
   void parseFile(String configFile) throws IOException {
     String configFileContent =
-        new String(Files.readAllBytes(Paths.get(configFile)), Charsets.UTF_8);
+        new String(Files.readAllBytes(Paths.get(configFile)), StandardCharsets.UTF_8);
     checkArgument(!configFileContent.isEmpty(), CONFIG_FILE_ENV_VAR_NAME + " is empty!");
     parse(configFileContent);
   }

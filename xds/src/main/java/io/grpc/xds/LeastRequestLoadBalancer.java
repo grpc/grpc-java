@@ -32,7 +32,6 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ConnectivityState;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
@@ -126,9 +125,8 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   }
 
   @Override
-  protected ChildLbState createChildLbState(Object key, Object policyConfig,
-      SubchannelPicker initialPicker, ResolvedAddresses unused) {
-    return new LeastRequestLbState(key, pickFirstLbProvider, policyConfig, initialPicker);
+  protected ChildLbState createChildLbState(Object key) {
+    return new LeastRequestLbState(key, pickFirstLbProvider);
   }
 
   private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
@@ -156,7 +154,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   static final class ReadyPicker extends SubchannelPicker {
     private final List<SubchannelPicker> childPickers; // non-empty
     private final List<AtomicInteger> childInFlights; // 1:1 with childPickers
-    private final List<EquivalentAddressGroup> childEags; // 1:1 with childPickers
     private final int choiceCount;
     private final ThreadSafeRandom random;
     private final int hashCode;
@@ -165,11 +162,9 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
       checkArgument(!childLbStates.isEmpty(), "empty list");
       this.childPickers = new ArrayList<>(childLbStates.size());
       this.childInFlights = new ArrayList<>(childLbStates.size());
-      this.childEags = new ArrayList<>(childLbStates.size());
       for (ChildLbState state : childLbStates) {
         childPickers.add(state.getCurrentPicker());
         childInFlights.add(getInFlights(state));
-        childEags.add(state.getEag());
       }
       this.choiceCount = choiceCount;
       this.random = checkNotNull(random, "random");
@@ -223,11 +218,6 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     @VisibleForTesting
     List<SubchannelPicker> getChildPickers() {
       return childPickers;
-    }
-
-    @VisibleForTesting
-    List<EquivalentAddressGroup> getChildEags() {
-      return childEags;
     }
 
     @Override
@@ -320,13 +310,25 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   protected class LeastRequestLbState extends ChildLbState {
     private final AtomicInteger activeRequests = new AtomicInteger(0);
 
-    public LeastRequestLbState(Object key, LoadBalancerProvider policyProvider,
-        Object childConfig, SubchannelPicker initialPicker) {
-      super(key, policyProvider, childConfig, initialPicker);
+    public LeastRequestLbState(Object key, LoadBalancerProvider policyProvider) {
+      super(key, policyProvider);
     }
 
     int getActiveRequests() {
       return activeRequests.get();
+    }
+
+    @Override
+    protected ChildLbStateHelper createChildHelper() {
+      return new ChildLbStateHelper() {
+        @Override
+        public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+          super.updateBalancingState(newState, newPicker);
+          if (!resolvingAddresses && newState == IDLE) {
+            getLb().requestConnection();
+          }
+        }
+      };
     }
   }
 }

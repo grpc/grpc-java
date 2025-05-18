@@ -23,7 +23,6 @@ import com.google.protobuf.BoolValue;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
@@ -48,10 +47,14 @@ public class CommonTlsContextTestsUtil {
   public static final String SERVER_0_PEM_FILE = "server0.pem";
   public static final String SERVER_0_KEY_FILE = "server0.key";
   public static final String SERVER_1_PEM_FILE = "server1.pem";
+  public static final String SERVER_1_SPIFFE_PEM_FILE = "server1_spiffe.pem";
   public static final String SERVER_1_KEY_FILE = "server1.key";
   public static final String CLIENT_PEM_FILE = "client.pem";
+  public static final String CLIENT_SPIFFE_PEM_FILE = "client_spiffe.pem";
   public static final String CLIENT_KEY_FILE = "client.key";
   public static final String CA_PEM_FILE = "ca.pem";
+  public static final String SPIFFE_TRUST_MAP_FILE = "spiffebundle.json";
+  public static final String SPIFFE_TRUST_MAP_1_FILE = "spiffebundle1.json";
   /** Bad/untrusted server certs. */
   public static final String BAD_SERVER_PEM_FILE = "badserver.pem";
   public static final String BAD_SERVER_KEY_FILE = "badserver.key";
@@ -59,48 +62,26 @@ public class CommonTlsContextTestsUtil {
   public static final String BAD_CLIENT_KEY_FILE = "badclient.key";
 
   /** takes additional values and creates CombinedCertificateValidationContext as needed. */
-  @SuppressWarnings("deprecation")
-  static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
+  private static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
       String certInstanceName, String certName,
       String validationContextCertInstanceName, String validationContextCertName,
       Iterable<StringMatcher> matchSubjectAltNames,
       Iterable<String> alpnNames) {
-
-    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
-
-    CertificateProviderInstance certificateProviderInstance = CertificateProviderInstance
-        .newBuilder().setInstanceName(certInstanceName).setCertificateName(certName).build();
-    if (certificateProviderInstance != null) {
-      builder.setTlsCertificateCertificateProviderInstance(certificateProviderInstance);
-    }
-    CertificateProviderInstance validationCertificateProviderInstance =
-        CertificateProviderInstance.newBuilder().setInstanceName(validationContextCertInstanceName)
-            .setCertificateName(validationContextCertName).build();
-    CertificateValidationContext certValidationContext =
-        matchSubjectAltNames == null
-            ? null
-            : CertificateValidationContext.newBuilder()
-                .addAllMatchSubjectAltNames(matchSubjectAltNames)
-                .build();
-    if (validationCertificateProviderInstance != null) {
-      CombinedCertificateValidationContext.Builder combinedBuilder =
-          CombinedCertificateValidationContext.newBuilder()
-              .setValidationContextCertificateProviderInstance(
-                  validationCertificateProviderInstance);
-      if (certValidationContext != null) {
-        combinedBuilder = combinedBuilder.setDefaultValidationContext(certValidationContext);
-      }
-      builder.setCombinedValidationContext(combinedBuilder);
-    } else if (validationCertificateProviderInstance != null) {
-      builder
-          .setValidationContextCertificateProviderInstance(validationCertificateProviderInstance);
-    } else if (certValidationContext != null) {
-      builder.setValidationContext(certValidationContext);
-    }
-    if (alpnNames != null) {
-      builder.addAllAlpnProtocols(alpnNames);
-    }
-    return builder.build();
+    @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+    CertificateValidationContext.Builder certificateValidationContextBuilder
+        = CertificateValidationContext.newBuilder()
+        .addAllMatchSubjectAltNames(matchSubjectAltNames);
+    return CommonTlsContext.newBuilder()
+        .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+          .setInstanceName(certInstanceName)
+          .setCertificateName(certName))
+        .setCombinedValidationContext(CombinedCertificateValidationContext.newBuilder()
+          .setDefaultValidationContext(certificateValidationContextBuilder
+            .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+              .setInstanceName(validationContextCertInstanceName)
+              .setCertificateName(validationContextCertName))))
+        .addAllAlpnProtocols(alpnNames)
+        .build();
   }
 
   /** Helper method to build DownstreamTlsContext for multiple test classes. */
@@ -148,7 +129,7 @@ public class CommonTlsContextTestsUtil {
           useSans ? Arrays.asList(
               StringMatcher.newBuilder()
                   .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
-                  .build()) : null,
+                  .build()) : Arrays.asList(),
           Arrays.asList("managed-tls"));
     }
     return buildDownstreamTlsContext(commonTlsContext, /* requireClientCert= */ false);
@@ -195,7 +176,6 @@ public class CommonTlsContextTestsUtil {
     }
   }
 
-  @SuppressWarnings("deprecation")
   private static CommonTlsContext buildCommonTlsContextForCertProviderInstance(
       String certInstanceName,
       String certName,
@@ -206,10 +186,10 @@ public class CommonTlsContextTestsUtil {
     CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
     if (certInstanceName != null) {
       builder =
-          builder.setTlsCertificateCertificateProviderInstance(
-              CommonTlsContext.CertificateProviderInstance.newBuilder()
-                  .setInstanceName(certInstanceName)
-                  .setCertificateName(certName));
+              builder.setTlsCertificateProviderInstance(
+                      CertificateProviderPluginInstance.newBuilder()
+                              .setInstanceName(certInstanceName)
+                              .setCertificateName(certName));
     }
     builder =
         addCertificateValidationContext(
@@ -244,29 +224,28 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
-  @SuppressWarnings("deprecation")
   private static CommonTlsContext.Builder addCertificateValidationContext(
       CommonTlsContext.Builder builder,
       String rootInstanceName,
       String rootCertName,
       CertificateValidationContext staticCertValidationContext) {
-    if (rootInstanceName != null) {
-      CertificateProviderInstance providerInstance =
-          CertificateProviderInstance.newBuilder()
-              .setInstanceName(rootInstanceName)
-              .setCertificateName(rootCertName)
-              .build();
-      if (staticCertValidationContext != null) {
-        CombinedCertificateValidationContext combined =
-            CombinedCertificateValidationContext.newBuilder()
-                .setDefaultValidationContext(staticCertValidationContext)
-                .setValidationContextCertificateProviderInstance(providerInstance)
-                .build();
-        return builder.setCombinedValidationContext(combined);
-      }
-      builder = builder.setValidationContextCertificateProviderInstance(providerInstance);
+    if (staticCertValidationContext == null && rootInstanceName == null) {
+      return builder;
     }
-    return builder;
+    CertificateValidationContext.Builder contextBuilder;
+    if (staticCertValidationContext == null) {
+      contextBuilder = CertificateValidationContext.newBuilder();
+    } else {
+      contextBuilder = staticCertValidationContext.toBuilder();
+    }
+    if (rootInstanceName != null) {
+      contextBuilder.setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+          .setInstanceName(rootInstanceName)
+          .setCertificateName(rootCertName));
+      builder.setValidationContext(contextBuilder.build());
+    }
+    return builder.setCombinedValidationContext(CombinedCertificateValidationContext.newBuilder()
+        .setDefaultValidationContext(contextBuilder));
   }
 
   private static CommonTlsContext.Builder addNewCertificateValidationContext(
@@ -274,19 +253,19 @@ public class CommonTlsContextTestsUtil {
           String rootInstanceName,
           String rootCertName,
           CertificateValidationContext staticCertValidationContext) {
+    CertificateValidationContext.Builder validationContextBuilder =
+        staticCertValidationContext != null ? staticCertValidationContext.toBuilder()
+            : CertificateValidationContext.newBuilder();
     if (rootInstanceName != null) {
       CertificateProviderPluginInstance providerInstance =
           CertificateProviderPluginInstance.newBuilder()
               .setInstanceName(rootInstanceName)
               .setCertificateName(rootCertName)
               .build();
-      CertificateValidationContext.Builder validationContextBuilder =
-          staticCertValidationContext != null ? staticCertValidationContext.toBuilder()
-              : CertificateValidationContext.newBuilder();
-      return builder.setValidationContext(
-          validationContextBuilder.setCaCertificateProviderInstance(providerInstance));
+      validationContextBuilder = validationContextBuilder.setCaCertificateProviderInstance(
+          providerInstance);
     }
-    return builder;
+    return builder.setValidationContext(validationContextBuilder);
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */

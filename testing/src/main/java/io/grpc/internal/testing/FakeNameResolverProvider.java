@@ -21,6 +21,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collection;
@@ -52,7 +53,7 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
 
   @Override
   protected int priority() {
-    return 5; // Default
+    return 10; // High priority
   }
 
   @Override
@@ -81,9 +82,10 @@ public final class FakeNameResolverProvider extends NameResolverProvider {
       if (shutdown) {
         listener.onError(Status.FAILED_PRECONDITION.withDescription("Resolver is shutdown"));
       } else {
-        listener.onResult(
+        listener.onResult2(
             ResolutionResult.newBuilder()
-                .setAddresses(ImmutableList.of(new EquivalentAddressGroup(address)))
+                .setAddressesOrError(
+                    StatusOr.fromValue(ImmutableList.of(new EquivalentAddressGroup(address))))
                 .build());
       }
     }

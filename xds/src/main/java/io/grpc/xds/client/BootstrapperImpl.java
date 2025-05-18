@@ -41,6 +41,9 @@ import java.util.Map;
 @Internal
 public abstract class BootstrapperImpl extends Bootstrapper {
 
+  public static final String GRPC_EXPERIMENTAL_XDS_FALLBACK =
+      "GRPC_EXPERIMENTAL_XDS_FALLBACK";
+
   // Client features.
   @VisibleForTesting
   public static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
@@ -50,6 +53,10 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   // Server features.
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
+  private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
+
+  @VisibleForTesting
+  static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
 
   protected final XdsLogger logger;
 
@@ -63,6 +70,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException;
+
 
   /**
    * Reads and parses bootstrap config. The config is expected to be in JSON format.
@@ -102,6 +110,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
     List<ServerInfo> servers = parseServerInfos(rawServerConfigs, logger);
+    if (servers.size() > 1 && !enableXdsFallback) {
+      servers = ImmutableList.of(servers.get(0));
+    }
     builder.servers(servers);
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -208,6 +219,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
         if (rawAuthorityServers == null || rawAuthorityServers.isEmpty()) {
           authorityServers = servers;
         } else {
+          if (rawAuthorityServers.size() > 1 && !enableXdsFallback) {
+            rawAuthorityServers = ImmutableList.of(rawAuthorityServers.get(0));
+          }
           authorityServers = parseServerInfos(rawAuthorityServers, logger);
         }
         authorityInfoMapBuilder.put(
@@ -234,13 +248,17 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
       boolean ignoreResourceDeletion = false;
-      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
+      // "For forward compatibility reasons, the client will ignore any entry in the list that it
+      // does not understand, regardless of type."
+      List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
       }
       servers.add(
-          ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion));
+          ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion,
+              serverFeatures != null
+                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER)));
     }
     return servers.build();
   }

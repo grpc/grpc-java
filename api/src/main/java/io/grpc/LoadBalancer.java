@@ -122,6 +122,12 @@ public abstract class LoadBalancer {
       LoadBalancer.CreateSubchannelArgs.Key.create("internal:health-check-consumer-listener");
 
   @Internal
+  public static final LoadBalancer.CreateSubchannelArgs.Key<Boolean>
+      DISABLE_SUBCHANNEL_RECONNECT_KEY =
+      LoadBalancer.CreateSubchannelArgs.Key.createWithDefault(
+          "internal:disable-subchannel-reconnect", Boolean.FALSE);
+
+  @Internal
   public static final Attributes.Key<Boolean>
       HAS_HEALTH_PRODUCER_LISTENER_KEY =
       Attributes.Key.create("internal:has-health-check-producer-listener");
@@ -206,7 +212,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.21.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
   public static final class ResolvedAddresses {
     private final List<EquivalentAddressGroup> addresses;
     @NameResolver.ResolutionResultAttr
@@ -446,18 +452,6 @@ public abstract class LoadBalancer {
      * @since 1.3.0
      */
     public abstract PickResult pickSubchannel(PickSubchannelArgs args);
-
-    /**
-     * Tries to establish connections now so that the upcoming RPC may then just pick a ready
-     * connection without having to connect first.
-     *
-     * <p>No-op if unsupported.
-     *
-     * @deprecated override {@link LoadBalancer#requestConnection} instead.
-     * @since 1.11.0
-     */
-    @Deprecated
-    public void requestConnection() {}
   }
 
   /**
@@ -546,6 +540,7 @@ public abstract class LoadBalancer {
     private final Status status;
     // True if the result is created by withDrop()
     private final boolean drop;
+    @Nullable private final String authorityOverride;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
@@ -554,6 +549,17 @@ public abstract class LoadBalancer {
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
+      this.authorityOverride = null;
+    }
+
+    private PickResult(
+        @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        Status status, boolean drop, @Nullable String authorityOverride) {
+      this.subchannel = subchannel;
+      this.streamTracerFactory = streamTracerFactory;
+      this.status = checkNotNull(status, "status");
+      this.drop = drop;
+      this.authorityOverride = authorityOverride;
     }
 
     /**
@@ -634,6 +640,19 @@ public abstract class LoadBalancer {
     }
 
     /**
+     * Same as {@code withSubchannel(subchannel, streamTracerFactory)} but with an authority name
+     * to override in the host header.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
+    public static PickResult withSubchannel(
+        Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        @Nullable String authorityOverride) {
+      return new PickResult(
+          checkNotNull(subchannel, "subchannel"), streamTracerFactory, Status.OK,
+          false, authorityOverride);
+    }
+
+    /**
      * Equivalent to {@code withSubchannel(subchannel, null)}.
      *
      * @since 1.2.0
@@ -674,6 +693,13 @@ public abstract class LoadBalancer {
      */
     public static PickResult withNoResult() {
       return NO_RESULT;
+    }
+
+    /** Returns the authority override if any. */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11656")
+    @Nullable
+    public String getAuthorityOverride() {
+      return authorityOverride;
     }
 
     /**
@@ -730,6 +756,7 @@ public abstract class LoadBalancer {
           .add("streamTracerFactory", streamTracerFactory)
           .add("status", status)
           .add("drop", drop)
+          .add("authority-override", authorityOverride)
           .toString();
     }
 
@@ -994,8 +1021,8 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Out-of-band channel for LoadBalancer’s own RPC needs, e.g., talking to an external
-     * load-balancer service.
+     * Create an out-of-band channel for the LoadBalancer’s own RPC needs, e.g., talking to an
+     * external load-balancer service.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
@@ -1005,7 +1032,12 @@ public abstract class LoadBalancer {
     public abstract ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority);
 
     /**
-     * Accept a list of EAG for multiple authorities: https://github.com/grpc/grpc-java/issues/4618
+     * Create an out-of-band channel for the LoadBalancer's own RPC needs, e.g., talking to an
+     * external load-balancer service. This version of the method allows multiple EAGs, so different
+     * addresses can have different authorities.
+     *
+     * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
+     * channels within {@link #shutdown}.
      * */
     public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag,
         String authority) {
@@ -1428,6 +1460,18 @@ public abstract class LoadBalancer {
     public Object getInternalSubchannel() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * (Internal use only) returns attributes of the address subchannel is connected to.
+     *
+     * <p>Warning: this is INTERNAL API, is not supposed to be used by external users, and may
+     * change without notice. If you think you must use it, please file an issue and we can consider
+     * removing its "internal" status.
+     */
+    @Internal
+    public Attributes getConnectedAddressAttributes() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -1525,6 +1569,20 @@ public abstract class LoadBalancer {
     @Override
     public String toString() {
       return "FixedResultPicker(" + result + ")";
+    }
+
+    @Override
+    public int hashCode() {
+      return result.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof FixedResultPicker)) {
+        return false;
+      }
+      FixedResultPicker that = (FixedResultPicker) o;
+      return this.result.equals(that.result);
     }
   }
 }

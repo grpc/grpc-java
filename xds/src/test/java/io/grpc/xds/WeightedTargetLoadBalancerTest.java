@@ -49,7 +49,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
@@ -113,6 +113,7 @@ public class WeightedTargetLoadBalancerTest {
     public LoadBalancer newLoadBalancer(Helper helper) {
       childHelpers.add(helper);
       LoadBalancer childBalancer = mock(LoadBalancer.class);
+      when(childBalancer.acceptResolvedAddresses(any())).thenReturn(Status.OK);
       childBalancers.add(childBalancer);
       fooLbCreated++;
       return childBalancer;
@@ -139,6 +140,7 @@ public class WeightedTargetLoadBalancerTest {
     public LoadBalancer newLoadBalancer(Helper helper) {
       childHelpers.add(helper);
       LoadBalancer childBalancer = mock(LoadBalancer.class);
+      when(childBalancer.acceptResolvedAddresses(any())).thenReturn(Status.OK);
       childBalancers.add(childBalancer);
       barLbCreated++;
       return childBalancer;
@@ -146,13 +148,13 @@ public class WeightedTargetLoadBalancerTest {
   };
 
   private final WeightedPolicySelection weightedLbConfig0 = new WeightedPolicySelection(
-      weights[0], new PolicySelection(fooLbProvider, configs[0]));
+      weights[0], newChildConfig(fooLbProvider, configs[0]));
   private final WeightedPolicySelection weightedLbConfig1 = new WeightedPolicySelection(
-      weights[1], new PolicySelection(barLbProvider, configs[1]));
+      weights[1], newChildConfig(barLbProvider, configs[1]));
   private final WeightedPolicySelection weightedLbConfig2 = new WeightedPolicySelection(
-      weights[2],  new PolicySelection(barLbProvider, configs[2]));
+      weights[2],  newChildConfig(barLbProvider, configs[2]));
   private final WeightedPolicySelection weightedLbConfig3 = new WeightedPolicySelection(
-      weights[3], new PolicySelection(fooLbProvider, configs[3]));
+      weights[3], newChildConfig(fooLbProvider, configs[3]));
 
   @Mock
   private Helper helper;
@@ -180,7 +182,7 @@ public class WeightedTargetLoadBalancerTest {
   }
 
   @Test
-  public void handleResolvedAddresses() {
+  public void acceptResolvedAddresses() {
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     Attributes.Key<Object> fakeKey = Attributes.Key.create("fake_key");
@@ -203,12 +205,13 @@ public class WeightedTargetLoadBalancerTest {
     eag2 = AddressFilter.setPathFilter(eag2, ImmutableList.of("target2"));
     EquivalentAddressGroup eag3 = new EquivalentAddressGroup(socketAddresses[3]);
     eag3 = AddressFilter.setPathFilter(eag3, ImmutableList.of("target3"));
-    weightedTargetLb.handleResolvedAddresses(
+    Status status = weightedTargetLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.of(eag0, eag1, eag2, eag3))
             .setAttributes(Attributes.newBuilder().set(fakeKey, fakeValue).build())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
             .build());
+    assertThat(status.isOk()).isTrue();
     verify(helper).updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     assertThat(childBalancers).hasSize(4);
     assertThat(childHelpers).hasSize(4);
@@ -216,7 +219,7 @@ public class WeightedTargetLoadBalancerTest {
     assertThat(barLbCreated).isEqualTo(2);
 
     for (int i = 0; i < childBalancers.size(); i++) {
-      verify(childBalancers.get(i)).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+      verify(childBalancers.get(i)).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
       ResolvedAddresses resolvedAddresses = resolvedAddressesCaptor.getValue();
       assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo(configs[i]);
       assertThat(resolvedAddresses.getAttributes().get(fakeKey)).isEqualTo(fakeValue);
@@ -226,6 +229,11 @@ public class WeightedTargetLoadBalancerTest {
           .containsExactly(socketAddresses[i]);
     }
 
+    // Even when a child return an error from the update, the other children should still receive
+    // their updates.
+    Status acceptReturnStatus = Status.UNAVAILABLE.withDescription("Didn't like something");
+    when(childBalancers.get(2).acceptResolvedAddresses(any())).thenReturn(acceptReturnStatus);
+
     // Update new weighted target config for a typical workflow.
     // target0 removed. target1, target2, target3 changed weight and config. target4 added.
     int[] newWeights = new int[]{11, 22, 33, 44};
@@ -233,21 +241,22 @@ public class WeightedTargetLoadBalancerTest {
     Map<String, WeightedPolicySelection> newTargets = ImmutableMap.of(
         "target1",
         new WeightedPolicySelection(
-            newWeights[0], new PolicySelection(barLbProvider, newConfigs[0])),
+            newWeights[0], newChildConfig(barLbProvider, newConfigs[0])),
         "target2",
         new WeightedPolicySelection(
-            newWeights[1], new PolicySelection(barLbProvider, newConfigs[1])),
+            newWeights[1], newChildConfig(barLbProvider, newConfigs[1])),
         "target3",
         new WeightedPolicySelection(
-            newWeights[2], new PolicySelection(fooLbProvider, newConfigs[2])),
+            newWeights[2], newChildConfig(fooLbProvider, newConfigs[2])),
         "target4",
         new WeightedPolicySelection(
-            newWeights[3], new PolicySelection(fooLbProvider, newConfigs[3])));
-    weightedTargetLb.handleResolvedAddresses(
+            newWeights[3], newChildConfig(fooLbProvider, newConfigs[3])));
+    status = weightedTargetLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(newTargets))
             .build());
+    assertThat(status.getCode()).isEqualTo(acceptReturnStatus.getCode());
     verify(helper, atLeast(2))
         .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     assertThat(childBalancers).hasSize(5);
@@ -258,7 +267,7 @@ public class WeightedTargetLoadBalancerTest {
     verify(childBalancers.get(0)).shutdown();
     for (int i = 1; i < childBalancers.size(); i++) {
       verify(childBalancers.get(i), atLeastOnce())
-          .handleResolvedAddresses(resolvedAddressesCaptor.capture());
+          .acceptResolvedAddresses(resolvedAddressesCaptor.capture());
       assertThat(resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig())
           .isEqualTo(newConfigs[i - 1]);
     }
@@ -286,7 +295,7 @@ public class WeightedTargetLoadBalancerTest {
         "target2", weightedLbConfig2,
         // {foo, 40, config3}
         "target3", weightedLbConfig3);
-    weightedTargetLb.handleResolvedAddresses(
+    weightedTargetLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
@@ -313,7 +322,7 @@ public class WeightedTargetLoadBalancerTest {
         "target2", weightedLbConfig2,
         // {foo, 40, config3}
         "target3", weightedLbConfig3);
-    weightedTargetLb.handleResolvedAddresses(
+    weightedTargetLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
@@ -395,7 +404,7 @@ public class WeightedTargetLoadBalancerTest {
     Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
         "target0", weightedLbConfig0,
         "target1", weightedLbConfig1);
-    weightedTargetLb.handleResolvedAddresses(
+    weightedTargetLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
@@ -418,10 +427,10 @@ public class WeightedTargetLoadBalancerTest {
 
     Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
         "target0", new WeightedPolicySelection(
-            weights[0], new PolicySelection(fakeLbProvider, configs[0])),
+            weights[0], newChildConfig(fakeLbProvider, configs[0])),
         "target3", new WeightedPolicySelection(
-            weights[3], new PolicySelection(fakeLbProvider, configs[3])));
-    weightedTargetLb.handleResolvedAddresses(
+            weights[3], newChildConfig(fakeLbProvider, configs[3])));
+    weightedTargetLb.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
@@ -432,6 +441,10 @@ public class WeightedTargetLoadBalancerTest {
     // WeightedTargetLLoadBalancer, the overall balancing state should only be updated once.
     verify(helper, times(1)).updateBalancingState(any(), any());
 
+  }
+
+  private Object newChildConfig(LoadBalancerProvider provider, Object config) {
+    return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
   }
 
   private static class FakeLoadBalancerProvider extends LoadBalancerProvider {
@@ -466,9 +479,10 @@ public class WeightedTargetLoadBalancerTest {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       helper.updateBalancingState(
           TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(Status.INTERNAL)));
+      return Status.OK;
     }
 
     @Override

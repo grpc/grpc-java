@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -118,6 +119,7 @@ import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.mockito.verification.VerificationMode;
 
 /**
  * Tests for {@link XdsClientImpl} with protocol version v3.
@@ -143,7 +145,8 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
         assertThat(adsEnded.get()).isTrue();  // ensure previous call was ended
         adsEnded.set(false);
         @SuppressWarnings("unchecked")
-        StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
+        StreamObserver<DiscoveryRequest> requestObserver =
+            mock(StreamObserver.class, delegatesTo(new MockStreamObserver()));
         DiscoveryRpcCall call = new DiscoveryRpcCallV3(requestObserver, responseObserver);
         resourceDiscoveryCalls.offer(call);
         Context.current().addListener(
@@ -205,8 +208,8 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
     @Override
     protected void verifyRequest(
         XdsResourceType<?> type, List<String> resources, String versionInfo, String nonce,
-        EnvoyProtoData.Node node) {
-      verify(requestObserver, Mockito.timeout(2000)).onNext(argThat(new DiscoveryRequestMatcher(
+        EnvoyProtoData.Node node, VerificationMode verificationMode) {
+      verify(requestObserver, verificationMode).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce, null, null)));
     }
 
@@ -610,18 +613,15 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     protected Message buildUpstreamTlsContext(String instanceName, String certName) {
       CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
       if (instanceName != null && certName != null) {
-        CommonTlsContext.CertificateProviderInstance providerInstance =
-            CommonTlsContext.CertificateProviderInstance.newBuilder()
-                .setInstanceName(instanceName)
-                .setCertificateName(certName)
-                .build();
         CommonTlsContext.CombinedCertificateValidationContext combined =
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(providerInstance)
+                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                  .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
+                    .setInstanceName(instanceName)
+                    .setCertificateName(certName)))
                 .build();
         commonTlsContextBuilder.setCombinedValidationContext(combined);
       }
@@ -702,7 +702,7 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
 
     @Override
     protected Message buildLbEndpoint(String address, int port, String healthStatus,
-        int lbWeight) {
+        int lbWeight, String endpointHostname) {
       HealthStatus status;
       switch (healthStatus) {
         case "unknown":
@@ -730,7 +730,8 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
           .setEndpoint(
               Endpoint.newBuilder().setAddress(
                   Address.newBuilder().setSocketAddress(
-                      SocketAddress.newBuilder().setAddress(address).setPortValue(port))))
+                      SocketAddress.newBuilder().setAddress(address).setPortValue(port)))
+                  .setHostname(endpointHostname))
           .setHealthStatus(status)
           .setLoadBalancingWeight(UInt32Value.of(lbWeight))
           .build();
@@ -747,7 +748,6 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
           .build();
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     protected FilterChain buildFilterChain(
         List<String> alpn, Message tlsContext, String transportSocketName,
@@ -873,6 +873,19 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
       }
       return node.equals(argument.getNode());
     }
+
+    @Override
+    public String toString() {
+      return "DiscoveryRequestMatcher{"
+          + "node=" + node
+          + ", versionInfo='" + versionInfo + '\''
+          + ", typeUrl='" + typeUrl + '\''
+          + ", resources=" + resources
+          + ", responseNonce='" + responseNonce + '\''
+          + ", errorCode=" + errorCode
+          + ", errorMessages=" + errorMessages
+          + '}';
+    }
   }
 
   /**
@@ -898,6 +911,25 @@ public class GrpcXdsClientImplV3Test extends GrpcXdsClientImplTestBase {
       }
       Collections.sort(actual);
       return actual.equals(expected);
+    }
+  }
+
+  private static class MockStreamObserver implements StreamObserver<DiscoveryRequest> {
+    private final List<DiscoveryRequest> requests = new ArrayList<>();
+
+    @Override
+    public void onNext(DiscoveryRequest value) {
+      requests.add(value);
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      // Ignore
+    }
+
+    @Override
+    public void onCompleted() {
+      // Ignore
     }
   }
 }

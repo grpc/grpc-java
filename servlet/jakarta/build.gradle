@@ -7,21 +7,24 @@ description = "gRPC: Jakarta Servlet"
 
 // Set up classpaths and source directories for different servlet tests
 sourceSets {
-    undertowTest {
-        java {
-            include '**/Undertow*.java'
-        }
-    }
-    tomcatTest {
-        java {
-            include '**/Tomcat*.java'
-        }
-    }
-    // Only run these tests if java 11+ is being used
-    if (JavaVersion.current().isJava11Compatible()) {
+
+    // Only run these tests if the required minimum Java version is being used
+    if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
         jettyTest {
             java {
                 include '**/Jetty*.java'
+            }
+        }
+    }
+    if (JavaVersion.current().isJava11Compatible()) {
+        tomcatTest {
+            java {
+                include '**/Tomcat*.java'
+            }
+        }
+        undertowTest {
+            java {
+                include '**/Undertow*.java'
             }
         }
     }
@@ -44,11 +47,15 @@ def migrate(String name, String inputDir, SourceSet sourceSet) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
     sourceSet.java.srcDir tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
         into(outputDir)
+	// Increment when changing the filter, to inform Gradle it needs to rebuild
+	inputs.property("filter-version", "1")
         from("$inputDir/io/grpc/servlet") {
             into('io/grpc/servlet/jakarta')
             filter { String line ->
                 line.replace('javax.servlet', 'jakarta.servlet')
                     .replace('io.grpc.servlet', 'io.grpc.servlet.jakarta')
+                    .replace('org.eclipse.jetty.http2.parser', 'org.eclipse.jetty.http2')
+                    .replace('org.eclipse.jetty.servlet', 'org.eclipse.jetty.ee10.servlet')
             }
         }
     }
@@ -56,12 +63,13 @@ def migrate(String name, String inputDir, SourceSet sourceSet) {
 
 migrate('main', '../src/main/java', sourceSets.main)
 
-// Build the set of sourceSets and classpaths to modify, since Jetty 11 requires Java 11
-// and must be skipped
-migrate('undertowTest', '../src/undertowTest/java', sourceSets.undertowTest)
-migrate('tomcatTest', '../src/tomcatTest/java', sourceSets.tomcatTest)
-if (JavaVersion.current().isJava11Compatible()) {
+// Only build sourceSets and classpaths for tests if using the required minimum Java version
+if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
     migrate('jettyTest', '../src/jettyTest/java', sourceSets.jettyTest)
+}
+if (JavaVersion.current().isJava11Compatible()) {
+    migrate('tomcatTest', '../src/tomcatTest/java', sourceSets.tomcatTest)
+    migrate('undertowTest', '../src/undertowTest/java', sourceSets.undertowTest)
 }
 
 // Disable checkstyle for this project, since it consists only of generated code
@@ -99,46 +107,48 @@ dependencies {
     jettyTestImplementation libraries.jetty.servlet,
             libraries.jetty.http2.server
 
-    undertowTestImplementation libraries.undertow.servlet.jakartaee9
+    undertowTestImplementation libraries.undertow.servlet
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,
 // and ensure they are only used when supported by the current jvm
-def undertowTest = tasks.register('undertowTest', Test) {
-    classpath = sourceSets.undertowTest.runtimeClasspath
-    testClassesDirs = sourceSets.undertowTest.output.classesDirs
-}
-def tomcat10Test = tasks.register('tomcat10Test', Test) {
-    classpath = sourceSets.tomcatTest.runtimeClasspath
-    testClassesDirs = sourceSets.tomcatTest.output.classesDirs
-
-    // Provide a temporary directory for tomcat to be deleted after test finishes
-    def tomcatTempDir = "$buildDir/tomcat_catalina_base"
-    systemProperty 'catalina.base', tomcatTempDir
-    doLast {
-        file(tomcatTempDir).deleteDir()
-    }
-
-    // tomcat-embed-core 10 presently performs illegal reflective access on
-    // java.io.ObjectStreamClass$Caches.localDescs and sun.rmi.transport.Target.ccl,
-    // see https://lists.apache.org/thread/s0xr7tk2kfkkxfjps9n7dhh4cypfdhyy
-    if (JavaVersion.current().isJava9Compatible()) {
-        jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
-    }
-}
-
-tasks.named("check").configure {
-    dependsOn undertowTest, tomcat10Test
-}
-
-// Only run these tests if java 11+ is being used
-if (JavaVersion.current().isJava11Compatible()) {
+if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
     def jetty11Test = tasks.register('jetty11Test', Test) {
         classpath = sourceSets.jettyTest.runtimeClasspath
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
     }
-
+    tasks.named('compileJettyTestJava') { JavaCompile task ->
+        task.options.release.set 9
+    }
     tasks.named("check").configure {
         dependsOn jetty11Test
+    }
+}
+if (JavaVersion.current().isJava11Compatible()) {
+    def tomcat10Test = tasks.register('tomcat10Test', Test) {
+        classpath = sourceSets.tomcatTest.runtimeClasspath
+        testClassesDirs = sourceSets.tomcatTest.output.classesDirs
+
+        // Provide a temporary directory for tomcat to be deleted after test finishes
+        def tomcatTempDir = "$buildDir/tomcat_catalina_base"
+        systemProperty 'catalina.base', tomcatTempDir
+        doLast {
+            file(tomcatTempDir).deleteDir()
+        }
+    }
+    tasks.named('compileTomcatTestJava') { JavaCompile task ->
+        task.options.release.set 11
+    }
+
+    def undertowTest = tasks.register('undertowTest', Test) {
+        classpath = sourceSets.undertowTest.runtimeClasspath
+        testClassesDirs = sourceSets.undertowTest.output.classesDirs
+    }
+    tasks.named('compileUndertowTestJava') { JavaCompile task ->
+        task.options.release.set 11
+    }
+
+    tasks.named("check").configure {
+        dependsOn tomcat10Test, undertowTest
     }
 }

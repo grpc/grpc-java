@@ -78,7 +78,7 @@ public final class ProtectedPromise extends DefaultChannelPromise {
     if (!doneAllocating) {
       doneAllocating = true;
       if (successfulCount == expectedCount) {
-        trySuccessInternal(null);
+        trySuccessInternal();
         return super.setSuccess(null);
       }
     }
@@ -117,18 +117,18 @@ public final class ProtectedPromise extends DefaultChannelPromise {
   }
 
   @Override
-  public ChannelPromise setSuccess(Void result) {
-    trySuccess(result);
+  public ChannelPromise setSuccess(Void unused) {
+    trySuccess(null);
     return this;
   }
 
   @Override
-  public boolean trySuccess(Void result) {
+  public boolean trySuccess(Void unused) {
     if (awaitingPromises()) {
       ++successfulCount;
       if (successfulCount == expectedCount && doneAllocating) {
-        trySuccessInternal(result);
-        return super.trySuccess(result);
+        trySuccessInternal();
+        return super.trySuccess(null);
       }
       // TODO: We break the interface a bit here.
       // Multiple success events can be processed without issue because this is an aggregation.
@@ -137,9 +137,9 @@ public final class ProtectedPromise extends DefaultChannelPromise {
     return false;
   }
 
-  private void trySuccessInternal(Void result) {
+  private void trySuccessInternal() {
     for (int i = 0; i < unprotectedPromises.size(); ++i) {
-      unprotectedPromises.get(i).trySuccess(result);
+      unprotectedPromises.get(i).trySuccess(null);
     }
   }
 

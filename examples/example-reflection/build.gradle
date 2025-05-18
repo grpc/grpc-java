@@ -1,14 +1,12 @@
 plugins {
     id 'application' // Provide convenience executables for trying out the examples.
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'java'
 }
 
 repositories {
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenCentral()
     mavenLocal()
 }
@@ -18,8 +16,8 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
-def grpcVersion = '1.65.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.1'
+def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protocVersion = '3.25.5'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
@@ -52,6 +50,8 @@ task ReflectionServer(type: CreateStartScripts) {
 application {
     applicationDistribution.into('bin') {
         from(ReflectionServer)
-        fileMode = 0755
+        filePermissions {
+            unix(0755)
+        }
     }
 }

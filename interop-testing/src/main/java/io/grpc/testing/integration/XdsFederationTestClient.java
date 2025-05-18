@@ -22,9 +22,10 @@ import static org.junit.Assert.assertTrue;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.ManagedChannel;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -44,26 +45,8 @@ public final class XdsFederationTestClient {
   public static void main(String[] args) throws Exception {
     final XdsFederationTestClient client = new XdsFederationTestClient();
     client.parseArgs(args);
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread() {
-              @Override
-              @SuppressWarnings("CatchAndPrintStackTrace")
-              public void run() {
-                System.out.println("Shutting down");
-                try {
-                  client.tearDown();
-                } catch (RuntimeException e) {
-                  e.printStackTrace();
-                }
-              }
-            });
     client.setUp();
-    try {
-      client.run();
-    } finally {
-      client.tearDown();
-    }
+    client.run();
     System.exit(0);
   }
 
@@ -209,22 +192,13 @@ public final class XdsFederationTestClient {
     for (int i = 0; i < uris.length; i++) {
       clients.add(new InnerClient(creds[i], uris[i]));
     }
-    for (InnerClient c : clients) {
-      c.setUp();
-    }
-  }
-
-  private synchronized void tearDown() {
-    for (InnerClient c : clients) {
-      c.tearDown();
-    }
   }
 
   /**
    * Wraps a single client stub configuration and executes a
    * soak test case with that configuration.
    */
-  class InnerClient extends AbstractInteropTest {
+  class InnerClient {
     private final String credentialsType;
     private final String serverUri;
     private boolean runSucceeded = false;
@@ -245,29 +219,43 @@ public final class XdsFederationTestClient {
     /**
      * Run the intended soak test.
      */
-    public void run() {
-      boolean resetChannelPerIteration;
-      switch (testCase) {
-        case "rpc_soak":
-          resetChannelPerIteration = false;
-          break;
-        case "channel_soak":
-          resetChannelPerIteration = true;
-          break;
-        default:
-          throw new RuntimeException("invalid testcase: " + testCase);
-      }
+    public void run() throws InterruptedException {
       try {
-        performSoakTest(
-            serverUri,
-            resetChannelPerIteration,
-            soakIterations,
-            soakMaxFailures,
-            soakPerIterationMaxAcceptableLatencyMs,
-            soakMinTimeMsBetweenRpcs,
-            soakOverallTimeoutSeconds,
-            soakRequestSize,
-            soakResponseSize);
+        switch (testCase) {
+          case "rpc_soak": {
+            SoakClient.performSoakTest(
+                serverUri,
+                soakIterations,
+                soakMaxFailures,
+                soakPerIterationMaxAcceptableLatencyMs,
+                soakMinTimeMsBetweenRpcs,
+                soakOverallTimeoutSeconds,
+                soakRequestSize,
+                soakResponseSize,
+                1,
+                createChannel(),
+                (currentChannel) -> currentChannel);
+          }
+              break;
+          case "channel_soak": {
+            SoakClient.performSoakTest(
+                serverUri,
+                soakIterations,
+                soakMaxFailures,
+                soakPerIterationMaxAcceptableLatencyMs,
+                soakMinTimeMsBetweenRpcs,
+                soakOverallTimeoutSeconds,
+                soakRequestSize,
+                soakResponseSize,
+                1,
+                createChannel(),
+                (currentChannel) -> createNewChannel(currentChannel));
+          }
+            break;
+          default:
+            throw new RuntimeException("invalid testcase: " + testCase);
+        }
+
         logger.info("Test case: " + testCase + " done for server: " + serverUri);
         runSucceeded = true;
       } catch (Exception e) {
@@ -276,8 +264,7 @@ public final class XdsFederationTestClient {
       }
     }
 
-    @Override
-    protected ManagedChannelBuilder<?> createChannelBuilder() {
+    ManagedChannel createChannel() {
       ChannelCredentials channelCredentials;
       switch (credentialsType) {
         case "compute_engine_channel_creds":
@@ -291,15 +278,33 @@ public final class XdsFederationTestClient {
       }
       return Grpc.newChannelBuilder(serverUri, channelCredentials)
           .keepAliveTime(3600, SECONDS)
-          .keepAliveTimeout(20, SECONDS);
+          .keepAliveTimeout(20, SECONDS)
+          .build();
+    }
+
+    ManagedChannel createNewChannel(ManagedChannel currentChannel) {
+      currentChannel.shutdownNow();
+      try {
+        currentChannel.awaitTermination(10, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Interrupted while creating a new channel", e);
+      }
+      return createChannel();
     }
   }
 
-  private void run() throws Exception {
+  private void run() throws InterruptedException {
     logger.info("Begin test case: " + testCase);
     ArrayList<Thread> threads = new ArrayList<>();
     for (InnerClient c : clients) {
-      Thread t = new Thread(c::run);
+      Thread t = new Thread(() -> {
+        try {
+          c.run();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt(); // Properly re-interrupt the thread
+          throw new RuntimeException("Thread was interrupted during execution", e);
+        }
+      });
       t.start();
       threads.add(t);
     }

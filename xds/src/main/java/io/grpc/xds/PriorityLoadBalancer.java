@@ -25,11 +25,9 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
@@ -93,6 +91,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     checkNotNull(config, "missing priority lb config");
     priorityNames = config.priorities;
     priorityConfigs = config.childConfigs;
+    Status status = Status.OK;
     Set<String> prioritySet = new HashSet<>(config.priorities);
     ArrayList<String> childKeys = new ArrayList<>(children.keySet());
     for (String priority : childKeys) {
@@ -107,12 +106,18 @@ final class PriorityLoadBalancer extends LoadBalancer {
     for (String priority : priorityNames) {
       ChildLbState childLbState = children.get(priority);
       if (childLbState != null) {
-        childLbState.updateResolvedAddresses();
+        Status newStatus = childLbState.updateResolvedAddresses();
+        if (!newStatus.isOk()) {
+          status = newStatus;
+        }
       }
     }
     handlingResolvedAddresses = false;
-    tryNextPriority();
-    return Status.OK;
+    Status newStatus = tryNextPriority();
+    if (!newStatus.isOk()) {
+      status = newStatus;
+    }
+    return status;
   }
 
   @Override
@@ -142,7 +147,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     children.clear();
   }
 
-  private void tryNextPriority() {
+  private Status tryNextPriority() {
     for (int i = 0; i < priorityNames.size(); i++) {
       String priority = priorityNames.get(i);
       if (!children.containsKey(priority)) {
@@ -153,8 +158,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
         // Calling the child's updateResolvedAddresses() can result in tryNextPriority() being
         // called recursively. We need to be sure to be done with processing here before it is
         // called.
-        child.updateResolvedAddresses();
-        return; // Give priority i time to connect.
+        return child.updateResolvedAddresses(); // Give priority i time to connect.
       }
       ChildLbState child = children.get(priority);
       child.reactivate();
@@ -167,16 +171,16 @@ final class PriorityLoadBalancer extends LoadBalancer {
             children.get(p).deactivate();
           }
         }
-        return;
+        return Status.OK;
       }
       if (child.failOverTimer != null && child.failOverTimer.isPending()) {
         updateOverallState(priority, child.connectivityState, child.picker);
-        return; // Give priority i time to connect.
+        return Status.OK; // Give priority i time to connect.
       }
       if (priority.equals(currentPriority) && child.connectivityState != TRANSIENT_FAILURE) {
         // If the current priority is not changed into TRANSIENT_FAILURE, keep using it.
         updateOverallState(priority, child.connectivityState, child.picker);
-        return;
+        return Status.OK;
       }
     }
     // TODO(zdapeng): Include error details of each priority.
@@ -184,6 +188,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     String lastPriority = priorityNames.get(priorityNames.size() - 1);
     SubchannelPicker errorPicker = children.get(lastPriority).picker;
     updateOverallState(lastPriority, TRANSIENT_FAILURE, errorPicker);
+    return Status.OK;
   }
 
   private void updateOverallState(
@@ -208,7 +213,6 @@ final class PriorityLoadBalancer extends LoadBalancer {
     // Timer to delay shutdown and deletion of the priority. Scheduled whenever the child is
     // deactivated.
     @Nullable ScheduledHandle deletionTimer;
-    @Nullable String policy;
     ConnectivityState connectivityState = CONNECTING;
     SubchannelPicker picker = new FixedResultPicker(PickResult.withNoResult());
 
@@ -231,7 +235,11 @@ final class PriorityLoadBalancer extends LoadBalancer {
             Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority)));
         logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
         currentPriority = null; // reset currentPriority to guarantee failover happen
-        tryNextPriority();
+        Status status = tryNextPriority();
+        if (!status.isOk()) {
+          // A child had a problem with the addresses/config. Request it to be refreshed
+          helper.refreshNameResolution();
+        }
       }
     }
 
@@ -282,20 +290,13 @@ final class PriorityLoadBalancer extends LoadBalancer {
      * resolvedAddresses}, or when priority lb receives a new resolved addresses while the child
      * already exists.
      */
-    void updateResolvedAddresses() {
+    Status updateResolvedAddresses() {
       PriorityLbConfig config =
           (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      PolicySelection childPolicySelection = config.childConfigs.get(priority).policySelection;
-      LoadBalancerProvider lbProvider = childPolicySelection.getProvider();
-      String newPolicy = lbProvider.getPolicyName();
-      if (!newPolicy.equals(policy)) {
-        policy = newPolicy;
-        lb.switchTo(lbProvider);
-      }
-      lb.handleResolvedAddresses(
+      return lb.acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), priority))
-              .setLoadBalancingPolicyConfig(childPolicySelection.getConfig())
+              .setLoadBalancingPolicyConfig(config.childConfigs.get(priority).childConfig)
               .build());
     }
 
@@ -341,7 +342,11 @@ final class PriorityLoadBalancer extends LoadBalancer {
         // If we are currently handling newly resolved addresses, let's not try to reconfigure as
         // the address handling process will take care of that to provide an atomic config update.
         if (!handlingResolvedAddresses) {
-          tryNextPriority();
+          Status status = tryNextPriority();
+          if (!status.isOk()) {
+            // A child had a problem with the addresses/config. Request it to be refreshed
+            helper.refreshNameResolution();
+          }
         }
       }
 

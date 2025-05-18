@@ -38,7 +38,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
@@ -108,11 +108,11 @@ public class WrrLocalityLoadBalancerTest {
   }
 
   @Test
-  public void handleResolvedAddresses() {
+  public void acceptResolvedAddresses() {
     // A two locality cluster with a mock child LB policy.
     String localityOne = "localityOne";
     String localityTwo = "localityTwo";
-    PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
+    Object childPolicy = newChildConfig(mockChildProvider, null);
 
     // The child config is delivered wrapped in the wrr_locality config and the locality weights
     // in a ResolvedAddresses attribute.
@@ -124,7 +124,7 @@ public class WrrLocalityLoadBalancerTest {
 
     // Assert that the child policy and the locality weights were correctly mapped to a
     // WeightedTargetConfig.
-    verify(mockWeightedTargetLb).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(mockWeightedTargetLb).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
     Object config = resolvedAddressesCaptor.getValue().getLoadBalancingPolicyConfig();
     assertThat(config).isInstanceOf(WeightedTargetConfig.class);
     WeightedTargetConfig wtConfig = (WeightedTargetConfig) config;
@@ -136,9 +136,9 @@ public class WrrLocalityLoadBalancerTest {
   }
 
   @Test
-  public void handleResolvedAddresses_noLocalityWeights() {
+  public void acceptResolvedAddresses_noLocalityWeights() {
     // A two locality cluster with a mock child LB policy.
-    PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
+    Object childPolicy = newChildConfig(mockChildProvider, null);
 
     // The child config is delivered wrapped in the wrr_locality config and the locality weights
     // in a ResolvedAddresses attribute.
@@ -163,7 +163,7 @@ public class WrrLocalityLoadBalancerTest {
 
   @Test
   public void handleNameResolutionError_withChildLb() {
-    deliverAddresses(new WrrLocalityConfig(new PolicySelection(mockChildProvider, null)),
+    deliverAddresses(new WrrLocalityConfig(newChildConfig(mockChildProvider, null)),
         ImmutableList.of(makeAddress("addr1", "test-locality", 1)));
     Status status = Status.DEADLINE_EXCEEDED.withDescription("too slow");
     loadBalancer.handleNameResolutionError(status);
@@ -175,22 +175,22 @@ public class WrrLocalityLoadBalancerTest {
 
   @Test
   public void localityWeightAttributeNotPropagated() {
-    PolicySelection childPolicy = new PolicySelection(mockChildProvider, null);
+    Object childPolicy = newChildConfig(mockChildProvider, null);
 
     WrrLocalityConfig wlConfig = new WrrLocalityConfig(childPolicy);
     deliverAddresses(wlConfig, ImmutableList.of(makeAddress("addr1", "test-locality", 1)));
 
     // Assert that the child policy and the locality weights were correctly mapped to a
     // WeightedTargetConfig.
-    verify(mockWeightedTargetLb).handleResolvedAddresses(resolvedAddressesCaptor.capture());
+    verify(mockWeightedTargetLb).acceptResolvedAddresses(resolvedAddressesCaptor.capture());
 
     //assertThat(resolvedAddressesCaptor.getValue().getAttributes()
-    //    .get(InternalXdsAttributes.ATTR_LOCALITY_WEIGHTS)).isNull();
+    //    .get(XdsAttributes.ATTR_LOCALITY_WEIGHTS)).isNull();
   }
 
   @Test
   public void shutdown() {
-    deliverAddresses(new WrrLocalityConfig(new PolicySelection(mockChildProvider, null)),
+    deliverAddresses(new WrrLocalityConfig(newChildConfig(mockChildProvider, null)),
         ImmutableList.of(makeAddress("addr", "test-locality", 1)));
     loadBalancer.shutdown();
 
@@ -199,19 +199,21 @@ public class WrrLocalityLoadBalancerTest {
 
   @Test
   public void configEquality() {
-    WrrLocalityConfig configOne = new WrrLocalityConfig(
-        new PolicySelection(mockChildProvider, null));
-    WrrLocalityConfig configTwo = new WrrLocalityConfig(
-        new PolicySelection(mockChildProvider, null));
+    WrrLocalityConfig configOne = new WrrLocalityConfig(newChildConfig(mockChildProvider, null));
+    WrrLocalityConfig configTwo = new WrrLocalityConfig(newChildConfig(mockChildProvider, null));
     WrrLocalityConfig differentConfig = new WrrLocalityConfig(
-        new PolicySelection(mockChildProvider, "config"));
+        newChildConfig(mockChildProvider, "config"));
 
     new EqualsTester().addEqualityGroup(configOne, configTwo).addEqualityGroup(differentConfig)
         .testEquals();
   }
 
+  private Object newChildConfig(LoadBalancerProvider provider, Object config) {
+    return GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(provider, config);
+  }
+
   private void deliverAddresses(WrrLocalityConfig config, List<EquivalentAddressGroup> addresses) {
-    loadBalancer.handleResolvedAddresses(
+    loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(addresses).setLoadBalancingPolicyConfig(config)
             .build());
   }
@@ -252,9 +254,9 @@ public class WrrLocalityLoadBalancerTest {
     }
 
     Attributes.Builder attrBuilder = Attributes.newBuilder()
-        .set(InternalXdsAttributes.ATTR_LOCALITY_NAME, locality);
+        .set(XdsAttributes.ATTR_LOCALITY_NAME, locality);
     if (localityWeight != null) {
-      attrBuilder.set(InternalXdsAttributes.ATTR_LOCALITY_WEIGHT, localityWeight);
+      attrBuilder.set(XdsAttributes.ATTR_LOCALITY_WEIGHT, localityWeight);
     }
 
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),

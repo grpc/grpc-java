@@ -16,16 +16,16 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Charsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.common.io.BaseEncoding;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
 
 /**
  * Utility functions for transport layer framing.

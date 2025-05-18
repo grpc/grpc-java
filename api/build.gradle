@@ -47,9 +47,22 @@ dependencies {
     testImplementation project(':grpc-core')
     testImplementation project(':grpc-testing')
     testImplementation libraries.guava.testlib
+    testImplementation libraries.truth
 
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+animalsniffer {
+    annotation = 'io.grpc.IgnoreJRERequirement'
 }
 
 tasks.named("javadoc").configure {

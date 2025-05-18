@@ -18,8 +18,10 @@ them before continuing, and set them again when resuming.
 ```bash
 MAJOR=1 MINOR=7 PATCH=0 # Set appropriately for new release
 VERSION_FILES=(
+  MODULE.bazel
   build.gradle
   core/src/main/java/io/grpc/internal/GrpcUtil.java
+  examples/MODULE.bazel
   examples/build.gradle
   examples/pom.xml
   examples/android/clientcache/app/build.gradle
@@ -63,7 +65,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
    ```bash
    git fetch upstream
    git checkout -b v$MAJOR.$MINOR.x \
-     $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
+     $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle" upstream/master)^
    git push upstream v$MAJOR.$MINOR.x
    ```
 5. Continue with Google-internal steps at go/grpc-java/releasing, but stop
@@ -130,7 +132,9 @@ Tagging the Release
      compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
    ./gradlew build
    git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
+   git push -u origin release-v$MAJOR.$MINOR.$PATCH
    ```
+   Raise a PR and set the base branch of the PR to v$MAJOR.$MINOR.x of the upstream grpc-java repo.
 6. Go through PR review and push the release tag and updated release branch to
    GitHub (DO NOT click the merge button on the GitHub page):
 
@@ -163,14 +167,14 @@ Tagging the Release
     generation instructions][gcr-image]. Summary:
     ```bash
     # If you haven't previously configured docker:
-    gcloud auth configure-docker
+    gcloud auth configure-docker us-docker.pkg.dev
 
     # In main grpc repo, add the new version to matrix
     ${EDITOR:-nano -w} tools/interop_matrix/client_matrix.py
     tools/interop_matrix/create_matrix_images.py --git_checkout --release=v$MAJOR.$MINOR.$PATCH \
         --upload_images --language java
-    docker pull gcr.io/grpc-testing/grpc_interop_java:v$MAJOR.$MINOR.$PATCH
-    docker_image=gcr.io/grpc-testing/grpc_interop_java:v$MAJOR.$MINOR.$PATCH \
+    docker pull us-docker.pkg.dev/grpc-testing/testing-images-public/grpc_interop_java:v$MAJOR.$MINOR.$PATCH
+    docker_image=us-docker.pkg.dev/grpc-testing/testing-images-public/grpc_interop_java:v$MAJOR.$MINOR.$PATCH \
         tools/interop_matrix/testcases/java__master
 
     # Commit the changes
@@ -202,31 +206,47 @@ Tagging the Release
 12. Add [Release Notes](https://github.com/grpc/grpc-java/releases) for the new tag.
     *Make sure that any backports are reflected in the release notes.*
 
+13. Notify the Community. Post a release announcement to
+    [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
+    (`grpc-io@googlegroups.com`) with the title `gRPC-Java v$MAJOR.$MINOR.$PATCH
+    Released`. The email content should link to the GitHub release notes and
+    include a copy of them.
 
-Update README.md
-----------------
-After waiting ~1 day and verifying that the release is indexed on [Maven
-Central](https://search.maven.org/search?q=g:io.grpc), cherry-pick the commit
-that updated the README into the master branch.
+14. Update README.md. Cherry-pick the commit that updated the README.md into the
+    master branch.
+
+    ```bash
+    git checkout -b bump-readme master
+    git cherry-pick v$MAJOR.$MINOR.$PATCH^
+    git push --set-upstream origin bump-readme
+    ```
+
+    Create a PR and go through the review process
+
+15. Update version referenced by tutorials. Update `params.grpc_vers.java` in
+    [config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml) of
+    the grpc.io repository. Create a PR and go through the review process.
+
+Post-release upgrades
+---------------------
+Upgrade dependencies after the release so they can be well-tested before the
+next release.
+
+Upgrade the Gradle plugins in `settings.gradle` and the Gradle version in
+`gradle/wrapper/gradle-wrapper.properties`. Make sure to read the release notes
+for each dependency upgraded. Test by doing a regular build.
+
+Upgrade the regular dependencies in `gradle/libs.versions.toml`, except for
+Netty and netty-tcnative. To find available upgrades:
 
 ```bash
-git checkout -b bump-readme master
-git cherry-pick v$MAJOR.$MINOR.$PATCH^
-git push --set-upstream origin bump-readme
+./gradlew checkForUpdates
 ```
 
-Create a PR and go through the review process
+Test by doing a regular build. For each step, if a dependency cannot be
+upgraded, add a comment. Create issues in other projects for breakages, and in
+gRPC for things that will need a migration effort.
 
-Update version referenced by tutorials
---------------------------------------
-
-Update `params.grpc_vers.java` in
-[config.yaml](https://github.com/grpc/grpc.io/blob/master/config.yaml)
-of the grpc.io repository.
-
-Notify the Community
---------------------
-Post a release announcement to [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
-(`grpc-io@googlegroups.com`) with the title `gRPC-Java v$MAJOR.$MINOR.$PATCH
-Released`. The email content should link to the GitHub release notes and include
-a copy of them.
+When happy with the dependency upgrades, update the versions in `MODULE.bazel`,
+`repositories.bzl`, and the various `pom.xml` and `build.gradle` files in
+`examples/`.

@@ -1,0 +1,36 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: GCP CSM Observability"
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.gcp.csm.observability')
+    }
+}
+
+dependencies {
+    implementation project(':grpc-api'),
+            project(':grpc-core'),
+            project(':grpc-opentelemetry'),
+            project(':grpc-protobuf'),
+            project(path: ':grpc-xds', configuration: 'shadow'),
+            libraries.guava.jre, // jre version pulled in via xds
+            libraries.protobuf.java,
+            libraries.opentelemetry.gcp.resources,
+            libraries.opentelemetry.sdk.extension.autoconfigure // opentelemetry.gcp.resources uses compileOnly for this dep
+    testImplementation project(":grpc-testing"),
+            project(":grpc-inprocess"),
+            libraries.opentelemetry.sdk.testing,
+            libraries.assertj.core // opentelemetry.sdk.testing uses compileOnly for this dep
+
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}

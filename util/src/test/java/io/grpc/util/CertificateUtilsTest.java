@@ -18,12 +18,12 @@ package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.common.base.Charsets;
 import io.grpc.internal.testing.TestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -80,7 +80,7 @@ public class CertificateUtilsTest {
 
   @Test
   public void readBadFormatKeyFile() throws Exception {
-    InputStream in = new ByteArrayInputStream(BAD_PEM_FORMAT.getBytes(Charsets.UTF_8));
+    InputStream in = new ByteArrayInputStream(BAD_PEM_FORMAT.getBytes(StandardCharsets.UTF_8));
     try {
       CertificateUtils.getPrivateKey(in);
       Assert.fail("no exception thrown");
@@ -92,7 +92,7 @@ public class CertificateUtilsTest {
 
   @Test
   public void readBadContentKeyFile() {
-    InputStream in = new ByteArrayInputStream(BAD_PEM_CONTENT.getBytes(Charsets.UTF_8));
+    InputStream in = new ByteArrayInputStream(BAD_PEM_CONTENT.getBytes(StandardCharsets.UTF_8));
     try {
       CertificateUtils.getPrivateKey(in);
       Assert.fail("no exception thrown");

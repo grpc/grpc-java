@@ -1,0 +1,93 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
+java_library(
+    name = "s2a_channel_pool",
+    srcs = glob([
+        "src/main/java/io/grpc/s2a/internal/channel/*.java",
+    ]),
+    deps = [
+        "//api",
+        "//core",
+        "//core:internal",
+        "//netty",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("org.checkerframework:checker-qual"),
+        artifact("io.netty:netty-common"),
+        artifact("io.netty:netty-transport"),
+    ],
+)
+
+java_library(
+    name = "s2a_identity",
+    srcs = ["src/main/java/io/grpc/s2a/internal/handshaker/S2AIdentity.java"],
+    deps = [
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.google.s2a.proto.v2:s2a-proto"),
+    ],
+)
+
+java_library(
+    name = "token_manager",
+    srcs = glob([
+        "src/main/java/io/grpc/s2a/internal/handshaker/tokenmanager/*.java",
+    ]),
+    deps = [
+        ":s2a_identity",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.guava:guava"),
+    ],
+)
+
+java_library(
+    name = "s2a_handshaker",
+    srcs = [
+        "src/main/java/io/grpc/s2a/internal/handshaker/ConnectionClosedException.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/GetAuthenticationMechanisms.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/ProtoUtil.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2AConnectionException.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2APrivateKeyMethod.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2AProtocolNegotiatorFactory.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2AStub.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/S2ATrustManager.java",
+        "src/main/java/io/grpc/s2a/internal/handshaker/SslContextFactory.java",
+    ],
+    deps = [
+        ":token_manager",
+        ":s2a_channel_pool",
+        ":s2a_identity",
+        "//api",
+        "//core:internal",
+        "//netty",
+        "//stub",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.google.s2a.proto.v2:s2a-proto"),
+        artifact("org.checkerframework:checker-qual"),
+        "@com_google_protobuf//:protobuf_java",
+        artifact("io.netty:netty-common"),
+        artifact("io.netty:netty-handler"),
+        artifact("io.netty:netty-transport"),
+    ],
+)
+
+java_library(
+    name = "s2a",
+    srcs = ["src/main/java/io/grpc/s2a/S2AChannelCredentials.java"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":s2a_channel_pool",
+        ":s2a_handshaker",
+        ":s2a_identity",
+        "//api",
+        "//core:internal",
+        "//netty",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"), 
+        artifact("org.checkerframework:checker-qual"), 
+    ],
+)

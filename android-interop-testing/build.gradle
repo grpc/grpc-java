@@ -7,7 +7,6 @@ description = 'gRPC: Android Integration Testing'
 
 repositories {
     google()
-    mavenCentral()
 }
 
 android {
@@ -69,21 +68,15 @@ dependencies {
 
     implementation project(':grpc-android'),
             project(':grpc-core'),
-            project(':grpc-auth'),
             project(':grpc-census'),
             project(':grpc-okhttp'),
             project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             project(':grpc-testing'),
-            libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
             libraries.androidx.test.rules,
             libraries.opencensus.contrib.grpc.metrics
-
-    implementation (libraries.google.auth.oauth2Http) {
-        exclude group: 'org.apache.httpcomponents'
-    }
 
     implementation (project(':grpc-services')) {
         exclude group: 'com.google.protobuf'
@@ -116,7 +109,6 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += [
             "-Xlint:-cast",
-            "-Xlint:-deprecation", // https://github.com/grpc/grpc-java/issues/10298
     ]
     appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
     appendToProperty(

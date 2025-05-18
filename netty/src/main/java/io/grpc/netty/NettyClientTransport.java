@@ -83,6 +83,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final int flowControlWindow;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
+  private final int softLimitHeaderListSize;
   private KeepAliveManager keepAliveManager;
   private final long keepAliveTimeNanos;
   private final long keepAliveTimeoutNanos;
@@ -105,16 +106,30 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
 
+
   NettyClientTransport(
-      SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
-      Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
-      ProtocolNegotiator negotiator, boolean autoFlowControl, int flowControlWindow,
-      int maxMessageSize, int maxHeaderListSize,
-      long keepAliveTimeNanos, long keepAliveTimeoutNanos,
-      boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
-      Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
-      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
-      boolean useGetForSafeMethods, Ticker ticker) {
+      SocketAddress address,
+      ChannelFactory<? extends Channel> channelFactory,
+      Map<ChannelOption<?>, ?> channelOptions,
+      EventLoopGroup group,
+      ProtocolNegotiator negotiator,
+      boolean autoFlowControl,
+      int flowControlWindow,
+      int maxMessageSize,
+      int maxHeaderListSize,
+      int softLimitHeaderListSize,
+      long keepAliveTimeNanos,
+      long keepAliveTimeoutNanos,
+      boolean keepAliveWithoutCalls,
+      String authority,
+      @Nullable String userAgent,
+      Runnable tooManyPingsRunnable,
+      TransportTracer transportTracer,
+      Attributes eagAttributes,
+      LocalSocketPicker localSocketPicker,
+      ChannelLogger channelLogger,
+      boolean useGetForSafeMethods,
+      Ticker ticker) {
 
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.negotiationScheme = this.negotiator.scheme();
@@ -126,6 +141,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.flowControlWindow = flowControlWindow;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
+    this.softLimitHeaderListSize = softLimitHeaderListSize;
     this.keepAliveTimeNanos = keepAliveTimeNanos;
     this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
     this.keepAliveWithoutCalls = keepAliveWithoutCalls;
@@ -149,7 +165,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       executor.execute(new Runnable() {
         @Override
         public void run() {
-          callback.onFailure(statusExplainingWhyTheChannelIsNull.asException());
+          callback.onFailure(statusExplainingWhyTheChannelIsNull);
         }
       });
       return;
@@ -161,7 +177,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       public void operationComplete(ChannelFuture future) throws Exception {
         if (!future.isSuccess()) {
           Status s = statusFromFailedFuture(future);
-          Http2Ping.notifyFailed(callback, executor, s.asException());
+          Http2Ping.notifyFailed(callback, executor, s);
         }
       }
     };
@@ -220,18 +236,19 @@ class NettyClientTransport implements ConnectionClientTransport {
     }
 
     handler = NettyClientHandler.newHandler(
-        lifecycleManager,
-        keepAliveManager,
-        autoFlowControl,
-        flowControlWindow,
-        maxHeaderListSize,
-        GrpcUtil.STOPWATCH_SUPPLIER,
-        tooManyPingsRunnable,
-        transportTracer,
-        eagAttributes,
-        authorityString,
-        channelLogger,
-        ticker);
+            lifecycleManager,
+            keepAliveManager,
+            autoFlowControl,
+            flowControlWindow,
+            maxHeaderListSize,
+            softLimitHeaderListSize,
+            GrpcUtil.STOPWATCH_SUPPLIER,
+            tooManyPingsRunnable,
+            transportTracer,
+            eagAttributes,
+            authorityString,
+            channelLogger,
+            ticker);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
@@ -241,13 +258,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.option(SO_KEEPALIVE, true);
-    // For non-epoll based channel, the option will be ignored.
-    if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
-      ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
-      if (tcpUserTimeout != null) {
-        b.option(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
-      }
-    }
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
       // Every entry in the map is obtained from
       // NettyChannelBuilder#withOption(ChannelOption<T> option, T value)
@@ -286,6 +296,20 @@ class NettyClientTransport implements ConnectionClientTransport {
       };
     }
     channel = regFuture.channel();
+    // For non-epoll based channel, the option will be ignored.
+    try {
+      if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED
+              && Class.forName("io.netty.channel.epoll.AbstractEpollChannel").isInstance(channel)) {
+        ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
+        if (tcpUserTimeout != null) {
+          int tcpUserTimeoutMs = (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos);
+          channel.config().setOption(tcpUserTimeout, tcpUserTimeoutMs);
+        }
+      }
+    } catch (ClassNotFoundException ignored) {
+      // JVM did not load AbstractEpollChannel, so the current channel will not be of epoll type,
+      // so there is no need to set TCP_USER_TIMEOUT
+    }
     // Start the write queue as soon as the channel is constructed
     handler.startWriteQueue(channel);
     // This write will have no effect, yet it will only complete once the negotiationHandler

@@ -22,6 +22,7 @@ import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISAB
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalLogId;
@@ -50,6 +51,7 @@ import io.grpc.okhttp.internal.framed.Settings;
 import io.grpc.okhttp.internal.framed.Variant;
 import java.io.IOException;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -61,7 +63,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.BufferedSource;
 import okio.ByteString;
@@ -170,6 +171,13 @@ final class OkHttpServerTransport implements ServerTransport,
       HandshakerSocketFactory.HandshakeResult result =
           config.handshakerSocketFactory.handshake(socket, Attributes.EMPTY);
       synchronized (lock) {
+        if (socket.isClosed()) {
+          // The wrapped socket may not handle the underlying socket being closed by shutdown(). In
+          // particular, SSLSocket hangs future reads if the underlying socket is already closed at
+          // this point, even if you call sslSocket.close() later.
+          result.socket.close();
+          throw new SocketException("Socket close raced with handshake");
+        }
         this.socket = result.socket;
       }
       this.attributes = result.attributes;

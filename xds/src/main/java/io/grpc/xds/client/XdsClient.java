@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
@@ -117,6 +118,23 @@ public abstract class XdsClient {
     return Joiner.on('/').join(encodedSegs);
   }
 
+  /**
+   * Returns the authority from the resource name.
+   */
+  public static String getAuthorityFromResourceName(String resourceNames) {
+    String authority;
+    if (resourceNames.startsWith(XDSTP_SCHEME)) {
+      URI uri = URI.create(resourceNames);
+      authority = uri.getAuthority();
+      if (authority == null) {
+        authority = "";
+      }
+    } else {
+      authority = null;
+    }
+    return authority;
+  }
+
   public interface ResourceUpdate {}
 
   /**
@@ -154,44 +172,46 @@ public abstract class XdsClient {
     private final String version;
     private final ResourceMetadataStatus status;
     private final long updateTimeNanos;
+    private final boolean cached;
     @Nullable private final Any rawResource;
     @Nullable private final UpdateFailureState errorState;
 
     private ResourceMetadata(
-        ResourceMetadataStatus status, String version, long updateTimeNanos,
+        ResourceMetadataStatus status, String version, long updateTimeNanos, boolean cached,
         @Nullable Any rawResource, @Nullable UpdateFailureState errorState) {
       this.status = checkNotNull(status, "status");
       this.version = checkNotNull(version, "version");
       this.updateTimeNanos = updateTimeNanos;
+      this.cached = cached;
       this.rawResource = rawResource;
       this.errorState = errorState;
     }
 
-    static ResourceMetadata newResourceMetadataUnknown() {
-      return new ResourceMetadata(ResourceMetadataStatus.UNKNOWN, "", 0, null, null);
+    public static ResourceMetadata newResourceMetadataUnknown() {
+      return new ResourceMetadata(ResourceMetadataStatus.UNKNOWN, "", 0, false,null, null);
     }
 
-    static ResourceMetadata newResourceMetadataRequested() {
-      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, null, null);
+    public static ResourceMetadata newResourceMetadataRequested() {
+      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, false, null, null);
     }
 
-    static ResourceMetadata newResourceMetadataDoesNotExist() {
-      return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, null, null);
+    public static ResourceMetadata newResourceMetadataDoesNotExist() {
+      return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, false, null, null);
     }
 
     public static ResourceMetadata newResourceMetadataAcked(
         Any rawResource, String version, long updateTimeNanos) {
       checkNotNull(rawResource, "rawResource");
       return new ResourceMetadata(
-          ResourceMetadataStatus.ACKED, version, updateTimeNanos, rawResource, null);
+          ResourceMetadataStatus.ACKED, version, updateTimeNanos, true, rawResource, null);
     }
 
-    static ResourceMetadata newResourceMetadataNacked(
+    public static ResourceMetadata newResourceMetadataNacked(
         ResourceMetadata metadata, String failedVersion, long failedUpdateTime,
-        String failedDetails) {
+        String failedDetails, boolean cached) {
       checkNotNull(metadata, "metadata");
       return new ResourceMetadata(ResourceMetadataStatus.NACKED,
-          metadata.getVersion(), metadata.getUpdateTimeNanos(), metadata.getRawResource(),
+          metadata.getVersion(), metadata.getUpdateTimeNanos(), cached, metadata.getRawResource(),
           new UpdateFailureState(failedVersion, failedUpdateTime, failedDetails));
     }
 
@@ -208,6 +228,11 @@ public abstract class XdsClient {
     /** The timestamp when the resource was last successfully updated. */
     public long getUpdateTimeNanos() {
       return updateTimeNanos;
+    }
+
+    /** Returns whether the resource was cached. */
+    public boolean isCached() {
+      return cached;
     }
 
     /** The last successfully updated xDS resource as it was returned by the server. */
@@ -299,14 +324,6 @@ public abstract class XdsClient {
   }
 
   /**
-   * For all subscriber's for the specified server, if the resource hasn't yet been
-   * resolved then start a timer for it.
-   */
-  protected void startSubscriberTimersIfNeeded(ServerInfo serverInfo) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
    * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
    * they are at the moment of the call.
    *
@@ -378,6 +395,23 @@ public abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
+  /** Callback used to report a gauge metric value for server connections. */
+  public interface ServerConnectionCallback {
+    void reportServerConnectionGauge(boolean isConnected, String xdsServer);
+  }
+
+  /**
+   * Reports whether xDS client has a "working" ADS stream to xDS server. The definition of a
+   * working stream is defined in gRFC A78.
+   *
+   * @see <a
+   *     href="https://github.com/grpc/proposal/blob/master/A78-grpc-metrics-wrr-pf-xds.md#xdsclient">
+   *     A78-grpc-metrics-wrr-pf-xds.md</a>
+   */
+  public Future<Void> reportServerConnections(ServerConnectionCallback callback) {
+    throw new UnsupportedOperationException();
+  }
+
   static final class ProcessingTracker {
     private final AtomicInteger pendingTask = new AtomicInteger(1);
     private final Executor executor;
@@ -403,30 +437,39 @@ public abstract class XdsClient {
     /** Called when a xds response is received. */
     void handleResourceResponse(
         XdsResourceType<?> resourceType, ServerInfo serverInfo, String versionInfo,
-        List<Any> resources, String nonce, ProcessingTracker processingTracker);
+        List<Any> resources, String nonce, boolean isFirstResponse,
+        ProcessingTracker processingTracker);
 
     /** Called when the ADS stream is closed passively. */
     // Must be synchronized.
-    void handleStreamClosed(Status error);
-
-    /** Called when the ADS stream has been recreated. */
-    // Must be synchronized.
-    void handleStreamRestarted(ServerInfo serverInfo);
+    void handleStreamClosed(Status error, boolean shouldTryFallback);
   }
 
-  public interface ResourceStore {
+  interface ResourceStore {
+
     /**
-     * Returns the collection of resources currently subscribing to or {@code null} if not
-     * subscribing to any resources for the given type.
+     * Returns the collection of resources currently subscribed to which have an authority matching
+     * one of those for which the ControlPlaneClient associated with the specified ServerInfo is
+     * the active one, or {@code null} if no such resources are currently subscribed to.
      *
      * <p>Note an empty collection indicates subscribing to resources of the given type with
      * wildcard mode.
+     *
+     * @param serverInfo the xds server to get the resources from
+     * @param type       the type of the resources that should be retrieved
      */
     // Must be synchronized.
     @Nullable
-    Collection<String> getSubscribedResources(ServerInfo serverInfo,
-                                              XdsResourceType<? extends ResourceUpdate> type);
+    Collection<String> getSubscribedResources(
+        ServerInfo serverInfo, XdsResourceType<? extends ResourceUpdate> type);
 
     Map<String, XdsResourceType<?>> getSubscribedResourceTypesWithTypeUrl();
+
+    /**
+     * For any of the subscribers to one of the specified resources, if there isn't a result or
+     * an existing timer for the resource, start a timer for the resource.
+     */
+    void startMissingResourceTimers(Collection<String> resourceNames,
+                                    XdsResourceType<?> resourceType);
   }
 }

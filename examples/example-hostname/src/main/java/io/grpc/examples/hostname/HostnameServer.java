@@ -21,7 +21,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
-import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.protobuf.services.ProtoReflectionServiceV1;
 import io.grpc.services.HealthStatusManager;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -53,7 +53,7 @@ public final class HostnameServer {
     HealthStatusManager health = new HealthStatusManager();
     final Server server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
         .addService(new HostnameGreeter(hostname))
-        .addService(ProtoReflectionService.newInstance())
+        .addService(ProtoReflectionServiceV1.newInstance())
         .addService(health.getHealthService())
         .build()
         .start();
@@ -64,17 +64,17 @@ public final class HostnameServer {
         // Start graceful shutdown
         server.shutdown();
         try {
-          // Wait for RPCs to complete processing
-          if (!server.awaitTermination(30, TimeUnit.SECONDS)) {
-            // That was plenty of time. Let's cancel the remaining RPCs
-            server.shutdownNow();
-            // shutdownNow isn't instantaneous, so give a bit of time to clean resources up
-            // gracefully. Normally this will be well under a second.
-            server.awaitTermination(5, TimeUnit.SECONDS);
-          }
+          // Wait up to 30 seconds for RPCs to complete processing.
+          server.awaitTermination(30, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
-          server.shutdownNow();
+          Thread.currentThread().interrupt();
         }
+        // Cancel any remaining RPCs. If awaitTermination() returned true above, then there are no
+        // RPCs and the server is already terminated. But it is safe to call even when terminated.
+        server.shutdownNow();
+        // shutdownNow isn't instantaneous, so you want an additional awaitTermination() to give
+        // time to clean resources up gracefully. Normally it will return in well under a second. In
+        // this example, the server.awaitTermination() in main() provides that delay.
       }
     });
     // This would normally be tied to the service's dependencies. For example, if HostnameGreeter

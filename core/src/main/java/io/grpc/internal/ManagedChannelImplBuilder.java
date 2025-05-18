@@ -45,6 +45,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
+import io.grpc.StatusOr;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
@@ -54,6 +55,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -158,6 +160,8 @@ public final class ManagedChannelImplBuilder
   final ChannelCredentials channelCredentials;
   @Nullable
   final CallCredentials callCredentials;
+  @Nullable
+  IdentityHashMap<NameResolver.Args.Key<?>, Object> nameResolverCustomArgs;
 
   @Nullable
   private final SocketAddress directServerAddress;
@@ -613,6 +617,24 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
+  public <X> ManagedChannelImplBuilder setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
+    if (nameResolverCustomArgs == null) {
+      nameResolverCustomArgs = new IdentityHashMap<>();
+    }
+    nameResolverCustomArgs.put(checkNotNull(key, "key"), checkNotNull(value, "value"));
+    return this;
+  }
+
+  @SuppressWarnings("unchecked") // This cast is safe because of setNameResolverArg()'s signature.
+  void copyAllNameResolverCustomArgsTo(NameResolver.Args.Builder dest) {
+    if (nameResolverCustomArgs != null) {
+      for (Map.Entry<NameResolver.Args.Key<?>, Object> entry : nameResolverCustomArgs.entrySet()) {
+        dest.setArg((NameResolver.Args.Key<Object>) entry.getKey(), entry.getValue());
+      }
+    }
+  }
+
+  @Override
   public ManagedChannelImplBuilder disableServiceConfigLookUp() {
     this.lookUpServiceConfig = false;
     return this;
@@ -715,18 +737,16 @@ public final class ManagedChannelImplBuilder
   // TODO(zdapeng): FIX IT
   @VisibleForTesting
   List<ClientInterceptor> getEffectiveInterceptors(String computedTarget) {
-    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
-    for (int i = 0; i < effectiveInterceptors.size(); i++) {
-      if (!(effectiveInterceptors.get(i) instanceof InterceptorFactoryWrapper)) {
-        continue;
+    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors.size());
+    for (ClientInterceptor interceptor : this.interceptors) {
+      if (interceptor instanceof InterceptorFactoryWrapper) {
+        InterceptorFactory factory = ((InterceptorFactoryWrapper) interceptor).factory;
+        interceptor = factory.newInterceptor(computedTarget);
+        if (interceptor == null) {
+          throw new NullPointerException("Factory returned null interceptor: " + factory);
+        }
       }
-      InterceptorFactory factory =
-          ((InterceptorFactoryWrapper) effectiveInterceptors.get(i)).factory;
-      ClientInterceptor interceptor = factory.newInterceptor(computedTarget);
-      if (interceptor == null) {
-        throw new NullPointerException("Factory returned null interceptor: " + factory);
-      }
-      effectiveInterceptors.set(i, interceptor);
+      effectiveInterceptors.add(interceptor);
     }
 
     boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();
@@ -877,9 +897,11 @@ public final class ManagedChannelImplBuilder
 
         @Override
         public void start(Listener2 listener) {
-          listener.onResult(
+          listener.onResult2(
               ResolutionResult.newBuilder()
-                  .setAddresses(Collections.singletonList(new EquivalentAddressGroup(address)))
+                  .setAddressesOrError(
+                      StatusOr.fromValue(
+                          Collections.singletonList(new EquivalentAddressGroup(address))))
                   .setAttributes(Attributes.EMPTY)
                   .build());
         }

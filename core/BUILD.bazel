@@ -17,7 +17,6 @@ java_library(
     srcs = glob([
         "src/main/java/io/grpc/internal/*.java",
     ]),
-    javacopts = ["-Xep:DoNotCall:OFF"],  # Remove once requiring Bazel 3.4.0+; allows non-final
     resources = glob([
         "src/bazel-internal/resources/**",
     ]),
@@ -30,7 +29,6 @@ java_library(
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
         artifact("io.perfmark:perfmark-api"),
         artifact("org.codehaus.mojo:animal-sniffer-annotations"),
     ],

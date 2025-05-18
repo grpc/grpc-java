@@ -18,10 +18,14 @@ package io.grpc.binder;
 
 import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.UserHandle;
+import com.google.common.base.Objects;
+import io.grpc.ExperimentalApi;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
 
@@ -41,18 +45,25 @@ import javax.annotation.Nullable;
  * fields, namely, an action of {@link ApiConstants#ACTION_BIND}, an empty category set and null
  * type and data URI.
  *
- * <p>The semantics of {@link #equals(Object)} are the same as {@link Intent#filterEquals(Intent)}.
+ * <p>Optionally contains a {@link UserHandle} that must be considered wherever the {@link Intent}
+ * is evaluated.
+ *
+ * <p>{@link #equals(Object)} uses {@link Intent#filterEquals(Intent)} semantics to compare Intents.
  */
 public final class AndroidComponentAddress extends SocketAddress {
   private static final long serialVersionUID = 0L;
 
   private final Intent bindIntent; // "Explicit", having either a component or package restriction.
 
-  protected AndroidComponentAddress(Intent bindIntent) {
+  @Nullable
+  private final UserHandle targetUser; // null means the same user that hosts this process.
+
+  protected AndroidComponentAddress(Intent bindIntent, @Nullable UserHandle targetUser) {
     checkArgument(
         bindIntent.getComponent() != null || bindIntent.getPackage() != null,
         "'bindIntent' must be explicit. Specify either a package or ComponentName.");
     this.bindIntent = bindIntent;
+    this.targetUser = targetUser;
   }
 
   /**
@@ -72,8 +83,8 @@ public final class AndroidComponentAddress extends SocketAddress {
   }
 
   /**
-   * Creates an address referencing a {@link android.app.Service} in another
-   * application and using the default binding {@link Intent}.
+   * Creates an address referencing a {@link android.app.Service} in another application and using
+   * the default binding {@link Intent}.
    *
    * @param applicationPackage The package name of the application containing the server.
    * @param serviceClassName The full class name of the Android Service to bind to.
@@ -99,7 +110,7 @@ public final class AndroidComponentAddress extends SocketAddress {
    * @throws IllegalArgumentException if 'intent' isn't "explicit"
    */
   public static AndroidComponentAddress forBindIntent(Intent intent) {
-    return new AndroidComponentAddress(intent.cloneFilter());
+    return new AndroidComponentAddress(intent.cloneFilter(), null);
   }
 
   /**
@@ -108,7 +119,7 @@ public final class AndroidComponentAddress extends SocketAddress {
    */
   public static AndroidComponentAddress forComponent(ComponentName component) {
     return new AndroidComponentAddress(
-        new Intent(ApiConstants.ACTION_BIND).setComponent(component));
+        new Intent(ApiConstants.ACTION_BIND).setComponent(component), null);
   }
 
   /**
@@ -141,6 +152,9 @@ public final class AndroidComponentAddress extends SocketAddress {
   /**
    * Returns this address as an explicit {@link Intent} suitable for passing to {@link
    * Context#bindService}.
+   *
+   * <p>NB: The returned Intent does not specify a target Android user. If {@link #getTargetUser()}
+   * is non-null, {@link Context#bindServiceAsUser} should be called instead.
    */
   public Intent asBindIntent() {
     return bindIntent.cloneFilter(); // Intent is mutable so return a copy.
@@ -177,13 +191,77 @@ public final class AndroidComponentAddress extends SocketAddress {
   public boolean equals(Object obj) {
     if (obj instanceof AndroidComponentAddress) {
       AndroidComponentAddress that = (AndroidComponentAddress) obj;
-      return bindIntent.filterEquals(that.bindIntent);
+      return bindIntent.filterEquals(that.bindIntent)
+          && Objects.equal(this.targetUser, that.targetUser);
     }
     return false;
   }
 
   @Override
   public String toString() {
-    return "AndroidComponentAddress[" + bindIntent + "]";
+    StringBuilder builder = new StringBuilder("AndroidComponentAddress[");
+    if (targetUser != null) {
+      builder.append(targetUser);
+      builder.append("@");
+    }
+    builder.append(bindIntent);
+    builder.append("]");
+    return builder.toString();
+  }
+
+  /**
+   * Identifies the Android user in which the bind Intent will be evaluated.
+   *
+   * <p>Returns the {@link UserHandle}, or null which means that the Android user hosting the
+   * current process will be used.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
+  @Nullable
+  public UserHandle getTargetUser() {
+    return targetUser;
+  }
+
+  public static Builder newBuilder() {
+    return new Builder();
+  }
+
+  /** Fluently builds instances of {@link AndroidComponentAddress}. */
+  public static class Builder {
+    Intent bindIntent;
+    UserHandle targetUser;
+
+    /**
+     * Sets the binding {@link Intent} to one having the "filter matching" fields of 'intent'.
+     *
+     * <p>'intent' must be "explicit", i.e. having either a target component ({@link
+     * Intent#getComponent()}) or package restriction ({@link Intent#getPackage()}).
+     */
+    public Builder setBindIntent(Intent intent) {
+      this.bindIntent = intent.cloneFilter();
+      return this;
+    }
+
+    /**
+     * Sets the binding {@link Intent} to one with the specified 'component' and default values for
+     * all other fields, for convenience.
+     */
+    public Builder setBindIntentFromComponent(ComponentName component) {
+      this.bindIntent = new Intent(ApiConstants.ACTION_BIND).setComponent(component);
+      return this;
+    }
+
+    /** See {@link AndroidComponentAddress#getTargetUser()}. */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
+    public Builder setTargetUser(@Nullable UserHandle targetUser) {
+      this.targetUser = targetUser;
+      return this;
+    }
+
+    public AndroidComponentAddress build() {
+      // We clone any incoming mutable intent in the setter, not here. AndroidComponentAddress
+      // itself is immutable so multiple instances built from here can safely share 'bindIntent'.
+      checkState(bindIntent != null, "Required property 'bindIntent' unset");
+      return new AndroidComponentAddress(bindIntent, targetUser);
+    }
   }
 }

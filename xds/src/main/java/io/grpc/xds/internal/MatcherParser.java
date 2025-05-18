@@ -26,9 +26,12 @@ public final class MatcherParser {
           io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
     switch (proto.getHeaderMatchSpecifierCase()) {
       case EXACT_MATCH:
+        @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
+        String exactMatch = proto.getExactMatch();
         return Matchers.HeaderMatcher.forExactValue(
-                        proto.getName(), proto.getExactMatch(), proto.getInvertMatch());
+                        proto.getName(), exactMatch, proto.getInvertMatch());
       case SAFE_REGEX_MATCH:
+        @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
         String rawPattern = proto.getSafeRegexMatch().getRegex();
         Pattern safeRegExMatch;
         try {
@@ -49,14 +52,20 @@ public final class MatcherParser {
         return Matchers.HeaderMatcher.forPresent(
               proto.getName(), proto.getPresentMatch(), proto.getInvertMatch());
       case PREFIX_MATCH:
+        @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
+        String prefixMatch = proto.getPrefixMatch();
         return Matchers.HeaderMatcher.forPrefix(
-              proto.getName(), proto.getPrefixMatch(), proto.getInvertMatch());
+              proto.getName(), prefixMatch, proto.getInvertMatch());
       case SUFFIX_MATCH:
+        @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
+        String suffixMatch = proto.getSuffixMatch();
         return Matchers.HeaderMatcher.forSuffix(
-              proto.getName(), proto.getSuffixMatch(), proto.getInvertMatch());
+              proto.getName(), suffixMatch, proto.getInvertMatch());
       case CONTAINS_MATCH:
+        @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
+        String containsMatch = proto.getContainsMatch();
         return Matchers.HeaderMatcher.forContains(
-              proto.getName(), proto.getContainsMatch(), proto.getInvertMatch());
+              proto.getName(), containsMatch, proto.getInvertMatch());
       case STRING_MATCH:
         return Matchers.HeaderMatcher.forString(
           proto.getName(), parseStringMatcher(proto.getStringMatch()), proto.getInvertMatch());

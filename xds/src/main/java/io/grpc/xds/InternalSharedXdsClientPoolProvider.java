@@ -16,7 +16,9 @@
 
 package io.grpc.xds;
 
+import io.grpc.CallCredentials;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
@@ -36,6 +38,18 @@ public final class InternalSharedXdsClientPoolProvider {
 
   public static ObjectPool<XdsClient> getOrCreate(String target)
       throws XdsInitializationException {
-    return SharedXdsClientPoolProvider.getDefaultProvider().getOrCreate();
+    return getOrCreate(target, new MetricRecorder() {});
+  }
+
+  public static ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+      throws XdsInitializationException {
+    return getOrCreate(target, metricRecorder, null);
+  }
+
+  public static ObjectPool<XdsClient> getOrCreate(
+      String target, MetricRecorder metricRecorder, CallCredentials transportCallCredentials)
+      throws XdsInitializationException {
+    return SharedXdsClientPoolProvider.getDefaultProvider()
+        .getOrCreate(target, metricRecorder, transportCallCredentials);
   }
 }

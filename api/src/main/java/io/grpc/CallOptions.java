@@ -17,16 +17,18 @@
 package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.grpc.TimeUtils.convertToNanos;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -174,6 +176,11 @@ public final class CallOptions {
    */
   public CallOptions withDeadlineAfter(long duration, TimeUnit unit) {
     return withDeadline(Deadline.after(duration, unit));
+  }
+
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  public CallOptions withDeadlineAfter(Duration duration) {
+    return withDeadlineAfter(convertToNanos(duration), TimeUnit.NANOSECONDS);
   }
 
   /**
@@ -512,6 +519,7 @@ public final class CallOptions {
     builder.waitForReady = other.waitForReady;
     builder.maxInboundMessageSize = other.maxInboundMessageSize;
     builder.maxOutboundMessageSize = other.maxOutboundMessageSize;
+    builder.onReadyThreshold = other.onReadyThreshold;
     return builder;
   }
 
@@ -527,6 +535,7 @@ public final class CallOptions {
         .add("waitForReady", isWaitForReady())
         .add("maxInboundMessageSize", maxInboundMessageSize)
         .add("maxOutboundMessageSize", maxOutboundMessageSize)
+        .add("onReadyThreshold", onReadyThreshold)
         .add("streamTracerFactories", streamTracerFactories)
         .toString();
   }

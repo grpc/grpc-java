@@ -17,7 +17,9 @@
 package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.InternalTimeUtils.convert;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -26,11 +28,12 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * Common base type for stub implementations. Stub configuration is immutable; changing the
@@ -149,6 +152,12 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
     return build(channel, callOptions.withDeadlineAfter(duration, unit));
   }
 
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11657")
+  @IgnoreJRERequirement
+  public final S withDeadlineAfter(Duration duration) {
+    return withDeadlineAfter(convert(duration), TimeUnit.NANOSECONDS);
+  }
+
   /**
    * Returns a new stub with the given executor that is to be used instead of the default one
    * specified with {@link ManagedChannelBuilder#executor}. Note that setting this option may not
@@ -250,6 +259,16 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public final S withMaxOutboundMessageSize(int maxSize) {
     return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
+  }
+
+  /**
+   * Returns a new stub that limits the maximum number of bytes per stream in the queue.
+   *
+   * @since 1.1.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11021")
+  public final S withOnReadyThreshold(int numBytes) {
+    return build(channel, callOptions.withOnReadyThreshold(numBytes));
   }
 
   /**

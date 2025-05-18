@@ -18,11 +18,11 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.ExperimentalApi;
 import java.io.IOException;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Custom SocketAddress class for {@link InProcessTransport}, for 

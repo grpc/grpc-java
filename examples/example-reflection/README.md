@@ -1,7 +1,7 @@
 gRPC Reflection Example
 ================
 
-The reflection example has a Hello World server with `ProtoReflectionService` registered. 
+The reflection example has a Hello World server with `ProtoReflectionServiceV1` registered. 
 
 ### Build the example
 
@@ -45,7 +45,7 @@ Output
 
 ### List all the methods of a service
   ```
-  $ grpcurl -plaintext localhost:50051 helloworld.Greeter
+  $ grpcurl -plaintext localhost:50051 list helloworld.Greeter
   ```
 Output
   ```

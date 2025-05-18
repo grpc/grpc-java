@@ -32,7 +32,6 @@ dependencies {
             libraries.truth,
             project(':grpc-testing')
     testImplementation testFixtures(project(':grpc-api')),
-            project(':grpc-inprocess'),
             project(':grpc-testing')
     testImplementation libraries.guava.testlib
 
@@ -40,8 +39,16 @@ dependencies {
 
     jmh project(':grpc-testing')
 
-    signature libraries.signature.java
-    signature libraries.signature.android
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("javadoc").configure {

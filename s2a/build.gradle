@@ -1,0 +1,120 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.google.osdetector"
+    id "com.google.protobuf"
+    id "com.gradleup.shadow"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: S2A"
+
+dependencies {
+    implementation libraries.s2a.proto
+
+    api project(':grpc-api')
+    implementation project(':grpc-stub'),
+            project(':grpc-protobuf'),
+            project(':grpc-core'),
+            libraries.protobuf.java,
+            libraries.guava.jre // JRE required by protobuf-java-util from grpclb
+    def nettyDependency = implementation project(':grpc-netty')
+    compileOnly libraries.javax.annotation
+
+    shadow configurations.implementation.getDependencies().minus(nettyDependency)
+    shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
+    
+    testImplementation project(':grpc-benchmarks'),
+            project(':grpc-testing'),
+            project(':grpc-testing-proto'),
+            testFixtures(project(':grpc-core')),
+            libraries.guava
+
+    testImplementation 'com.google.truth:truth:1.4.2'
+    testImplementation 'com.google.truth.extensions:truth-proto-extension:1.4.2' 
+    testImplementation libraries.guava.testlib
+
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "windows-x86_64"
+        }
+    }
+
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+configureProtoCompilation()
+
+tasks.named("javadoc").configure {
+    exclude 'io/grpc/s2a/**'
+}
+
+tasks.named("jar").configure {
+    // Must use a different archiveClassifier to avoid conflicting with shadowJar
+    archiveClassifier = 'original'
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.s2a')
+    }
+}
+
+// We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
+// source to work with Bazel, so we rewrite the code as part of the build.
+tasks.named("shadowJar").configure {
+    archiveClassifier = null
+    dependencies {
+        exclude(dependency {true})
+    }
+    relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
+    relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
+}
+
+plugins.withId('maven-publish') {
+publishing {
+    publications {
+        maven(MavenPublication) {
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            pom.withXml {
+                def dependenciesNode = new Node(null, 'dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    dependencyNode.appendNode('version', dep.version)
+                    dependencyNode.appendNode('scope', 'compile')
+                }
+                asNode().dependencies[0].replaceNode(dependenciesNode)
+            }
+        }
+    }
+}
+}

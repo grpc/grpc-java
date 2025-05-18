@@ -87,7 +87,7 @@ import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
-import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
+import io.netty.handler.codec.http2.UniformStreamByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
@@ -152,7 +152,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   private int rstCount;
   private long lastRstNanoTime;
 
-
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
       ChannelPromise channelUnused,
@@ -162,6 +161,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
+      int softLimitHeaderListSize,
       int maxMessageSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
@@ -192,6 +192,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
+        softLimitHeaderListSize,
         maxMessageSize,
         keepAliveTimeInNanos,
         keepAliveTimeoutInNanos,
@@ -217,6 +218,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       int flowControlWindow,
       int maxHeaderListSize,
+      int softLimitHeaderListSize,
       int maxMessageSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
@@ -234,12 +236,15 @@ class NettyServerHandler extends AbstractNettyHandler {
         flowControlWindow);
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
         maxHeaderListSize);
+    Preconditions.checkArgument(
+        softLimitHeaderListSize > 0, "softLimitHeaderListSize must be positive: %s",
+        softLimitHeaderListSize);
     Preconditions.checkArgument(maxMessageSize > 0, "maxMessageSize must be positive: %s",
         maxMessageSize);
 
     final Http2Connection connection = new DefaultHttp2Connection(true);
-    WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);
-    dist.allocationQuantum(16 * 1024); // Make benchmarks fast again.
+    UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
+    dist.minAllocationChunk(MIN_ALLOCATED_CHUNK); // Increased for benchmarks performance.
     DefaultHttp2RemoteFlowController controller =
         new DefaultHttp2RemoteFlowController(connection, dist);
     connection.remote().flowController(controller);
@@ -273,7 +278,10 @@ class NettyServerHandler extends AbstractNettyHandler {
         transportTracer,
         decoder, encoder, settings,
         maxMessageSize,
-        keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+        maxHeaderListSize,
+        softLimitHeaderListSize,
+        keepAliveTimeInNanos,
+        keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         keepAliveEnforcer,
@@ -293,6 +301,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       Http2ConnectionEncoder encoder,
       Http2Settings settings,
       int maxMessageSize,
+      int maxHeaderListSize,
+      int softLimitHeaderListSize,
       long keepAliveTimeInNanos,
       long keepAliveTimeoutInNanos,
       long maxConnectionIdleInNanos,
@@ -304,8 +314,17 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxRstPeriodNanos,
       Attributes eagAttributes,
       Ticker ticker) {
-    super(channelUnused, decoder, encoder, settings, new ServerChannelLogger(),
-        autoFlowControl, null, ticker);
+    super(
+        channelUnused,
+        decoder,
+        encoder,
+        settings,
+        new ServerChannelLogger(),
+        autoFlowControl,
+        null,
+        ticker,
+        maxHeaderListSize,
+        softLimitHeaderListSize);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {
@@ -467,6 +486,16 @@ class NettyServerHandler extends AbstractNettyHandler {
       if (!HTTP_METHOD.contentEquals(headers.method())) {
         respondWithHttpError(ctx, streamId, 405, Status.Code.INTERNAL,
             String.format("Method '%s' is not supported", headers.method()));
+        return;
+      }
+
+      int h2HeadersSize = Utils.getH2HeadersSize(headers);
+      if (Utils.shouldRejectOnMetadataSizeSoftLimitExceeded(
+              h2HeadersSize, softLimitHeaderListSize, maxHeaderListSize)) {
+        respondWithHttpError(ctx, streamId, 431, Status.Code.RESOURCE_EXHAUSTED, String.format(
+                "Client Headers of size %d exceeded Metadata size soft limit: %d",
+                h2HeadersSize,
+                softLimitHeaderListSize));
         return;
       }
 

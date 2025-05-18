@@ -16,7 +16,9 @@
 
 package io.grpc.opentelemetry.internal;
 
+import com.google.common.collect.ImmutableList;
 import io.opentelemetry.api.common.AttributeKey;
+import java.util.List;
 
 public final class OpenTelemetryConstants {
 
@@ -30,6 +32,22 @@ public final class OpenTelemetryConstants {
 
   public static final AttributeKey<String> LOCALITY_KEY =
       AttributeKey.stringKey("grpc.lb.locality");
+
+  public static final AttributeKey<String> BACKEND_SERVICE_KEY =
+      AttributeKey.stringKey("grpc.lb.backend_service");
+
+  public static final List<Double> LATENCY_BUCKETS =
+      ImmutableList.of(
+          0d,     0.00001d, 0.00005d, 0.0001d, 0.0003d, 0.0006d, 0.0008d, 0.001d, 0.002d,
+          0.003d, 0.004d,   0.005d,   0.006d,  0.008d,  0.01d,   0.013d,  0.016d, 0.02d,
+          0.025d, 0.03d,    0.04d,    0.05d,   0.065d,  0.08d,   0.1d,    0.13d,  0.16d,
+          0.2d,   0.25d,    0.3d,     0.4d,    0.5d,    0.65d,   0.8d,    1d,     2d,
+          5d,     10d,      20d,      50d,     100d);
+
+  public static final List<Long> SIZE_BUCKETS =
+      ImmutableList.of(
+          0L, 1024L, 2048L, 4096L, 16384L, 65536L, 262144L, 1048576L, 4194304L, 16777216L,
+          67108864L, 268435456L, 1073741824L, 4294967296L);
 
   private OpenTelemetryConstants() {
   }

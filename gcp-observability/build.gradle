@@ -65,8 +65,7 @@ dependencies {
             libraries.auto.value.annotations, // Use our newer version
             libraries.guava.jre, // Use our newer version
             libraries.protobuf.java.util, // Use our newer version
-            libraries.re2j, // Use our newer version
-            libraries.j2objc.annotations // Explicit dependency to keep in step with version used by guava
+            libraries.re2j // Use our newer version
 
     testImplementation testFixtures(project(':grpc-api')),
             project(':grpc-testing'),
@@ -75,7 +74,11 @@ dependencies {
         exclude group: 'junit', module: 'junit'
     }
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 configureProtoCompilation()

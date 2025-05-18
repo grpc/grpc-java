@@ -21,7 +21,6 @@ import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.robolectric.Shadows.shadowOf;
-import static org.robolectric.annotation.LooperMode.Mode.PAUSED;
 
 import android.app.Application;
 import android.app.admin.DevicePolicyManager;
@@ -48,11 +47,9 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
-import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowDevicePolicyManager;
 
-@LooperMode(PAUSED)
 @RunWith(RobolectricTestRunner.class)
 public final class ServiceBindingTest {
 
@@ -266,8 +263,7 @@ public final class ServiceBindingTest {
   @Test
   @Config(sdk = 30)
   public void testBindWithTargetUserHandle() throws Exception {
-    binding =
-        newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
+    binding = newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
     shadowOf(getMainLooper()).idle();
 
     binding.bind();
@@ -290,8 +286,7 @@ public final class ServiceBindingTest {
         newBuilder()
             .setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0))
             .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
-            .setChannelCredentials(
-                BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
+            .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
     shadowOf(getMainLooper()).idle();
 
@@ -317,16 +312,16 @@ public final class ServiceBindingTest {
     }
   }
 
-  private static void allowBindDeviceAdminForUser(Context context, ComponentName admin, int userId) {
+  private static void allowBindDeviceAdminForUser(
+      Context context, ComponentName admin, int userId) {
     ShadowDevicePolicyManager devicePolicyManager =
         shadowOf(context.getSystemService(DevicePolicyManager.class));
     devicePolicyManager.setDeviceOwner(admin);
     devicePolicyManager.setBindDeviceAdminTargetUsers(
         Arrays.asList(UserHandle.getUserHandleForUid(userId)));
-        shadowOf((DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE));
+    shadowOf((DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE));
     devicePolicyManager.setDeviceOwner(admin);
-    devicePolicyManager.setBindDeviceAdminTargetUsers(
-        Arrays.asList(generateUserHandle(userId)));
+    devicePolicyManager.setBindDeviceAdminTargetUsers(Arrays.asList(generateUserHandle(userId)));
   }
 
   /** Generate UserHandles the hard way. */
@@ -373,7 +368,7 @@ public final class ServiceBindingTest {
     private BinderChannelCredentials channelCredentials = BinderChannelCredentials.forDefault();
 
     public ServiceBindingBuilder setSourceContext(Context sourceContext) {
-      this.sourceContext = sourceContext;      
+      this.sourceContext = sourceContext;
       return this;
     }
 

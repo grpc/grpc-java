@@ -25,6 +25,7 @@ import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.net.InetAddresses;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -43,7 +44,6 @@ import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.client.XdsResourceType;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -108,13 +108,13 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     Listener listener = (Listener) unpackedMessage;
 
     if (listener.hasApiListener()) {
-      return processClientSideListener(listener);
+      return processClientSideListener(listener, args);
     } else {
       return processServerSideListener(listener, args);
     }
   }
 
-  private LdsUpdate processClientSideListener(Listener listener)
+  private LdsUpdate processClientSideListener(Listener listener, XdsResourceType.Args args)
       throws ResourceInvalidException {
     // Unpack HttpConnectionManager from the Listener.
     HttpConnectionManager hcm;
@@ -127,10 +127,10 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
     return LdsUpdate.forApiListener(
-        parseHttpConnectionManager(hcm, filterRegistry, true /* isForClient */));
+        parseHttpConnectionManager(hcm, filterRegistry, true /* isForClient */, args));
   }
 
-  private LdsUpdate processServerSideListener(Listener proto, Args args)
+  private LdsUpdate processServerSideListener(Listener proto, XdsResourceType.Args args)
       throws ResourceInvalidException {
     Set<String> certProviderInstances = null;
     if (args.getBootstrapInfo() != null && args.getBootstrapInfo().certProviders() != null) {
@@ -138,19 +138,19 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
     return LdsUpdate.forTcpListener(parseServerSideListener(proto,
         (TlsContextManager) args.getSecurityConfig(),
-        filterRegistry, certProviderInstances));
+        filterRegistry, certProviderInstances, args));
   }
 
   @VisibleForTesting
   static EnvoyServerProtoData.Listener parseServerSideListener(
       Listener proto, TlsContextManager tlsContextManager,
-      FilterRegistry filterRegistry, Set<String> certProviderInstances)
+      FilterRegistry filterRegistry, Set<String> certProviderInstances, XdsResourceType.Args args)
       throws ResourceInvalidException {
-    if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)
-        && !proto.getTrafficDirection().equals(TrafficDirection.UNSPECIFIED)) {
+    TrafficDirection trafficDirection = proto.getTrafficDirection();
+    if (!trafficDirection.equals(TrafficDirection.INBOUND)
+        && !trafficDirection.equals(TrafficDirection.UNSPECIFIED)) {
       throw new ResourceInvalidException(
-          "Listener " + proto.getName() + " with invalid traffic direction: "
-              + proto.getTrafficDirection());
+          "Listener " + proto.getName() + " with invalid traffic direction: " + trafficDirection);
     }
     if (!proto.getListenerFiltersList().isEmpty()) {
       throw new ResourceInvalidException(
@@ -162,13 +162,16 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     String address = null;
+    SocketAddress socketAddress = null;
     if (proto.getAddress().hasSocketAddress()) {
-      SocketAddress socketAddress = proto.getAddress().getSocketAddress();
+      socketAddress = proto.getAddress().getSocketAddress();
       address = socketAddress.getAddress();
+      if (address.isEmpty()) {
+        throw new ResourceInvalidException("Invalid address: Empty address is not allowed.");
+      }
       switch (socketAddress.getPortSpecifierCase()) {
         case NAMED_PORT:
-          address = address + ":" + socketAddress.getNamedPort();
-          break;
+          throw new ResourceInvalidException("NAMED_PORT is not supported in gRPC.");
         case PORT_VALUE:
           address = address + ":" + socketAddress.getPortValue();
           break;
@@ -178,56 +181,82 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     ImmutableList.Builder<FilterChain> filterChains = ImmutableList.builder();
-    Set<FilterChainMatch> uniqueSet = new HashSet<>();
+    Set<String> filterChainNames = new HashSet<>();
+    Set<FilterChainMatch> filterChainMatchSet = new HashSet<>();
+    int i = 0;
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
+      // May be empty. If it's not empty, required to be unique.
+      String filterChainName = fc.getName();
+      if (filterChainName.isEmpty()) {
+        // Generate a name, so we can identify it in the logs.
+        filterChainName = "chain_" + i;
+      }
+      if (!filterChainNames.add(filterChainName)) {
+        throw new ResourceInvalidException("Filter chain names must be unique. "
+            + "Found duplicate: " + filterChainName);
+      }
       filterChains.add(
-          parseFilterChain(fc, tlsContextManager, filterRegistry, uniqueSet,
-              certProviderInstances));
-    }
-    FilterChain defaultFilterChain = null;
-    if (proto.hasDefaultFilterChain()) {
-      defaultFilterChain = parseFilterChain(
-          proto.getDefaultFilterChain(), tlsContextManager, filterRegistry,
-          null, certProviderInstances);
+          parseFilterChain(fc, filterChainName, tlsContextManager, filterRegistry,
+              filterChainMatchSet, certProviderInstances, args));
+      i++;
     }
 
-    return EnvoyServerProtoData.Listener.create(
-        proto.getName(), address, filterChains.build(), defaultFilterChain);
+    FilterChain defaultFilterChain = null;
+    if (proto.hasDefaultFilterChain()) {
+      String defaultFilterChainName = proto.getDefaultFilterChain().getName();
+      if (defaultFilterChainName.isEmpty()) {
+        defaultFilterChainName = "chain_default";
+      }
+      defaultFilterChain = parseFilterChain(
+          proto.getDefaultFilterChain(), defaultFilterChainName, tlsContextManager, filterRegistry,
+          null, certProviderInstances, args);
+    }
+
+    return EnvoyServerProtoData.Listener.create(proto.getName(), address, filterChains.build(),
+        defaultFilterChain, socketAddress == null ? null : socketAddress.getProtocol());
   }
 
   @VisibleForTesting
   static FilterChain parseFilterChain(
       io.envoyproxy.envoy.config.listener.v3.FilterChain proto,
-      TlsContextManager tlsContextManager, FilterRegistry filterRegistry,
-      Set<FilterChainMatch> uniqueSet, Set<String> certProviderInstances)
+      String filterChainName,
+      TlsContextManager tlsContextManager,
+      FilterRegistry filterRegistry,
+      // null disables FilterChainMatch uniqueness check, used for defaultFilterChain
+      @Nullable Set<FilterChainMatch> filterChainMatchSet,
+      Set<String> certProviderInstances,
+      XdsResourceType.Args args)
       throws ResourceInvalidException {
+    // FilterChain contains L4 filters, so we ensure it contains only HCM.
     if (proto.getFiltersCount() != 1) {
-      throw new ResourceInvalidException("FilterChain " + proto.getName()
+      throw new ResourceInvalidException("FilterChain " + filterChainName
           + " should contain exact one HttpConnectionManager filter");
     }
-    io.envoyproxy.envoy.config.listener.v3.Filter filter = proto.getFiltersList().get(0);
-    if (!filter.hasTypedConfig()) {
+    io.envoyproxy.envoy.config.listener.v3.Filter l4Filter = proto.getFiltersList().get(0);
+    if (!l4Filter.hasTypedConfig()) {
       throw new ResourceInvalidException(
-          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+          "FilterChain " + filterChainName + " contains filter " + l4Filter.getName()
               + " without typed_config");
     }
-    Any any = filter.getTypedConfig();
-    // HttpConnectionManager is the only supported network filter at the moment.
+    Any any = l4Filter.getTypedConfig();
     if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
       throw new ResourceInvalidException(
-          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+          "FilterChain " + filterChainName + " contains filter " + l4Filter.getName()
               + " with unsupported typed_config type " + any.getTypeUrl());
     }
+
+    // Parse HCM.
     HttpConnectionManager hcmProto;
     try {
       hcmProto = any.unpack(HttpConnectionManager.class);
     } catch (InvalidProtocolBufferException e) {
-      throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
-          + filter.getName() + " failed to unpack message", e);
+      throw new ResourceInvalidException("FilterChain " + filterChainName + " with filter "
+          + l4Filter.getName() + " failed to unpack message", e);
     }
     io.grpc.xds.HttpConnectionManager httpConnectionManager = parseHttpConnectionManager(
-        hcmProto, filterRegistry, false /* isForClient */);
+        hcmProto, filterRegistry, false /* isForClient */, args);
 
+    // Parse Transport Socket.
     EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext = null;
     if (proto.hasTransportSocket()) {
       if (!TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
@@ -239,7 +268,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
         downstreamTlsContextProto =
             proto.getTransportSocket().getTypedConfig().unpack(DownstreamTlsContext.class);
       } catch (InvalidProtocolBufferException e) {
-        throw new ResourceInvalidException("FilterChain " + proto.getName()
+        throw new ResourceInvalidException("FilterChain " + filterChainName
             + " failed to unpack message", e);
       }
       downstreamTlsContext =
@@ -247,10 +276,15 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
               validateDownstreamTlsContext(downstreamTlsContextProto, certProviderInstances));
     }
 
+    // Parse FilterChainMatch.
     FilterChainMatch filterChainMatch = parseFilterChainMatch(proto.getFilterChainMatch());
-    checkForUniqueness(uniqueSet, filterChainMatch);
+    // null used to skip this check for defaultFilterChain.
+    if (filterChainMatchSet != null) {
+      validateFilterChainMatchForUniqueness(filterChainMatchSet, filterChainMatch);
+    }
+
     return FilterChain.create(
-        proto.getName(),
+        filterChainName,
         filterChainMatch,
         httpConnectionManager,
         downstreamTlsContext,
@@ -284,15 +318,15 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     return downstreamTlsContext;
   }
 
-  private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
+  private static void validateFilterChainMatchForUniqueness(
+      Set<FilterChainMatch> filterChainMatchSet,
       FilterChainMatch filterChainMatch) throws ResourceInvalidException {
-    if (uniqueSet != null) {
-      List<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
-      for (FilterChainMatch cur : crossProduct) {
-        if (!uniqueSet.add(cur)) {
-          throw new ResourceInvalidException("FilterChainMatch must be unique. "
-              + "Found duplicate: " + cur);
-        }
+    // Flattens complex FilterChainMatch into a list of simple FilterChainMatch'es.
+    List<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
+    for (FilterChainMatch cur : crossProduct) {
+      if (!filterChainMatchSet.add(cur)) {
+        throw new ResourceInvalidException("FilterChainMatch must be unique. "
+            + "Found duplicate: " + cur);
       }
     }
   }
@@ -420,16 +454,18 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     try {
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
         prefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+            CidrRange.create(InetAddresses.forString(range.getAddressPrefix()),
+                range.getPrefixLen().getValue()));
       }
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range
           : proto.getSourcePrefixRangesList()) {
-        sourcePrefixRanges.add(
-            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+        sourcePrefixRanges.add(CidrRange.create(
+            InetAddresses.forString(range.getAddressPrefix()), range.getPrefixLen().getValue()));
       }
-    } catch (UnknownHostException e) {
-      throw new ResourceInvalidException("Failed to create CidrRange", e);
+    } catch (IllegalArgumentException ex) {
+      throw new ResourceInvalidException("Failed to create CidrRange", ex);
     }
+
     ConnectionSourceType sourceType;
     switch (proto.getSourceType()) {
       case ANY:
@@ -458,7 +494,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   @VisibleForTesting
   static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
       HttpConnectionManager proto, FilterRegistry filterRegistry,
-      boolean isForClient) throws ResourceInvalidException {
+      boolean isForClient, XdsResourceType.Args args) throws ResourceInvalidException {
     if (proto.getXffNumTrustedHops() != 0) {
       throw new ResourceInvalidException(
           "HttpConnectionManager with xff_num_trusted_hops unsupported");
@@ -515,7 +551,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     // Parse inlined RouteConfiguration or RDS.
     if (proto.hasRouteConfig()) {
       List<VirtualHost> virtualHosts = extractVirtualHosts(
-          proto.getRouteConfig(), filterRegistry);
+          proto.getRouteConfig(), filterRegistry, args);
       return io.grpc.xds.HttpConnectionManager.forVirtualHosts(
           maxStreamDuration, virtualHosts, filterConfigs);
     }
@@ -549,12 +585,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     String filterName = httpFilter.getName();
     boolean isOptional = httpFilter.getIsOptional();
     if (!httpFilter.hasTypedConfig()) {
-      if (isOptional) {
-        return null;
-      } else {
-        return StructOrError.fromError(
-            "HttpFilter [" + filterName + "] is not optional and has no typed config");
-      }
+      return isOptional ? null : StructOrError.fromError(
+          "HttpFilter [" + filterName + "] is not optional and has no typed config");
     }
     Message rawConfig = httpFilter.getTypedConfig();
     String typeUrl = httpFilter.getTypedConfig().getTypeUrl();
@@ -574,18 +606,17 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       return StructOrError.fromError(
           "HttpFilter [" + filterName + "] contains invalid proto: " + e);
     }
-    Filter filter = filterRegistry.get(typeUrl);
-    if ((isForClient && !(filter instanceof Filter.ClientInterceptorBuilder))
-        || (!isForClient && !(filter instanceof Filter.ServerInterceptorBuilder))) {
-      if (isOptional) {
-        return null;
-      } else {
-        return StructOrError.fromError(
-            "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for "
-                + (isForClient ? "client" : "server"));
-      }
+
+    Filter.Provider provider = filterRegistry.get(typeUrl);
+    if (provider == null
+        || (isForClient && !provider.isClientFilter())
+        || (!isForClient && !provider.isServerFilter())) {
+      // Filter type not supported.
+      return isOptional ? null : StructOrError.fromError(
+          "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for " + (
+              isForClient ? "client" : "server"));
     }
-    ConfigOrError<? extends FilterConfig> filterConfig = filter.parseFilterConfig(rawConfig);
+    ConfigOrError<? extends FilterConfig> filterConfig = provider.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);

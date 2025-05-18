@@ -154,8 +154,8 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void deframeFailed(Throwable cause) {
-      if (logger.isLoggable(FINE)) {
-        logger.log(FINE, String.format("[{%s}] Exception processing message", logId), cause);
+      if (logger.isLoggable(WARNING)) {
+        logger.log(WARNING, String.format("[{%s}] Exception processing message", logId), cause);
       }
       cancel(Status.fromThrowable(cause));
     }
@@ -168,7 +168,7 @@ final class ServletServerStream extends AbstractServerStream {
     private int index;
 
     ByteArrayWritableBuffer(int capacityHint) {
-      this.bytes = new byte[min(1024 * 1024,  max(4096, capacityHint))];
+      this.bytes = new byte[min(1024 * 1024, capacityHint)];
       this.capacity = bytes.length;
     }
 
@@ -297,7 +297,9 @@ final class ServletServerStream extends AbstractServerStream {
       }
       transportState.runOnTransportThread(() -> transportState.transportReportStatus(status));
       // There is no way to RST_STREAM with CANCEL code, so write trailers instead
-      close(Status.CANCELLED.withCause(status.asRuntimeException()), new Metadata());
+      close(Status.CANCELLED.withDescription("Servlet stream cancelled")
+              .withCause(status.asRuntimeException()),
+          new Metadata());
       CountDownLatch countDownLatch = new CountDownLatch(1);
       transportState.runOnTransportThread(() -> {
         asyncCtx.complete();

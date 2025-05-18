@@ -45,12 +45,11 @@ import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
-import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityHandler;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityProtocolNegotiator;
 import io.grpc.xds.internal.security.certprovider.CommonCertProviderTestUtils;
@@ -134,7 +133,7 @@ public class SecurityProtocolNegotiatorsTest {
     when(mockHandler.getEagAttributes())
         .thenReturn(
             Attributes.newBuilder()
-                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
                 .build());
     ChannelHandler newHandler = pn.newHandler(mockHandler);
@@ -149,7 +148,7 @@ public class SecurityProtocolNegotiatorsTest {
     CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
             .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
@@ -216,7 +215,7 @@ public class SecurityProtocolNegotiatorsTest {
     pipeline = channel.pipeline();
     Bootstrapper.BootstrapInfo bootstrapInfoForServer = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-server", SERVER_1_KEY_FILE,
-            SERVER_1_PEM_FILE, CA_PEM_FILE, null, null, null, null);
+            SERVER_1_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(
             "google_cloud_private_spiffe-server", true, true);
@@ -361,7 +360,7 @@ public class SecurityProtocolNegotiatorsTest {
     CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
             .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
@@ -412,7 +411,7 @@ public class SecurityProtocolNegotiatorsTest {
     CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-            CA_PEM_FILE, null, null, null, null);
+            CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
             .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);

@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -34,6 +33,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.Lists;
+import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -52,7 +52,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -153,8 +152,7 @@ public class MultiChildLoadBalancerTest {
     LoadBalancer.Subchannel removedSubchannel = getSubchannel(removedEag);
     LoadBalancer.Subchannel oldSubchannel = getSubchannel(oldEag1);
     LoadBalancer.SubchannelStateListener removedListener =
-        testHelperInst.getSubchannelStateListeners()
-            .get(testHelperInst.getRealForMockSubChannel(removedSubchannel));
+        testHelperInst.getSubchannelStateListener(removedSubchannel);
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
@@ -167,8 +165,6 @@ public class MultiChildLoadBalancerTest {
 
     verify(removedSubchannel, times(1)).requestConnection();
     verify(oldSubchannel, times(1)).requestConnection();
-
-    assertThat(getChildEags(loadBalancer)).containsExactly(removedEag, oldEag1);
 
     // This time with Attributes
     List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
@@ -186,10 +182,10 @@ public class MultiChildLoadBalancerTest {
     removedListener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
     deliverSubchannelState(newSubchannel, ConnectivityStateInfo.forNonError(READY));
 
-    assertThat(getChildEags(loadBalancer)).containsExactly(oldEag2, newEag);
-
     verify(mockHelper, times(3)).createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class));
     inOrder.verify(mockHelper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    picker = pickerCaptor.getValue();
+    assertThat(getList(picker)).containsExactly(oldSubchannel, newSubchannel);
 
     AbstractTestHelper.verifyNoMoreMeaningfulInteractions(mockHelper);
   }
@@ -244,37 +240,28 @@ public class MultiChildLoadBalancerTest {
 
   @Test
   public void testEndpoint_equals() {
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1"),
-        createEndpoint(Attributes.EMPTY, "addr1"));
-
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(Attributes.EMPTY, "addr2", "addr1"));
-
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(affinity, "addr2", "addr1"));
-
-    assertEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2").hashCode(),
-        createEndpoint(affinity, "addr2", "addr1").hashCode());
-
-  }
-
-  @Test
-  public void testEndpoint_notEquals() {
-    assertNotEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(Attributes.EMPTY, "addr1", "addr3"));
-
-    assertNotEquals(
-        createEndpoint(Attributes.EMPTY, "addr1"),
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"));
-
-    assertNotEquals(
-        createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
-        createEndpoint(Attributes.EMPTY, "addr1"));
+    new EqualsTester()
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1"),
+            createEndpoint(Attributes.EMPTY, "addr1"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2"),
+            createEndpoint(Attributes.EMPTY, "addr2", "addr1"),
+            createEndpoint(affinity, "addr1", "addr2"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr3"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr10"),
+            createEndpoint(Attributes.EMPTY, "addr2", "addr1", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr10"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr11"))
+        .addEqualityGroup(
+            createEndpoint(Attributes.EMPTY, "addr1", "addr2", "addr3", "addr4", "addr5", "addr6",
+              "addr7", "addr8", "addr9", "addr10", "addr11"))
+        .testEquals();
   }
 
   private String addressesOnlyString(EquivalentAddressGroup eag) {
@@ -337,12 +324,6 @@ public class MultiChildLoadBalancerTest {
     return null;
   }
 
-  private static List<Object> getChildEags(MultiChildLoadBalancer loadBalancer) {
-    return loadBalancer.getChildLbStates().stream()
-        .map(ChildLbState::getEag)
-        .collect(Collectors.toList());
-  }
-
   private void deliverSubchannelState(LoadBalancer.Subchannel subchannel,
                                       ConnectivityStateInfo newState) {
     testHelperInst.deliverSubchannelState(subchannel, newState);
@@ -357,13 +338,16 @@ public class MultiChildLoadBalancerTest {
     protected void updateOverallBalancingState() {
       ConnectivityState overallState = null;
       final Map<Object, SubchannelPicker> childPickers = new HashMap<>();
+      final Map<Object, ConnectivityState> childConnStates = new HashMap<>();
       for (ChildLbState childLbState : getChildLbStates()) {
         childPickers.put(childLbState.getKey(), childLbState.getCurrentPicker());
+        childConnStates.put(childLbState.getKey(), childLbState.getCurrentState());
         overallState = aggregateState(overallState, childLbState.getCurrentState());
       }
 
       if (overallState != null) {
-        getHelper().updateBalancingState(overallState, new TestSubchannelPicker(childPickers));
+        getHelper().updateBalancingState(
+            overallState, new TestSubchannelPicker(childPickers, childConnStates));
         currentConnectivityState = overallState;
       }
 
@@ -373,18 +357,17 @@ public class MultiChildLoadBalancerTest {
       Map<Object, SubchannelPicker> childPickerMap;
       Map<Object, ConnectivityState> childStates = new HashMap<>();
 
-      TestSubchannelPicker(Map<Object, SubchannelPicker> childPickers) {
-        childPickerMap = childPickers;
-        for (Object key : childPickerMap.keySet()) {
-          childStates.put(key, getChildLbState(key).getCurrentState());
-        }
+      TestSubchannelPicker(
+          Map<Object, SubchannelPicker> childPickers, Map<Object, ConnectivityState> childStates) {
+        this.childPickerMap = childPickers;
+        this.childStates = childStates;
       }
 
       List<Subchannel>  getReadySubchannels() {
         List<Subchannel> readySubchannels = new ArrayList<>();
         for ( Map.Entry<Object, ConnectivityState> cur : childStates.entrySet()) {
           if (cur.getValue() == READY) {
-            Subchannel s = subchannels.get(Arrays.asList(getChildLbState(cur.getKey()).getEag()));
+            Subchannel s = childPickerMap.get(cur.getKey()).pickSubchannel(null).getSubchannel();
             readySubchannels.add(s);
           }
         }

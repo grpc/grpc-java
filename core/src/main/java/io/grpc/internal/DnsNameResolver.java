@@ -32,6 +32,7 @@ import io.grpc.NameResolver;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
@@ -59,7 +60,7 @@ import javax.annotation.Nullable;
  * A DNS-based {@link NameResolver}.
  *
  * <p>Each {@code A} or {@code AAAA} record emits an {@link EquivalentAddressGroup} in the list
- * passed to {@link NameResolver.Listener2#onResult(ResolutionResult)}.
+ * passed to {@link NameResolver.Listener2#onResult2(ResolutionResult)}.
  *
  * @see DnsNameResolverProvider
  */
@@ -133,20 +134,16 @@ public class DnsNameResolver extends NameResolver {
   private final String host;
   private final int port;
 
-  /** Executor that will be used if an Executor is not provide via {@link NameResolver.Args}. */
-  private final Resource<Executor> executorResource;
+  private final ObjectPool<Executor> executorPool;
   private final long cacheTtlNanos;
   private final SynchronizationContext syncContext;
+  private final ServiceConfigParser serviceConfigParser;
 
   // Following fields must be accessed from syncContext
   private final Stopwatch stopwatch;
   protected boolean resolved;
   private boolean shutdown;
   private Executor executor;
-
-  /** True if using an executor resource that should be released after use. */
-  private final boolean usingExecutorResource;
-  private final ServiceConfigParser serviceConfigParser;
 
   private boolean resolving;
 
@@ -164,7 +161,7 @@ public class DnsNameResolver extends NameResolver {
     checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
-    this.executorResource = executorResource;
+
     // Must prepend a "//" to the name when constructing a URI, otherwise it will be treated as an
     // opaque URI, thus the authority and host of the resulted URI would be null.
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
@@ -178,11 +175,15 @@ public class DnsNameResolver extends NameResolver {
       port = nameUri.getPort();
     }
     this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
+    Executor offloadExecutor = args.getOffloadExecutor();
+    if (offloadExecutor != null) {
+      this.executorPool = new FixedObjectPool<>(offloadExecutor);
+    } else {
+      this.executorPool = SharedResourcePool.forResource(executorResource);
+    }
     this.cacheTtlNanos = getNetworkAddressCacheTtlNanos(isAndroid);
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
-    this.executor = args.getOffloadExecutor();
-    this.usingExecutorResource = executor == null;
     this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
   }
 
@@ -199,9 +200,7 @@ public class DnsNameResolver extends NameResolver {
   @Override
   public void start(Listener2 listener) {
     Preconditions.checkState(this.listener == null, "already started");
-    if (usingExecutorResource) {
-      executor = SharedResourceHolder.get(executorResource);
-    }
+    executor = executorPool.getObject();
     this.listener = checkNotNull(listener, "listener");
     resolve();
   }
@@ -313,15 +312,20 @@ public class DnsNameResolver extends NameResolver {
           if (logger.isLoggable(Level.FINER)) {
             logger.finer("Using proxy address " + proxiedAddr);
           }
-          resolutionResultBuilder.setAddresses(Collections.singletonList(proxiedAddr));
+          resolutionResultBuilder.setAddressesOrError(
+              StatusOr.fromValue(Collections.singletonList(proxiedAddr)));
         } else {
           result = doResolve(false);
           if (result.error != null) {
-            savedListener.onError(result.error);
+            InternalResolutionResult finalResult = result;
+            syncContext.execute(() ->
+                savedListener.onResult2(ResolutionResult.newBuilder()
+                    .setAddressesOrError(StatusOr.fromStatus(finalResult.error))
+                    .build()));
             return;
           }
           if (result.addresses != null) {
-            resolutionResultBuilder.setAddresses(result.addresses);
+            resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(result.addresses));
           }
           if (result.config != null) {
             resolutionResultBuilder.setServiceConfig(result.config);
@@ -330,10 +334,16 @@ public class DnsNameResolver extends NameResolver {
             resolutionResultBuilder.setAttributes(result.attributes);
           }
         }
-        savedListener.onResult(resolutionResultBuilder.build());
+        syncContext.execute(() -> {
+          savedListener.onResult2(resolutionResultBuilder.build());
+        });
       } catch (IOException e) {
-        savedListener.onError(
-            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
+        syncContext.execute(() ->
+            savedListener.onResult2(ResolutionResult.newBuilder()
+                .setAddressesOrError(
+                    StatusOr.fromStatus(
+                        Status.UNAVAILABLE.withDescription(
+                            "Unable to resolve host " + host).withCause(e))).build()));
       } finally {
         final boolean succeed = result != null && result.error == null;
         syncContext.execute(new Runnable() {
@@ -401,8 +411,8 @@ public class DnsNameResolver extends NameResolver {
       return;
     }
     shutdown = true;
-    if (executor != null && usingExecutorResource) {
-      executor = SharedResourceHolder.release(executorResource, executor);
+    if (executor != null) {
+      executor = executorPool.returnObject(executor);
     }
   }
 

@@ -28,6 +28,8 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
@@ -73,9 +75,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -109,6 +109,7 @@ final class CachingRlsLbClient {
   // LRU cache based on access order (BACKOFF and actual data will be here)
   @GuardedBy("lock")
   private final RlsAsyncLruCache linkedHashLruCache;
+  private final Future<?> periodicCleaner;
   // any RPC on the fly will cached in this map
   @GuardedBy("lock")
   private final Map<RouteLookupRequest, PendingCacheEntry> pendingCallCache = new HashMap<>();
@@ -177,10 +178,10 @@ final class CachingRlsLbClient {
         new RlsAsyncLruCache(
             rlsConfig.cacheSizeBytes(),
             new AutoCleaningEvictionListener(builder.evictionListener),
-            scheduledExecutorService,
             ticker,
-            lock,
             helper);
+    periodicCleaner =
+        scheduledExecutorService.scheduleAtFixedRate(this::periodicClean, 1, 1, TimeUnit.MINUTES);
     logger = helper.getChannelLogger();
     String serverHost = null;
     try {
@@ -267,13 +268,18 @@ final class CachingRlsLbClient {
             serverName, status.getCode(), status.getDescription()));
   }
 
+  private void periodicClean() {
+    synchronized (lock) {
+      linkedHashLruCache.cleanupExpiredEntries();
+    }
+  }
+
   /** Populates async cache entry for new request. */
   @GuardedBy("lock")
   private CachedRouteLookupResponse asyncRlsCall(
       RouteLookupRequest request, @Nullable BackoffPolicy backoffPolicy) {
-    logger.log(ChannelLogLevel.DEBUG, "Making an async call to RLS");
     if (throttler.shouldThrottle()) {
-      logger.log(ChannelLogLevel.DEBUG, "Request is throttled");
+      logger.log(ChannelLogLevel.DEBUG, "[RLS Entry {0}] Throttled RouteLookup", request);
       // Cache updated, but no need to call updateBalancingState because no RPCs were queued waiting
       // on this result
       return CachedRouteLookupResponse.backoffEntry(createBackOffEntry(
@@ -281,27 +287,29 @@ final class CachingRlsLbClient {
     }
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
     io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(request);
-    logger.log(ChannelLogLevel.DEBUG, "Sending RouteLookupRequest: {0}", routeLookupRequest);
+    logger.log(ChannelLogLevel.DEBUG,
+        "[RLS Entry {0}] Starting RouteLookup: {1}", request, routeLookupRequest);
     rlsStub.withDeadlineAfter(callTimeoutNanos, TimeUnit.NANOSECONDS)
         .routeLookup(
             routeLookupRequest,
             new StreamObserver<io.grpc.lookup.v1.RouteLookupResponse>() {
               @Override
               public void onNext(io.grpc.lookup.v1.RouteLookupResponse value) {
-                logger.log(ChannelLogLevel.DEBUG, "Received RouteLookupResponse: {0}", value);
+                logger.log(ChannelLogLevel.DEBUG,
+                    "[RLS Entry {0}] RouteLookup succeeded: {1}", request, value);
                 response.set(RESPONSE_CONVERTER.reverse().convert(value));
               }
 
               @Override
               public void onError(Throwable t) {
-                logger.log(ChannelLogLevel.DEBUG, "Error looking up route:", t);
+                logger.log(ChannelLogLevel.DEBUG,
+                    "[RLS Entry {0}] RouteLookup failed: {1}", request, t);
                 response.setException(t);
                 throttler.registerBackendResponse(true);
               }
 
               @Override
               public void onCompleted() {
-                logger.log(ChannelLogLevel.DEBUG, "routeLookup call completed");
                 throttler.registerBackendResponse(false);
               }
             });
@@ -316,13 +324,10 @@ final class CachingRlsLbClient {
    */
   @CheckReturnValue
   final CachedRouteLookupResponse get(final RouteLookupRequest request) {
-    logger.log(ChannelLogLevel.DEBUG, "Acquiring lock to get cached entry");
     synchronized (lock) {
-      logger.log(ChannelLogLevel.DEBUG, "Acquired lock to get cached entry");
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
       if (cacheEntry == null) {
-        logger.log(ChannelLogLevel.DEBUG, "No cache entry found, making a new lrs request");
         PendingCacheEntry pendingEntry = pendingCallCache.get(request);
         if (pendingEntry != null) {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
@@ -332,15 +337,12 @@ final class CachingRlsLbClient {
 
       if (cacheEntry instanceof DataCacheEntry) {
         // cache hit, initiate async-refresh if entry is staled
-        logger.log(ChannelLogLevel.DEBUG, "Cache hit for the request");
         DataCacheEntry dataEntry = ((DataCacheEntry) cacheEntry);
         if (dataEntry.isStaled(ticker.read())) {
-          logger.log(ChannelLogLevel.DEBUG, "Cache entry is stale");
           dataEntry.maybeRefresh();
         }
         return CachedRouteLookupResponse.dataEntry((DataCacheEntry) cacheEntry);
       }
-      logger.log(ChannelLogLevel.DEBUG, "Cache hit for a backup entry");
       return CachedRouteLookupResponse.backoffEntry((BackoffCacheEntry) cacheEntry);
     }
   }
@@ -349,6 +351,7 @@ final class CachingRlsLbClient {
   void close() {
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient closed");
     synchronized (lock) {
+      periodicCleaner.cancel(false);
       // all childPolicyWrapper will be returned via AutoCleaningEvictionListener
       linkedHashLruCache.close();
       // TODO(creamsoup) maybe cancel all pending requests
@@ -401,8 +404,8 @@ final class CachingRlsLbClient {
       RouteLookupRequest request, RouteLookupResponse routeLookupResponse) {
     logger.log(
         ChannelLogLevel.DEBUG,
-        "Transition to data cache: routeLookupResponse={0}",
-        routeLookupResponse);
+        "[RLS Entry {0}] Transition to data cache: routeLookupResponse={1}",
+        request, routeLookupResponse);
     DataCacheEntry entry = new DataCacheEntry(request, routeLookupResponse);
     // Constructor for DataCacheEntry causes updateBalancingState, but the picks can't happen until
     // this cache update because the lock is held
@@ -413,18 +416,19 @@ final class CachingRlsLbClient {
   @GuardedBy("lock")
   private BackoffCacheEntry createBackOffEntry(
       RouteLookupRequest request, Status status, @Nullable BackoffPolicy backoffPolicy) {
-    logger.log(ChannelLogLevel.DEBUG, "Transition to back off: status={0}", status);
     if (backoffPolicy == null) {
       backoffPolicy = backoffProvider.get();
     }
     long delayNanos = backoffPolicy.nextBackoffNanos();
+    logger.log(
+        ChannelLogLevel.DEBUG,
+        "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
+        request, status, delayNanos);
     BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy);
     // Lock is held, so the task can't execute before the assignment
     entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
     linkedHashLruCache.cacheAndClean(request, entry);
-    logger.log(ChannelLogLevel.DEBUG, "BackoffCacheEntry created with a delay of {0} nanos",
-        delayNanos);
     return entry;
   }
 
@@ -435,7 +439,8 @@ final class CachingRlsLbClient {
         // Future was previously cancelled
         return;
       }
-      logger.log(ChannelLogLevel.DEBUG, "Calling RLS for transition to pending");
+      logger.log(ChannelLogLevel.DEBUG,
+          "[RLS Entry {0}] Calling RLS for transition to pending", entry.request);
       linkedHashLruCache.invalidate(entry.request);
       asyncRlsCall(entry.request, entry.backoffPolicy);
     }
@@ -651,10 +656,10 @@ final class CachingRlsLbClient {
       synchronized (lock) { // Lock is already held, but ErrorProne can't tell
         if (pendingCallCache.containsKey(request)) {
           // pending already requested
-          logger.log(ChannelLogLevel.DEBUG,
-              "A pending refresh request already created, no need to proceed with refresh");
           return;
         }
+        logger.log(ChannelLogLevel.DEBUG,
+            "[RLS Entry {0}] Cache entry is stale, refreshing", request);
         asyncRlsCall(request, /* backoffPolicy= */ null);
       }
     }
@@ -887,15 +892,8 @@ final class CachingRlsLbClient {
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
-        ScheduledExecutorService ses, Ticker ticker, Object lock, RlsLbHelper helper) {
-      super(
-          maxEstimatedSizeBytes,
-          evictionListener,
-          1,
-          TimeUnit.MINUTES,
-          ses,
-          ticker,
-          lock);
+        Ticker ticker, RlsLbHelper helper) {
+      super(maxEstimatedSizeBytes, evictionListener, ticker);
       this.helper = checkNotNull(helper, "helper");
     }
 
@@ -942,13 +940,10 @@ final class CachingRlsLbClient {
 
     @Override
     public void onStatusChanged(ConnectivityState newState) {
-      logger.log(ChannelLogLevel.DEBUG, "LB status changed to: {0}", newState);
       if (prevState == ConnectivityState.TRANSIENT_FAILURE
           && newState == ConnectivityState.READY) {
         logger.log(ChannelLogLevel.DEBUG, "Transitioning from TRANSIENT_FAILURE to READY");
-        logger.log(ChannelLogLevel.DEBUG, "Acquiring lock force refresh backoff cache entries");
         synchronized (lock) {
-          logger.log(ChannelLogLevel.DEBUG, "Lock acquired for refreshing backoff cache entries");
           for (CacheEntry value : linkedHashLruCache.values()) {
             if (value instanceof BackoffCacheEntry) {
               refreshBackoffEntry((BackoffCacheEntry) value);
@@ -982,31 +977,22 @@ final class CachingRlsLbClient {
       RouteLookupRequest request =
           requestFactory.create(serviceName, methodName, args.getHeaders());
       final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
-      logger.log(ChannelLogLevel.DEBUG,
-          "Got route lookup cache entry for service={0}, method={1}, headers={2}:\n {3}",
-          new Object[]{serviceName, methodName, args.getHeaders(), response});
 
       if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
-        logger.log(ChannelLogLevel.DEBUG, "Updating LRS metadata from the LRS response headers");
         Metadata headers = args.getHeaders();
         headers.discardAll(RLS_DATA_KEY);
         headers.put(RLS_DATA_KEY, response.getHeaderData());
       }
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
-      logger.log(ChannelLogLevel.DEBUG, "defaultTarget = {0}", defaultTarget);
       boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
-        logger.log(ChannelLogLevel.DEBUG, "LRS response has data, proceed with selecting a picker");
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
         SubchannelPicker picker =
             (childPolicyWrapper != null) ? childPolicyWrapper.getPicker() : null;
         if (picker == null) {
-          logger.log(ChannelLogLevel.DEBUG,
-              "Child policy wrapper didn't return a picker, returning PickResult with no results");
           return PickResult.withNoResult();
         }
         // Happy path
-        logger.log(ChannelLogLevel.DEBUG, "Returning PickResult");
         PickResult pickResult = picker.pickSubchannel(args);
         if (pickResult.hasResult()) {
           helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
@@ -1016,20 +1002,15 @@ final class CachingRlsLbClient {
         }
         return pickResult;
       } else if (response.hasError()) {
-        logger.log(ChannelLogLevel.DEBUG, "RLS response has errors");
         if (hasFallback) {
-          logger.log(ChannelLogLevel.DEBUG, "Using RLS fallback");
           return useFallback(args);
         }
-        logger.log(ChannelLogLevel.DEBUG, "No RLS fallback, returning PickResult with an error");
         helper.getMetricRecorder().addLongCounter(FAILED_PICKS_COUNTER, 1,
             Arrays.asList(helper.getChannelTarget(), lookupService), Collections.emptyList());
         return PickResult.withError(
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
       } else {
-        logger.log(ChannelLogLevel.DEBUG,
-            "RLS response had no data, return a PickResult with no data");
         return PickResult.withNoResult();
       }
     }
@@ -1066,13 +1047,11 @@ final class CachingRlsLbClient {
 
     private void startFallbackChildPolicy() {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
-      logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
-      logger.log(ChannelLogLevel.DEBUG, "Acquiring lock to start fallback child policy");
       synchronized (lock) {
-        logger.log(ChannelLogLevel.DEBUG, "Acquired lock for starting fallback child policy");
         if (fallbackChildPolicyWrapper != null) {
           return;
         }
+        logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
         fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
       }
     }
@@ -1080,7 +1059,6 @@ final class CachingRlsLbClient {
     // GuardedBy CachingRlsLbClient.lock
     void close() {
       synchronized (lock) { // Lock is already held, but ErrorProne can't tell
-        logger.log(ChannelLogLevel.DEBUG, "Closing RLS picker");
         if (fallbackChildPolicyWrapper != null) {
           refCountedChildPolicyWrapperFactory.release(fallbackChildPolicyWrapper);
         }

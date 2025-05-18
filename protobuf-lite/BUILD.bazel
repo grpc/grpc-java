@@ -10,10 +10,9 @@ java_library(
         "//api",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
-        artifact("com.google.j2objc:j2objc-annotations"),
     ] + select({
-        ":android": [artifact("com.google.protobuf:protobuf-javalite")],
-        "//conditions:default": [artifact("com.google.protobuf:protobuf-java")],
+        ":android": ["@com_google_protobuf//:protobuf_javalite"],
+        "//conditions:default": ["@com_google_protobuf//:protobuf_java"],
     }),
 )
 

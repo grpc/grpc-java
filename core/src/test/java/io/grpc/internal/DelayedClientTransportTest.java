@@ -503,6 +503,31 @@ public class DelayedClientTransportTest {
   }
 
   @Test
+  public void reprocess_authorityOverrideFromLb() {
+    InOrder inOrder = inOrder(mockRealStream);
+    DelayedStream delayedStream = (DelayedStream) delayedTransport.newStream(
+        method, headers, callOptions.withAuthority(null), tracers);
+    delayedStream.setAuthority("authority-override-from-calloptions");
+    delayedStream.start(mock(ClientStreamListener.class));
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    PickResult pickResult = PickResult.withSubchannel(
+        mockSubchannel, null, "authority-override-hostname-from-lb");
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(pickResult);
+    when(mockRealTransport.newStream(
+        same(method), same(headers), any(CallOptions.class),
+        ArgumentMatchers.any()))
+        .thenReturn(mockRealStream);
+
+    delayedTransport.reprocess(picker);
+    fakeExecutor.runDueTasks();
+
+    // Must be set before start(), and may be overwritten
+    inOrder.verify(mockRealStream).setAuthority("authority-override-hostname-from-lb");
+    inOrder.verify(mockRealStream).setAuthority("authority-override-from-calloptions");
+    inOrder.verify(mockRealStream).start(any(ClientStreamListener.class));
+  }
+
+  @Test
   public void reprocess_NoPendingStream() {
     SubchannelPicker picker = mock(SubchannelPicker.class);
     AbstractSubchannel subchannel = mock(AbstractSubchannel.class);
@@ -523,6 +548,53 @@ public class DelayedClientTransportTest {
     verify(picker).pickSubchannel(eqPickSubchannelArgs(method, headers, CallOptions.DEFAULT));
     verify(mockInternalSubchannel).obtainActiveTransport();
     assertSame(mockRealStream, stream);
+  }
+
+  @Test
+  public void newStream_authorityOverrideFromLb() {
+    InOrder inOrder = inOrder(mockRealStream);
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    PickResult pickResult = PickResult.withSubchannel(
+        mockSubchannel, null, "authority-override-hostname-from-lb");
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(pickResult);
+    when(mockRealTransport.newStream(
+        any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class), any()))
+        .thenReturn(mockRealStream);
+    delayedTransport.reprocess(picker);
+
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, tracers);
+    assertThat(stream).isSameInstanceAs(mockRealStream);
+    stream.setAuthority("authority-override-from-calloptions");
+    stream.start(mock(ClientStreamListener.class));
+
+    // Must be set before start(), and may be overwritten
+    inOrder.verify(mockRealStream).setAuthority("authority-override-hostname-from-lb");
+    inOrder.verify(mockRealStream).setAuthority("authority-override-from-calloptions");
+    inOrder.verify(mockRealStream).start(any(ClientStreamListener.class));
+  }
+
+  @Test
+  public void newStream_assignsTransport_authorityFromLB() {
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    AbstractSubchannel subchannel = mock(AbstractSubchannel.class);
+    when(subchannel.getInternalSubchannel()).thenReturn(mockInternalSubchannel);
+    PickResult pickResult = PickResult.withSubchannel(
+        subchannel, null, "authority-override-hostname-from-lb");
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(pickResult);
+    ArgumentCaptor<CallOptions> callOptionsArgumentCaptor =
+        ArgumentCaptor.forClass(CallOptions.class);
+    when(mockRealTransport.newStream(
+        any(MethodDescriptor.class), any(Metadata.class), callOptionsArgumentCaptor.capture(),
+        ArgumentMatchers.<ClientStreamTracer[]>any()))
+        .thenReturn(mockRealStream);
+    delayedTransport.reprocess(picker);
+    verifyNoMoreInteractions(picker);
+    verifyNoMoreInteractions(transportListener);
+
+    CallOptions callOptions = CallOptions.DEFAULT;
+    delayedTransport.newStream(method, headers, callOptions, tracers);
+    assertThat(callOptionsArgumentCaptor.getValue().getAuthority()).isEqualTo(
+        "authority-override-hostname-from-lb");
   }
 
   @Test
@@ -671,6 +743,23 @@ public class DelayedClientTransportTest {
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
         .matches("\\[wait_for_ready, buffered_nanos=[0-9]+\\, waiting_for_connection]");
+  }
+
+  @Test
+  public void pendingStream_appendTimeoutInsight_waitForReady_withLastPickFailure() {
+    ClientStream stream = delayedTransport.newStream(
+        method, headers, callOptions.withWaitForReady(), tracers);
+    stream.start(streamListener);
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withError(Status.PERMISSION_DENIED));
+    delayedTransport.reprocess(picker);
+    InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString())
+        .matches("\\[wait_for_ready, "
+            + "Last Pick Failure=Status\\{code=PERMISSION_DENIED, description=null, cause=null\\},"
+            + " buffered_nanos=[0-9]+, waiting_for_connection]");
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {

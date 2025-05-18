@@ -17,12 +17,12 @@
 package io.grpc.binder.internal;
 
 import com.google.common.base.Ticker;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientTransport.PingCallback;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Tracks an ongoing ping request for a client-side binder transport. We only handle a single active
@@ -99,15 +99,14 @@ final class PingTracker {
     private synchronized void fail(Status status) {
       if (!done) {
         done = true;
-        executor.execute(() -> callback.onFailure(status.asException()));
+        executor.execute(() -> callback.onFailure(status));
       }
     }
 
     private synchronized void success() {
       if (!done) {
         done = true;
-        executor.execute(
-            () -> callback.onSuccess(ticker.read() - startTimeNanos));
+        executor.execute(() -> callback.onSuccess(ticker.read() - startTimeNanos));
       }
     }
   }

@@ -39,7 +39,6 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TimeProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -140,8 +139,6 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       addressMap.put(e.getKey(), endpointTrackerMap.get(e.getValue()));
     }
 
-    switchLb.switchTo(config.childPolicy.getProvider());
-
     // If outlier detection is actually configured, start a timer that will periodically try to
     // detect outliers.
     if (config.outlierDetectionEnabled()) {
@@ -174,10 +171,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       endpointTrackerMap.cancelTracking();
     }
 
-    switchLb.handleResolvedAddresses(
-        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childPolicy.getConfig())
-            .build());
-    return Status.OK;
+    return switchLb.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config.childConfig).build());
   }
 
   @Override
@@ -689,7 +684,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     /** Adds a new tracker for every given address. */
     void putNewTrackers(OutlierDetectionLoadBalancerConfig config,
         Set<Set<SocketAddress>> endpoints) {
-      endpoints.forEach(e -> trackerMap.putIfAbsent(e, new EndpointTracker(config)));
+      for (Set<SocketAddress> endpoint : endpoints) {
+        if (!trackerMap.containsKey(endpoint)) {
+          trackerMap.put(endpoint, new EndpointTracker(config));
+        }
+      }
     }
 
     /** Resets the call counters for all the trackers in the map. */
@@ -958,7 +957,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     public final Integer maxEjectionPercent;
     public final SuccessRateEjection successRateEjection;
     public final FailurePercentageEjection failurePercentageEjection;
-    public final PolicySelection childPolicy;
+    public final Object childConfig;
 
     private OutlierDetectionLoadBalancerConfig(Long intervalNanos,
         Long baseEjectionTimeNanos,
@@ -966,14 +965,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         Integer maxEjectionPercent,
         SuccessRateEjection successRateEjection,
         FailurePercentageEjection failurePercentageEjection,
-        PolicySelection childPolicy) {
+        Object childConfig) {
       this.intervalNanos = intervalNanos;
       this.baseEjectionTimeNanos = baseEjectionTimeNanos;
       this.maxEjectionTimeNanos = maxEjectionTimeNanos;
       this.maxEjectionPercent = maxEjectionPercent;
       this.successRateEjection = successRateEjection;
       this.failurePercentageEjection = failurePercentageEjection;
-      this.childPolicy = childPolicy;
+      this.childConfig = childConfig;
     }
 
     /** Builds a new {@link OutlierDetectionLoadBalancerConfig}. */
@@ -984,7 +983,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       Integer maxEjectionPercent = 10;
       SuccessRateEjection successRateEjection;
       FailurePercentageEjection failurePercentageEjection;
-      PolicySelection childPolicy;
+      Object childConfig;
 
       /** The interval between outlier detection sweeps. */
       public Builder setIntervalNanos(Long intervalNanos) {
@@ -1028,19 +1027,22 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         return this;
       }
 
-      /** Sets the child policy the {@link OutlierDetectionLoadBalancer} delegates to. */
-      public Builder setChildPolicy(PolicySelection childPolicy) {
-        checkState(childPolicy != null);
-        this.childPolicy = childPolicy;
+      /**
+       * Sets the graceful child switch config the {@link OutlierDetectionLoadBalancer} delegates
+       * to.
+       */
+      public Builder setChildConfig(Object childConfig) {
+        checkState(childConfig != null);
+        this.childConfig = childConfig;
         return this;
       }
 
       /** Builds a new instance of {@link OutlierDetectionLoadBalancerConfig}. */
       public OutlierDetectionLoadBalancerConfig build() {
-        checkState(childPolicy != null);
+        checkState(childConfig != null);
         return new OutlierDetectionLoadBalancerConfig(intervalNanos, baseEjectionTimeNanos,
             maxEjectionTimeNanos, maxEjectionPercent, successRateEjection,
-            failurePercentageEjection, childPolicy);
+            failurePercentageEjection, childConfig);
       }
     }
 

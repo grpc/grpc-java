@@ -16,13 +16,16 @@
 
 package io.grpc.netty;
 
+import com.google.common.base.Optional;
 import io.grpc.ChannelLogger;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.GrpcNegotiationHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.util.concurrent.Executor;
 
 /**
  * Internal accessor for {@link ProtocolNegotiators}.
@@ -35,9 +38,13 @@ public final class InternalProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
+   * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
-  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext) {
-    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext);
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
+          ObjectPool<? extends Executor> executorPool,
+          Optional<Runnable> handshakeCompleteRunnable) {
+    final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
+        executorPool, handshakeCompleteRunnable, null);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override
@@ -57,6 +64,15 @@ public final class InternalProtocolNegotiators {
     }
     
     return new TlsNegotiator();
+  }
+  
+  /**
+   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
+   * may happen immediately, even before the TLS Handshake is complete.
+   */
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext) {
+    return tls(sslContext, null, Optional.absent());
   }
 
   /**
@@ -153,7 +169,8 @@ public final class InternalProtocolNegotiators {
   public static ChannelHandler clientTlsHandler(
       ChannelHandler next, SslContext sslContext, String authority,
       ChannelLogger negotiationLogger) {
-    return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger);
+    return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger,
+        Optional.absent(), null, null);
   }
 
   public static class ProtocolNegotiationHandler

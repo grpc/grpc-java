@@ -16,13 +16,14 @@
 
 package io.grpc;
 
-import static com.google.common.base.Charsets.US_ASCII;
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Throwables.getStackTraceAsString;
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Metadata.TrustedAsciiMarshaller;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -30,10 +31,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
-
 
 /**
  * Defines the status of an operation by providing a standard {@link Code} in conjunction with an

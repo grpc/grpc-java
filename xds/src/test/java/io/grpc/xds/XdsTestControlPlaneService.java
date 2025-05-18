@@ -106,7 +106,7 @@ final class XdsTestControlPlaneService extends
       public void run() {
         HashMap<String, Message> copyResources =  new HashMap<>(resources);
         xdsResources.put(type, copyResources);
-        String newVersionInfo = String.valueOf(xdsVersions.get(type).getAndDecrement());
+        String newVersionInfo = String.valueOf(xdsVersions.get(type).getAndIncrement());
 
         for (Map.Entry<StreamObserver<DiscoveryResponse>, Set<String>> entry :
             subscribers.get(type).entrySet()) {
@@ -117,6 +117,11 @@ final class XdsTestControlPlaneService extends
         }
       }
     });
+  }
+
+  ImmutableMap<String, Message> getCurrentConfig(String type) {
+    HashMap<String, Message> hashMap = xdsResources.get(type);
+    return (hashMap != null) ? ImmutableMap.copyOf(hashMap) : ImmutableMap.of();
   }
 
   @Override
@@ -135,12 +140,15 @@ final class XdsTestControlPlaneService extends
                   new Object[]{value.getResourceNamesList(), value.getErrorDetail()});
               return;
             }
+
             String resourceType = value.getTypeUrl();
-            if (!value.getResponseNonce().isEmpty()
-                && !String.valueOf(xdsNonces.get(resourceType)).equals(value.getResponseNonce())) {
+            if (!value.getResponseNonce().isEmpty() && xdsNonces.containsKey(resourceType)
+                && !String.valueOf(xdsNonces.get(resourceType).get(responseObserver))
+                .equals(value.getResponseNonce())) {
               logger.log(Level.FINE, "Resource nonce does not match, ignore.");
               return;
             }
+
             Set<String> requestedResourceNames = new HashSet<>(value.getResourceNamesList());
             if (subscribers.get(resourceType).containsKey(responseObserver)
                 && subscribers.get(resourceType).get(responseObserver)
@@ -149,12 +157,14 @@ final class XdsTestControlPlaneService extends
                   value.getResourceNamesList());
               return;
             }
+
             if (!xdsNonces.get(resourceType).containsKey(responseObserver)) {
               xdsNonces.get(resourceType).put(responseObserver, new AtomicInteger(0));
             }
+
             DiscoveryResponse response = generateResponse(resourceType,
                 String.valueOf(xdsVersions.get(resourceType)),
-                String.valueOf(xdsNonces.get(resourceType).get(responseObserver)),
+                String.valueOf(xdsNonces.get(resourceType).get(responseObserver).addAndGet(1)),
                 requestedResourceNames);
             responseObserver.onNext(response);
             subscribers.get(resourceType).put(responseObserver, requestedResourceNames);
@@ -196,5 +206,13 @@ final class XdsTestControlPlaneService extends
       }
     }
     return responseBuilder.build();
+  }
+
+  public Map<String, Integer> getSubscriberCounts() {
+    Map<String, Integer> subscriberCounts = new HashMap<>();
+    for (String type : subscribers.keySet()) {
+      subscriberCounts.put(type, subscribers.get(type).size());
+    }
+    return subscriberCounts;
   }
 }

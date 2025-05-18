@@ -16,7 +16,7 @@
 
 package io.grpc.testing.integration;
 
-import static com.google.common.base.Charsets.UTF_8;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 
 import com.google.common.io.CharStreams;

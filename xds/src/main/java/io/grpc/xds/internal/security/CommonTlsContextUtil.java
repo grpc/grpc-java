@@ -18,33 +18,18 @@ package io.grpc.xds.internal.security;
 
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 
 /** Class for utility functions for {@link CommonTlsContext}. */
 public final class CommonTlsContextUtil {
 
   private CommonTlsContextUtil() {}
 
-  static boolean hasCertProviderInstance(CommonTlsContext commonTlsContext) {
+  public static boolean hasCertProviderInstance(CommonTlsContext commonTlsContext) {
     if (commonTlsContext == null) {
       return false;
     }
-    return hasIdentityCertificateProviderInstance(commonTlsContext)
-        || hasCertProviderValidationContext(commonTlsContext);
-  }
-
-  private static boolean hasCertProviderValidationContext(CommonTlsContext commonTlsContext) {
-    if (commonTlsContext.hasCombinedValidationContext()) {
-      CombinedCertificateValidationContext combinedCertificateValidationContext =
-          commonTlsContext.getCombinedValidationContext();
-      return combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance();
-    }
-    return hasValidationProviderInstance(commonTlsContext);
-  }
-
-  private static boolean hasIdentityCertificateProviderInstance(CommonTlsContext commonTlsContext) {
     return commonTlsContext.hasTlsCertificateProviderInstance()
-        || commonTlsContext.hasTlsCertificateCertificateProviderInstance();
+        || hasValidationProviderInstance(commonTlsContext);
   }
 
   private static boolean hasValidationProviderInstance(CommonTlsContext commonTlsContext) {
@@ -52,7 +37,9 @@ public final class CommonTlsContextUtil {
         .hasCaCertificateProviderInstance()) {
       return true;
     }
-    return commonTlsContext.hasValidationContextCertificateProviderInstance();
+    return commonTlsContext.hasCombinedValidationContext()
+        && commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()
+          .hasCaCertificateProviderInstance();
   }
 
   /**
@@ -64,5 +51,16 @@ public final class CommonTlsContextUtil {
     return CommonTlsContext.CertificateProviderInstance.newBuilder()
         .setInstanceName(pluginInstance.getInstanceName())
         .setCertificateName(pluginInstance.getCertificateName()).build();
+  }
+
+  public static boolean isUsingSystemRootCerts(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasCombinedValidationContext()) {
+      return commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()
+          .hasSystemRootCerts();
+    }
+    if (commonTlsContext.hasValidationContext()) {
+      return commonTlsContext.getValidationContext().hasSystemRootCerts();
+    }
+    return false;
   }
 }

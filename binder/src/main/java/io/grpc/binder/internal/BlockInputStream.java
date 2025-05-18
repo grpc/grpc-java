@@ -28,20 +28,17 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * A simple InputStream from a 2-dimensional byte array.
  *
- * Used to provide message data from incoming blocks of data. It is assumed that
- * all byte arrays passed in the constructor of this this class are owned by the new
- * instance.
+ * <p>Used to provide message data from incoming blocks of data. It is assumed that all byte arrays
+ * passed in the constructor of this this class are owned by the new instance.
  *
- * This also assumes byte arrays are created by the BlockPool class, and should
- * be returned to it when this class is closed.
+ * <p>This also assumes byte arrays are created by the BlockPool class, and should be returned to it
+ * when this class is closed.
  */
 @NotThreadSafe
 final class BlockInputStream extends InputStream implements KnownLength, Drainable {
 
-  @Nullable
-  private byte[][] blocks;
-  @Nullable
-  private byte[] currentBlock;
+  @Nullable private byte[][] blocks;
+  @Nullable private byte[] currentBlock;
   private int blockIndex;
   private int blockOffset;
   private int available;
@@ -50,8 +47,7 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
   /**
    * Creates a new stream with a single block.
    *
-   * @param block The single byte array block, ownership of which is
-   * passed to this instance.
+   * @param block The single byte array block, ownership of which is passed to this instance.
    */
   BlockInputStream(byte[] block) {
     this.blocks = null;
@@ -62,10 +58,10 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
   /**
    * Creates a new stream from a sequence of blocks.
    *
-   * @param blocks A two dimensional byte array containing the data. Ownership
-   * of all blocks is passed to this instance.
-   * @param available The number of bytes available in total. This may be
-   * less than (but never more than) the total size of all byte arrays in blocks.
+   * @param blocks A two dimensional byte array containing the data. Ownership of all blocks is
+   *     passed to this instance.
+   * @param available The number of bytes available in total. This may be less than (but never more
+   *     than) the total size of all byte arrays in blocks.
    */
   BlockInputStream(byte[][] blocks, int available) {
     this.blocks = blocks;

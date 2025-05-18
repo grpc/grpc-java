@@ -19,39 +19,39 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.ServiceConfigUtil;
+import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
  * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
- * will keep using the old policy until the new policy reports READY or the old policy exits READY.
+ * will keep using the old policy until the new policy leaves CONNECTING or the old policy exits
+ * READY.
  *
- * <p>The balancer must {@link #switchTo(LoadBalancer.Factory) switch to} a policy prior to {@link
- * LoadBalancer#handleResolvedAddresses(ResolvedAddresses) handling resolved addresses} for the
- * first time.
+ * <p>The child balancer and configuration is specified using service config. Config objects are
+ * generally created by calling {@link #parseLoadBalancingPolicyConfig(List)} from a
+ * {@link io.grpc.LoadBalancerProvider#parseLoadBalancingPolicyConfig
+ * provider's parseLoadBalancingPolicyConfig()} implementation.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      //  Most LB policies using this class will receive child policy configuration within the
-      //  service config, so they are naturally calling switchTo() just before
-      //  handleResolvedAddresses(), within their own handleResolvedAddresses(). If switchTo() is
-      //  not called immediately after construction that does open up potential for bugs in the
-      //  parent policies, where they fail to call switchTo(). So we will use the exception to try
-      //  to notice those bugs quickly, as it will fail very loudly.
-      throw new IllegalStateException(
-          "GracefulSwitchLoadBalancer must switch to a load balancing policy before handling"
-              + " ResolvedAddresses");
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      throw new AssertionError("real LB is called instead");
     }
 
     @Override
@@ -63,19 +63,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
     @Override
     public void shutdown() {}
-  };
-
-  @VisibleForTesting
-  static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withNoResult();
-    }
-
-    @Override
-    public String toString() {
-      return "BUFFER_PICKER";
-    }
   };
 
   private final Helper helper;
@@ -97,11 +84,27 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     this.helper = checkNotNull(helper, "helper");
   }
 
-  /**
-   * Gracefully switch to a new policy defined by the given factory, if the given factory isn't
-   * equal to the current one.
-   */
-  public void switchTo(LoadBalancer.Factory newBalancerFactory) {
+  @Override
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    Config config = (Config) resolvedAddresses.getLoadBalancingPolicyConfig();
+    switchToInternal(config.childFactory);
+    delegate().handleResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(config.childConfig)
+          .build());
+  }
+
+  @Override
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    Config config = (Config) resolvedAddresses.getLoadBalancingPolicyConfig();
+    switchToInternal(config.childFactory);
+    return delegate().acceptResolvedAddresses(
+        resolvedAddresses.toBuilder()
+          .setLoadBalancingPolicyConfig(config.childConfig)
+          .build());
+  }
+
+  private void switchToInternal(LoadBalancer.Factory newBalancerFactory) {
     checkNotNull(newBalancerFactory, "newBalancerFactory");
 
     if (newBalancerFactory.equals(pendingBalancerFactory)) {
@@ -111,7 +114,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb = defaultBalancer;
     pendingBalancerFactory = null;
     pendingState = ConnectivityState.CONNECTING;
-    pendingPicker = BUFFER_PICKER;
+    pendingPicker = new FixedResultPicker(PickResult.withNoResult());
 
     if (newBalancerFactory.equals(currentBalancerFactory)) {
       return;
@@ -131,7 +134,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
           checkState(currentLbIsReady, "there's pending lb while current lb has been out of READY");
           pendingState = newState;
           pendingPicker = newPicker;
-          if (newState == ConnectivityState.READY) {
+          if (newState != ConnectivityState.CONNECTING) {
             swap();
           }
         } else if (lb == currentLb) {
@@ -184,5 +187,87 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
   public String delegateType() {
     return delegate().getClass().getSimpleName();
+  }
+
+  /**
+   * Provided a JSON list of LoadBalancingConfigs, parse it into a config to pass to GracefulSwitch.
+   */
+  public static ConfigOrError parseLoadBalancingPolicyConfig(
+      List<Map<String, ?>> loadBalancingConfigs) {
+    return parseLoadBalancingPolicyConfig(
+        loadBalancingConfigs, LoadBalancerRegistry.getDefaultRegistry());
+  }
+
+  /**
+   * Provided a JSON list of LoadBalancingConfigs, parse it into a config to pass to GracefulSwitch.
+   */
+  public static ConfigOrError parseLoadBalancingPolicyConfig(
+      List<Map<String, ?>> loadBalancingConfigs, LoadBalancerRegistry lbRegistry) {
+    List<ServiceConfigUtil.LbConfig> childConfigCandidates =
+        ServiceConfigUtil.unwrapLoadBalancingConfigList(loadBalancingConfigs);
+    if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
+      return ConfigOrError.fromError(
+          Status.INTERNAL.withDescription("No child LB config specified"));
+    }
+    ConfigOrError selectedConfig =
+        ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, lbRegistry);
+    if (selectedConfig.getError() != null) {
+      Status error = selectedConfig.getError();
+      return ConfigOrError.fromError(
+          Status.INTERNAL
+              .withCause(error.getCause())
+              .withDescription(error.getDescription())
+              .augmentDescription("Failed to select child config"));
+    }
+    ServiceConfigUtil.PolicySelection selection =
+        (ServiceConfigUtil.PolicySelection) selectedConfig.getConfig();
+    return ConfigOrError.fromConfig(
+        createLoadBalancingPolicyConfig(selection.getProvider(), selection.getConfig()));
+  }
+
+  /**
+   * Directly create a config to pass to GracefulSwitch. The object returned is the same as would be
+   * found in {@code ConfigOrError.getConfig()}.
+   */
+  public static Object createLoadBalancingPolicyConfig(
+      LoadBalancer.Factory childFactory, @Nullable Object childConfig) {
+    return new Config(childFactory, childConfig);
+  }
+
+  static final class Config {
+    final LoadBalancer.Factory childFactory;
+    @Nullable
+    final Object childConfig;
+
+    public Config(LoadBalancer.Factory childFactory, @Nullable Object childConfig) {
+      this.childFactory = checkNotNull(childFactory, "childFactory");
+      this.childConfig = childConfig;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof Config)) {
+        return false;
+      }
+      Config that = (Config) o;
+      return Objects.equal(childFactory, that.childFactory)
+          && Objects.equal(childConfig, that.childConfig);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(childFactory, childConfig);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper("GracefulSwitchLoadBalancer.Config")
+          .add("childFactory", childFactory)
+          .add("childConfig", childConfig)
+          .toString();
+    }
   }
 }

@@ -27,6 +27,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -46,6 +47,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
+import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.InternalSubchannel.CallTracingTransport;
@@ -64,7 +66,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -78,9 +79,6 @@ import org.mockito.junit.MockitoRule;
 public class InternalSubchannelTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "mosaic";
@@ -309,10 +307,57 @@ public class InternalSubchannelTest {
     verify(mockBackoffPolicy2, times(backoff2Consulted)).nextBackoffNanos();
   }
 
+  @Test public void twoAddressesReconnectDisabled() {
+    SocketAddress addr1 = mock(SocketAddress.class);
+    SocketAddress addr2 = mock(SocketAddress.class);
+    createInternalSubchannel(true,
+        new EquivalentAddressGroup(Arrays.asList(addr1, addr2)));
+    assertEquals(IDLE, internalSubchannel.getState());
+
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(CONNECTING, internalSubchannel.getState());
+    verify(mockTransportFactory).newClientTransport(eq(addr1), any(), any());
+    // Let this one fail without success
+    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
+    // Still in CONNECTING
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertNoCallbackInvoke();
+    assertEquals(CONNECTING, internalSubchannel.getState());
+
+    // Second attempt will start immediately. Still no back-off policy.
+    verify(mockBackoffPolicyProvider, times(0)).get();
+    verify(mockTransportFactory, times(1))
+        .newClientTransport(
+            eq(addr2),
+            eq(createClientTransportOptions()),
+            isA(TransportLogger.class));
+    assertNull(internalSubchannel.obtainActiveTransport());
+    // Fail this one too
+    assertNoCallbackInvoke();
+    transports.poll().listener.transportShutdown(Status.UNAVAILABLE);
+    // All addresses have failed, but we aren't controlling retries.
+    assertEquals(IDLE, internalSubchannel.getState());
+    assertExactCallbackInvokes("onStateChange:" + UNAVAILABLE_STATE);
+    // Backoff reset and first back-off interval begins
+    verify(mockBackoffPolicy1, never()).nextBackoffNanos();
+    verify(mockBackoffPolicyProvider, never()).get();
+    assertTrue("Nothing should have been scheduled", fakeClock.getPendingTasks().isEmpty());
+
+    // Should follow orders and create an active transport.
+    internalSubchannel.obtainActiveTransport();
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(CONNECTING, internalSubchannel.getState());
+
+    // Shouldn't have anything scheduled, so shouldn't do anything
+    assertTrue("Nothing should have been scheduled 2", fakeClock.getPendingTasks().isEmpty());
+  }
+
   @Test public void twoAddressesReconnect() {
     SocketAddress addr1 = mock(SocketAddress.class);
     SocketAddress addr2 = mock(SocketAddress.class);
-    createInternalSubchannel(addr1, addr2);
+    createInternalSubchannel(false,
+        new EquivalentAddressGroup(Arrays.asList(addr1, addr2)));
     assertEquals(IDLE, internalSubchannel.getState());
     // Invocation counters
     int transportsAddr1 = 0;
@@ -496,8 +541,9 @@ public class InternalSubchannelTest {
   public void updateAddresses_emptyEagList_throws() {
     SocketAddress addr = new FakeSocketAddress();
     createInternalSubchannel(addr);
-    thrown.expect(IllegalArgumentException.class);
-    internalSubchannel.updateAddresses(Arrays.<EquivalentAddressGroup>asList());
+    List<EquivalentAddressGroup> newAddressGroups = Collections.emptyList();
+    assertThrows(IllegalArgumentException.class,
+        () -> internalSubchannel.updateAddresses(newAddressGroups));
   }
 
   @Test
@@ -505,8 +551,7 @@ public class InternalSubchannelTest {
     SocketAddress addr = new FakeSocketAddress();
     createInternalSubchannel(addr);
     List<EquivalentAddressGroup> eags = Arrays.asList((EquivalentAddressGroup) null);
-    thrown.expect(NullPointerException.class);
-    internalSubchannel.updateAddresses(eags);
+    assertThrows(NullPointerException.class, () -> internalSubchannel.updateAddresses(eags));
   }
 
   @Test public void updateAddresses_intersecting_ready() {
@@ -1339,6 +1384,32 @@ public class InternalSubchannelTest {
     assertThat(index.getCurrentAddress()).isSameInstanceAs(addr2);
   }
 
+  @Test
+  public void connectedAddressAttributes_ready() {
+    SocketAddress addr = new SocketAddress() {};
+    Attributes attr = Attributes.newBuilder().set(Attributes.Key.create("some-key"), "1").build();
+    createInternalSubchannel(new EquivalentAddressGroup(Arrays.asList(addr), attr));
+
+    assertEquals(IDLE, internalSubchannel.getState());
+    assertNoCallbackInvoke();
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertNull(internalSubchannel.getConnectedAddressAttributes());
+
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    assertEquals(CONNECTING, internalSubchannel.getState());
+    verify(mockTransportFactory).newClientTransport(
+        eq(addr),
+        eq(createClientTransportOptions().setEagAttributes(attr)),
+        isA(TransportLogger.class));
+    assertNull(internalSubchannel.getConnectedAddressAttributes());
+
+    internalSubchannel.obtainActiveTransport();
+    transports.peek().listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:READY");
+    assertEquals(READY, internalSubchannel.getState());
+    assertEquals(attr, internalSubchannel.getConnectedAddressAttributes());
+  }
+
   /** Create ClientTransportOptions. Should not be reused if it may be mutated. */
   private ClientTransportFactory.ClientTransportOptions createClientTransportOptions() {
     return new ClientTransportFactory.ClientTransportOptions()
@@ -1351,11 +1422,24 @@ public class InternalSubchannelTest {
   }
 
   private void createInternalSubchannel(EquivalentAddressGroup ... addrs) {
+    createInternalSubchannel(false, addrs);
+  }
+
+  private void createInternalSubchannel(boolean reconnectDisabled,
+                                        EquivalentAddressGroup ... addrs) {
     List<EquivalentAddressGroup> addressGroups = Arrays.asList(addrs);
     InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ AUTHORITY);
     ChannelTracer subchannelTracer = new ChannelTracer(logId, 10,
         fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel");
-    internalSubchannel = new InternalSubchannel(addressGroups, AUTHORITY, USER_AGENT,
+    LoadBalancer.CreateSubchannelArgs.Builder argBuilder =
+        LoadBalancer.CreateSubchannelArgs.newBuilder().setAddresses(addressGroups);
+    if (reconnectDisabled) {
+      argBuilder.addOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY, reconnectDisabled);
+    }
+    LoadBalancer.CreateSubchannelArgs createSubchannelArgs = argBuilder.build();
+    internalSubchannel = new InternalSubchannel(
+        createSubchannelArgs,
+        AUTHORITY, USER_AGENT,
         mockBackoffPolicyProvider, mockTransportFactory, fakeClock.getScheduledExecutorService(),
         fakeClock.getStopwatchSupplier(), syncContext, mockInternalSubchannelCallback,
         channelz, CallTracer.getDefaultFactory().create(),

@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
@@ -27,7 +28,6 @@ import java.io.Closeable;
 import java.net.SocketAddress;
 import java.util.Collection;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /** Pre-configured factory for creating {@link ConnectionClientTransport} instances. */

@@ -59,9 +59,9 @@ public final class BinderChannelCredentials extends ChannelCredentials {
     return this;
   }
 
-  /** 
+  /**
    * Returns the admin component to be specified with DevicePolicyManager
-   * bindDeviceAdminServiceAsUser API. 
+   * bindDeviceAdminServiceAsUser API.
    */
   @Nullable
   public ComponentName getDevicePolicyAdminComponentName() {

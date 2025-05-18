@@ -33,9 +33,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
-import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil.TestCallback;
 import java.util.Queue;
@@ -338,7 +338,8 @@ public class CertProviderClientSslContextProviderTest {
   }
 
   @Test
-  public void testProviderForClient_rootInstanceNull_expectError() throws Exception {
+  public void testProviderForClient_rootInstanceNull_and_notUsingSystemRootCerts_expectError()
+      throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
@@ -351,9 +352,28 @@ public class CertProviderClientSslContextProviderTest {
           /* alpnProtocols= */ null,
           /* staticCertValidationContext= */ null);
       fail("exception expected");
-    } catch (NullPointerException expected) {
-      assertThat(expected).hasMessageThat().contains("Client SSL requires rootCertInstance");
+    } catch (UnsupportedOperationException expected) {
+      assertThat(expected).hasMessageThat().contains("Unsupported configurations in "
+          + "UpstreamTlsContext!");
     }
+  }
+
+  @Test
+  public void testProviderForClient_rootInstanceNull_but_isUsingSystemRootCerts_valid()
+      throws Exception {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[1];
+    TestCertificateProvider.createAndRegisterProviderProvider(
+        certificateProviderRegistry, watcherCaptor, "testca", 0);
+    getSslContextProvider(
+        /* certInstanceName= */ null,
+        /* rootInstanceName= */ null,
+        CommonBootstrapperTestUtils.getTestBootstrapInfo(),
+        /* alpnProtocols= */ null,
+        CertificateValidationContext.newBuilder()
+            .setSystemRootCerts(
+                CertificateValidationContext.SystemRootCerts.newBuilder().build())
+            .build());
   }
 
   static class QueuedExecutor implements Executor {

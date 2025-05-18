@@ -1,0 +1,77 @@
+plugins {
+    id 'application' // Provide convenience executables for trying out the examples.
+    id 'java'
+
+    id "com.google.protobuf" version "0.9.5"
+
+    // Generate IntelliJ IDEA's .idea & .iml project files
+    id 'idea'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+// IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
+// are looking at a tagged version of the example and not "master"!
+
+// Feel free to delete the comment at the next line. It is just for safely
+// updating the version in our release process.
+def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.5'
+
+dependencies {
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-netty:${grpcVersion}"
+    implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-services:${grpcVersion}"
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+}
+
+protobuf {
+  protoc {
+    artifact = "com.google.protobuf:protoc:${protobufVersion}"
+  }
+  plugins {
+    grpc {
+      artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
+    }
+  }
+  generateProtoTasks {
+    all()*.plugins {
+      grpc {}
+    }
+  }
+}
+
+startScripts.enabled = false
+
+task DualStackClient(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.dualstack.DualStackClient'
+    applicationName = 'dual-stack-client'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+task DualStackServer(type: CreateStartScripts) {
+    mainClass = 'io.grpc.examples.dualstack.DualStackServer'
+    applicationName = 'dual-stack-server'
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
+application {
+    applicationDistribution.into('bin') {
+        from(DualStackClient)
+        from(DualStackServer)
+        filePermissions {
+            unix(0755)
+        }
+    }
+}

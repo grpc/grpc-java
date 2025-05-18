@@ -16,9 +16,11 @@
 
 package io.grpc.xds;
 
+import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
+import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
@@ -26,7 +28,10 @@ interface XdsClientPoolFactory {
   void setBootstrapOverride(Map<String, ?> bootstrap);
 
   @Nullable
-  ObjectPool<XdsClient> get();
+  ObjectPool<XdsClient> get(String target);
 
-  ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException;
+  ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
+      throws XdsInitializationException;
+
+  List<String> getTargets();
 }

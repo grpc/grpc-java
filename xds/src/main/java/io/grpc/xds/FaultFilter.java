@@ -37,7 +37,6 @@ import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.ForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -46,7 +45,6 @@ import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
-import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.Locale;
 import java.util.concurrent.Executor;
@@ -57,10 +55,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /** HttpFault filter implementation. */
-final class FaultFilter implements Filter, ClientInterceptorBuilder {
+final class FaultFilter implements Filter {
 
-  static final FaultFilter INSTANCE =
+  private static final FaultFilter INSTANCE =
       new FaultFilter(ThreadSafeRandomImpl.instance, new AtomicLong());
+
   @VisibleForTesting
   static final Metadata.Key<String> HEADER_DELAY_KEY =
       Metadata.Key.of("x-envoy-fault-delay-request", Metadata.ASCII_STRING_MARSHALLER);
@@ -88,196 +87,216 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
     this.activeFaultCounter = activeFaultCounter;
   }
 
-  @Override
-  public String[] typeUrls() {
-    return new String[] { TYPE_URL };
-  }
+  static final class Provider implements Filter.Provider {
+    @Override
+    public String[] typeUrls() {
+      return new String[]{TYPE_URL};
+    }
 
-  @Override
-  public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
-    HTTPFault httpFaultProto;
-    if (!(rawProtoMessage instanceof Any)) {
-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+    @Override
+    public boolean isClientFilter() {
+      return true;
     }
-    Any anyMessage = (Any) rawProtoMessage;
-    try {
-      httpFaultProto = anyMessage.unpack(HTTPFault.class);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Invalid proto: " + e);
-    }
-    return parseHttpFault(httpFaultProto);
-  }
 
-  private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
-    FaultDelay faultDelay = null;
-    FaultAbort faultAbort = null;
-    if (httpFault.hasDelay()) {
-      faultDelay = parseFaultDelay(httpFault.getDelay());
+    @Override
+    public FaultFilter newInstance(String name) {
+      return INSTANCE;
     }
-    if (httpFault.hasAbort()) {
-      ConfigOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
-      if (faultAbortOrError.errorDetail != null) {
-        return ConfigOrError.fromError(
-            "HttpFault contains invalid FaultAbort: " + faultAbortOrError.errorDetail);
+
+    @Override
+    public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
+      HTTPFault httpFaultProto;
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
       }
-      faultAbort = faultAbortOrError.config;
+      Any anyMessage = (Any) rawProtoMessage;
+      try {
+        httpFaultProto = anyMessage.unpack(HTTPFault.class);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+      return parseHttpFault(httpFaultProto);
     }
-    Integer maxActiveFaults = null;
-    if (httpFault.hasMaxActiveFaults()) {
-      maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
-      if (maxActiveFaults < 0) {
-        maxActiveFaults = Integer.MAX_VALUE;
+
+    @Override
+    public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      return parseFilterConfig(rawProtoMessage);
+    }
+
+    private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
+      FaultDelay faultDelay = null;
+      FaultAbort faultAbort = null;
+      if (httpFault.hasDelay()) {
+        faultDelay = parseFaultDelay(httpFault.getDelay());
+      }
+      if (httpFault.hasAbort()) {
+        ConfigOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
+        if (faultAbortOrError.errorDetail != null) {
+          return ConfigOrError.fromError(
+              "HttpFault contains invalid FaultAbort: " + faultAbortOrError.errorDetail);
+        }
+        faultAbort = faultAbortOrError.config;
+      }
+      Integer maxActiveFaults = null;
+      if (httpFault.hasMaxActiveFaults()) {
+        maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
+        if (maxActiveFaults < 0) {
+          maxActiveFaults = Integer.MAX_VALUE;
+        }
+      }
+      return ConfigOrError.fromConfig(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
+    }
+
+    private static FaultDelay parseFaultDelay(
+        io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
+      FaultConfig.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
+      if (faultDelay.hasHeaderDelay()) {
+        return FaultDelay.forHeader(percent);
+      }
+      return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
+    }
+
+    @VisibleForTesting
+    static ConfigOrError<FaultAbort> parseFaultAbort(
+        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
+      FaultConfig.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
+      switch (faultAbort.getErrorTypeCase()) {
+        case HEADER_ABORT:
+          return ConfigOrError.fromConfig(FaultAbort.forHeader(percent));
+        case HTTP_STATUS:
+          return ConfigOrError.fromConfig(FaultAbort.forStatus(
+              GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
+        case GRPC_STATUS:
+          return ConfigOrError.fromConfig(FaultAbort.forStatus(
+              Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
+        case ERRORTYPE_NOT_SET:
+        default:
+          return ConfigOrError.fromError(
+              "Unknown error type case: " + faultAbort.getErrorTypeCase());
       }
     }
-    return ConfigOrError.fromConfig(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
-  }
 
-  private static FaultDelay parseFaultDelay(
-      io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
-    FaultConfig.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
-    if (faultDelay.hasHeaderDelay()) {
-      return FaultDelay.forHeader(percent);
+    private static FaultConfig.FractionalPercent parsePercent(FractionalPercent proto) {
+      switch (proto.getDenominator()) {
+        case HUNDRED:
+          return FaultConfig.FractionalPercent.perHundred(proto.getNumerator());
+        case TEN_THOUSAND:
+          return FaultConfig.FractionalPercent.perTenThousand(proto.getNumerator());
+        case MILLION:
+          return FaultConfig.FractionalPercent.perMillion(proto.getNumerator());
+        case UNRECOGNIZED:
+        default:
+          throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
+      }
     }
-    return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
-  }
-
-  @VisibleForTesting
-  static ConfigOrError<FaultAbort> parseFaultAbort(
-      io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
-    FaultConfig.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
-    switch (faultAbort.getErrorTypeCase()) {
-      case HEADER_ABORT:
-        return ConfigOrError.fromConfig(FaultAbort.forHeader(percent));
-      case HTTP_STATUS:
-        return ConfigOrError.fromConfig(FaultAbort.forStatus(
-            GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
-      case GRPC_STATUS:
-        return ConfigOrError.fromConfig(FaultAbort.forStatus(
-            Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
-      case ERRORTYPE_NOT_SET:
-      default:
-        return ConfigOrError.fromError(
-            "Unknown error type case: " + faultAbort.getErrorTypeCase());
-    }
-  }
-
-  private static FaultConfig.FractionalPercent parsePercent(FractionalPercent proto) {
-    switch (proto.getDenominator()) {
-      case HUNDRED:
-        return FaultConfig.FractionalPercent.perHundred(proto.getNumerator());
-      case TEN_THOUSAND:
-        return FaultConfig.FractionalPercent.perTenThousand(proto.getNumerator());
-      case MILLION:
-        return FaultConfig.FractionalPercent.perMillion(proto.getNumerator());
-      case UNRECOGNIZED:
-      default:
-        throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
-    }
-  }
-
-  @Override
-  public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-    return parseFilterConfig(rawProtoMessage);
   }
 
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(
-      FilterConfig config, @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
+      FilterConfig config, @Nullable FilterConfig overrideConfig,
       final ScheduledExecutorService scheduler) {
     checkNotNull(config, "config");
     if (overrideConfig != null) {
       config = overrideConfig;
     }
     FaultConfig faultConfig = (FaultConfig) config;
-    Long delayNanos = null;
-    Status abortStatus = null;
-    if (faultConfig.maxActiveFaults() == null
-        || activeFaultCounter.get() < faultConfig.maxActiveFaults()) {
-      Metadata headers = args.getHeaders();
-      if (faultConfig.faultDelay() != null) {
-        delayNanos = determineFaultDelayNanos(faultConfig.faultDelay(), headers);
-      }
-      if (faultConfig.faultAbort() != null) {
-        abortStatus = determineFaultAbortStatus(faultConfig.faultAbort(), headers);
-      }
-    }
-    if (delayNanos == null && abortStatus == null) {
-      return null;
-    }
-    final Long finalDelayNanos = delayNanos;
-    final Status finalAbortStatus = getAbortStatusWithDescription(abortStatus);
 
     final class FaultInjectionInterceptor implements ClientInterceptor {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           final MethodDescriptor<ReqT, RespT> method, final CallOptions callOptions,
           final Channel next) {
-        Executor callExecutor = callOptions.getExecutor();
-        if (callExecutor == null) { // This should never happen in practice because
-          // ManagedChannelImpl.ConfigSelectingClientCall always provides CallOptions with
-          // a callExecutor.
-          // TODO(https://github.com/grpc/grpc-java/issues/7868)
-          callExecutor = MoreExecutors.directExecutor();
+        boolean checkFault = false;
+        if (faultConfig.maxActiveFaults() == null
+            || activeFaultCounter.get() < faultConfig.maxActiveFaults()) {
+          checkFault = faultConfig.faultDelay() != null || faultConfig.faultAbort() != null;
         }
-        if (finalDelayNanos != null) {
-          Supplier<? extends ClientCall<ReqT, RespT>> callSupplier;
-          if (finalAbortStatus != null) {
-            callSupplier = Suppliers.ofInstance(
-                new FailingClientCall<ReqT, RespT>(finalAbortStatus, callExecutor));
-          } else {
-            callSupplier = new Supplier<ClientCall<ReqT, RespT>>() {
-              @Override
-              public ClientCall<ReqT, RespT> get() {
-                return next.newCall(method, callOptions);
-              }
-            };
-          }
-          final DelayInjectedCall<ReqT, RespT> delayInjectedCall = new DelayInjectedCall<>(
-              finalDelayNanos, callExecutor, scheduler, callOptions.getDeadline(), callSupplier);
+        if (!checkFault) {
+          return next.newCall(method, callOptions);
+        }
+        final class DeadlineInsightForwardingCall extends ForwardingClientCall<ReqT, RespT> {
+          private ClientCall<ReqT, RespT> delegate;
 
-          final class DeadlineInsightForwardingCall extends ForwardingClientCall<ReqT, RespT> {
-            @Override
-            protected ClientCall<ReqT, RespT> delegate() {
-              return delayInjectedCall;
+          @Override
+          protected ClientCall<ReqT, RespT> delegate() {
+            return delegate;
+          }
+
+          @Override
+          public void start(Listener<RespT> listener, Metadata headers) {
+            Executor callExecutor = callOptions.getExecutor();
+            if (callExecutor == null) { // This should never happen in practice because
+              // ManagedChannelImpl.ConfigSelectingClientCall always provides CallOptions with
+              // a callExecutor.
+              // TODO(https://github.com/grpc/grpc-java/issues/7868)
+              callExecutor = MoreExecutors.directExecutor();
             }
 
-            @Override
-            public void start(Listener<RespT> listener, Metadata headers) {
-              Listener<RespT> finalListener =
-                  new SimpleForwardingClientCallListener<RespT>(listener) {
-                    @Override
-                    public void onClose(Status status, Metadata trailers) {
-                      if (status.getCode().equals(Code.DEADLINE_EXCEEDED)) {
-                        // TODO(zdapeng:) check effective deadline locally, and
-                        //   do the following only if the local deadline is exceeded.
-                        //   (If the server sends DEADLINE_EXCEEDED for its own deadline, then the
-                        //   injected delay does not contribute to the error, because the request is
-                        //   only sent out after the delay. There could be a race between local and
-                        //   remote, but it is rather rare.)
-                        String description = String.format(
-                            Locale.US,
-                            "Deadline exceeded after up to %d ns of fault-injected delay",
-                            finalDelayNanos);
-                        if (status.getDescription() != null) {
-                          description = description + ": " + status.getDescription();
-                        }
-                        status = Status.DEADLINE_EXCEEDED
-                            .withDescription(description).withCause(status.getCause());
-                        // Replace trailers to prevent mixing sources of status and trailers.
-                        trailers = new Metadata();
+            Long delayNanos;
+            Status abortStatus = null;
+            if (faultConfig.faultDelay() != null) {
+              delayNanos = determineFaultDelayNanos(faultConfig.faultDelay(), headers);
+            } else {
+              delayNanos = null;
+            }
+            if (faultConfig.faultAbort() != null) {
+              abortStatus = getAbortStatusWithDescription(
+                  determineFaultAbortStatus(faultConfig.faultAbort(), headers));
+            }
+
+            Supplier<? extends ClientCall<ReqT, RespT>> callSupplier;
+            if (abortStatus != null) {
+              callSupplier = Suppliers.ofInstance(
+                  new FailingClientCall<ReqT, RespT>(abortStatus, callExecutor));
+            } else {
+              callSupplier = new Supplier<ClientCall<ReqT, RespT>>() {
+                @Override
+                public ClientCall<ReqT, RespT> get() {
+                  return next.newCall(method, callOptions);
+                }
+              };
+            }
+            if (delayNanos == null) {
+              delegate = callSupplier.get();
+              delegate().start(listener, headers);
+              return;
+            }
+
+            delegate = new DelayInjectedCall<>(
+                delayNanos, callExecutor, scheduler, callOptions.getDeadline(), callSupplier);
+
+            Listener<RespT> finalListener =
+                new SimpleForwardingClientCallListener<RespT>(listener) {
+                  @Override
+                  public void onClose(Status status, Metadata trailers) {
+                    if (status.getCode().equals(Code.DEADLINE_EXCEEDED)) {
+                      // TODO(zdapeng:) check effective deadline locally, and
+                      //   do the following only if the local deadline is exceeded.
+                      //   (If the server sends DEADLINE_EXCEEDED for its own deadline, then the
+                      //   injected delay does not contribute to the error, because the request is
+                      //   only sent out after the delay. There could be a race between local and
+                      //   remote, but it is rather rare.)
+                      String description = String.format(
+                          Locale.US,
+                          "Deadline exceeded after up to %d ns of fault-injected delay",
+                          delayNanos);
+                      if (status.getDescription() != null) {
+                        description = description + ": " + status.getDescription();
                       }
-                      delegate().onClose(status, trailers);
+                      status = Status.DEADLINE_EXCEEDED
+                          .withDescription(description).withCause(status.getCause());
+                      // Replace trailers to prevent mixing sources of status and trailers.
+                      trailers = new Metadata();
                     }
-                  };
-              delegate().start(finalListener, headers);
-            }
+                    delegate().onClose(status, trailers);
+                  }
+                };
+            delegate().start(finalListener, headers);
           }
-
-          return new DeadlineInsightForwardingCall();
-        } else {
-          return new FailingClientCall<>(finalAbortStatus, callExecutor);
         }
+
+        return new DeadlineInsightForwardingCall();
       }
     }
 

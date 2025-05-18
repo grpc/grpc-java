@@ -1,14 +1,12 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
 
 repositories {
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenCentral()
     mavenLocal()
 }
@@ -23,8 +21,8 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.65.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.25.1'
+def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.5'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -54,16 +52,6 @@ protobuf {
     }
 }
 
-// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
-sourceSets {
-    main {
-        java {
-            srcDirs 'build/generated/source/proto/main/grpc'
-            srcDirs 'build/generated/source/proto/main/java'
-        }
-    }
-}
-
 startScripts.enabled = false
 
 // Creates start scripts for a class name and adds it to the distribution. The
@@ -82,7 +70,9 @@ def createStartScripts(String mainClassName) {
     application {
         applicationDistribution.into('bin') {
             from(newTask)
-            fileMode = 0755
+            filePermissions {
+                unix(0755)
+            }
         }
     }
 }
@@ -107,6 +97,7 @@ createStartScripts('io.grpc.examples.keepalive.KeepAliveClient')
 createStartScripts('io.grpc.examples.keepalive.KeepAliveServer')
 createStartScripts('io.grpc.examples.loadbalance.LoadBalanceClient')
 createStartScripts('io.grpc.examples.loadbalance.LoadBalanceServer')
+createStartScripts('io.grpc.examples.manualflowcontrol.BidiBlockingClient')
 createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlClient')
 createStartScripts('io.grpc.examples.manualflowcontrol.ManualFlowControlServer')
 createStartScripts('io.grpc.examples.multiplex.MultiplexingServer')

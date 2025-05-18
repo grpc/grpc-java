@@ -4,8 +4,8 @@ plugins {
     id "java"
     id "maven-publish"
 
-    id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
+    id "com.gradleup.shadow"
     id "ru.vyarus.animalsniffer"
 }
 
@@ -20,6 +20,7 @@ sourceSets {
             srcDir 'third_party/envoy/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/xds/src/main/proto'
+            srcDir 'third_party/cel-spec/src/main/proto'
             srcDir 'third_party/googleapis/src/main/proto'
             srcDir 'third_party/istio/src/main/proto'
         }
@@ -43,21 +44,23 @@ configurations {
 dependencies {
     thirdpartyCompileOnly libraries.javax.annotation
     thirdpartyImplementation project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            libraries.opencensus.proto
+            project(':grpc-stub')
     compileOnly sourceSets.thirdparty.output
+    testCompileOnly sourceSets.thirdparty.output
     implementation project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-util'),
             project(':grpc-services'),
             project(':grpc-auth'),
             project(path: ':grpc-alts', configuration: 'shadow'),
+            libraries.guava,
             libraries.gson,
             libraries.re2j,
             libraries.auto.value.annotations,
             libraries.protobuf.java.util
     def nettyDependency = implementation project(':grpc-netty')
 
+    testImplementation project(':grpc-api')
     testImplementation project(':grpc-rls')
     testImplementation project(':grpc-inprocess')
     testImplementation testFixtures(project(':grpc-core')),
@@ -80,7 +83,11 @@ dependencies {
     shadow configurations.implementation.getDependencies().minus([nettyDependency])
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
-    signature libraries.signature.java
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
     testRuntimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
     testRuntimeOnly (libraries.netty.tcnative) {
@@ -126,8 +133,6 @@ tasks.named("checkstyleThirdparty").configure {
 
 tasks.named("compileJava").configure {
     it.options.compilerArgs += [
-        // TODO: remove
-        "-Xlint:-deprecation",
         // only has AutoValue annotation processor
         "-Xlint:-processing",
     ]
@@ -186,6 +191,7 @@ tasks.named("shadowJar").configure {
     relocate 'com.google.api.expr', "${prefixName}.shaded.com.google.api.expr"
     relocate 'com.google.security', "${prefixName}.shaded.com.google.security"
     // TODO: missing java_package option in .proto
+    relocate 'dev.cel.expr', "${prefixName}.shaded.dev.cel.expr"
     relocate 'envoy.annotations', "${prefixName}.shaded.envoy.annotations"
     relocate 'io.envoyproxy', "${prefixName}.shaded.io.envoyproxy"
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
@@ -213,6 +219,7 @@ tasks.named("jacocoTestReport").configure {
                 '**/com/github/xds/**',
                 '**/com/google/api/expr/**',
                 '**/com/google/security/**',
+                '**/cel/expr/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
                 '**/udpa/annotations/**',

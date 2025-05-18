@@ -19,6 +19,7 @@ package io.grpc.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
@@ -39,7 +40,6 @@ import java.util.LinkedHashSet;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A client transport that queues requests before a real transport is available. When {@link
@@ -129,22 +129,35 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (state.shutdownStatus != null) {
           return new FailingClientStream(state.shutdownStatus, tracers);
         }
+        PickResult pickResult = null;
         if (state.lastPicker != null) {
-          PickResult pickResult = state.lastPicker.pickSubchannel(args);
+          pickResult = state.lastPicker.pickSubchannel(args);
+          callOptions = args.getCallOptions();
+          // User code provided authority takes precedence over the LB provided one.
+          if (callOptions.getAuthority() == null
+              && pickResult.getAuthorityOverride() != null) {
+            callOptions = callOptions.withAuthority(pickResult.getAuthorityOverride());
+          }
           ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
               callOptions.isWaitForReady());
           if (transport != null) {
-            return transport.newStream(
-                args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
+            ClientStream stream = transport.newStream(
+                args.getMethodDescriptor(), args.getHeaders(), callOptions,
                 tracers);
+            // User code provided authority takes precedence over the LB provided one; this will be
+            // overwritten by ClientCallImpl if the application sets an authority override
+            if (pickResult.getAuthorityOverride() != null) {
+              stream.setAuthority(pickResult.getAuthorityOverride());
+            }
+            return stream;
           }
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
-        // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
+        // race with reprocess()), we will buffer the RPC.  Otherwise, will try with the new picker.
         synchronized (lock) {
           PickerState newerState = pickerState;
           if (state == newerState) {
-            return createPendingStream(args, tracers);
+            return createPendingStream(args, tracers, pickResult);
           }
           state = newerState;
         }
@@ -159,9 +172,12 @@ final class DelayedClientTransport implements ManagedClientTransport {
    * schedule tasks on syncContext.
    */
   @GuardedBy("lock")
-  private PendingStream createPendingStream(
-      PickSubchannelArgs args, ClientStreamTracer[] tracers) {
+  private PendingStream createPendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
+      PickResult pickResult) {
     PendingStream pendingStream = new PendingStream(args, tracers);
+    if (args.getCallOptions().isWaitForReady() && pickResult != null && pickResult.hasResult()) {
+      pendingStream.lastPickStatus = pickResult.getStatus();
+    }
     pendingStreams.add(pendingStream);
     if (getPendingStreamsCount() == 1) {
       syncContext.executeLater(reportTransportInUse);
@@ -281,6 +297,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     for (final PendingStream stream : toProcess) {
       PickResult pickResult = picker.pickSubchannel(stream.args);
       CallOptions callOptions = stream.args.getCallOptions();
+      if (callOptions.isWaitForReady() && pickResult.hasResult()) {
+        stream.lastPickStatus = pickResult.getStatus();
+      }
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
           callOptions.isWaitForReady());
       if (transport != null) {
@@ -291,7 +310,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (callOptions.getExecutor() != null) {
           executor = callOptions.getExecutor();
         }
-        Runnable runnable = stream.createRealStream(transport);
+        Runnable runnable = stream.createRealStream(transport, pickResult.getAuthorityOverride());
         if (runnable != null) {
           executor.execute(runnable);
         }
@@ -306,7 +325,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
       if (!hasPendingStreams()) {
         return;
       }
-      pendingStreams.removeAll(toRemove);
+      // Avoid pendingStreams.removeAll() as it can degrade to calling toRemove.contains() for each
+      // element in pendingStreams.
+      for (PendingStream stream : toRemove) {
+        pendingStreams.remove(stream);
+      }
       // Because delayed transport is long-lived, we take this opportunity to down-size the
       // hashmap.
       if (pendingStreams.isEmpty()) {
@@ -337,6 +360,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
     private final ClientStreamTracer[] tracers;
+    private volatile Status lastPickStatus;
 
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers) {
       this.args = args;
@@ -344,7 +368,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     /** Runnable may be null. */
-    private Runnable createRealStream(ClientTransport transport) {
+    private Runnable createRealStream(ClientTransport transport, String authorityOverride) {
       ClientStream realStream;
       Context origContext = context.attach();
       try {
@@ -353,6 +377,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
             tracers);
       } finally {
         context.detach(origContext);
+      }
+      if (authorityOverride != null) {
+        // User code provided authority takes precedence over the LB provided one; this will be
+        // overwritten by an enqueud call from ClientCallImpl if the application sets an authority
+        // override. We must call the real stream directly because stream.start() has likely already
+        // been called on the delayed stream.
+        realStream.setAuthority(authorityOverride);
       }
       return setStream(realStream);
     }
@@ -386,6 +417,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
     public void appendTimeoutInsight(InsightBuilder insight) {
       if (args.getCallOptions().isWaitForReady()) {
         insight.append("wait_for_ready");
+        Status status = lastPickStatus;
+        if (status != null && !status.isOk()) {
+          insight.appendKeyValue("Last Pick Failure", status);
+        }
       }
       super.appendTimeoutInsight(insight);
     }

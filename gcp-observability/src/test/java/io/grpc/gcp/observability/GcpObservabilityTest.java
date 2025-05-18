@@ -45,6 +45,7 @@ import io.grpc.gcp.observability.logging.Sink;
 import io.opencensus.trace.samplers.Samplers;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -196,9 +197,9 @@ public class GcpObservabilityTest {
           mock(InternalLoggingServerInterceptor.Factory.class);
       when(serverInterceptorFactory.create()).thenReturn(serverInterceptor);
 
-      try (GcpObservability unused =
-          GcpObservability.grpcInit(
-              sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+      try {
+        GcpObservability gcpObservability = GcpObservability.grpcInit(
+            sink, config, channelInterceptorFactory, serverInterceptorFactory);
         List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
         assertThat(configurators).hasSize(1);
         ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
@@ -208,9 +209,11 @@ public class GcpObservabilityTest {
         assertThat(list.get(2)).isInstanceOf(ConditionalClientInterceptor.class);
         assertThat(configurator.serverInterceptors).hasSize(1);
         assertThat(configurator.tracerFactories).hasSize(2);
+        gcpObservability.closeWithSleepTime(3000, TimeUnit.MILLISECONDS);
       } catch (Exception e) {
         fail("Encountered exception: " + e);
       }
+      verify(sink).close();
     }
   }
 

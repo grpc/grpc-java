@@ -16,7 +16,6 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
@@ -30,12 +29,14 @@ import static io.grpc.netty.Utils.STATUS_OK;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
 import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -47,6 +48,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.collect.ImmutableList;
@@ -57,12 +59,12 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.StatusException;
 import io.grpc.internal.AbstractStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransport.PingCallback;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedClientTransport;
@@ -89,10 +91,12 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
 import java.io.InputStream;
+import java.security.cert.CertificateException;
 import java.text.MessageFormat;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Handler;
@@ -122,6 +126,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private Http2Headers grpcHeaders;
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
   private int maxHeaderListSize = Integer.MAX_VALUE;
+  private int softLimitHeaderListSize = Integer.MAX_VALUE;
   private int streamId = STREAM_ID;
   private ClientTransportLifecycleManager lifecycleManager;
   private KeepAliveManager mockKeepAliveManager = null;
@@ -187,7 +192,11 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
           })
         .when(streamListener)
         .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
-
+    doAnswer((attributes) -> Attributes.newBuilder().set(
+            GrpcAttributes.ATTR_AUTHORITY_VERIFIER,
+            (authority) -> Status.OK).build())
+          .when(listener)
+          .filterTransport(ArgumentMatchers.any(Attributes.class));
     lifecycleManager = new ClientTransportLifecycleManager(listener);
     // This mocks the keepalive manager only for there's in which we verify it. For other tests
     // it'll be null which will be testing if we behave correctly when it's not present.
@@ -215,6 +224,37 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
+    channel().releaseOutbound();
+  }
+
+  @Test
+  @SuppressWarnings("InlineMeInliner")
+  public void sendLargerThanSoftLimitHeaderMayFail() throws Exception {
+    maxHeaderListSize = 8000;
+    softLimitHeaderListSize = 2000;
+    manualSetUp();
+
+    createStream();
+    // total head size of 7999, soft limit = 2000 and max = 8000.
+    // This header has 5999/6000 chance to be rejected.
+    Http2Headers headers = new DefaultHttp2Headers()
+        .scheme(HTTPS)
+        .authority(as("www.fake.com"))
+        .path(as("/fakemethod"))
+        .method(HTTP_METHOD)
+        .add(as("auth"), as("sometoken"))
+        .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .add(TE_HEADER, TE_TRAILERS)
+        .add("large-field", Strings.repeat("a", 7620)); // String.repeat() requires Java 11
+
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    ArgumentCaptor<Status> statusArgumentCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(statusArgumentCaptor.capture(), eq(PROCESSED),
+        any(Metadata.class));
+    assertThat(statusArgumentCaptor.getValue().getCode()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
+    assertThat(statusArgumentCaptor.getValue().getDescription()).contains(
+        "exceeded Metadata size soft limit");
   }
 
   @Test
@@ -310,11 +350,12 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     createStream();
 
     // Send a frame and verify that it was written.
+    ByteBuf content = content();
     ChannelFuture future
-        = enqueue(new SendGrpcFrameCommand(streamTransportState, content(), true));
+        = enqueue(new SendGrpcFrameCommand(streamTransportState, content, true));
 
     assertTrue(future.isSuccess());
-    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), eq(content()), eq(0), eq(true),
+    verifyWrite().writeData(eq(ctx()), eq(STREAM_ID), same(content), eq(0), eq(true),
         any(ChannelPromise.class));
     verify(mockKeepAliveManager, times(1)).onTransportActive(); // onStreamActive
     verifyNoMoreInteractions(mockKeepAliveManager);
@@ -770,9 +811,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     handler().channelInactive(ctx());
     // ping failed on channel going inactive
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertEquals(Status.Code.UNAVAILABLE, callback.failureCause.getCode());
     // A failed ping is still counted
     assertEquals(1, transportTracer.getStats().keepAlivesSent);
   }
@@ -885,6 +924,159 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertFalse(channel().isOpen());
   }
 
+  @Test
+  public void missingAuthorityHeader_streamCreationShouldFail() throws Exception {
+    Http2Headers grpcHeadersWithoutAuthority = new DefaultHttp2Headers()
+            .scheme(HTTPS)
+            .path(as("/fakemethod"))
+            .method(HTTP_METHOD)
+            .add(as("auth"), as("sometoken"))
+            .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+            .add(TE_HEADER, TE_TRAILERS);
+    ChannelFuture channelFuture = enqueue(newCreateStreamCommand(
+            grpcHeadersWithoutAuthority, streamTransportState));
+    try {
+      channelFuture.get();
+      fail("Expected stream creation failure");
+    } catch (ExecutionException e) {
+      assertThat(e.getCause().getMessage()).isEqualTo("UNAVAILABLE: Missing authority header");
+    }
+  }
+
+  @Test
+  public void missingAuthorityVerifierInAttributes_streamCreationShouldFail() throws Exception {
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        StreamListener.MessageProducer producer =
+                (StreamListener.MessageProducer) invocation.getArguments()[0];
+        InputStream message;
+        while ((message = producer.next()) != null) {
+          streamListenerMessageQueue.add(message);
+        }
+        return null;
+      }
+    })
+        .when(streamListener)
+        .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+    doAnswer((attributes) -> Attributes.EMPTY)
+        .when(listener)
+        .filterTransport(ArgumentMatchers.any(Attributes.class));
+    lifecycleManager = new ClientTransportLifecycleManager(listener);
+    // This mocks the keepalive manager only for there's in which we verify it. For other tests
+    // it'll be null which will be testing if we behave correctly when it's not present.
+    if (setKeepaliveManagerFor.contains(testNameRule.getMethodName())) {
+      mockKeepAliveManager = mock(KeepAliveManager.class);
+    }
+
+    initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
+    streamTransportState = new TransportStateImpl(
+            handler(),
+            channel().eventLoop(),
+            DEFAULT_MAX_MESSAGE_SIZE,
+            transportTracer);
+    streamTransportState.setListener(streamListener);
+
+    grpcHeaders = new DefaultHttp2Headers()
+            .scheme(HTTPS)
+            .authority(as("www.fake.com"))
+            .path(as("/fakemethod"))
+            .method(HTTP_METHOD)
+            .add(as("auth"), as("sometoken"))
+            .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+            .add(TE_HEADER, TE_TRAILERS);
+
+    // Simulate receipt of initial remote settings.
+    ByteBuf serializedSettings = serializeSettings(new Http2Settings());
+    channelRead(serializedSettings);
+    channel().releaseOutbound();
+
+    ChannelFuture channelFuture = createStream();
+    try {
+      channelFuture.get();
+      fail("Expected stream creation failure");
+    } catch (ExecutionException e) {
+      assertThat(e.getCause().getMessage()).isEqualTo(
+              "UNAVAILABLE: Authority verifier not found to verify authority");
+    }
+  }
+
+  @Test
+  public void authorityVerificationSuccess_streamCreationSucceeds() throws Exception {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      ChannelFuture channelFuture = createStream();
+      channelFuture.get();
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
+  public void authorityVerificationFailure_streamCreationFails() throws Exception {
+    NettyClientHandler.enablePerRpcAuthorityCheck = true;
+    try {
+      doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) throws Throwable {
+          StreamListener.MessageProducer producer =
+                  (StreamListener.MessageProducer) invocation.getArguments()[0];
+          InputStream message;
+          while ((message = producer.next()) != null) {
+            streamListenerMessageQueue.add(message);
+          }
+          return null;
+        }
+      })
+          .when(streamListener)
+          .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
+      doAnswer((attributes) -> Attributes.newBuilder().set(
+          GrpcAttributes.ATTR_AUTHORITY_VERIFIER,
+          (authority) -> Status.UNAVAILABLE.withCause(
+                  new CertificateException("Peer verification failed"))).build())
+          .when(listener)
+          .filterTransport(ArgumentMatchers.any(Attributes.class));
+      lifecycleManager = new ClientTransportLifecycleManager(listener);
+      // This mocks the keepalive manager only for there's in which we verify it. For other tests
+      // it'll be null which will be testing if we behave correctly when it's not present.
+      if (setKeepaliveManagerFor.contains(testNameRule.getMethodName())) {
+        mockKeepAliveManager = mock(KeepAliveManager.class);
+      }
+
+      initChannel(new GrpcHttp2ClientHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
+      streamTransportState = new TransportStateImpl(
+              handler(),
+              channel().eventLoop(),
+              DEFAULT_MAX_MESSAGE_SIZE,
+              transportTracer);
+      streamTransportState.setListener(streamListener);
+
+      grpcHeaders = new DefaultHttp2Headers()
+              .scheme(HTTPS)
+              .authority(as("www.fake.com"))
+              .path(as("/fakemethod"))
+              .method(HTTP_METHOD)
+              .add(as("auth"), as("sometoken"))
+              .add(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+              .add(TE_HEADER, TE_TRAILERS);
+
+      // Simulate receipt of initial remote settings.
+      ByteBuf serializedSettings = serializeSettings(new Http2Settings());
+      channelRead(serializedSettings);
+      channel().releaseOutbound();
+
+      ChannelFuture channelFuture = createStream();
+      try {
+        channelFuture.get();
+        fail("Expected stream creation failure");
+      } catch (ExecutionException e) {
+        assertThat(e.getMessage()).isEqualTo("io.grpc.InternalStatusRuntimeException: UNAVAILABLE");
+      }
+    } finally {
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
   @Override
   protected void makeStream() throws Exception {
     createStream();
@@ -946,6 +1138,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         false,
         flowControlWindow,
         maxHeaderListSize,
+        softLimitHeaderListSize,
         stopwatchSupplier,
         tooManyPingsRunnable,
         transportTracer,
@@ -973,7 +1166,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private static class PingCallbackImpl implements ClientTransport.PingCallback {
     int invocationCount;
     long roundTripTime;
-    Throwable failureCause;
+    Status failureCause;
 
     @Override
     public void onSuccess(long roundTripTimeNanos) {
@@ -982,7 +1175,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     }
 
     @Override
-    public void onFailure(Throwable cause) {
+    public void onFailure(Status cause) {
       invocationCount++;
       this.failureCause = cause;
     }

@@ -17,6 +17,7 @@
 package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
@@ -25,7 +26,9 @@ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TARGET_KEY;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -42,7 +45,10 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
 import io.opentelemetry.api.common.AttributesBuilder;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
@@ -50,7 +56,6 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Provides factories for {@link StreamTracer} that records metrics to OpenTelemetry.
@@ -66,7 +71,6 @@ import javax.annotation.concurrent.GuardedBy;
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
-  private static final String LOCALITY_LABEL_NAME = "grpc.lb.locality";
   public static final ImmutableSet<String> DEFAULT_PER_CALL_METRICS_SET =
       ImmutableSet.of(
           "grpc.client.attempt.started",
@@ -86,12 +90,17 @@ final class OpenTelemetryMetricsModule {
   private final OpenTelemetryMetricsResource resource;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final boolean localityEnabled;
+  private final boolean backendServiceEnabled;
+  private final ImmutableList<OpenTelemetryPlugin> plugins;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
-      OpenTelemetryMetricsResource resource, Collection<String> optionalLabels) {
+      OpenTelemetryMetricsResource resource, Collection<String> optionalLabels,
+      List<OpenTelemetryPlugin> plugins) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    this.localityEnabled = optionalLabels.contains(LOCALITY_LABEL_NAME);
+    this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
+    this.backendServiceEnabled = optionalLabels.contains(BACKEND_SERVICE_KEY.getKey());
+    this.plugins = ImmutableList.copyOf(plugins);
   }
 
   /**
@@ -105,7 +114,14 @@ final class OpenTelemetryMetricsModule {
    * Returns the client interceptor that facilitates OpenTelemetry metrics reporting.
    */
   ClientInterceptor getClientInterceptor(String target) {
-    return new MetricsClientInterceptor(target);
+    ImmutableList.Builder<OpenTelemetryPlugin> pluginBuilder =
+        ImmutableList.builderWithExpectedSize(plugins.size());
+    for (OpenTelemetryPlugin plugin : plugins) {
+      if (plugin.enablePluginForChannel(target)) {
+        pluginBuilder.add(plugin);
+      }
+    }
+    return new MetricsClientInterceptor(target, pluginBuilder.build());
   }
 
   static String recordMethodName(String fullMethodName, boolean isGeneratedMethod) {
@@ -144,20 +160,31 @@ final class OpenTelemetryMetricsModule {
     final StreamInfo info;
     final String target;
     final String fullMethodName;
+    final List<OpenTelemetryPlugin.ClientStreamPlugin> streamPlugins;
     volatile long outboundWireSize;
     volatile long inboundWireSize;
     volatile String locality;
+    volatile String backendService;
     long attemptNanos;
     Code statusCode;
 
     ClientTracer(CallAttemptsTracerFactory attemptsState, OpenTelemetryMetricsModule module,
-        StreamInfo info, String target, String fullMethodName) {
+        StreamInfo info, String target, String fullMethodName,
+        List<OpenTelemetryPlugin.ClientStreamPlugin> streamPlugins) {
       this.attemptsState = attemptsState;
       this.module = module;
       this.info = info;
       this.target = target;
       this.fullMethodName = fullMethodName;
+      this.streamPlugins = streamPlugins;
       this.stopwatch = module.stopwatchSupplier.get().start();
+    }
+
+    @Override
+    public void inboundHeaders(Metadata headers) {
+      for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
+        plugin.inboundHeaders(headers);
+      }
     }
 
     @Override
@@ -182,8 +209,18 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void addOptionalLabel(String key, String value) {
-      if (LOCALITY_LABEL_NAME.equals(key)) {
+      if ("grpc.lb.locality".equals(key)) {
         locality = value;
+      }
+      if ("grpc.lb.backend_service".equals(key)) {
+        backendService = value;
+      }
+    }
+
+    @Override
+    public void inboundTrailers(Metadata trailers) {
+      for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
+        plugin.inboundTrailers(trailers);
       }
     }
 
@@ -217,6 +254,16 @@ final class OpenTelemetryMetricsModule {
         }
         builder.put(LOCALITY_KEY, savedLocality);
       }
+      if (module.backendServiceEnabled) {
+        String savedBackendService = backendService;
+        if (savedBackendService == null) {
+          savedBackendService = "";
+        }
+        builder.put(BACKEND_SERVICE_KEY, savedBackendService);
+      }
+      for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
+        plugin.addLabels(builder);
+      }
       io.opentelemetry.api.common.Attributes attribute = builder.build();
 
       if (module.resource.clientAttemptDurationCounter() != null ) {
@@ -243,6 +290,7 @@ final class OpenTelemetryMetricsModule {
     @GuardedBy("lock")
     private boolean callEnded;
     private final String fullMethodName;
+    private final List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins;
     private Status status;
     private long callLatencyNanos;
     private final Object lock = new Object();
@@ -253,10 +301,14 @@ final class OpenTelemetryMetricsModule {
     private boolean finishedCallToBeRecorded;
 
     CallAttemptsTracerFactory(
-        OpenTelemetryMetricsModule module, String target, String fullMethodName) {
+        OpenTelemetryMetricsModule module,
+        String target,
+        String fullMethodName,
+        List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins) {
       this.module = checkNotNull(module, "module");
       this.target = checkNotNull(target, "target");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
+      this.callPlugins = checkNotNull(callPlugins, "callPlugins");
       this.attemptStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
@@ -295,7 +347,19 @@ final class OpenTelemetryMetricsModule {
       if (!info.isTransparentRetry()) {
         attemptsPerCall.incrementAndGet();
       }
-      return new ClientTracer(this, module, info, target, fullMethodName);
+      return newClientTracer(info);
+    }
+
+    private ClientTracer newClientTracer(StreamInfo info) {
+      List<OpenTelemetryPlugin.ClientStreamPlugin> streamPlugins = Collections.emptyList();
+      if (!callPlugins.isEmpty()) {
+        streamPlugins = new ArrayList<>(callPlugins.size());
+        for (OpenTelemetryPlugin.ClientCallPlugin plugin : callPlugins) {
+          streamPlugins.add(plugin.newClientStreamPlugin());
+        }
+        streamPlugins = Collections.unmodifiableList(streamPlugins);
+      }
+      return new ClientTracer(this, module, info, target, fullMethodName, streamPlugins);
     }
 
     // Called whenever each attempt is ended.
@@ -337,8 +401,7 @@ final class OpenTelemetryMetricsModule {
 
     void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
-        ClientTracer tracer =
-            new ClientTracer(this, module, null, target, fullMethodName);
+        ClientTracer tracer = newClientTracer(null);
         tracer.attemptNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
@@ -390,15 +453,18 @@ final class OpenTelemetryMetricsModule {
 
     private final OpenTelemetryMetricsModule module;
     private final String fullMethodName;
+    private final List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins;
     private volatile boolean isGeneratedMethod;
     private volatile int streamClosed;
     private final Stopwatch stopwatch;
     private volatile long outboundWireSize;
     private volatile long inboundWireSize;
 
-    ServerTracer(OpenTelemetryMetricsModule module, String fullMethodName) {
+    ServerTracer(OpenTelemetryMetricsModule module, String fullMethodName,
+        List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins) {
       this.module = checkNotNull(module, "module");
       this.fullMethodName = fullMethodName;
+      this.streamPlugins = checkNotNull(streamPlugins, "streamPlugins");
       this.stopwatch = module.stopwatchSupplier.get().start();
     }
 
@@ -458,10 +524,13 @@ final class OpenTelemetryMetricsModule {
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      io.opentelemetry.api.common.Attributes attributes =
-          io.opentelemetry.api.common.Attributes.of(
-          METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod),
-          STATUS_KEY, status.getCode().toString());
+      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+          .put(METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod))
+          .put(STATUS_KEY, status.getCode().toString());
+      for (OpenTelemetryPlugin.ServerStreamPlugin plugin : streamPlugins) {
+        plugin.addLabels(builder);
+      }
+      io.opentelemetry.api.common.Attributes attributes = builder.build();
 
       if (module.resource.serverCallDurationCounter() != null) {
         module.resource.serverCallDurationCounter()
@@ -482,32 +551,63 @@ final class OpenTelemetryMetricsModule {
   final class ServerTracerFactory extends ServerStreamTracer.Factory {
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-      return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName);
+      final List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins;
+      if (plugins.isEmpty()) {
+        streamPlugins = Collections.emptyList();
+      } else {
+        List<OpenTelemetryPlugin.ServerStreamPlugin> streamPluginsMutable =
+            new ArrayList<>(plugins.size());
+        for (OpenTelemetryPlugin plugin : plugins) {
+          streamPluginsMutable.add(plugin.newServerStreamPlugin(headers));
+        }
+        streamPlugins = Collections.unmodifiableList(streamPluginsMutable);
+      }
+      return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName, streamPlugins);
     }
   }
 
   @VisibleForTesting
   final class MetricsClientInterceptor implements ClientInterceptor {
     private final String target;
+    private final ImmutableList<OpenTelemetryPlugin> plugins;
 
-    MetricsClientInterceptor(String target) {
+    MetricsClientInterceptor(String target, ImmutableList<OpenTelemetryPlugin> plugins) {
       this.target = checkNotNull(target, "target");
+      this.plugins = checkNotNull(plugins, "plugins");
     }
 
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      final List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins;
+      if (plugins.isEmpty()) {
+        callPlugins = Collections.emptyList();
+      } else {
+        List<OpenTelemetryPlugin.ClientCallPlugin> callPluginsMutable =
+            new ArrayList<>(plugins.size());
+        for (OpenTelemetryPlugin plugin : plugins) {
+          callPluginsMutable.add(plugin.newClientCallPlugin());
+        }
+        callPlugins = Collections.unmodifiableList(callPluginsMutable);
+        for (OpenTelemetryPlugin.ClientCallPlugin plugin : callPlugins) {
+          callOptions = plugin.filterCallOptions(callOptions);
+        }
+      }
       // Only record method name as an attribute if isSampledToLocalTracing is set to true,
       // which is true for all generated methods. Otherwise, programatically
       // created methods result in high cardinality metrics.
       final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
           OpenTelemetryMetricsModule.this, target,
-          recordMethodName(method.getFullMethodName(), method.isSampledToLocalTracing()));
+          recordMethodName(method.getFullMethodName(), method.isSampledToLocalTracing()),
+          callPlugins);
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
+          for (OpenTelemetryPlugin.ClientCallPlugin plugin : callPlugins) {
+            plugin.addMetadata(headers);
+          }
           delegate().start(
               new SimpleForwardingClientCallListener<RespT>(responseListener) {
                 @Override
