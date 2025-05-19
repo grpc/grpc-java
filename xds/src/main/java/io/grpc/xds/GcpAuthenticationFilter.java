@@ -313,7 +313,7 @@ final class GcpAuthenticationFilter implements Filter {
     public AudienceWrapper parse(Any any) throws ResourceInvalidException {
       Audience audience;
       try {
-        if (!isEnabledGcpAuthnFilter) {
+        if (!isEnabledGcpAuthnFilter()) {
           throw new InvalidProtocolBufferException("Environment variable for GCP Authentication "
               + "Filter is Not Set");
         }
