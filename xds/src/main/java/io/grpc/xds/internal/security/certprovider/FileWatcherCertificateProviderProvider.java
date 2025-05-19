@@ -38,7 +38,7 @@ public final class FileWatcherCertificateProviderProvider implements Certificate
 
   @VisibleForTesting
   public static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
-      false);
+      false) || GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_MTLS_SPIFFE", false);
   private static final String CERT_FILE_KEY = "certificate_file";
   private static final String KEY_FILE_KEY = "private_key_file";
   private static final String ROOT_FILE_KEY = "ca_certificate_file";
