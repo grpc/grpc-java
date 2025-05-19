@@ -21,6 +21,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -45,6 +46,9 @@ final class HandshakerServiceChannel {
     return new ChannelResource(handshakerAddress);
   }
 
+  private static final boolean EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS", false);
+
   private static class ChannelResource implements Resource<Channel> {
     private final String target;
 
@@ -57,12 +61,16 @@ final class HandshakerServiceChannel {
       /* Use its own event loop thread pool to avoid blocking. */
       EventLoopGroup eventGroup =
           new NioEventLoopGroup(1, new DefaultThreadFactory("handshaker pool", true));
-      ManagedChannel channel = NettyChannelBuilder.forTarget(target)
+      NettyChannelBuilder channelBuilder =
+          NettyChannelBuilder.forTarget(target)
           .channelType(NioSocketChannel.class, InetSocketAddress.class)
           .directExecutor()
           .eventLoopGroup(eventGroup)
-          .usePlaintext()
-          .build();
+          .usePlaintext();
+      if (EXPERIMENTAL_ALTS_HANDSHAKER_KEEPALIVE_PARAMS) {
+        channelBuilder.keepAliveTime(10, TimeUnit.MINUTES).keepAliveTimeout(10, TimeUnit.SECONDS);
+      }
+      ManagedChannel channel = channelBuilder.build();
       return new EventLoopHoldingChannel(channel, eventGroup);
     }
 
