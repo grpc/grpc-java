@@ -2417,6 +2417,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesAudienceMetadata() throws Exception {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_GCP_AUTHENTICATION_FILTER", "true");
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()

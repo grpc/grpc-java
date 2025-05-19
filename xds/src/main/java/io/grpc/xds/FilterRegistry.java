@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.internal.GrpcUtil;
 import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -32,13 +33,18 @@ final class FilterRegistry {
 
   private FilterRegistry() {}
 
+  public static boolean isEnabledGcpAuthnFilter =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_GCP_AUTHENTICATION_FILTER", false);
+
   static synchronized FilterRegistry getDefaultRegistry() {
     if (instance == null) {
       instance = newRegistry().register(
               new FaultFilter.Provider(),
               new RouterFilter.Provider(),
-              new RbacFilter.Provider(),
-              new GcpAuthenticationFilter.Provider());
+              new RbacFilter.Provider());
+      if (isEnabledGcpAuthnFilter) {
+        instance.register(new GcpAuthenticationFilter.Provider());
+      }
     }
     return instance;
   }
