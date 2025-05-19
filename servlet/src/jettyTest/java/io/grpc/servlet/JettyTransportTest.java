@@ -69,7 +69,7 @@ public class JettyTransportTest extends AbstractTransportTest {
                 listener.transportCreated(new ServletServerBuilder.ServerTransportImpl(scheduler));
         ServletAdapter adapter =
                 new ServletAdapter(serverTransportListener, streamTracerFactories,
-                        Integer.MAX_VALUE);
+                        Integer.MAX_VALUE, false);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
 
         jettyServer = new Server(0);
