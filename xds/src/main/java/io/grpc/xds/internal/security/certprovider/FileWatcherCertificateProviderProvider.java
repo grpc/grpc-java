@@ -36,6 +36,7 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public final class FileWatcherCertificateProviderProvider implements CertificateProviderProvider {
 
+  // TODO(lwge): Remove the old env var check once it's confirmed to be unused.
   @VisibleForTesting
   public static boolean enableSpiffe = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_SPIFFE_TRUST_BUNDLE_MAP",
       false) || GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_MTLS_SPIFFE", false);
