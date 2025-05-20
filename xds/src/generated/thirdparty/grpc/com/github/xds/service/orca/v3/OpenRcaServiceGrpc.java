@@ -14,9 +14,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * a new call to change backend reporting frequency.
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: xds/service/orca/v3/orca.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class OpenRcaServiceGrpc {
 

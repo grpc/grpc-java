@@ -184,7 +184,11 @@ protobuf {
             inputs.file javaPluginPath
         }
         ofSourceSet('test').configureEach {
-            plugins { grpc {} }
+            plugins {
+                grpc {
+                    option '@generated=javax'
+                }
+            }
         }
         ofSourceSet('testLite').configureEach {
             builtins {
@@ -193,7 +197,6 @@ protobuf {
             plugins {
                 grpc {
                     option 'lite'
-                    option '@generated=omit'
                 }
             }
         }
