@@ -33,9 +33,8 @@ final class FilterRegistry {
 
   private FilterRegistry() {}
 
-  public static boolean isEnabledGcpAuthnFilter() {
-    return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_GCP_AUTHENTICATION_FILTER", false);
-  }
+  static boolean isEnabledGcpAuthnFilter =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_GCP_AUTHENTICATION_FILTER", false);
 
   static synchronized FilterRegistry getDefaultRegistry() {
     if (instance == null) {
@@ -43,7 +42,7 @@ final class FilterRegistry {
               new FaultFilter.Provider(),
               new RouterFilter.Provider(),
               new RbacFilter.Provider());
-      if (isEnabledGcpAuthnFilter()) {
+      if (isEnabledGcpAuthnFilter) {
         instance.register(new GcpAuthenticationFilter.Provider());
       }
     }
