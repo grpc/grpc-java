@@ -349,7 +349,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
    * setting the estimatedSizeBytes
    */
   public final void setEstimatedSizeBytes(long newSizeBytes) {
-    //testing email link
     this.estimatedSizeBytes = newSizeBytes;
   }
 }
