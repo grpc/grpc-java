@@ -2419,6 +2419,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesAudienceMetadata() throws Exception {
+    FilterRegistry.isEnabledGcpAuthnFilter = true;
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()
@@ -2462,10 +2463,14 @@ public class GrpcXdsClientImplDataTest {
         "FILTER_METADATA", ImmutableMap.of(
             "key1", "value1",
             "key2", 42.0));
-    assertThat(update.parsedMetadata().get("FILTER_METADATA"))
-        .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
-    assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
-        .isInstanceOf(AudienceWrapper.class);
+    try {
+      assertThat(update.parsedMetadata().get("FILTER_METADATA"))
+          .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
+      assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
+          .isInstanceOf(AudienceWrapper.class);
+    } finally {
+      FilterRegistry.isEnabledGcpAuthnFilter = false;
+    }
   }
 
   @Test
