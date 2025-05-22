@@ -1,6 +1,5 @@
 choco install -y pkgconfiglite
 choco install -y openjdk --version=17.0
-set JAVA_HOME="c:\Program Files\OpenJDK\jdk-17"
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
 set PROTOBUF_VER=22.5
 set ABSL_VERSION=20230125.4
