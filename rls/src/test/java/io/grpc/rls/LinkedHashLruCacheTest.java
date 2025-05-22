@@ -288,6 +288,7 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void testFitToLimitWithEstimatedSizeBytes() {
+    //test email link
 
     Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
     Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
