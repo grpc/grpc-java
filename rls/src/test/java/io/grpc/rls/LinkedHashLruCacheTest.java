@@ -266,4 +266,40 @@ public class LinkedHashLruCacheTest {
       return Objects.hash(value, expireTime);
     }
   }
+
+  @Test
+  public void testFitToLimitWithEstimatedMaxSizeBytes() {
+    Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
+
+    cache.cache(1, entry1);
+    cache.cache(2, entry2);
+    cache.cache(3, entry3);
+
+    assertThat(cache.estimatedSize()).isEqualTo(2);
+    cache.setEstimatedMaxSizeBytes(2);
+
+    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(2);
+    assertThat(cache.fitToLimit()).isEqualTo(true);
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(1);
+  }
+
+  @Test
+  public void testFitToLimitWithEstimatedSizeBytes() {
+    Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
+
+    cache.cache(1, entry1);
+    cache.cache(2, entry2);
+    cache.cache(3, entry3);
+
+    assertThat(cache.estimatedSize()).isEqualTo(2);
+    cache.setEstimatedSizeBytes(7);
+
+    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(5);
+    assertThat(cache.fitToLimit()).isEqualTo(true);
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(5);
+  }
 }
