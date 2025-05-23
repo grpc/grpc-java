@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.RETRY_BUCKETS;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.SIZE_BUCKETS;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -64,8 +65,8 @@ public final class GrpcOpenTelemetry {
   };
 
   @VisibleForTesting
-  static boolean ENABLE_OTEL_TRACING = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING",
-      false);
+  static boolean ENABLE_OTEL_TRACING =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING", false);
 
   private final OpenTelemetry openTelemetrySdk;
   private final MeterProvider meterProvider;
@@ -241,6 +242,28 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
+    if (isMetricEnabled("grpc.client.call.retries", enableMetrics, disableDefault)) {
+      builder.clientCallRetriesCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.retries")
+              .setUnit("{retry}")
+              .setDescription("Number of retry attempts made during the client call")
+              .ofLongs()
+              .setExplicitBucketBoundariesAdvice(RETRY_BUCKETS)
+              .build());
+    }
+
+    if (isMetricEnabled("grpc.client.call.retry_delay", enableMetrics, disableDefault)) {
+      builder.clientCallRetryDelayCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.retry_delay")
+              .setUnit("s")
+              .setDescription("Total time of delay while there is no active attempt during the "
+                  + "client call")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
+              .build());
+    }
+
     if (isMetricEnabled("grpc.server.call.started", enableMetrics, disableDefault)) {
       builder.serverCallCountCounter(
           meter.counterBuilder("grpc.server.call.started")
@@ -259,8 +282,8 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isMetricEnabled("grpc.server.call.sent_total_compressed_message_size", enableMetrics,
-        disableDefault)) {
+    if (isMetricEnabled("grpc.server.call.sent_total_compressed_message_size",
+        enableMetrics, disableDefault)) {
       builder.serverTotalSentCompressedMessageSizeCounter(
           meter.histogramBuilder(
                   "grpc.server.call.sent_total_compressed_message_size")
@@ -271,8 +294,8 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isMetricEnabled("grpc.server.call.rcvd_total_compressed_message_size", enableMetrics,
-        disableDefault)) {
+    if (isMetricEnabled("grpc.server.call.rcvd_total_compressed_message_size",
+        enableMetrics, disableDefault)) {
       builder.serverTotalReceivedCompressedMessageSizeCounter(
           meter.histogramBuilder(
                   "grpc.server.call.rcvd_total_compressed_message_size")
