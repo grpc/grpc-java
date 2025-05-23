@@ -215,7 +215,7 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   protected final boolean fitToLimit() {
     boolean removedAnyUnexpired = false;
     if (estimatedSizeBytes <= estimatedMaxSizeBytes) {
-      // new size is larger no need to do cleanup
+      // there is space available so no need to do cleanup
       return false;
     }
     // cleanup expired entries
@@ -336,5 +336,19 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
           .add("value", value)
           .toString();
     }
+  }
+
+  /**
+   * setting the estimatedMaxSizeBytes
+   */
+  public final void setEstimatedMaxSizeBytes(long newSizeBytes) {
+    this.estimatedMaxSizeBytes = newSizeBytes;
+  }
+
+  /**
+   * setting the estimatedSizeBytes
+   */
+  public final void setEstimatedSizeBytes(long newSizeBytes) {
+    this.estimatedSizeBytes = newSizeBytes;
   }
 }
