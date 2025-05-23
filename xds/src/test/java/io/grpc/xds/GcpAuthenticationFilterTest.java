@@ -73,6 +73,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -88,6 +89,11 @@ public class GcpAuthenticationFilterTest {
   private static final EdsUpdate edsUpdate = getEdsUpdate();
   private static final RdsUpdate rdsUpdate = getRdsUpdate();
   private static final CdsUpdate cdsUpdate = getCdsUpdate();
+
+  @Before
+  public void setUp() {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_GCP_AUTHENTICATION_FILTER", "true");
+  }
 
   @Test
   public void testNewFilterInstancesPerFilterName() {
