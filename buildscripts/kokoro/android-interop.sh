@@ -2,15 +2,7 @@
 
 set -exu -o pipefail
 
-# Install gRPC and codegen for the Android interop app
-# (a composite gradle build can't find protoc-gen-grpc-java)
-
 cd github/grpc-java
-
-export LDFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --libs protobuf)"
-export CXXFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --cflags protobuf)"
-export LD_LIBRARY_PATH=/tmp/protobuf/lib
-export OS_NAME=$(uname)
 
 export ANDROID_HOME=/tmp/Android/Sdk
 mkdir -p "${ANDROID_HOME}/cmdline-tools"
@@ -21,15 +13,12 @@ rm cmdline.zip
 mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
 (yes || true) | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses
 
-# Proto deps
-buildscripts/make_dependencies.sh
-
 # Build Android with Java 11, this adds it to the PATH
 sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
 # Unset any existing JAVA_HOME env var to stop Gradle from using it
 unset JAVA_HOME
 
-GRADLE_FLAGS="-Pandroid.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx1024m"
+GRADLE_FLAGS="-Pandroid.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx1024m -PskipCodegen=true"
 
 ./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebug
 ./gradlew $GRADLE_FLAGS :grpc-android-interop-testing:assembleDebugAndroidTest
