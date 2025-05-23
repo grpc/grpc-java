@@ -59,15 +59,17 @@ final class GcpAuthenticationFilter implements Filter {
 
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
-
+  private final LruCache<String, CallCredentials> callCredentialsCache;
   final String filterInstanceName;
 
-  GcpAuthenticationFilter(String name) {
+  GcpAuthenticationFilter(String name, int cacheSize) {
     filterInstanceName = checkNotNull(name, "name");
+    this.callCredentialsCache = new LruCache<>(cacheSize);
   }
 
-
   static final class Provider implements Filter.Provider {
+    private final int cacheSize = 10;
+
     @Override
     public String[] typeUrls() {
       return new String[]{TYPE_URL};
@@ -80,7 +82,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public GcpAuthenticationFilter newInstance(String name) {
-      return new GcpAuthenticationFilter(name);
+      return new GcpAuthenticationFilter(name, cacheSize);
     }
 
     @Override
@@ -101,11 +103,14 @@ final class GcpAuthenticationFilter implements Filter {
       // Validate cache_config
       if (gcpAuthnProto.hasCacheConfig()) {
         TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
-        cacheSize = cacheConfig.getCacheSize().getValue();
-        if (cacheSize == 0) {
-          return ConfigOrError.fromError(
-              "cache_config.cache_size must be greater than zero");
+        if (cacheConfig.hasCacheSize()) {
+          cacheSize = cacheConfig.getCacheSize().getValue();
+          if (cacheSize == 0) {
+            return ConfigOrError.fromError(
+                "cache_config.cache_size must be greater than zero");
+          }
         }
+
         // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
         cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);
       }
@@ -127,8 +132,9 @@ final class GcpAuthenticationFilter implements Filter {
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
-    LruCache<String, CallCredentials> callCredentialsCache =
-        new LruCache<>(((GcpAuthenticationConfig) config).getCacheSize());
+    synchronized (callCredentialsCache) {
+      callCredentialsCache.resizeCache(((GcpAuthenticationConfig) config).getCacheSize());
+    }
     return new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -254,22 +260,36 @@ final class GcpAuthenticationFilter implements Filter {
 
   private static final class LruCache<K, V> {
 
-    private final Map<K, V> cache;
+    private Map<K, V> cache;
+    private int maxSize;
 
     LruCache(int maxSize) {
-      this.cache = new LinkedHashMap<K, V>(
-          maxSize,
-          0.75f,
-          true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-          return size() > maxSize;
-        }
-      };
+      this.maxSize = maxSize;
+      this.cache = createEvictingMap(maxSize);
     }
 
     V getOrInsert(K key, Function<K, V> create) {
       return cache.computeIfAbsent(key, create);
+    }
+
+    private void resizeCache(int newSize) {
+      if (newSize >= maxSize) {
+        maxSize = newSize;
+        return;
+      }
+      Map<K, V> newCache = createEvictingMap(newSize);
+      maxSize = newSize;
+      newCache.putAll(cache);
+      cache = newCache;
+    }
+
+    private Map<K, V> createEvictingMap(int size) {
+      return new LinkedHashMap<K, V>(size, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+          return size() > LruCache.this.maxSize;
+        }
+      };
     }
   }
 
