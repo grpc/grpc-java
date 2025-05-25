@@ -131,8 +131,10 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void failInvalidAuthority() {
+    @SuppressWarnings("AddressSelection") // We actually expect zero addresses!
+    InetSocketAddress address = new InetSocketAddress("invalid_authority", 1234);
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> NettyChannelBuilder.forAddress(new InetSocketAddress("invalid_authority", 1234)));
+        () -> NettyChannelBuilder.forAddress(address));
     assertThat(e).hasMessageThat().isEqualTo("Invalid host or port: invalid_authority 1234");
   }
 
