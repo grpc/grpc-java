@@ -17,11 +17,14 @@
 package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Ticker;
 import io.grpc.internal.FakeClock;
 import io.grpc.rls.LruCache.EvictionListener;
-
+import io.grpc.rls.LruCache.EvictionType;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
@@ -73,6 +76,7 @@ public class LinkedHashLruCacheTest {
     }
     cache.cache(MAX_SIZE + 1, new Entry("should kick the first", Long.MAX_VALUE));
 
+    verify(evictionListener).onEviction(1, new Entry("Entry1", Long.MAX_VALUE), EvictionType.SIZE);
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE);
   }
 
@@ -100,13 +104,11 @@ public class LinkedHashLruCacheTest {
 
     fakeClock.forwardTime(10, TimeUnit.NANOSECONDS);
     cache.cleanupExpiredEntries();
-
-    assertThat(cache.estimatedSize()).isEqualTo(1);
+    verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.EXPIRED);
 
     fakeClock.forwardTime(10, TimeUnit.NANOSECONDS);
     cache.cleanupExpiredEntries();
-
-    assertThat(cache.estimatedSize()).isEqualTo(0);
+    verify(evictionListener).onEviction(1, survivor, EvictionType.EXPIRED);
   }
 
   @Test
@@ -117,7 +119,17 @@ public class LinkedHashLruCacheTest {
     cache.cache(1, survivor);
 
     assertThat(cache.invalidate(0)).isEqualTo(toBeEvicted);
+    verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.EXPLICIT);
+  }
 
+  @Test
+  public void eviction_replaced() {
+    Entry toBeEvicted = new Entry("Entry0", ticker.read() + 10);
+    Entry survivor = new Entry("Entry1", ticker.read() + 20);
+    cache.cache(0, toBeEvicted);
+    cache.cache(0, survivor);
+
+    verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.REPLACED);
   }
 
   @Test
@@ -129,6 +141,8 @@ public class LinkedHashLruCacheTest {
     cache.cache(MAX_SIZE + 1, new Entry("should kick the first", Long.MAX_VALUE));
 
     // should remove MAX_SIZE-1 instead of MAX_SIZE because MAX_SIZE is accessed later
+    verify(evictionListener)
+            .onEviction(eq(MAX_SIZE - 1), any(Entry.class), eq(EvictionType.EXPIRED));
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE);
   }
 
@@ -146,6 +160,7 @@ public class LinkedHashLruCacheTest {
     cache.cleanupExpiredEntries();
     assertThat(cache.read(MAX_SIZE)).isNull();
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE - 1);
+    verify(evictionListener).onEviction(eq(MAX_SIZE), any(Entry.class), eq(EvictionType.EXPIRED));
   }
 
   @Test
