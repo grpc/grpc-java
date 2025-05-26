@@ -207,7 +207,7 @@ public final class EnvoyServerProtoData {
   @AutoValue
   abstract static class FilterChain {
 
-    // possibly empty
+    // Must be unique per server instance (except the default chain).
     abstract String name();
 
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.

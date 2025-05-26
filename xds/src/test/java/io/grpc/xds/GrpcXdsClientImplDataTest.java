@@ -2925,6 +2925,45 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void parseFilterChain_duplicateName() throws ResourceInvalidException {
+    FilterChain filterChain0 =
+        FilterChain.newBuilder()
+            .setName("filter_chain")
+            .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
+            .addFilters(buildHttpConnectionManagerFilter(
+                HttpFilter.newBuilder()
+                    .setName("http-filter-foo")
+                    .setIsOptional(true)
+                    .setTypedConfig(Any.pack(Router.newBuilder().build()))
+                    .build()))
+            .build();
+
+    FilterChain filterChain1 =
+        FilterChain.newBuilder()
+            .setName("filter_chain")
+            .setFilterChainMatch(
+                FilterChainMatch.newBuilder().addAllSourcePorts(Arrays.asList(443, 8080)))
+            .addFilters(buildHttpConnectionManagerFilter(
+                HttpFilter.newBuilder()
+                    .setName("http-filter-bar")
+                    .setTypedConfig(Any.pack(Router.newBuilder().build()))
+                    .setIsOptional(true)
+                    .build()))
+            .build();
+
+    Listener listenerProto =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .addAllFilterChains(Arrays.asList(filterChain0, filterChain1))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Filter chain names must be unique. Found duplicate: filter_chain");
+    XdsListenerResource.parseServerSideListener(
+        listenerProto, null, filterRegistry, null, getXdsResourceTypeArgs(true));
+  }
+
+  @Test
   public void validateCommonTlsContext_tlsParams() throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
             .setTlsParams(TlsParameters.getDefaultInstance())

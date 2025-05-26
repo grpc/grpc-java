@@ -151,6 +151,10 @@ final class FilterChainMatchingProtocolNegotiators {
         this.defaultRoutingConfig = checkNotNull(defaultRoutingConfig, "defaultRoutingConfig");
       }
 
+      FilterChainSelector(Map<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs) {
+        this(routingConfigs, null, new AtomicReference<>());
+      }
+
       @VisibleForTesting
       Map<FilterChain, AtomicReference<ServerRoutingConfig>> getRoutingConfigs() {
         return routingConfigs;

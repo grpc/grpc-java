@@ -178,6 +178,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     ImmutableList.Builder<FilterChain> filterChains = ImmutableList.builder();
+    Set<String> filterChainNames = new HashSet<>();
     Set<FilterChainMatch> filterChainMatchSet = new HashSet<>();
     int i = 0;
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
@@ -186,6 +187,10 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
       if (filterChainName.isEmpty()) {
         // Generate a name, so we can identify it in the logs.
         filterChainName = "chain_" + i;
+      }
+      if (!filterChainNames.add(filterChainName)) {
+        throw new ResourceInvalidException("Filter chain names must be unique. "
+            + "Found duplicate: " + filterChainName);
       }
       filterChains.add(
           parseFilterChain(fc, filterChainName, tlsContextManager, filterRegistry,
