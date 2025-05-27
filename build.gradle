@@ -32,14 +32,13 @@ subprojects {
                 }
             }
         }
-    }
-
-    tasks.withType(JavaCompile).configureEach {
-        it.options.compilerArgs += [
-                "-Xlint:all"
-        ]
-        if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
-            it.options.compilerArgs += ["-Werror"]
+        tasks.withType(JavaCompile).configureEach {
+            it.options.compilerArgs += [
+                    "-Xlint:all"
+            ]
+            if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                it.options.compilerArgs += ["-Werror"]
+            }
         }
     }
 
