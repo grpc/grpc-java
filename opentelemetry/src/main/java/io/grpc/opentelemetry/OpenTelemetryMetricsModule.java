@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
-import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.RETRY_TYPE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TARGET_KEY;
 
@@ -45,7 +44,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
-import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.common.AttributesBuilder;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -299,6 +297,7 @@ final class OpenTelemetryMetricsModule {
     private long callLatencyNanos;
     private final Object lock = new Object();
     private final AtomicLong attemptsPerCall = new AtomicLong();
+    private final AtomicLong hedgedAttemptsPerCall = new AtomicLong();
     private final AtomicLong transparentRetriesPerCall = new AtomicLong();
     @GuardedBy("lock")
     private int activeStreams;
@@ -352,7 +351,10 @@ final class OpenTelemetryMetricsModule {
       }
       if (info.isTransparentRetry()) {
         transparentRetriesPerCall.incrementAndGet();
-      } else {
+      } else if (info.isHedging()) {
+        hedgedAttemptsPerCall.incrementAndGet();
+      }
+      else {
         attemptsPerCall.incrementAndGet();
       }
       return newClientTracer(info);
@@ -442,19 +444,30 @@ final class OpenTelemetryMetricsModule {
           retriesPerCall = attempts - 1;
         }
 
-        module.resource.clientCallRetriesCounter().record(
-            retriesPerCall,
-            baseAttributes.toBuilder()
-                .put(RETRY_TYPE_KEY, OpenTelemetryConstants.RetryType.RETRY.getValue())
-                .build()
-        );
+        if (retriesPerCall > 0) {
+          module.resource.clientCallRetriesCounter().record(retriesPerCall, baseAttributes);
+        }
+      }
 
+      // Hedge counts
+      if (module.resource.clientCallHedgesCounter() != null) {
+
+        long hedgesPerCall = 0;
+        long attempts = hedgedAttemptsPerCall.get();
+        if (attempts > 0) {
+          hedgesPerCall = attempts - 1;
+        }
+
+        if (hedgesPerCall > 0) {
+          module.resource.clientCallHedgesCounter().record(hedgesPerCall, baseAttributes);
+        }
+      }
+
+      // Transparent Retry counts
+      if (module.resource.clientCallTransparentRetriesCounter() != null
+          && transparentRetriesPerCall.get() > 0) {
         module.resource.clientCallRetriesCounter().record(
-            transparentRetriesPerCall.get(),
-            baseAttributes.toBuilder()
-                .put(RETRY_TYPE_KEY, OpenTelemetryConstants.RetryType.TRANSPARENT.getValue())
-                .build()
-        );
+            transparentRetriesPerCall.get(), baseAttributes);
       }
 
       // Retry delay

@@ -36,9 +36,6 @@ public final class OpenTelemetryConstants {
   public static final AttributeKey<String> BACKEND_SERVICE_KEY =
       AttributeKey.stringKey("grpc.lb.backend_service");
 
-  public static final AttributeKey<String> RETRY_TYPE_KEY =
-      AttributeKey.stringKey("grpc.retry_type");
-
   public static final List<Double> LATENCY_BUCKETS =
       ImmutableList.of(
           0d,     0.00001d, 0.00005d, 0.0001d, 0.0003d, 0.0006d, 0.0008d, 0.001d, 0.002d,
@@ -52,24 +49,12 @@ public final class OpenTelemetryConstants {
           0L, 1024L, 2048L, 4096L, 16384L, 65536L, 262144L, 1048576L, 4194304L, 16777216L,
           67108864L, 268435456L, 1073741824L, 4294967296L);
 
-  public static final List<Long> RETRY_BUCKETS =
-      ImmutableList.of(0L, 1L, 2L, 3L, 4L, 5L, 10L, 100L, 1000L);
+  public static final List<Long> RETRY_BUCKETS = ImmutableList.of(0L, 1L, 2L, 3L, 4L, 5L);
 
-  public enum RetryType {
-    RETRY("retry"),
-    HEDGE("hedge"),
-    TRANSPARENT("transparent");
+  public static final List<Long> TRANSPARENT_RETRY_BUCKETS =
+      ImmutableList.of(0L, 1L, 2L, 3L, 4L, 5L, 10L);
 
-    private final String value;
-
-    RetryType(String value) {
-      this.value = value;
-    }
-
-    public String getValue() {
-      return value;
-    }
-  }
+  public static final List<Long> HEDGE_BUCKETS = ImmutableList.of(0L, 1L, 2L, 3L, 4L, 5L);
 
   private OpenTelemetryConstants() {
   }
