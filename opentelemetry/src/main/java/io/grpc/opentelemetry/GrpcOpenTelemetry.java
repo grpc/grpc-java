@@ -18,9 +18,11 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.HEDGE_BUCKETS;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.RETRY_BUCKETS;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.SIZE_BUCKETS;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TRANSPARENT_RETRY_BUCKETS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -247,9 +249,34 @@ public final class GrpcOpenTelemetry {
           meter.histogramBuilder(
                   "grpc.client.call.retries")
               .setUnit("{retry}")
-              .setDescription("Number of retry attempts made during the client call")
+              .setDescription("Number of retries during the client call. "
+                  + "If there were no retries, 0 is not reported.")
               .ofLongs()
               .setExplicitBucketBoundariesAdvice(RETRY_BUCKETS)
+              .build());
+    }
+
+    if (isMetricEnabled("grpc.client.call.transparent_retries", enableMetrics, disableDefault)) {
+      builder.clientCallRetriesCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.transparent_retries")
+              .setUnit("{transparent_retry}")
+              .setDescription("Number of transparent retries during the client call. "
+                  + "If there were no transparent retries, 0 is not reported.")
+              .ofLongs()
+              .setExplicitBucketBoundariesAdvice(TRANSPARENT_RETRY_BUCKETS)
+              .build());
+    }
+
+    if (isMetricEnabled("grpc.client.call.hedges", enableMetrics, disableDefault)) {
+      builder.clientCallRetriesCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.hedges")
+              .setUnit("{hedge}")
+              .setDescription("Number of hedges during the client call. "
+                  + "If there were no hedges, 0 is not reported.")
+              .ofLongs()
+              .setExplicitBucketBoundariesAdvice(HEDGE_BUCKETS)
               .build());
     }
 
