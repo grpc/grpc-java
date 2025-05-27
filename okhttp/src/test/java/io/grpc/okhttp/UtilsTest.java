@@ -25,6 +25,7 @@ import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.TlsVersion;
 import java.net.Socket;
 import java.util.List;
+import java.util.Locale;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -95,6 +96,9 @@ public class UtilsTest {
     assertEquals("5000", socketOptions.others.get("SO_SNDBUF"));
     assertEquals("true", socketOptions.others.get("SO_KEEPALIVE"));
     assertEquals("true", socketOptions.others.get("SO_OOBINLINE"));
-    assertEquals("8", socketOptions.others.get("IP_TOS"));
+    String osName = System.getProperty("os.name").toLowerCase(Locale.ENGLISH);
+    if (!osName.startsWith("windows")) {
+      assertEquals("8", socketOptions.others.get("IP_TOS"));
+    }
   }
 }

@@ -4,9 +4,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 
 /**
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/reflection/testing/reflection_test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class ReflectableServiceGrpc {
 
