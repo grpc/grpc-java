@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Ticker;
 import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -39,7 +40,6 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.TimeProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -82,7 +82,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   private final SynchronizationContext syncContext;
   private final Helper childHelper;
   private final GracefulSwitchLoadBalancer switchLb;
-  private TimeProvider timeProvider;
+  //private TimeProvider timeProvider;
+  private Ticker ticker;
   private final ScheduledExecutorService timeService;
   private ScheduledHandle detectionTimerHandle;
   private Long detectionTimerStartNanos;
@@ -95,14 +96,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Creates a new instance of {@link OutlierDetectionLoadBalancer}.
    */
-  public OutlierDetectionLoadBalancer(Helper helper, TimeProvider timeProvider) {
+  public OutlierDetectionLoadBalancer(Helper helper, Ticker ticker) {
     logger = helper.getChannelLogger();
     childHelper = new ChildHelper(checkNotNull(helper, "helper"));
     switchLb = new GracefulSwitchLoadBalancer(childHelper);
     endpointTrackerMap = new EndpointTrackerMap();
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
-    this.timeProvider = timeProvider;
+    this.ticker = ticker;
     logger.log(ChannelLogLevel.DEBUG, "OutlierDetection lb created.");
   }
 
@@ -151,7 +152,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         // If a timer has started earlier we cancel it and use the difference between the start
         // time and now as the interval.
         initialDelayNanos = Math.max(0L,
-            config.intervalNanos - (timeProvider.currentTimeNanos() - detectionTimerStartNanos));
+            config.intervalNanos - (ticker.read() - detectionTimerStartNanos));
       }
 
       // If a timer has been previously created we need to cancel it and reset all the call counters
@@ -201,7 +202,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public void run() {
-      detectionTimerStartNanos = timeProvider.currentTimeNanos();
+      detectionTimerStartNanos = ticker.read();
 
       endpointTrackerMap.swapCounters();
 
