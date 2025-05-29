@@ -136,7 +136,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     existing = delegate.put(key, new SizedValue(size, value));
     if (existing != null) {
       evictionListener.onEviction(key, existing, EvictionType.REPLACED);
-      // estimatedSizeBytes decremented
       estimatedSizeBytes -= existing.size;
     }
     return existing == null ? null : existing.value;
@@ -177,7 +176,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
     SizedValue existing = delegate.remove(key);
     if (existing != null) {
       evictionListener.onEviction(key, existing, cause);
-      // estimatedSizeBytes decremented
       estimatedSizeBytes -= existing.size;
     }
     return existing == null ? null : existing.value;
@@ -190,7 +188,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       Map.Entry<K, SizedValue> entry = iterator.next();
       if (entry.getValue() != null) {
         evictionListener.onEviction(entry.getKey(), entry.getValue(), EvictionType.EXPLICIT);
-        // estimatedSizeBytes decremented
         estimatedSizeBytes -= entry.getValue().size;
       }
       iterator.remove();
@@ -238,7 +235,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       lruIter.remove();
       // eviction listener is used to track the eviction type
       evictionListener.onEviction(entry.getKey(), entry.getValue(), EvictionType.SIZE);
-      // estimatedSizeBytes decremented
       estimatedSizeBytes -= entry.getValue().size;
       removedAnyUnexpired = true;
     }
@@ -279,7 +275,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       if (isExpired(entry.getKey(), entry.getValue().value, now)) {
         lruIter.remove();
         evictionListener.onEviction(entry.getKey(), entry.getValue(), EvictionType.EXPIRED);
-        // estimatedSizeBytes decremented
         estimatedSizeBytes -= entry.getValue().size;
         removedAny = true;
         maxExpiredEntries--;
@@ -304,7 +299,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
     @Override
     public void onEviction(K key, SizedValue value, EvictionType cause) {
-      //estimatedSizeBytes -= value.size;
       if (delegate != null) {
         delegate.onEviction(key, value.value, cause);
       }
