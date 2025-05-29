@@ -93,13 +93,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   @Override
   public Closeable subscribeToCluster(String clusterName) {
-
     checkNotNull(clusterName, "clusterName");
     ClusterSubscription subscription = new ClusterSubscription(clusterName);
 
     syncContext.execute(() -> {
+      if (getWatchers(XdsListenerResource.getInstance()).isEmpty()) {
+        subscription.closed = true;
+        return; // shutdown() called
+      }
       addClusterWatcher(clusterName, subscription, 1);
-      maybePublishConfig();
     });
 
     return subscription;
@@ -207,10 +209,14 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     checkNotNull(subscription, "subscription");
     String clusterName = subscription.getClusterName();
     syncContext.execute(() -> {
+      if (subscription.closed) {
+        return;
+      }
+      subscription.closed = true;
       XdsWatcherBase<?> cdsWatcher =
           resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
       if (cdsWatcher == null) {
-        return; // already released while waiting for the syncContext
+        return; // shutdown() called
       }
       cancelClusterWatcherTree((CdsWatcher) cdsWatcher, subscription);
       maybePublishConfig();
@@ -263,6 +269,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     if (waitingOnResource) {
       return;
     }
+    if (getWatchers(XdsListenerResource.getInstance()).isEmpty()) {
+      return; // shutdown() called
+    }
 
     StatusOr<XdsConfig> newUpdate = buildUpdate();
     if (Objects.equals(newUpdate, lastUpdate)) {
@@ -291,6 +300,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       XdsListenerResource.LdsUpdate ldsUpdate = ldsWatcher.getData().getValue();
       builder.setListener(ldsUpdate);
       routeSource = ((LdsWatcher) ldsWatcher).getRouteSource();
+    }
+
+    if (routeSource == null) {
+      return StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
+          "Bug: No route source found for listener " + dataPlaneAuthority));
     }
 
     StatusOr<RdsUpdate> statusOrRdsUpdate = routeSource.getRdsUpdate();
@@ -557,14 +571,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     void onUpdate(StatusOr<XdsConfig> config);
   }
 
-  private class ClusterSubscription implements Closeable {
-    String clusterName;
+  private final class ClusterSubscription implements Closeable {
+    private final String clusterName;
+    boolean closed; // Accessed from syncContext
 
     public ClusterSubscription(String clusterName) {
-      this.clusterName = clusterName;
+      this.clusterName = checkNotNull(clusterName, "clusterName");
     }
 
-    public String getClusterName() {
+    String getClusterName() {
       return clusterName;
     }
 
