@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.StatusMatcher.statusHasCode;
-import static io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType.AGGREGATE;
 import static io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType.EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
@@ -239,9 +238,10 @@ public class XdsDependencyManagerTest {
         testWatcher.lastConfig.getClusters();
     assertThat(lastConfigClusters).hasSize(childNames.size() + 1);
     StatusOr<XdsClusterConfig> rootC = lastConfigClusters.get(rootName);
-    CdsUpdate rootUpdate = rootC.getValue().getClusterResource();
-    assertThat(rootUpdate.clusterType()).isEqualTo(AGGREGATE);
-    assertThat(rootUpdate.prioritizedClusterNames()).isEqualTo(childNames);
+    assertThat(rootC.getValue().getChildren()).isInstanceOf(XdsClusterConfig.AggregateConfig.class);
+    XdsClusterConfig.AggregateConfig aggConfig =
+        (XdsClusterConfig.AggregateConfig) rootC.getValue().getChildren();
+    assertThat(aggConfig.getLeafNames()).isEqualTo(childNames);
 
     for (String childName : childNames) {
       assertThat(lastConfigClusters).containsKey(childName);
@@ -552,13 +552,36 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(
         ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, newRouteConfig));
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
-    assertThat(xdsUpdateCaptor.getValue().getValue().getClusters().keySet().size()).isEqualTo(4);
+    assertThat(xdsUpdateCaptor.getValue().getValue().getClusters()).hasSize(8);
 
     // Now that it is released, we should only have A11
     rootSub.close();
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
     assertThat(xdsUpdateCaptor.getValue().getValue().getClusters().keySet())
         .containsExactly("clusterA11");
+  }
+
+  @Test
+  public void testCdsCycle() throws Exception {
+    RouteConfiguration routeConfig =
+        XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "clusterA");
+    Map<String, Message> clusterMap = new HashMap<>();
+    Map<String, Message> edsMap = new HashMap<>();
+    clusterMap.put("clusterA", XdsTestUtils.buildAggCluster("clusterA", Arrays.asList("clusterB")));
+    clusterMap.put("clusterB", XdsTestUtils.buildAggCluster("clusterB", Arrays.asList("clusterA")));
+    XdsTestUtils.addEdsClusters(clusterMap, edsMap, "clusterC");
+    controlPlaneService.setXdsConfig(
+        ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, routeConfig));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
+    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
+        serverName, serverName, nameResolverArgs, scheduler);
+    inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    XdsConfig config = xdsUpdateCaptor.getValue().getValue();
+    assertThat(config.getClusters().get("clusterA").hasValue()).isFalse();
+    assertThat(config.getClusters().get("clusterA").getStatus().getDescription()).contains("cycle");
   }
 
   @Test
@@ -646,7 +669,7 @@ public class XdsDependencyManagerTest {
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
     XdsConfig config = xdsUpdateCaptor.getValue().getValue();
     assertThat(config.getVirtualHost().name()).isEqualTo(newRdsName);
-    assertThat(config.getClusters().size()).isEqualTo(4);
+    assertThat(config.getClusters()).hasSize(8);
   }
 
   @Test
@@ -697,8 +720,8 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
     // Verify that the config is updated as expected
-    ClusterNameMatcher nameMatcher
-        = new ClusterNameMatcher(Arrays.asList("root", "clusterA21", "clusterA22"));
+    ClusterNameMatcher nameMatcher = new ClusterNameMatcher(Arrays.asList(
+        "root", "clusterA", "clusterA2", "clusterA21", "clusterA22"));
     inOrder.verify(xdsConfigWatcher).onUpdate(argThat(nameMatcher));
   }
 
