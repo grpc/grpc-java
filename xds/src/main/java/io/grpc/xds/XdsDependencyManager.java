@@ -456,17 +456,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     return logId.toString();
   }
 
-  // Returns true if the watcher was added, false if it already exists
-  private boolean addEdsWatcher(String edsServiceName, CdsWatcher parentContext) {
+  private void addEdsWatcher(String edsServiceName, CdsWatcher parentContext) {
     EdsWatcher watcher
         = (EdsWatcher) getWatchers(XdsEndpointResource.getInstance()).get(edsServiceName);
     if (watcher != null) {
       watcher.addParentContext(parentContext); // Is a set, so don't need to check for existence
-      return false;
+      return;
     }
 
     addWatcher(new EdsWatcher(edsServiceName, parentContext));
-    return true;
   }
 
   private void addClusterWatcher(String clusterName, Object parentContext, int depth) {
@@ -823,13 +821,10 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       switch (update.clusterType()) {
         case EDS:
           setData(update);
-          if (!addEdsWatcher(getEdsServiceName(), this))  {
-            maybePublishConfig();
-          }
+          addEdsWatcher(getEdsServiceName(), this);
           break;
         case LOGICAL_DNS:
           setData(update);
-          maybePublishConfig();
           // no eds needed
           break;
         case AGGREGATE:
@@ -856,27 +851,20 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
               setData(update);
               Set<String> addedClusters = Sets.difference(newNames, oldNames);
               addedClusters.forEach((cluster) -> addClusterWatcher(cluster, parentContext, depth));
-
-              if (addedClusters.isEmpty()) {
-                maybePublishConfig();
-              }
-            } else { // data was set to error status above
-              maybePublishConfig();
             }
 
           } else if (depth <= MAX_CLUSTER_RECURSION_DEPTH) {
             setData(update);
             update.prioritizedClusterNames()
                 .forEach(name -> addClusterWatcher(name, parentContext, depth));
-            maybePublishConfig();
           }
           break;
         default:
           Status error = Status.UNAVAILABLE.withDescription(
               "aggregate cluster graph exceeds max depth at " + resourceName() + nodeInfo());
           setDataAsStatus(error);
-          maybePublishConfig();
       }
+      maybePublishConfig();
     }
 
     public String getEdsServiceName() {
