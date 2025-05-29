@@ -45,6 +45,8 @@ public class ForwardingLoadBalancerTest {
         mockDelegate,
         new TestBalancer(),
         Arrays.asList(
-            LoadBalancer.class.getMethod("acceptResolvedAddresses", ResolvedAddresses.class)));
+            LoadBalancer.class.getMethod("acceptResolvedAddresses", ResolvedAddresses.class),
+            LoadBalancer.class.getMethod("handleResolvedAddresses", ResolvedAddresses.class))
+    );
   }
 }
