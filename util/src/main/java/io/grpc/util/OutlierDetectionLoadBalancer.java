@@ -82,7 +82,6 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   private final SynchronizationContext syncContext;
   private final Helper childHelper;
   private final GracefulSwitchLoadBalancer switchLb;
-  //private TimeProvider timeProvider;
   private Ticker ticker;
   private final ScheduledExecutorService timeService;
   private ScheduledHandle detectionTimerHandle;
