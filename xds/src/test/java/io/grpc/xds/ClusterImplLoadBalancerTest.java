@@ -50,6 +50,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -198,6 +199,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
     assertThat(childBalancer.attributes.get(XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
+    assertThat(childBalancer.attributes.get(NameResolver.ATTR_BACKEND_SERVICE)).isEqualTo(CLUSTER);
   }
 
   /**

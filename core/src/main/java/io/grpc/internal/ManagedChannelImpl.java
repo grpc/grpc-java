@@ -1212,7 +1212,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   @Override
-  @SuppressWarnings("deprecation")
   public ConnectivityState getState(boolean requestConnection) {
     ConnectivityState savedChannelState = channelStateManager.getState();
     if (requestConnection && savedChannelState == IDLE) {
@@ -1558,7 +1557,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       checkState(!terminated, "Channel is terminated");
 
-      @SuppressWarnings("deprecation")
       ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder();
 
       return builder

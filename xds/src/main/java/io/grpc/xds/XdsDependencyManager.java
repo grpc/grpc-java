@@ -93,13 +93,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   @Override
   public Closeable subscribeToCluster(String clusterName) {
-
     checkNotNull(clusterName, "clusterName");
     ClusterSubscription subscription = new ClusterSubscription(clusterName);
 
     syncContext.execute(() -> {
+      if (getWatchers(XdsListenerResource.getInstance()).isEmpty()) {
+        subscription.closed = true;
+        return; // shutdown() called
+      }
       addClusterWatcher(clusterName, subscription, 1);
-      maybePublishConfig();
     });
 
     return subscription;
@@ -199,6 +201,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     for (Map.Entry<String, XdsWatcherBase<T>> watcherEntry : watchers.watchers.entrySet()) {
       xdsClient.cancelXdsResourceWatch(watchers.resourceType, watcherEntry.getKey(),
           watcherEntry.getValue());
+      watcherEntry.getValue().cancelled = true;
     }
   }
 
@@ -206,10 +209,14 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     checkNotNull(subscription, "subscription");
     String clusterName = subscription.getClusterName();
     syncContext.execute(() -> {
+      if (subscription.closed) {
+        return;
+      }
+      subscription.closed = true;
       XdsWatcherBase<?> cdsWatcher =
           resourceWatchers.get(CLUSTER_RESOURCE).watchers.get(clusterName);
       if (cdsWatcher == null) {
-        return; // already released while waiting for the syncContext
+        return; // shutdown() called
       }
       cancelClusterWatcherTree((CdsWatcher) cdsWatcher, subscription);
       maybePublishConfig();
@@ -256,6 +263,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
    */
   private void maybePublishConfig() {
     syncContext.throwIfNotInThisSynchronizationContext();
+    if (getWatchers(XdsListenerResource.getInstance()).isEmpty()) {
+      return; // shutdown() called
+    }
     boolean waitingOnResource = resourceWatchers.values().stream()
         .flatMap(typeWatchers -> typeWatchers.watchers.values().stream())
         .anyMatch(XdsWatcherBase::missingResult);
@@ -290,6 +300,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       XdsListenerResource.LdsUpdate ldsUpdate = ldsWatcher.getData().getValue();
       builder.setListener(ldsUpdate);
       routeSource = ((LdsWatcher) ldsWatcher).getRouteSource();
+    }
+
+    if (routeSource == null) {
+      return StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
+          "Bug: No route source found for listener " + dataPlaneAuthority));
     }
 
     StatusOr<RdsUpdate> statusOrRdsUpdate = routeSource.getRdsUpdate();
@@ -556,14 +571,15 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     void onUpdate(StatusOr<XdsConfig> config);
   }
 
-  private class ClusterSubscription implements Closeable {
-    String clusterName;
+  private final class ClusterSubscription implements Closeable {
+    private final String clusterName;
+    boolean closed; // Accessed from syncContext
 
     public ClusterSubscription(String clusterName) {
-      this.clusterName = clusterName;
+      this.clusterName = checkNotNull(clusterName, "clusterName");
     }
 
-    public String getClusterName() {
+    String getClusterName() {
       return clusterName;
     }
 
@@ -591,6 +607,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     @Override
     public void onError(Status error) {
       checkNotNull(error, "error");
+      if (cancelled) {
+        return;
+      }
       // Don't update configuration on error, if we've already received configuration
       if (!hasDataValue()) {
         setDataAsStatus(Status.UNAVAILABLE.withDescription(
@@ -659,6 +678,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     @Override
     public void onChanged(XdsListenerResource.LdsUpdate update) {
       checkNotNull(update, "update");
+      if (cancelled) {
+        return;
+      }
 
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
       List<VirtualHost> virtualHosts;
@@ -787,6 +809,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     @Override
     public void onChanged(RdsUpdate update) {
       checkNotNull(update, "update");
+      if (cancelled) {
+        return;
+      }
       List<VirtualHost> oldVirtualHosts = hasDataValue()
           ? getData().getValue().virtualHosts
           : Collections.emptyList();
@@ -815,6 +840,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     @Override
     public void onChanged(XdsClusterResource.CdsUpdate update) {
       checkNotNull(update, "update");
+      if (cancelled) {
+        return;
+      }
       switch (update.clusterType()) {
         case EDS:
           setData(update);
@@ -895,6 +923,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void onChanged(XdsEndpointResource.EdsUpdate update) {
+      if (cancelled) {
+        return;
+      }
       setData(checkNotNull(update, "update"));
       maybePublishConfig();
     }

@@ -382,7 +382,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  /** Starts the first PRC attempt. */
+  /** Starts the first RPC attempt. */
   @Override
   public final void start(ClientStreamListener listener) {
     masterListener = listener;

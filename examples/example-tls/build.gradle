@@ -1,7 +1,7 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
@@ -21,7 +21,7 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.73.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.25.5'
 
 dependencies {
@@ -38,16 +38,6 @@ protobuf {
     }
     generateProtoTasks {
         all()*.plugins { grpc {} }
-    }
-}
-
-// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
-sourceSets {
-    main {
-        java {
-            srcDirs 'build/generated/source/proto/main/grpc'
-            srcDirs 'build/generated/source/proto/main/java'
-        }
     }
 }
 
