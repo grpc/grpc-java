@@ -848,6 +848,22 @@ public class XdsDependencyManagerTest {
     });
   }
 
+  @Test
+  public void subscribeToClusterAfterShutdown() throws Exception {
+    XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS", "EDS",
+        ENDPOINT_HOSTNAME, ENDPOINT_PORT);
+
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
+    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
+        serverName, serverName, nameResolverArgs, scheduler);
+    inOrder.verify(xdsConfigWatcher).onUpdate(any());
+    xdsDependencyManager.shutdown();
+
+    Closeable subscription = xdsDependencyManager.subscribeToCluster("CDS");
+    inOrder.verify(xdsConfigWatcher, never()).onUpdate(any());
+    subscription.close();
+  }
+
   private Listener buildInlineClientListener(String rdsName, String clusterName) {
     return XdsTestUtils.buildInlineClientListener(rdsName, clusterName, serverName);
   }
