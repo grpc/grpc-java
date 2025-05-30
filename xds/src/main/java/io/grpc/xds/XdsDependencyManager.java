@@ -263,14 +263,14 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
    */
   private void maybePublishConfig() {
     syncContext.throwIfNotInThisSynchronizationContext();
+    if (getWatchers(XdsListenerResource.getInstance()).isEmpty()) {
+      return; // shutdown() called
+    }
     boolean waitingOnResource = resourceWatchers.values().stream()
         .flatMap(typeWatchers -> typeWatchers.watchers.values().stream())
         .anyMatch(XdsWatcherBase::missingResult);
     if (waitingOnResource) {
       return;
-    }
-    if (getWatchers(XdsListenerResource.getInstance()).isEmpty()) {
-      return; // shutdown() called
     }
 
     StatusOr<XdsConfig> newUpdate = buildUpdate();
