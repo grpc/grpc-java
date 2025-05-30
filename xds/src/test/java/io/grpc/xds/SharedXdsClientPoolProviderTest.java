@@ -19,6 +19,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -50,7 +51,6 @@ import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -64,9 +64,6 @@ public class SharedXdsClientPoolProviderTest {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
   private final Node node = Node.newBuilder().setId("SharedXdsClientPoolProviderTest").build();
   private final MetricRecorder metricRecorder = new MetricRecorder() {};
   private static final String DUMMY_TARGET = "dummy";
@@ -83,9 +80,9 @@ public class SharedXdsClientPoolProviderTest {
         BootstrapInfo.builder().servers(Collections.<ServerInfo>emptyList()).node(node).build();
     when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
-    thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("No xDS server provided");
-    provider.getOrCreate(DUMMY_TARGET, metricRecorder);
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        () -> provider.getOrCreate(DUMMY_TARGET, metricRecorder));
+    assertThat(e).hasMessageThat().isEqualTo("No xDS server provided");
     assertThat(provider.get(DUMMY_TARGET)).isNull();
   }
 
