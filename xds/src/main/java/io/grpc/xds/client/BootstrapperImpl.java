@@ -43,6 +43,8 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   public static final String GRPC_EXPERIMENTAL_XDS_FALLBACK =
       "GRPC_EXPERIMENTAL_XDS_FALLBACK";
+  public static final String GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING =
+      "GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING";
 
   // Client features.
   @VisibleForTesting
@@ -54,9 +56,14 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   // Server features.
   private static final String SERVER_FEATURE_IGNORE_RESOURCE_DELETION = "ignore_resource_deletion";
   private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
+  private static final String
+      SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR = "resource_timer_is_transient_error";
 
   @VisibleForTesting
   static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
+
+  static boolean XdsDataErrorHandlingEnabled
+      = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING, false);
 
   protected final XdsLogger logger;
 
@@ -247,6 +254,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
       Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
+      boolean resourceTimerIsTransientError = false;
       boolean ignoreResourceDeletion = false;
       // "For forward compatibility reasons, the client will ignore any entry in the list that it
       // does not understand, regardless of type."
@@ -254,11 +262,14 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
+        resourceTimerIsTransientError = XdsDataErrorHandlingEnabled
+            && serverFeatures.contains(SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR);
       }
       servers.add(
           ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion,
               serverFeatures != null
-                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER)));
+                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER),
+              resourceTimerIsTransientError));
     }
     return servers.build();
   }

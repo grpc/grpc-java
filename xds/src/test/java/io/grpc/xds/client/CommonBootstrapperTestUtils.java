@@ -203,7 +203,7 @@ public class CommonBootstrapperTestUtils {
 
     List<ServerInfo> serverInfos = new ArrayList<>();
     for (String uri : serverUris) {
-      serverInfos.add(ServerInfo.create(uri, CHANNEL_CREDENTIALS, false, true));
+      serverInfos.add(ServerInfo.create(uri, CHANNEL_CREDENTIALS, false, true, false));
     }
     EnvoyProtoData.Node node = EnvoyProtoData.Node.newBuilder().setId("node-id").build();
 
