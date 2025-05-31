@@ -472,7 +472,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   private void addClusterWatcher(String clusterName, Object parentContext, int depth) {
     CdsWatcher watcher = (CdsWatcher) getWatchers(CLUSTER_RESOURCE).get(clusterName);
     if (watcher != null) {
-      watcher.parentContexts.add(parentContext);
+      watcher.parentContexts.put(parentContext, depth);
       return;
     }
 
