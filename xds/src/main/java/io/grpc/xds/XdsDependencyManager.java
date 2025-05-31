@@ -567,7 +567,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private class LdsWatcher extends XdsWatcherBase<XdsListenerResource.LdsUpdate>
       implements RdsUpdateSupplier {
-    String rdsName;
 
     private LdsWatcher(String resourceName) {
       super(XdsListenerResource.getInstance(), resourceName);
@@ -582,22 +581,18 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
       List<VirtualHost> virtualHosts;
-      String rdsName;
       if (httpConnectionManager == null) {
         // TCP listener. Unsupported config
         virtualHosts = Collections.emptyList(); // Not null, to not delegate to RDS
-        rdsName = null;
       } else {
         virtualHosts = httpConnectionManager.virtualHosts();
-        rdsName = httpConnectionManager.rdsName();
+      }
+      if (virtualHosts != null) {
+        updateRoutes(virtualHosts);
       }
 
-      if (virtualHosts != null) {
-        // No RDS watcher since we are getting RDS updates via LDS
-        updateRoutes(virtualHosts);
-        this.rdsName = null;
-      } else {
-        this.rdsName = rdsName;
+      String rdsName = getRdsName(update);
+      if (rdsName != null) {
         addRdsWatcher(rdsName);
       }
 
@@ -605,20 +600,17 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       maybePublishConfig();
     }
 
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      if (cancelled) {
-        return;
+    private String getRdsName(XdsListenerResource.LdsUpdate update) {
+      HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
+      if (httpConnectionManager == null) {
+        // TCP listener. Unsupported config
+        return null;
       }
-
-      checkArgument(resourceName().equals(resourceName), "Resource name does not match");
-      setDataAsStatus(Status.UNAVAILABLE.withDescription(
-          toContextString() + " does not exist" + nodeInfo()));
-      rdsName = null;
-      maybePublishConfig();
+      return httpConnectionManager.rdsName();
     }
 
-    private RdsWatcher getRdsWatcher(WatcherTracer tracer) {
+    private RdsWatcher getRdsWatcher(XdsListenerResource.LdsUpdate update, WatcherTracer tracer) {
+      String rdsName = getRdsName(update);
       if (rdsName == null) {
         return null;
       }
@@ -637,7 +629,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       if (virtualHosts != null) {
         return this;
       }
-      RdsWatcher rdsWatcher = getRdsWatcher(tracer);
+      RdsWatcher rdsWatcher = getRdsWatcher(getData().getValue(), tracer);
       assert rdsWatcher != null;
       return rdsWatcher;
     }
