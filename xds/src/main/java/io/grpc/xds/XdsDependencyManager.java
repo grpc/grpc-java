@@ -333,7 +333,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
             Status.INTERNAL.withDescription("Logical DNS in dependency manager unsupported")));
         break;
       default:
-        throw new IllegalStateException("Unexpected value: " + cdsUpdate.clusterType());
+        child = new EndpointConfig(StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
+              "Unknown type in cluster " + clusterName + " " + cdsUpdate.clusterType())));
     }
     if (clusters.containsKey(clusterName)) {
       // If a cycle is detected, we'll have detected it while recursing, so now there will be a key
@@ -520,7 +521,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
       // Don't update configuration on error, if we've already received configuration
       if (!hasDataValue()) {
-        setDataAsStatus(Status.UNAVAILABLE.withDescription(
+        this.data = StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
             String.format("Error retrieving %s: %s: %s",
               toContextString(), error.getCode(), error.getDescription())));
         maybePublishConfig();
@@ -534,10 +535,24 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
 
       checkArgument(this.resourceName.equals(resourceName), "Resource name does not match");
-      setDataAsStatus(Status.UNAVAILABLE.withDescription(
+      this.data = StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
           toContextString() + " does not exist" + nodeInfo()));
       maybePublishConfig();
     }
+
+    @Override
+    public void onChanged(T update) {
+      checkNotNull(update, "update");
+      if (cancelled) {
+        return;
+      }
+
+      this.data = StatusOr.fromValue(update);
+      subscribeToChildren(update);
+      maybePublishConfig();
+    }
+
+    protected abstract void subscribeToChildren(T update);
 
     public void close() {
       cancelled = true;
@@ -557,20 +572,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       return data != null && data.hasValue();
     }
 
-    String resourceName() {
-      return resourceName;
-    }
-
-    protected void setData(T data) {
-      checkNotNull(data, "data");
-      this.data = StatusOr.fromValue(data);
-    }
-
-    protected void setDataAsStatus(Status status) {
-      checkNotNull(status, "status");
-      this.data = StatusOr.fromStatus(status);
-    }
-
     public String toContextString() {
       return toContextStr(type.typeName(), resourceName);
     }
@@ -588,12 +589,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(XdsListenerResource.LdsUpdate update) {
-      checkNotNull(update, "update");
-      if (cancelled) {
-        return;
-      }
-
+    public void subscribeToChildren(XdsListenerResource.LdsUpdate update) {
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
       List<VirtualHost> virtualHosts;
       if (httpConnectionManager == null) {
@@ -610,9 +606,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       if (rdsName != null) {
         addRdsWatcher(rdsName);
       }
-
-      setData(update);
-      maybePublishConfig();
     }
 
     private String getRdsName(XdsListenerResource.LdsUpdate update) {
@@ -680,14 +673,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(RdsUpdate update) {
-      checkNotNull(update, "update");
-      if (cancelled) {
-        return;
-      }
-      setData(update);
+    public void subscribeToChildren(RdsUpdate update) {
       updateRoutes(update.virtualHosts);
-      maybePublishConfig();
     }
 
     @Override
@@ -705,31 +692,20 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(XdsClusterResource.CdsUpdate update) {
-      checkNotNull(update, "update");
-      if (cancelled) {
-        return;
-      }
+    public void subscribeToChildren(XdsClusterResource.CdsUpdate update) {
       switch (update.clusterType()) {
         case EDS:
-          setData(update);
           addEdsWatcher(getEdsServiceName());
           break;
         case LOGICAL_DNS:
-          setData(update);
           // no eds needed
           break;
         case AGGREGATE:
-          setData(update);
           update.prioritizedClusterNames()
               .forEach(name -> addClusterWatcher(name));
           break;
         default:
-          Status error = Status.UNAVAILABLE.withDescription(
-              "unknown cluster type in " + resourceName() + " " + update.clusterType());
-          setDataAsStatus(error);
       }
-      maybePublishConfig();
     }
 
     public String getEdsServiceName() {
@@ -749,12 +725,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(XdsEndpointResource.EdsUpdate update) {
-      if (cancelled) {
-        return;
-      }
-      setData(checkNotNull(update, "update"));
-      maybePublishConfig();
-    }
+    public void subscribeToChildren(XdsEndpointResource.EdsUpdate update) {}
   }
 }
