@@ -592,18 +592,17 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         subscriber.onRejected(args.versionInfo, updateTime, errorDetail);
       }
 
-      // Nothing else to do for incremental ADS resources.
-      if (!xdsResourceType.isFullStateOfTheWorld()) {
-        continue;
-      }
-
-      // Handle State of the World ADS: invalid resources.
       if (invalidResources.contains(resourceName)) {
         // The resource is missing. Reuse the cached resource if possible.
         if (subscriber.data == null) {
           // No cached data. Notify the watchers of an invalid update.
           subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail), processingTracker);
         }
+        continue;
+      }
+
+      // Nothing else to do for incremental ADS resources.
+      if (!xdsResourceType.isFullStateOfTheWorld()) {
         continue;
       }
 

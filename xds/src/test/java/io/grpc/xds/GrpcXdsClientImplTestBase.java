@@ -3270,6 +3270,8 @@ public abstract class GrpcXdsClientImplTestBase {
         + "locality:Locality{region=region2, zone=zone2, subZone=subzone2} for priority:1";
     call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0001", NODE, ImmutableList.of(
         errorMsg));
+    verify(edsResourceWatcher).onError(errorCaptor.capture());
+    assertThat(errorCaptor.getValue().getDescription()).contains(errorMsg);
   }
 
   @Test
