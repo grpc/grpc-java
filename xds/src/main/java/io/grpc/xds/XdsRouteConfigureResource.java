@@ -245,8 +245,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         return StructOrError.fromError(
             "FilterConfig [" + name + "] contains invalid proto: " + e);
       }
-      Filter.Provider provider = filterRegistry.get(typeUrl);
-      if (provider == null) {
+      Filter filter = filterRegistry.get(typeUrl);
+      if (filter == null) {
         if (isOptional) {
           continue;
         }
@@ -254,7 +254,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             "HttpFilter [" + name + "](" + typeUrl + ") is required but unsupported");
       }
       ConfigOrError<? extends Filter.FilterConfig> filterConfig =
-          provider.parseFilterConfigOverride(rawConfig);
+          filter.parseFilterConfigOverride(rawConfig);
       if (filterConfig.errorDetail != null) {
         return StructOrError.fromError(
             "Invalid filter config for HttpFilter [" + name + "]: " + filterConfig.errorDetail);
