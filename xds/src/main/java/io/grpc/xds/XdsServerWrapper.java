@@ -47,6 +47,7 @@ import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
@@ -523,56 +524,37 @@ final class XdsServerWrapper extends Server {
     }
 
     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
-        @Nullable List<NamedFilterConfig> filterConfigs, List<VirtualHost> virtualHosts) {
-      // This should always be called from the sync context.
-      // Ideally we'd want to throw otherwise, but this breaks the tests now.
-      // syncContext.throwIfNotInThisSynchronizationContext();
-
+        List<NamedFilterConfig> namedFilterConfigs, List<VirtualHost> virtualHosts) {
       ImmutableMap.Builder<Route, ServerInterceptor> perRouteInterceptors =
           new ImmutableMap.Builder<>();
-
       for (VirtualHost virtualHost : virtualHosts) {
         for (Route route : virtualHost.routes()) {
-          // Short circuit.
-          if (filterConfigs == null) {
-            perRouteInterceptors.put(route, noopInterceptor);
-            continue;
-          }
-
-          // Override vhost filter configs with more specific per-route configs.
-          Map<String, FilterConfig> perRouteOverrides = ImmutableMap.<String, FilterConfig>builder()
-              .putAll(virtualHost.filterConfigOverrides())
-              .putAll(route.filterConfigOverrides())
-              .buildKeepingLast();
-
-          // Interceptors for this vhost/route combo.
-          List<ServerInterceptor> interceptors = new ArrayList<>(filterConfigs.size());
-
-          for (NamedFilterConfig namedFilter : filterConfigs) {
-            FilterConfig config = namedFilter.filterConfig;
-            String name = namedFilter.name;
-            String typeUrl = config.typeUrl();
-
-            Filter.Provider provider = filterRegistry.get(typeUrl);
-            if (provider == null || !provider.isServerFilter()) {
-              logger.warning("HttpFilter[" + name + "]: not supported on server-side: " + typeUrl);
-              continue;
-            }
-
-            Filter filter = provider.newInstance();
-            ServerInterceptor interceptor =
-                filter.buildServerInterceptor(config, perRouteOverrides.get(name));
-            if (interceptor != null) {
-              interceptors.add(interceptor);
+          List<ServerInterceptor> filterInterceptors = new ArrayList<>();
+          Map<String, FilterConfig> selectedOverrideConfigs =
+              new HashMap<>(virtualHost.filterConfigOverrides());
+          selectedOverrideConfigs.putAll(route.filterConfigOverrides());
+          if (namedFilterConfigs != null) {
+            for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
+              FilterConfig filterConfig = namedFilterConfig.filterConfig;
+              Filter filter = filterRegistry.get(filterConfig.typeUrl());
+              if (filter instanceof ServerInterceptorBuilder) {
+                ServerInterceptor interceptor =
+                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
+                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+                if (interceptor != null) {
+                  filterInterceptors.add(interceptor);
+                }
+              } else {
+                logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
+                    + filterConfig.typeUrl() + ") is not supported on server-side. "
+                    + "Probably a bug at ClientXdsClient verification.");
+              }
             }
           }
-
-          // Combine interceptors produced by different filters into a single one that executes
-          // them sequentially. The order is preserved.
-          perRouteInterceptors.put(route, combineInterceptors(interceptors));
+          ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
+          perRouteInterceptors.put(route, interceptor);
         }
       }
-
       return perRouteInterceptors.buildOrThrow();
     }
 

@@ -23,21 +23,21 @@ import javax.annotation.Nullable;
 
 /**
  * A registry for all supported {@link Filter}s. Filters can be queried from the registry
- * by any of the {@link Filter.Provider#typeUrls() type URLs}.
+ * by any of the {@link Filter#typeUrls() type URLs}.
  */
 final class FilterRegistry {
   private static FilterRegistry instance;
 
-  private final Map<String, Filter.Provider> supportedFilters = new HashMap<>();
+  private final Map<String, Filter> supportedFilters = new HashMap<>();
 
   private FilterRegistry() {}
 
   static synchronized FilterRegistry getDefaultRegistry() {
     if (instance == null) {
       instance = newRegistry().register(
-              new FaultFilter.Provider(),
-              new RouterFilter.Provider(),
-              new RbacFilter.Provider());
+              FaultFilter.INSTANCE,
+              RouterFilter.INSTANCE,
+              RbacFilter.INSTANCE);
     }
     return instance;
   }
@@ -48,8 +48,8 @@ final class FilterRegistry {
   }
 
   @VisibleForTesting
-  FilterRegistry register(Filter.Provider... filters) {
-    for (Filter.Provider filter : filters) {
+  FilterRegistry register(Filter... filters) {
+    for (Filter filter : filters) {
       for (String typeUrl : filter.typeUrls()) {
         supportedFilters.put(typeUrl, filter);
       }
@@ -58,7 +58,7 @@ final class FilterRegistry {
   }
 
   @Nullable
-  Filter.Provider get(String typeUrl) {
+  Filter get(String typeUrl) {
     return supportedFilters.get(typeUrl);
   }
 }

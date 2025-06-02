@@ -35,7 +35,6 @@ import io.grpc.Channel;
 import io.grpc.ClientInterceptor;
 import io.grpc.MethodDescriptor;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.GcpAuthenticationFilter.GcpAuthenticationConfig;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -44,14 +43,6 @@ import org.mockito.Mockito;
 
 @RunWith(JUnit4.class)
 public class GcpAuthenticationFilterTest {
-  private static final GcpAuthenticationFilter.Provider FILTER_PROVIDER =
-      new GcpAuthenticationFilter.Provider();
-
-  @Test
-  public void filterType_clientOnly() {
-    assertThat(FILTER_PROVIDER.isClientFilter()).isTrue();
-    assertThat(FILTER_PROVIDER.isServerFilter()).isFalse();
-  }
 
   @Test
   public void testParseFilterConfig_withValidConfig() {
@@ -60,11 +51,13 @@ public class GcpAuthenticationFilterTest {
         .build();
     Any anyMessage = Any.pack(config);
 
-    ConfigOrError<GcpAuthenticationConfig> result = FILTER_PROVIDER.parseFilterConfig(anyMessage);
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
+    ConfigOrError<? extends Filter.FilterConfig> result = filter.parseFilterConfig(anyMessage);
 
     assertNotNull(result.config);
     assertNull(result.errorDetail);
-    assertEquals(20L, result.config.getCacheSize());
+    assertEquals(20L,
+        ((GcpAuthenticationFilter.GcpAuthenticationConfig) result.config).getCacheSize());
   }
 
   @Test
@@ -74,7 +67,8 @@ public class GcpAuthenticationFilterTest {
         .build();
     Any anyMessage = Any.pack(config);
 
-    ConfigOrError<GcpAuthenticationConfig> result = FILTER_PROVIDER.parseFilterConfig(anyMessage);
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
+    ConfigOrError<? extends Filter.FilterConfig> result = filter.parseFilterConfig(anyMessage);
 
     assertNull(result.config);
     assertNotNull(result.errorDetail);
@@ -83,9 +77,9 @@ public class GcpAuthenticationFilterTest {
 
   @Test
   public void testParseFilterConfig_withInvalidMessageType() {
+    GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
     Message invalidMessage = Empty.getDefaultInstance();
-    ConfigOrError<GcpAuthenticationConfig> result =
-        FILTER_PROVIDER.parseFilterConfig(invalidMessage);
+    ConfigOrError<? extends Filter.FilterConfig> result = filter.parseFilterConfig(invalidMessage);
 
     assertNull(result.config);
     assertThat(result.errorDetail).contains("Invalid config type");
@@ -93,7 +87,8 @@ public class GcpAuthenticationFilterTest {
 
   @Test
   public void testClientInterceptor_createsAndReusesCachedCredentials() {
-    GcpAuthenticationConfig config = new GcpAuthenticationConfig(10);
+    GcpAuthenticationFilter.GcpAuthenticationConfig config =
+        new GcpAuthenticationFilter.GcpAuthenticationConfig(10);
     GcpAuthenticationFilter filter = new GcpAuthenticationFilter();
 
     // Create interceptor

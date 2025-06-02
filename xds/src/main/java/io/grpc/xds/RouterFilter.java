@@ -17,12 +17,18 @@
 package io.grpc.xds;
 
 import com.google.protobuf.Message;
+import io.grpc.ClientInterceptor;
+import io.grpc.ServerInterceptor;
+import io.grpc.xds.Filter.ClientInterceptorBuilder;
+import io.grpc.xds.Filter.ServerInterceptorBuilder;
+import java.util.concurrent.ScheduledExecutorService;
+import javax.annotation.Nullable;
 
 /**
  * Router filter implementation. Currently this filter does not parse any field in the config.
  */
-final class RouterFilter implements Filter {
-  private static final RouterFilter INSTANCE = new RouterFilter();
+enum RouterFilter implements Filter, ClientInterceptorBuilder, ServerInterceptorBuilder {
+  INSTANCE;
 
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router";
@@ -30,7 +36,7 @@ final class RouterFilter implements Filter {
   static final FilterConfig ROUTER_CONFIG = new FilterConfig() {
     @Override
     public String typeUrl() {
-      return TYPE_URL;
+      return RouterFilter.TYPE_URL;
     }
 
     @Override
@@ -39,38 +45,33 @@ final class RouterFilter implements Filter {
     }
   };
 
-  static final class Provider implements Filter.Provider {
-    @Override
-    public String[] typeUrls() {
-      return new String[]{TYPE_URL};
-    }
-
-    @Override
-    public boolean isClientFilter() {
-      return true;
-    }
-
-    @Override
-    public boolean isServerFilter() {
-      return true;
-    }
-
-    @Override
-    public RouterFilter newInstance() {
-      return INSTANCE;
-    }
-
-    @Override
-    public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
-      return ConfigOrError.fromConfig(ROUTER_CONFIG);
-    }
-
-    @Override
-    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
-        Message rawProtoMessage) {
-      return ConfigOrError.fromError("Router Filter should not have override config");
-    }
+  @Override
+  public String[] typeUrls() {
+    return new String[] { TYPE_URL };
   }
 
-  private RouterFilter() {}
+  @Override
+  public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
+    return ConfigOrError.fromConfig(ROUTER_CONFIG);
+  }
+
+  @Override
+  public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+    return ConfigOrError.fromError("Router Filter should not have override config");
+  }
+
+  @Nullable
+  @Override
+  public ClientInterceptor buildClientInterceptor(
+      FilterConfig config, @Nullable FilterConfig overrideConfig,
+      ScheduledExecutorService scheduler) {
+    return null;
+  }
+
+  @Nullable
+  @Override
+  public ServerInterceptor buildServerInterceptor(
+      FilterConfig config, @Nullable Filter.FilterConfig overrideConfig) {
+    return null;
+  }
 }
