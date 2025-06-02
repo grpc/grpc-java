@@ -27,9 +27,15 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * A {@link ServerTransportListener} that helps you write blocking unit tests.
+ *
+ * <p>TODO: Rename, since this is not actually a mock:
+ * https://testing.googleblog.com/2013/07/testing-on-toilet-know-your-test-doubles.html
+ */
 public class MockServerTransportListener implements ServerTransportListener {
   public final ServerTransport transport;
-  public final BlockingQueue<StreamCreation> streams = new LinkedBlockingQueue<>();
+  private final BlockingQueue<StreamCreation> streams = new LinkedBlockingQueue<>();
   private final SettableFuture<?> terminated = SettableFuture.create();
 
   public MockServerTransportListener(ServerTransport transport) {

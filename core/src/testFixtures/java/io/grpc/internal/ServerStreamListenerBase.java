@@ -28,7 +28,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A {@link ServerStreamListener} that helps you write unit tests.
+ * A {@link ServerStreamListener} that helps you write blocking unit tests.
  */
 public class ServerStreamListenerBase implements ServerStreamListener {
   public final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
