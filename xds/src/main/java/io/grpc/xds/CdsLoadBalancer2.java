@@ -243,9 +243,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       ClusterResolverConfig config = new ClusterResolverConfig(
-          Collections.unmodifiableList(instances),
-          configOrError.getConfig(),
-          root.result.isHttp11ProxyAvailable());
+          Collections.unmodifiableList(instances), configOrError.getConfig());
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }

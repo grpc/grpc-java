@@ -179,7 +179,7 @@ public class CdsLoadBalancer2Test {
   public void discoverTopLevelEdsCluster() {
     CdsUpdate update =
         CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext,
-                outlierDetection, false)
+                outlierDetection)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
@@ -198,8 +198,7 @@ public class CdsLoadBalancer2Test {
   @Test
   public void discoverTopLevelLogicalDnsCluster() {
     CdsUpdate update =
-        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext,
-                false)
+        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext)
             .leastRequestLbPolicy(3).build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
@@ -233,7 +232,7 @@ public class CdsLoadBalancer2Test {
   @Test
   public void nonAggregateCluster_resourceUpdate() {
     CdsUpdate update =
-        CdsUpdate.forEds(CLUSTER, null, null, 100L, upstreamTlsContext, outlierDetection, false)
+        CdsUpdate.forEds(CLUSTER, null, null, 100L, upstreamTlsContext, outlierDetection)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
@@ -244,7 +243,7 @@ public class CdsLoadBalancer2Test {
         100L, upstreamTlsContext, outlierDetection);
 
     update = CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 200L, null,
-        outlierDetection, false).roundRobinLbPolicy().build();
+        outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     childLbConfig = (ClusterResolverConfig) childBalancer.config;
     instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
@@ -255,8 +254,7 @@ public class CdsLoadBalancer2Test {
   @Test
   public void nonAggregateCluster_resourceRevoked() {
     CdsUpdate update =
-        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, null, 100L, upstreamTlsContext,
-                false)
+        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, null, 100L, upstreamTlsContext)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
@@ -300,16 +298,16 @@ public class CdsLoadBalancer2Test {
         CLUSTER, cluster1, cluster2, cluster3, cluster4);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update3 = CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_INFO, 200L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, null, 100L, null, false)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, null, 100L, null)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update4 =
-        CdsUpdate.forEds(cluster4, null, LRS_SERVER_INFO, 300L, null, outlierDetection, false)
+        CdsUpdate.forEds(cluster4, null, LRS_SERVER_INFO, 300L, null, outlierDetection)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster4, update4);
     assertThat(childBalancers).hasSize(1);  // all non-aggregate clusters discovered
@@ -364,11 +362,10 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     CdsUpdate update1 = CdsUpdate.forEds(cluster1, EDS_SERVICE_NAME, LRS_SERVER_INFO, 200L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null,
-                false)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -415,11 +412,10 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     CdsUpdate update1 = CdsUpdate.forEds(cluster1, EDS_SERVICE_NAME, LRS_SERVER_INFO, 200L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null,
-                false)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_INFO, 100L, null)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -471,7 +467,7 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(cluster2, update2);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster2, cluster3);
     CdsUpdate update3 = CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
@@ -522,7 +518,7 @@ public class CdsLoadBalancer2Test {
 
     reset(helper);
     CdsUpdate update3 = CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
@@ -557,7 +553,7 @@ public class CdsLoadBalancer2Test {
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     CdsUpdate update3 = CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
 
     // cluster2 (aggr.) -> [cluster3 (EDS)]
@@ -606,7 +602,7 @@ public class CdsLoadBalancer2Test {
 
     // Define EDS cluster
     CdsUpdate update3 = CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
 
     // cluster4 (agg) -> [cluster3 (EDS)] with dups (3 copies)
@@ -653,8 +649,7 @@ public class CdsLoadBalancer2Test {
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     CdsUpdate update1 =
-        CdsUpdate.forLogicalDns(cluster1, DNS_HOST_NAME, LRS_SERVER_INFO, 200L, null,
-                false)
+        CdsUpdate.forLogicalDns(cluster1, DNS_HOST_NAME, LRS_SERVER_INFO, 200L, null)
             .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     FakeLoadBalancer childLb = Iterables.getOnlyElement(childBalancers);
@@ -681,7 +676,7 @@ public class CdsLoadBalancer2Test {
   @Test
   public void handleNameResolutionErrorFromUpstream_afterChildLbCreated_fallThrough() {
     CdsUpdate update = CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L,
-        upstreamTlsContext, outlierDetection, false).roundRobinLbPolicy().build();
+        upstreamTlsContext, outlierDetection).roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.shutdown).isFalse();
@@ -697,7 +692,7 @@ public class CdsLoadBalancer2Test {
     try {
       xdsClient.deliverCdsUpdate(CLUSTER,
           CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext,
-                  outlierDetection, false)
+                  outlierDetection)
               .lbPolicyConfig(ImmutableMap.of("unknownLb", ImmutableMap.of("foo", "bar"))).build());
     } catch (Exception e) {
       assertThat(e).hasMessageThat().contains("unknownLb");
@@ -711,7 +706,7 @@ public class CdsLoadBalancer2Test {
     try {
       xdsClient.deliverCdsUpdate(CLUSTER,
           CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext,
-                  outlierDetection, false).lbPolicyConfig(
+                  outlierDetection).lbPolicyConfig(
                   ImmutableMap.of("ring_hash_experimental", ImmutableMap.of("minRingSize", "-1")))
               .build());
     } catch (Exception e) {
