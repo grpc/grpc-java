@@ -74,6 +74,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -251,7 +252,7 @@ public class XdsServerWrapperTest {
     FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
     FilterChain f1 = createFilterChain("filter-chain-1", createRds("rds"));
     xdsClient.deliverLdsUpdate(Collections.singletonList(f0), f1);
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     verify(listener, timeout(5000)).onServing();
@@ -260,7 +261,7 @@ public class XdsServerWrapperTest {
     xdsServerWrapper.shutdown();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
     assertThat(xdsClient.ldsResource).isNull();
-    assertThat(xdsClient.isShutDown()).isTrue();
+    assertThat(xdsClient.shutdown).isTrue();
     verify(mockServer).shutdown();
     assertThat(f0.sslContextProviderSupplier().isShutdown()).isTrue();
     assertThat(f1.sslContextProviderSupplier().isShutdown()).isTrue();
@@ -302,7 +303,7 @@ public class XdsServerWrapperTest {
     verify(mockServer, never()).start();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
     assertThat(xdsClient.ldsResource).isNull();
-    assertThat(xdsClient.isShutDown()).isTrue();
+    assertThat(xdsClient.shutdown).isTrue();
     verify(mockServer).shutdown();
     assertThat(f0.sslContextProviderSupplier().isShutdown()).isTrue();
     assertThat(f1.sslContextProviderSupplier().isShutdown()).isTrue();
@@ -341,7 +342,7 @@ public class XdsServerWrapperTest {
     xdsServerWrapper.shutdown();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
     assertThat(xdsClient.ldsResource).isNull();
-    assertThat(xdsClient.isShutDown()).isTrue();
+    assertThat(xdsClient.shutdown).isTrue();
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(1)).shutdown();
     xdsServerWrapper.awaitTermination(1, TimeUnit.SECONDS);
@@ -366,7 +367,7 @@ public class XdsServerWrapperTest {
     FilterChain filterChain = createFilterChain("filter-chain-1", createRds("rds"));
     SslContextProviderSupplier sslSupplier = filterChain.sslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     try {
@@ -433,7 +434,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     FilterChain filterChain = createFilterChain("filter-chain-1", createRds("rds"));
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     try {
@@ -543,7 +544,7 @@ public class XdsServerWrapperTest {
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
     EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcmVirtual);
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
-    xdsClient.setExpectedRdsCount(3);
+    xdsClient.rdsCount = new CountDownLatch(3);
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
     assertThat(start.isDone()).isFalse();
     assertThat(selectorManager.getSelectorToUpdateSelector()).isNull();
@@ -555,7 +556,7 @@ public class XdsServerWrapperTest {
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f2), f3);
     verify(mockServer, never()).start();
     verify(listener, never()).onServing();
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
 
     xdsClient.deliverRdsUpdate("r1",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
@@ -601,11 +602,12 @@ public class XdsServerWrapperTest {
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
     EnvoyServerProtoData.FilterChain f2 = createFilterChain("filter-chain-2", createRds("r0"));
 
+    xdsClient.rdsCount = new CountDownLatch(1);
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), f2);
     assertThat(start.isDone()).isFalse();
     assertThat(selectorManager.getSelectorToUpdateSelector()).isNull();
 
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("r0",
             Collections.singletonList(createVirtualHost("virtual-host-0")));
     start.get(5000, TimeUnit.MILLISECONDS);
@@ -631,9 +633,9 @@ public class XdsServerWrapperTest {
     EnvoyServerProtoData.FilterChain f3 = createFilterChain("filter-chain-3", createRds("r0"));
     EnvoyServerProtoData.FilterChain f4 = createFilterChain("filter-chain-4", createRds("r1"));
     EnvoyServerProtoData.FilterChain f5 = createFilterChain("filter-chain-4", createRds("r1"));
-    xdsClient.setExpectedRdsCount(1);
+    xdsClient.rdsCount = new CountDownLatch(1);
     xdsClient.deliverLdsUpdate(Arrays.asList(f5, f3), f4);
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("r1",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     xdsClient.deliverRdsUpdate("r0",
@@ -686,7 +688,7 @@ public class XdsServerWrapperTest {
     EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcmVirtual);
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await();
     xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
     start.get(5000, TimeUnit.MILLISECONDS);
     assertThat(selectorManager.getSelectorToUpdateSelector().getRoutingConfigs().size())
@@ -1233,7 +1235,7 @@ public class XdsServerWrapperTest {
     VirtualHost virtualHost  = VirtualHost.create(
         "v1", Collections.singletonList("foo.google.com"), Arrays.asList(route),
         ImmutableMap.of("filter-config-name-0", f0Override));
-    xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("r0", Collections.singletonList(virtualHost));
     start.get(5000, TimeUnit.MILLISECONDS);
     verify(mockServer).start();
