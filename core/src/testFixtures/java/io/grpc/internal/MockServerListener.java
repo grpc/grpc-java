@@ -35,6 +35,10 @@ public class MockServerListener implements ServerListener {
   private final SettableFuture<?> shutdown = SettableFuture.create();
   private final ServerTransportListenerFactory serverTransportListenerFactory;
 
+  /**
+   * Lets you customize the {@link MockServerTransportListener} installed on newly created
+   * {@link ServerTransport}s.
+   */
   public interface ServerTransportListenerFactory {
     MockServerTransportListener create(ServerTransport transport);
   }
