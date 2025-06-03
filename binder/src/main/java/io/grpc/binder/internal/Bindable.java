@@ -48,7 +48,16 @@ interface Bindable {
     void onUnbound(Status reason);
   }
 
-  /** Fetches details about the remote service from PackageManager *before* binding to it. */
+  /**
+   * Fetches details about the remote service from PackageManager without binding to it.
+   *
+   * <p>Resolving an untrusted address before binding to it lets you "screen" out problematic
+   * servers before giving them a chance to run. However, note that the identity/existence of the
+   * resolved Service can change between the time this method returns and the time you actually
+   * bind/connect to it. For example, suppose the target package gets uninstalled right after this
+   * method returns. In {@link Observer#onBound}, you should verify that the server you resolved is
+   * the same one you connected to.
+   */
   @AnyThread
   ServiceInfo resolve() throws StatusException;
 
