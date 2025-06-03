@@ -171,8 +171,8 @@ public final class AnotherReflectableServiceGrpc {
 
     /**
      */
-    public io.grpc.reflection.testing.Reply method(io.grpc.reflection.testing.Request request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.reflection.testing.Reply method(io.grpc.reflection.testing.Request request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getMethodMethod(), getCallOptions(), request);
     }
   }
