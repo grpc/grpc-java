@@ -284,22 +284,26 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   }
 
   /**
-   * Checks server addresses against this channel's {@link SecurityPolicy} *before* connecting.
+   * Checks servers against this channel's {@link SecurityPolicy} *before* binding.
    *
    * <p>Android users can be tricked into installing a malicious app with the same package name as a
    * legitimate server. That's why we don't send calls to a server until it has been authorized by
-   * an appropriate {@link SecurityPolicy}. But merely connecting to a malicious server can enable
-   * "keep-alive" and "background activity launch" attacks, even if that server is ultimately
-   * disallowed by the channel's security policy. Pre-authorization is even more important for
-   * security when the server's address isn't known in advance but rather resolved via target URI or
-   * discovered by other means.
+   * an appropriate {@link SecurityPolicy}. But merely binding to a malicious server can enable
+   * "keep-alive" and "background activity launch" attacks, even if security policy ultimately
+   * causes the grpc connection to fail. Pre-authorization is especially important for security when
+   * the server's address isn't known in advance but rather resolved via target URI or discovered by
+   * other means.
    *
-   * <p>Pre-authorization is strongly recommended but it remains optional for now because of the
-   * small performance cost and because it precludes servers that proxy their "endpoint binder"
-   * through another (unauthorized) app (not recommended, but technically a behavior change).
+   * <p>Note that, unlike ordinary authorization, pre-authorization is performed against the server
+   * app's UID, not the UID of the server process. These can be different, most commonly due to
+   * services that set `android:isolatedProcess=true`.
+   *
+   * <p>Pre-authorization is strongly recommended but it remains optional for now because of this
+   * behavior change and the small performance cost.
    *
    * <p>The default value of this property is false but it will become true in a future release.
-   * Clients that require a particular behavior should configure it explicitly using this method.
+   * Clients that require a particular behavior should configure it explicitly using this method
+   * rather than relying on the default.
    */
   public BinderChannelBuilder preAuthorizeServers(boolean preAuthorize) {
     transportFactoryBuilder.setPreAuthorizeServers(preAuthorize);
