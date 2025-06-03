@@ -282,8 +282,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       ResolveInfo resolveInfo =
           resolveServiceAsUser(sourceContext.getPackageManager(), bindIntent, 0, targetUserHandle);
       if (resolveInfo == null) {
-        // Same code as when bindService() returns false.
-        throw Status.UNIMPLEMENTED
+        throw Status.UNIMPLEMENTED // Same code as when bindService() returns false.
             .withDescription("resolveService(" + bindIntent + ") returned null")
             .asException();
       }
