@@ -677,13 +677,14 @@ public abstract class BinderTransport
         return;
       }
 
-      // It's unlikely, but the server identity/existence of this Service could change by the time
-      // we actually connect. It doesn't matter though, because:
-      // - If pre-auth fails (but would succeed for the new identity), grpc-core will retry
-      // against the replacement server using a new instance of BinderClientTransport.
-      // - If pre-auth succeeds (but would fail for the new identity), we might incorrectly bind
-      // to an unauthorized server, but we'll notice when we check SecurityPolicy again as part of
-      // the usual handshake.
+      // It's unlikely, but the identity/existence of this Service could change by the time we
+      // actually connect. It doesn't matter though, because:
+      // - If pre-auth fails (but would succeed against the server's new state), the grpc-core layer
+      // will eventually retry using a new transport instance that will see the Service's new state.
+      // - If pre-auth succeeds (but would fail against the server's new state), we might give an
+      // unauthorized server a chance to run, but the connection will still fail by SecurityPolicy
+      // check later in handshake. Pre-auth remains effective at mitigating abuse because malware
+      // can't typically control the exact timing of its installation.
       preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
       Futures.addCallback(
           preAuthResultFuture,
