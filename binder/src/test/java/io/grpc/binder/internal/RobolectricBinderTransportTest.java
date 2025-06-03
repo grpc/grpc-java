@@ -70,8 +70,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
   private int nextServerAddress;
 
-  @Parameter
-  public boolean preAuthorizeServers;
+  @Parameter public boolean preAuthorizeServers;
 
   @Parameters(name = "preAuthorizeServers={0}")
   public static ImmutableList<Boolean> data() {

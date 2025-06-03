@@ -20,7 +20,6 @@ import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
-import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Status;
 import io.grpc.StatusException;
 
